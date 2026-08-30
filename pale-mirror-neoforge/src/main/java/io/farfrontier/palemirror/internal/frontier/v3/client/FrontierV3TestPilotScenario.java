@@ -12,7 +12,7 @@ final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
-            "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity");
+            "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of("summary", "site", "settlement", "hive", "actor", "item", "container", "operation", "route_construction", "physical_delta", "scene", "intent", "trace", "transit");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -57,6 +57,8 @@ final class FrontierV3TestPilotScenario {
             JsonObject action = element.getAsJsonObject();
             if ((type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
+                    (type.equals("visit_operation") && !validOperationVisit(action)) ||
+                    (type.equals("look_operation") && !validOperationLook(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !timeout(action, 300_000L))) ||
@@ -65,6 +67,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_fixture") && !validFixture(action)) ||
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
+                    (type.equals("assert_visible_entity") && !validVisibleEntity(action)) ||
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
@@ -167,11 +170,34 @@ final class FrontierV3TestPilotScenario {
                 && position(action) && timeout(action, 120_000L, "settleMs");
     }
 
+    /** A semantic camera may read one current operation projection, then perform only ordinary player travel. */
+    private static boolean validOperationVisit(JsonObject action) {
+        return requiredId(action, "operationId", "operation:") && action.has("dimension") && action.get("dimension").isJsonPrimitive()
+                && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && offset(action) && timeout(action, 120_000L, "settleMs") && timeout(action, 120_000L);
+    }
+
+    /** A semantic camera target is derived from the same bounded operation diagnostic, never a server-selected entity. */
+    private static boolean validOperationLook(JsonObject action) {
+        return requiredId(action, "operationId", "operation:") && (!action.has("anchor") || action.get("anchor").isJsonPrimitive()
+                && (action.get("anchor").getAsString().equals("travelCurrent") || action.get("anchor").getAsString().equals("travelCargo")))
+                && timeout(action, 120_000L);
+    }
+
     private static boolean validVisibleBoard(JsonObject action) {
         if (!position(action) || !timeout(action, 120_000L) || !action.has("text") || !action.get("text").isJsonPrimitive()
                 || action.get("text").getAsString().isBlank()) return false;
         return boundedOptionalNumber(action, "radius", 0.0D, 16.0D)
                 && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
+                && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
+    }
+
+    /** A visual assertion may inspect only a locally rendered ordinary entity and its visible name. */
+    private static boolean validVisibleEntity(JsonObject action) {
+        return action.has("entityType") && action.get("entityType").isJsonPrimitive()
+                && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && action.has("nameContains") && action.get("nameContains").isJsonPrimitive() && !action.get("nameContains").getAsString().isBlank()
+                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
                 && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
     }
 
@@ -202,6 +228,11 @@ final class FrontierV3TestPilotScenario {
     private static boolean position(JsonObject action) {
         JsonObject position = action.has("position") ? action.getAsJsonObject("position") : action.getAsJsonObject("at");
         return position != null && whole(position, "x") && whole(position, "y") && whole(position, "z");
+    }
+
+    private static boolean offset(JsonObject action) {
+        JsonObject offset = action.getAsJsonObject("offset");
+        return offset != null && wholeWithin(offset, "x", -32, 32) && wholeWithin(offset, "y", -8, 8) && wholeWithin(offset, "z", -32, 32);
     }
 
     private static boolean whole(JsonObject value, String field) {

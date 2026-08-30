@@ -38,8 +38,11 @@ final class FrontierV3CargoCarrierExecutor {
         List<ExactItemStack> items = items(state, cargo);
         if (items.size() != cargo.itemIds().size()) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         Entity existing = carrier(level, lease);
-        if (existing != null) return owned(existing, lease, items) ? FrontierV3SceneExecutor.BodyMaterialization.COMPLETE
-                : FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
+        if (existing != null) {
+            if (!owned(existing, lease, items)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
+            FrontierV3CargoCarrierPresentation.ensure(level, state, lease, (MinecartChest) existing);
+            return FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
+        }
         BlockPos candidate = spawnCandidate(lease);
         if (!level.hasChunkAt(candidate)) return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
         BlockPos position = FrontierV3StandingPosition.aboveFloor(level, candidate);
@@ -49,11 +52,15 @@ final class FrontierV3CargoCarrierExecutor {
         cart.setUUID(id(lease));
         cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         cart.setCustomName(FrontierV3ScenePresentation.cargoName(state, cargo));
-        cart.setCustomNameVisible(true); cart.setNoGravity(true);
+        // The attached TextDisplay is the readable local caption; retain the exact ordinary
+        // entity name for accessible metadata without stacking a tiny duplicate above the cart.
+        cart.setCustomNameVisible(false); cart.setNoGravity(true);
         for (int index = 0; index < items.size(); index++) cart.setItem(index, FrontierV3CargoHandoffExecutor.materializedStack(items.get(index)));
         cart.getPersistentData().putString(LEASE_KEY, lease.id().value());
         cart.getPersistentData().putString(CARGO_KEY, lease.cargoId().value());
-        return level.addFreshEntity(cart) ? FrontierV3SceneExecutor.BodyMaterialization.COMPLETE : FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
+        if (!level.addFreshEntity(cart)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
+        FrontierV3CargoCarrierPresentation.ensure(level, state, lease, cart);
+        return FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
     }
 
     static boolean move(ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPosition destination) {
@@ -97,7 +104,9 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static void discardClosed(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        if (intact(level, state, lease)) carrier(level, lease).discard();
+        if (intact(level, state, lease)) {
+            Entity carrier = carrier(level, lease); FrontierV3CargoCarrierPresentation.discard(carrier, lease); carrier.discard();
+        }
     }
 
     static UUID id(SceneLease lease) {
@@ -117,6 +126,7 @@ final class FrontierV3CargoCarrierExecutor {
         List<ExactItemStack> items = items(state, cargo);
         if (!owned(entity, lease, items)) return false;
         MinecartChest cart = (MinecartChest) entity;
+        FrontierV3CargoCarrierPresentation.discard(cart, lease);
         for (int index = 0; index < items.size(); index++) {
             var stack = cart.getItem(index);
             FrontierV3CargoHandoffExecutor.bindWorldCarrier(stack, cart.getUUID());

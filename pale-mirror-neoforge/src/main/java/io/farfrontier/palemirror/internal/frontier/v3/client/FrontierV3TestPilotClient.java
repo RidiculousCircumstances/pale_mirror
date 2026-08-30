@@ -144,8 +144,10 @@ public final class FrontierV3TestPilotClient {
                 case "wait_until_container_item" -> waitUntilContainerItem(minecraft, action);
                 case "assert_fixture" -> assertFixture(minecraft, action);
                 case "visit" -> visit(minecraft, action);
+                case "visit_operation" -> visitOperation(minecraft, action);
                 case "assert_visible_block" -> assertVisibleBlock(minecraft, action);
                 case "assert_visible_board" -> assertVisibleBoard(minecraft, action);
+                case "assert_visible_entity" -> assertVisibleEntity(minecraft, action);
                 case "interact_board" -> interactBoard(minecraft, action);
                 case "interact_nearest_entity" -> interactNearestEntity(minecraft, action);
                 case "attack_nearest_entity" -> attackNearestEntity(minecraft, action);
@@ -157,6 +159,7 @@ public final class FrontierV3TestPilotClient {
                     look(minecraft, position(action, action.has("at") ? "at" : "position"));
                     advance(type);
                 }
+                case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
                 case "place" -> placeBlock(minecraft, action);
@@ -285,7 +288,20 @@ public final class FrontierV3TestPilotClient {
      * a chunk; after travel, ordinary player demand performs that work.
      */
     private static void visit(Minecraft minecraft, JsonObject action) {
-        BlockPos target = position(action, "position"); String dimension = action.get("dimension").getAsString(); long tick = minecraft.level.getGameTime();
+        visit(minecraft, position(action, "position"), action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit");
+    }
+
+    /** Uses only a fresh read-only operation snapshot to choose a player-side observation point. */
+    private static void visitOperation(Minecraft minecraft, JsonObject action) {
+        BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent");
+        if (anchor == null) return;
+        JsonObject offset = action.getAsJsonObject("offset");
+        visit(minecraft, anchor.offset(offset.get("x").getAsInt(), offset.get("y").getAsInt(), offset.get("z").getAsInt()),
+                action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), action.get("timeoutMs").getAsLong(), "visit_operation");
+    }
+
+    private static void visit(Minecraft minecraft, BlockPos target, String dimension, long settleMs, long timeoutMs, String actionType) {
+        long tick = minecraft.level.getGameTime();
         if (!visitSent) {
             String username = minecraft.player.getGameProfile().getName();
             minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
@@ -295,11 +311,33 @@ public final class FrontierV3TestPilotClient {
         boolean ready = minecraft.level.dimension().location().toString().equals(dimension) && minecraft.level.hasChunkAt(target);
         if (ready) {
             if (visitChunkReadyTick < 0L) visitChunkReadyTick = tick;
-            if ((tick - visitChunkReadyTick) * 50L >= action.get("settleMs").getAsLong()) { advance("visit"); return; }
+            if ((tick - visitChunkReadyTick) * 50L >= settleMs) { advance(actionType); return; }
         } else visitChunkReadyTick = -1L;
-        if ((tick - actionStartedTick) * 50L >= 120_000L + action.get("settleMs").getAsLong()) {
+        if ((tick - actionStartedTick) * 50L >= timeoutMs) {
             throw new IllegalStateException("timed out visiting naturally loaded " + dimension + " at " + target);
         }
+    }
+
+    private static void lookOperation(Minecraft minecraft, JsonObject action) {
+        BlockPos anchor = operationAnchor(minecraft, action, action.has("anchor") ? action.get("anchor").getAsString() : "travelCargo");
+        if (anchor == null) return;
+        look(minecraft, anchor); advance("look_operation");
+    }
+
+    /** Returns one current diagnostic coordinate, requesting it at the same bounded cadence as other waits. */
+    private static BlockPos operationAnchor(Minecraft minecraft, JsonObject action, String anchor) {
+        String operation = action.get("operationId").getAsString(); long tick = minecraft.level.getGameTime();
+        ObservedDiagnostic diagnostic = diagnostics.get(new DiagnosticIdentity("operation", operation));
+        if (fresh(diagnostic)) {
+            JsonObject value = diagnostic.value().getAsJsonObject(anchor);
+            if (value == null || !value.has("x") || !value.has("y") || !value.has("z")) {
+                throw new IllegalStateException("operation diagnostic lacks " + anchor + " for " + operation);
+            }
+            return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());
+        }
+        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect operation " + operation);
+        timeout(minecraft, action, "timed out reading current operation anchor " + operation);
+        return null;
     }
 
     /** Proves the player camera itself is aimed at one loaded, non-air exact block. */
@@ -339,6 +377,23 @@ public final class FrontierV3TestPilotClient {
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
             throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor);
         }
+    }
+
+    /** Presentation-only proof: the player camera sees a locally rendered ordinary entity, not a server-selected UUID. */
+    private static void assertVisibleEntity(Minecraft minecraft, JsonObject action) {
+        ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
+        String expectedName = action.get("nameContains").getAsString();
+        double maxDistance = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
+        double maxAngle = Math.cos(Math.toRadians(action.has("maxAngleDeg") ? action.get("maxAngleDeg").getAsDouble() : 50.0D));
+        Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
+        boolean visible = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maxDistance), entity -> {
+            if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                    || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)) return false;
+            Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
+            return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
+        }).stream().findFirst().isPresent();
+        if (visible) { advance("assert_visible_entity"); return; }
+        timeout(minecraft, action, "camera never saw local entity " + expectedType + " named " + expectedName);
     }
 
     /**

@@ -111,6 +111,21 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsAReadOnlyOperationRelativeCameraAndLocalEntityPresentationProof() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"visit_operation","operationId":"operation:supply-1-2","dimension":"pale_mirror:frontier_graybox",
+                "offset":{"x":10,"y":1,"z":-10},"settleMs":1000,"timeoutMs":30000},
+                {"type":"look_operation","operationId":"operation:supply-1-2","anchor":"travelCargo","timeoutMs":30000},
+                {"type":"assert_visible_entity","entityType":"minecraft:text_display","nameContains":"CARAVAN",
+                "maxDistance":64,"maxAngleDeg":50,"timeoutMs":30000}]}""");
+        assertEquals(3, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit_operation","operationId":"operation:supply-1-2",
+                "dimension":"pale_mirror:frontier_graybox","offset":{"x":33,"y":1,"z":0},"settleMs":1000,"timeoutMs":30000}]}"""));
+    }
+
+    @Test
     void permitsOneBoundedOrdinaryBlockPlacementWithoutWorldCommandAuthority() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"place","position":{"x":1,"y":65,"z":2},

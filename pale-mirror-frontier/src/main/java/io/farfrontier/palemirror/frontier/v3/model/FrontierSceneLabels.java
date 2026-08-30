@@ -31,7 +31,12 @@ public final class FrontierSceneLabels {
                 .min(Comparator.comparing(ExactItemStack::id))
                 .orElseThrow(() -> new IllegalStateException("cargo has no exact presentable stack: " + cargo.id().value()));
         String material = stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(Locale.ROOT);
-        return "CARAVAN · " + material + " ×" + stack.count();
+        String owner = state.bootstrap().settlements().stream().filter(settlement -> settlement.id().equals(cargo.ownerId()))
+                .map(Settlement::displayName).findFirst().orElse(cargo.ownerId().value().startsWith("hive:") ? "HIVE" : "FRONTIER");
+        // A physical carrier is often seen from the side at a distance.  Two short semantic
+        // lines make its affiliation and exact visible load legible without creating a HUD,
+        // exposing an internal ID, or introducing a second operation object.
+        return owner.toUpperCase(Locale.ROOT) + " CARAVAN\n" + material + " ×" + stack.count();
     }
 
     private static String words(String enumName) { return enumName.replace('_', ' ').toUpperCase(Locale.ROOT); }

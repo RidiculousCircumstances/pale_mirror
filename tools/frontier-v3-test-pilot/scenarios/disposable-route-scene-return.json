@@ -19,19 +19,20 @@
     { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "CLOSED", "primaryActor": "resident:1-16", "primaryEntityUuid": "f786e0b1-0619-31ad-aafa-5993d44220f0" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 1 }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -366, "y": 65, "z": -340 }, "settleMs": 1000 },
+    { "type": "visit_operation", "operationId": "operation:supply-1-2", "dimension": "pale_mirror:frontier_graybox", "offset": { "x": 10, "y": 1, "z": -10 }, "settleMs": 1000, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16", "primaryEntityUuid": "f786e0b1-0619-31ad-aafa-5993d44220f0" }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "operation:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_travel_advanced", "subject": "operation:supply-1-2" }, "timeoutMs": 30000 },
-    { "type": "look", "at": { "x": -366, "y": 65, "z": -340 } },
+    { "type": "look_operation", "operationId": "operation:supply-1-2", "anchor": "travelCargo", "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:text_display", "nameContains": "CARAVAN", "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "inspect", "view": "scene", "id": "operation:supply-1-2" }
   ],
   "assertions": [
     { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 1 } },
     { "after": 10, "view": "trace", "id": "operation:operation:supply-1-2", "expect": { "status": "ok", "eventKind": "operation_travel_advanced", "subject": "operation:supply-1-2" } },
-    { "after": 12, "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16", "primaryEntityUuid": "f786e0b1-0619-31ad-aafa-5993d44220f0" } }
+    { "after": 13, "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16", "primaryEntityUuid": "f786e0b1-0619-31ad-aafa-5993d44220f0" } }
   ],
   "frames": [
-    { "after": 11, "name": "route-current-continuation" }
+    { "after": 12, "name": "route-current-continuation" }
   ]
 }

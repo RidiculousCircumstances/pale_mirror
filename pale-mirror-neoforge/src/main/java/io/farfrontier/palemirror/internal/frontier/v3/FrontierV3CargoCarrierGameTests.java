@@ -63,6 +63,8 @@ public final class FrontierV3CargoCarrierGameTests {
                 Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 helper.assertTrue(carrier instanceof MinecartChest, "the graybox carrier must be a visible chest minecart");
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.owned(carrier, lease, expected), "the carrier must hold only canonical tagged cargo");
+                helper.assertTrue(FrontierV3CargoCarrierPresentation.attached(carrier, lease),
+                        "one exact local caption must ride with the real cargo carrier rather than becoming a detached HUD");
                 helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                         "recovery must reuse the exact carrier rather than duplicate cargo");
                 helper.assertValueEqual(level.getEntitiesOfClass(MinecartChest.class, carrier.getBoundingBox().inflate(8.0D)).size(), 1,
@@ -171,6 +173,8 @@ public final class FrontierV3CargoCarrierGameTests {
                 FrontierWorldState hot = state(runtime);
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.markReleasedCarrier(hot, lease, cart),
                         "release marks every exact stack with its live cart carrier before the durable fact");
+                helper.assertTrue(!FrontierV3CargoCarrierPresentation.attached(cart, lease),
+                        "a released player-opened cart must lose its caravan caption before it can become ordinary world custody");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-release", lease.id().value(),
                         new CargoCarrierReleased(lease.id(), lease.cargoId(), cart.getUUID(), java.util.Optional.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000061"))));
                 FrontierWorldState released = state(runtime);

@@ -33,7 +33,8 @@ class FrontierV3ScenePresentationTest {
 
         assertEquals(settlement.displayName() + " " + resident.role().name(), residentName);
         assertEquals("HIVE " + state.bootstrap().hive().bioforms().getFirst().role().name(), bioformName);
-        assertEquals("CARAVAN · " + stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(java.util.Locale.ROOT)
+        assertEquals(settlement.displayName().toUpperCase(java.util.Locale.ROOT) + " CARAVAN\n"
+                + stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(java.util.Locale.ROOT)
                 + " ×" + stack.count(), cargoName);
         assertFalse(residentName.contains(resident.id().value()) || cargoName.contains(cargo.id().value()),
                 "canonical IDs belong in diagnostics, not a player's in-world scene");
