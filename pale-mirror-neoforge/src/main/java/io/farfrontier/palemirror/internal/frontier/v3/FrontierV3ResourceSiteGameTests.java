@@ -138,6 +138,11 @@ public final class FrontierV3ResourceSiteGameTests {
                 ResourceSiteKind.WHEAT_FIELD, crops);
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
+        // GameTest's vanilla 1x1 template only loads its own chunk, while an 8x8
+        // field can cross a random test-world chunk edge. These are fixture reads,
+        // not production tickets: load every exact field chunk before its baseline
+        // writes so an unavailable neighbour cannot look like a physical conflict.
+        site.managedSlots().forEach(slot -> level.getChunkAt(minecraft(slot)));
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             // Production accepts grass or dirt; use dirt in the delayed fixture because
             // grass can receive a random tick before the ownership assertion runs.

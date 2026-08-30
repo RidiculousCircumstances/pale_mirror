@@ -147,13 +147,18 @@ public final class FrontierV3SceneGameTests {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList());
         FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset((index % 2) * 2, 0, (index / 2) * 2); prepareFloor(level, position);
+            BlockPos position = origin.offset((index % 2) * 2, 0, (index / 2) * 2);
+            // The vanilla 1x1 GameTest template only tickets its own chunk. This proof
+            // deliberately uses an off-template HOT scene, so load each fixture chunk
+            // synchronously without creating a persistent force-load ticket.
+            level.getChunkAt(position); prepareFloor(level, position);
             addOwnedBody(helper, level, lease, lease.members().get(index), position);
         }
         for (SceneMember member : lease.members()) {
             Entity body = level.getEntity(member.entityId());
             helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
-                    "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission");
+                    "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission: "
+                            + admissionDetail(runtime, member, body));
         }
         Zombie foreign = EntityType.ZOMBIE.create(level);
         helper.assertTrue(foreign != null && !FrontierV3SceneExecutor.recognizes(runtime, foreign),
@@ -586,6 +591,17 @@ public final class FrontierV3SceneGameTests {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage()
                 .orElseThrow(() -> new IllegalStateException("the v3 GameTest runtime must remain active: "
                         + runtime.status().detail().orElse(runtime.status().kind().name()))).canonicalState());
+    }
+    private static String admissionDetail(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneMember member, Entity body) {
+        if (body == null) return "missing body for " + member.actorId() + " expectedUuid=" + member.entityId();
+        String lease = body.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY);
+        String actor = body.getPersistentData().getString(FrontierV3SceneExecutor.ACTOR_KEY);
+        long revision = body.getPersistentData().getLong(FrontierV3SceneExecutor.REVISION_KEY);
+        return "actor=" + member.actorId() + ", expectedUuid=" + member.entityId() + ", actualUuid=" + body.getUUID()
+                + ", type=" + body.getType() + ", removed=" + body.isRemoved() + ", lease=" + lease
+                + ", actorTag=" + actor + ", revision=" + revision + ", canonicalRevision="
+                + state(runtime).sceneLeases().values().stream().filter(value -> value.id().value().equals(lease))
+                .map(value -> value.revision() + "/" + value.status()).findFirst().orElse("missing");
     }
     /** GameTest-only memory port: the filesystem restart proof lives in FrontierV3ServerRuntimeTest. */
     private static final class EphemeralStore implements FrontierStore {
