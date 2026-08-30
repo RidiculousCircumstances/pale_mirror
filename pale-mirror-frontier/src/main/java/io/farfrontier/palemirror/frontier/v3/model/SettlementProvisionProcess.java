@@ -25,6 +25,8 @@ import java.util.List;
  */
 final class SettlementProvisionProcess {
     static final String BREAD = "minecraft:bread";
+    /** Allows the first COLD harvest and its exact workshop transformation to complete. */
+    static final long INITIAL_REVIEW_TICK = 24_000L;
     private static final long REVIEW_INTERVAL = 24_000L;
 
     private SettlementProvisionProcess() { }

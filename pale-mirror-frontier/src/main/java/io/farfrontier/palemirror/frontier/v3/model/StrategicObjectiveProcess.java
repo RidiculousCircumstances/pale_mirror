@@ -23,8 +23,26 @@ final class StrategicObjectiveProcess {
                 new SimInstant(dueAt), 0, owner, "frontier.objective.review", 1);
     }
 
+    /**
+     * A physical route fact must wake only the settlements whose actual supply corridor it
+     * invalidates.  This is deliberately a one-shot reconsideration: it cannot multiply the
+     * ordinary recurring review stream just because one player broke a block.
+     */
+    static ScheduledAction routeReconsideration(SubjectId settlementId, BlockPosition obstruction, String trigger, long dueAt) {
+        requireKnownRouteTrigger(trigger);
+        String owner = settlementId.value().replace(':', '-');
+        String position = obstruction.x() + "-" + obstruction.y() + "-" + obstruction.z();
+        return new ScheduledAction(new ScheduleId("schedule:objective-route-" + trigger + "-" + owner + "-" + position + "-1"),
+                new SimInstant(dueAt), 0, settlementId, "frontier.objective.reconsider", 1);
+    }
+
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         return plan(state, action, true, true);
+    }
+
+    static List<ProposedEvent> planReconsideration(FrontierWorldState state, ScheduledAction action) {
+        if (!action.kind().equals("frontier.objective.reconsider")) throw new IllegalArgumentException("route reconsideration has an invalid action kind");
+        return plan(state, action, false, true, action.id().value());
     }
 
     static ScheduledAction interceptOpportunity(SubjectId hive, RouteOperation operation, long dueAt) {
@@ -68,6 +86,11 @@ final class StrategicObjectiveProcess {
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
                                             boolean allowHiveInterception) {
+        return plan(state, action, recurring, allowHiveInterception, null);
+    }
+
+    private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
+                                            boolean allowHiveInterception, String eventIdentity) {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
@@ -79,10 +102,11 @@ final class StrategicObjectiveProcess {
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
             return concatenate(health, next);
         }
-        List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
-        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return concatenate(health, next);
+        List<ProposedEvent> preempted = new java.util.ArrayList<>(preemptForInterception(state, owner, candidate));
+        candidate.filter(value -> emergencyFoodCandidate(state, owner, value)).ifPresent(ignored -> preempted.addAll(preemptForEmergencyProvision(state, owner)));
         if (candidate.isEmpty()) return concatenate(health, next);
-        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal);
+        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal, eventIdentity);
+        if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) return concatenate(health, next);
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {
             StrategicTask preparation = cargoPreparationTask(state, objective); StrategicTask delivery = deliveryTask(objective, preparation);
             List<ProposedEvent> events = new java.util.ArrayList<>(preempted);
@@ -146,6 +170,16 @@ final class StrategicObjectiveProcess {
                 .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
                 .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(owner, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
     }
+    private static boolean emergencyFoodCandidate(FrontierWorldState state, SubjectId owner, Candidate candidate) {
+        return candidate.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && !state.bootstrap().hive().id().equals(owner)
+                && SettlementProvisionProcess.availableFood(state, owner) < SettlementProvisionProcess.reserveRequirement(state, owner);
+    }
+    private static List<ProposedEvent> preemptForEmergencyProvision(FrontierWorldState state, SubjectId settlementId) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
+                .filter(task -> task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL && task.status() == StrategicTaskStatus.PENDING)
+                .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(settlementId,
+                        new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
+    }
     private static List<ProposedEvent> withPreemption(List<ProposedEvent> preempted, List<ProposedEvent> next, ProposedEvent... events) {
         List<ProposedEvent> result = new java.util.ArrayList<>(preempted);
         result.addAll(List.of(events)); result.addAll(next);
@@ -155,6 +189,30 @@ final class StrategicObjectiveProcess {
         List<ProposedEvent> result = new java.util.ArrayList<>(first); result.addAll(second); return List.copyOf(result);
     }
     private static Optional<Candidate> settlementCandidate(FrontierWorldState state, Settlement settlement) {
+        boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
+                && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
+        boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
+        boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
+        boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
+        boolean blockedRoute = !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas());
+        // A confirmed physical logistics failure outranks ordinary production and containment
+        // selection.  It does not cancel an already active task; lane ownership remains the
+        // sole authority for that decision.
+        if (!constructionActive && alreadyConfirmed) {
+            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), Long.MAX_VALUE));
+        }
+        if (!constructionActive && !alreadyConfirmed && blockedRoute) {
+            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE));
+        }
+        // Food may preempt a pending containment task that is waiting for an infirmary reagent,
+        // but never a physical effect already under execution.
+        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent() && reserveShort) {
+            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), Long.MAX_VALUE - 1L));
+        }
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
         if (infirmary.isPresent()) {
@@ -164,22 +222,6 @@ final class StrategicObjectiveProcess {
                     .sorted(Candidate.HIGHEST_UTILITY).findFirst();
             if (containment.isPresent()) return containment;
         }
-        boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
-        boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
-                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
-        boolean blockedRoute = !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas());
-        if (!constructionActive && alreadyConfirmed) {
-            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), Long.MAX_VALUE));
-        }
-        if (!constructionActive && !alreadyConfirmed && blockedRoute) {
-            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE));
-        }
-        boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
-                && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
-        boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
         if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
         return SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent() && !state.humanPopulation().quarantined(settlement.id())
@@ -200,9 +242,16 @@ final class StrategicObjectiveProcess {
         return capacity && biomass ? Optional.of(new Candidate(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
-        String stem = owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal;
+        return objective(owner, candidate, ordinal, null);
+    }
+    private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
+        String stem = eventIdentity == null ? owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal
+                : eventIdentity.substring("schedule:".length());
         return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), candidate.resourceSiteTarget(), ordinal,
                 StrategicObjectiveStatus.ACTIVE);
+    }
+    private static void requireKnownRouteTrigger(String trigger) {
+        if (!trigger.equals("loss") && !trigger.equals("confirmed")) throw new IllegalArgumentException("route reconsideration has an unknown trigger");
     }
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective) {
         List<StrategicTaskRequirement> requirements = switch (objective.kind()) {

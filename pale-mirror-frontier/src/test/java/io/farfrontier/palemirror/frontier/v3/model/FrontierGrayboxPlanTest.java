@@ -72,6 +72,17 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void exactOrganCellCountMatchesTheMaterializedSemanticGeometry() {
+        FrontierWorldState state = initial();
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().hive().organs().forEach(organ -> assertEquals(
+                plan.cells().values().stream().filter(cell -> cell.ownerId().equals(organ.id())).count(),
+                FrontierGrayboxPlan.intactOrganCellCount(organ),
+                "operational damage threshold must count the exact compiled organ geometry: " + organ.id()));
+    }
+
+    @Test
     void everyBootstrapResidentUsesOneClearDeterministicStreetOrPerimeterSlot() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

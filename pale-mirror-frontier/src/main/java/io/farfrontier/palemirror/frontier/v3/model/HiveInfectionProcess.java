@@ -15,7 +15,15 @@ import java.util.Optional;
 
 /** Executes one durable hive infection-expansion task, never an ownerless metabolism pulse. */
 final class HiveInfectionProcess {
-    private static final long PULSE_INTERVAL = 100L;
+    /**
+     * COLD infection advances at meaningful visible boundaries, not every five seconds.
+     *
+     * <p>One pulse changes one 4×4 cell by one eighth. At this cadence a cell takes four
+     * minutes to bloom while a loaded materializer still presents the same canonical stages
+     * immediately. This preserves a readable, background world process without producing a
+     * high-frequency stream of otherwise invisible immutable COLD transactions.</p>
+     */
+    static final long COLD_PULSE_INTERVAL = 600L;
     private static final long PULSE_GAIN = 125_000L;
 
     private HiveInfectionProcess() { }
@@ -48,7 +56,7 @@ final class HiveInfectionProcess {
         if (raw == FixedScalar.SCALE) {
             events.add(transition(task, StrategicTaskStatus.COMPLETED));
         } else {
-            events.add(new ProposedEvent(task.ownerId(), new ScheduleEffect.Created(task(task, pulse(action) + 1, action.dueAt().ticks() + PULSE_INTERVAL))));
+            events.add(new ProposedEvent(task.ownerId(), new ScheduleEffect.Created(task(task, pulse(action) + 1, action.dueAt().ticks() + COLD_PULSE_INTERVAL))));
         }
         return List.copyOf(events);
     }

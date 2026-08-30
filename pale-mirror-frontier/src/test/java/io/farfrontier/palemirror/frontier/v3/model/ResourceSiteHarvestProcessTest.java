@@ -14,13 +14,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteHarvestProcessTest {
     @Test
-    void readyFieldUsesItsBoundedFacilityLaneWithoutCancellingStrategicWork() {
+    void readyFieldUsesItsBoundedFacilityLaneWithoutCancellingContainmentWork() {
         FrontierWorldState state = ready(initial()); SubjectId settlement = new SubjectId("settlement:1");
         StrategicObjective strategic = new StrategicObjective(new SubjectId("objective:1-export"), settlement,
-                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(new InfectionCell(0, 0)), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask strategicTask = new StrategicTask(new SubjectId("task:1-export"), strategic.id(), settlement,
-                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
-                StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.PENDING);
+                StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(new InfectionCell(0, 0)),
+                List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY, StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(strategic).addTask(strategicTask));
         SubjectId site = new SubjectId("site:1-wheat-field");
 

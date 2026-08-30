@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,6 +52,22 @@ class FrontierV3AnnualAutonomyAuditTest {
         assertEquals(uninterrupted, recovered,
                 "a recovered annual COLD run must end at the same canonical state as uninterrupted execution");
         System.out.println("PMV3_ANNUAL_RECOVERY " + recovered);
+    }
+
+    /**
+     * A short, printed calibration trace for the ordinary fresh-world food loop.  It deliberately
+     * runs the same unmaterialized COLD profile that a server uses while no player is near a
+     * settlement: food autonomy must not depend on a convenient loaded field or depot.
+     */
+    @Test
+    void normalBootstrapFoodLoopRecoversBeforeAnyResidentCanStarve() {
+        List<FoodSnapshot> snapshots = foodSnapshots(41L, List.of(26_000L, 50_000L, 74_000L, 98_000L));
+        System.out.println("PMV3_FOOD_CALIBRATION " + foodSummary(snapshots));
+        assertEquals(4, snapshots.size());
+        assertTrue(snapshots.stream().allMatch(snapshot -> snapshot.starvingResidents() == 0L),
+                "a normal fresh world may expose a ration shortfall, but may not starve residents before its COLD farms recover");
+        assertTrue(snapshots.stream().allMatch(snapshot -> snapshot.hungryResidents() == 0L),
+                "the ordinary twelve-settlement bootstrap must feed every resident from its first scheduled ration onward");
     }
 
     /** Allows one full-year seed to be diagnosed locally without weakening the default four-seed gate. */
@@ -108,6 +126,70 @@ class FrontierV3AnnualAutonomyAuditTest {
                 state.inventory().items().size(), state.contracts().size(), state.operations().size(), state.infection().size(), digest(checkpoint));
     }
 
+    private static List<FoodSnapshot> foodSnapshots(long seed, List<Long> ticks) {
+        WorldId world = new WorldId("frontier:food-calibration-" + seed);
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, seed));
+        List<FoodSnapshot> snapshots = new java.util.ArrayList<>();
+        long current = 0L; long compactedAt = 0L;
+        for (long tick : ticks) {
+            long[] retention = {compactedAt}; current = advanceThrough(engine, current, tick, retention); compactedAt = retention[0];
+            assertEquals(tick, current, "food calibration must process every due action before its snapshot");
+            FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            long nourished = state.humanPopulation().residents().keySet().stream().filter(id -> state.humanPopulation().nutrition(id).status() == ResidentNutritionStatus.NOURISHED).count();
+            long hungry = state.humanPopulation().residents().keySet().stream().filter(id -> state.humanPopulation().nutrition(id).status() == ResidentNutritionStatus.HUNGRY).count();
+            long starving = state.humanPopulation().residents().keySet().stream().filter(id -> state.humanPopulation().nutrition(id).status() == ResidentNutritionStatus.STARVING).count();
+            Map<SettlementProvisionStatus, Long> provisioning = state.humanPopulation().provisions().values().stream()
+                    .collect(java.util.stream.Collectors.groupingBy(SettlementProvision::status, java.util.TreeMap::new, java.util.stream.Collectors.counting()));
+            Map<SubjectId, SettlementFoodSnapshot> settlements = new java.util.TreeMap<>();
+            for (Settlement settlement : state.bootstrap().settlements()) {
+                SubjectId depot = FrontierWorldState.depotId(settlement.id());
+                int bread = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                        .filter(item -> SettlementProvisionProcess.BREAD.equals(item.itemKind())).mapToInt(ExactItemStack::count).sum();
+                int wheat = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                        .filter(item -> "minecraft:wheat".equals(item.itemKind())).mapToInt(ExactItemStack::count).sum();
+                ResourceSiteLifecycle field = state.resourceSites().site(new SubjectId("site:" + settlement.id().value().substring("settlement:".length()) + "-wheat-field"));
+                long settlementHungry = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                        .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() != ResidentNutritionStatus.NOURISHED).count();
+                List<String> activeTasks = state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlement.id()))
+                        .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
+                        .map(task -> task.kind() + ":" + task.status()).sorted().toList();
+                List<String> depotItems = state.inventory().items().values().stream()
+                        .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                        .map(item -> item.itemKind() + "x" + item.count()).sorted().toList();
+                StructureCondition workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP)
+                        .map(structure -> state.structureConditions().get(structure.id())).findFirst().orElseThrow();
+                settlements.put(settlement.id(), new SettlementFoodSnapshot(bread, wheat, field.phase(), field.growthEpoch(), field.growthStage(),
+                        state.humanPopulation().provision(settlement.id()).status(), settlementHungry, workshop, state.inventory().firstFreeSlot(depot).isPresent(), depotItems, activeTasks));
+            }
+            snapshots.add(new FoodSnapshot(tick, nourished, hungry, starving, provisioning, settlements));
+        }
+        return List.copyOf(snapshots);
+    }
+
+    private static List<String> foodSummary(List<FoodSnapshot> snapshots) {
+        return snapshots.stream().map(snapshot -> {
+            List<String> exceptions = snapshot.settlements().entrySet().stream()
+                    .filter(entry -> entry.getValue().hungryResidents() > 0L || entry.getValue().provision() != SettlementProvisionStatus.SECURE)
+                    .map(entry -> entry.getKey().value() + "=" + entry.getValue().provision() + "/hungry=" + entry.getValue().hungryResidents())
+                    .toList();
+            return "t=" + snapshot.tick() + " nourished=" + snapshot.nourishedResidents() + " hungry=" + snapshot.hungryResidents()
+                    + " starving=" + snapshot.starvingResidents() + " provisioning=" + snapshot.provisioning() + " exceptions=" + exceptions;
+        }).toList();
+    }
+
+    private static long advanceThrough(FrontierEngine<FrontierWorldProjection> engine, long current, long target, long[] compactedAt) {
+        while (current < target) {
+            long next = nextTarget(engine.nextScheduledInstantAfter(new SimInstant(current)), target);
+            var result = engine.advanceTo(new SimInstant(next), BUDGET);
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("food calibration engine quarantined"));
+            if (result.revision().value() - compactedAt[0] >= 1_024L) {
+                engine.compact(result.revision()); compactedAt[0] = result.revision().value();
+            }
+            current = result.instant().ticks();
+        }
+        return current;
+    }
+
     private static long nextTarget(java.util.Optional<SimInstant> nextDue, long year) {
         return Math.min(nextDue.map(SimInstant::ticks).orElse(year), year);
     }
@@ -135,4 +217,11 @@ class FrontierV3AnnualAutonomyAuditTest {
 
     private record AnnualResult(long seed, long revision, int residents, int bioforms, int itemStacks, int contracts, int operations,
                                 int infectedCells, String stateDigest) { }
+
+    private record FoodSnapshot(long tick, long nourishedResidents, long hungryResidents, long starvingResidents,
+                                Map<SettlementProvisionStatus, Long> provisioning, Map<SubjectId, SettlementFoodSnapshot> settlements) { }
+
+    private record SettlementFoodSnapshot(int bread, int wheat, ResourceSitePhase fieldPhase, long growthEpoch, int growthStage,
+                                         SettlementProvisionStatus provision, long hungryResidents, StructureCondition workshop, boolean freeDepotSlot, List<String> depotItems,
+                                         List<String> activeTasks) { }
 }

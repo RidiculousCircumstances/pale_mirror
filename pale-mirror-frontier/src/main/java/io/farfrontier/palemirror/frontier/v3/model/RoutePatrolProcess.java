@@ -43,8 +43,13 @@ final class RoutePatrolProcess {
         int next = patrol.routeIndex() + 1;
         java.util.Optional<BlockPosition> obstruction = FrontierRouteNetwork.firstObstructionOnSegment(patrol.route(), patrol.routeIndex(), state.physicalDeltas());
         ProposedEvent advanced = new ProposedEvent(patrol.settlementId(), new RoutePatrolAdvanced(patrol.taskId(), next));
-        if (obstruction.isPresent()) return List.of(advanced, new ProposedEvent(patrol.settlementId(),
-                new RoutePatrolObstructionConfirmed(patrol.taskId(), obstruction.orElseThrow())), transition(task, StrategicTaskStatus.COMPLETED));
+        if (obstruction.isPresent()) {
+            BlockPosition confirmed = obstruction.orElseThrow();
+            ScheduledAction reconsideration = StrategicObjectiveProcess.routeReconsideration(patrol.settlementId(), confirmed, "confirmed",
+                    Math.addExact(action.dueAt().ticks(), 1L));
+            return List.of(advanced, new ProposedEvent(patrol.settlementId(), new RoutePatrolObstructionConfirmed(patrol.taskId(), confirmed)),
+                    transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(patrol.settlementId(), new ScheduleEffect.Created(reconsideration)));
+        }
         if (next == patrol.route().size() - 1) return List.of(advanced, transition(task, StrategicTaskStatus.COMPLETED));
         return List.of(advanced, schedule(progress(patrol.advance(next), action.dueAt().ticks() + STEP_INTERVAL)));
     }

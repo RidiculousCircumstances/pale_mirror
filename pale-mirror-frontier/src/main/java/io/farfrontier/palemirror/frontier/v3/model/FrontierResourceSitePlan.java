@@ -2,19 +2,38 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.WeakHashMap;
 
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
     private static final int FIELD_SIDE = 8;
+    /**
+     * Resource-site geometry is a pure function of an immutable fresh-world bootstrap.
+     *
+     * <p>Complete canonical validation may need that geometry on every accepted event. Keeping
+     * it in a weak, derived cache avoids reconstructing the same twelve 64-cell field plans,
+     * without making the cache a source of world state or retaining retired worlds. The returned
+     * value is immutable, so callers cannot alter a later validation through this cache.</p>
+     */
+    private static final Map<FrontierBootstrap, Map<SubjectId, ResourceSite>> BY_BOOTSTRAP =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private FrontierResourceSitePlan() { }
 
     public static Map<SubjectId, ResourceSite> compile(FrontierBootstrap bootstrap) {
-        Objects.requireNonNull(bootstrap, "bootstrap"); Map<SubjectId, ResourceSite> sites = new LinkedHashMap<>();
+        Objects.requireNonNull(bootstrap, "bootstrap");
+        synchronized (BY_BOOTSTRAP) {
+            return BY_BOOTSTRAP.computeIfAbsent(bootstrap, FrontierResourceSitePlan::compileFresh);
+        }
+    }
+
+    private static Map<SubjectId, ResourceSite> compileFresh(FrontierBootstrap bootstrap) {
+        Map<SubjectId, ResourceSite> sites = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementStructure farm = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.FARM).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("settlement lacks a farm: " + settlement.id().value()));

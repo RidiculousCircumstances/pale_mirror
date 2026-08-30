@@ -265,7 +265,7 @@ final class StrategicPlanState {
         Map<SubjectId, StrategicObjective> retainedObjectives = new LinkedHashMap<>(objectives);
         Map<SubjectId, StrategicTask> retainedTasks = new LinkedHashMap<>(tasks);
         while (retainedObjectives.size() + newObjectives > MAX_OBJECTIVES || retainedTasks.size() + newTasks > MAX_TASKS) {
-            RetentionIndex retention = RetentionIndex.forTasks(retainedTasks);
+            RetentionIndex retention = RetentionIndex.forTasks(retainedTasks, retainedObjectives);
             StrategicObjective discard = retainedObjectives.values().stream().filter(value -> value.status() != StrategicObjectiveStatus.ACTIVE)
                     .filter(value -> retention.removable(value.id(), protectedTaskIds))
                     .sorted(java.util.Comparator.comparingInt(StrategicObjective::decisionOrdinal).thenComparing(StrategicObjective::id)).findFirst()
@@ -331,8 +331,9 @@ final class StrategicPlanState {
      * Rebuilding those bounded indexes once per discarded objective preserves the exact same
      * retention rule without multiplying a 512-task scan by every terminal candidate.
      */
-    private record RetentionIndex(Map<SubjectId, Set<SubjectId>> ownedByObjective, Set<SubjectId> externallyReferenced) {
-        static RetentionIndex forTasks(Map<SubjectId, StrategicTask> tasks) {
+    private record RetentionIndex(Map<SubjectId, Set<SubjectId>> ownedByObjective, Set<SubjectId> externallyReferenced,
+                                  Set<SubjectId> prospectiveDeliveryPredecessors) {
+        static RetentionIndex forTasks(Map<SubjectId, StrategicTask> tasks, Map<SubjectId, StrategicObjective> objectives) {
             Map<SubjectId, Set<SubjectId>> owned = new HashMap<>();
             for (StrategicTask task : tasks.values()) {
                 owned.computeIfAbsent(task.objectiveId(), ignored -> new HashSet<>()).add(task.id());
@@ -342,12 +343,32 @@ final class StrategicPlanState {
                 StrategicTask predecessor = tasks.get(dependency);
                 if (predecessor != null && !predecessor.objectiveId().equals(task.objectiveId())) external.add(dependency);
             }
-            return new RetentionIndex(owned, external);
+            // An objective is reduced before its tasks in one atomic command. A forthcoming
+            // delivery task may therefore reference the newest completed local bread task that
+            // is not yet visible in this intermediate state. Keep precisely that bounded
+            // predecessor per owner; once a delivery task exists, its ordinary dependency index
+            // takes over. This avoids a reducer-order-dependent dangling task reference.
+            Map<SubjectId, StrategicTask> newestBread = new HashMap<>();
+            for (StrategicTask task : tasks.values()) {
+                if (task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != StrategicTaskStatus.COMPLETED) continue;
+                StrategicTask prior = newestBread.get(task.ownerId());
+                if (prior == null || newer(task, prior, objectives)) newestBread.put(task.ownerId(), task);
+            }
+            return new RetentionIndex(owned, external, Set.copyOf(newestBread.values().stream().map(StrategicTask::id).toList()));
         }
 
         boolean removable(SubjectId objectiveId, List<SubjectId> protectedTaskIds) {
             Set<SubjectId> owned = ownedByObjective.getOrDefault(objectiveId, Set.of());
-            return java.util.Collections.disjoint(owned, protectedTaskIds) && java.util.Collections.disjoint(owned, externallyReferenced);
+            return java.util.Collections.disjoint(owned, protectedTaskIds) && java.util.Collections.disjoint(owned, externallyReferenced)
+                    && java.util.Collections.disjoint(owned, prospectiveDeliveryPredecessors);
+        }
+
+        private static boolean newer(StrategicTask candidate, StrategicTask previous, Map<SubjectId, StrategicObjective> objectives) {
+            StrategicObjective candidateObjective = objectives.get(candidate.objectiveId());
+            StrategicObjective previousObjective = objectives.get(previous.objectiveId());
+            if (candidateObjective == null || previousObjective == null) throw new IllegalArgumentException("production task lacks its objective");
+            int byOrdinal = Integer.compare(candidateObjective.decisionOrdinal(), previousObjective.decisionOrdinal());
+            return byOrdinal != 0 ? byOrdinal > 0 : candidate.id().compareTo(previous.id()) > 0;
         }
     }
 

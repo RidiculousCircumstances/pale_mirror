@@ -146,6 +146,9 @@ final class FrontierDevelopmentScenarios {
     static HealthQuarantineFixture healthQuarantineFixture(WorldId worldId, long seed) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        // This fixture isolates ordinary infection/quarantine causality; food production has its
+        // own native profile and must not win the settlement's first review here.
+        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat")));
         Settlement settlement = bootstrap.settlements().getFirst();
         SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
                 .findFirst().orElseThrow(() -> new IllegalStateException("health fixture needs one infirmary"));

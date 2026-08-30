@@ -118,7 +118,8 @@ public final class FrontierWorldRuntimeDefinition {
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
-            actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1, 10_000L + index * 100L));
+            actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
+                    SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
         }
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
@@ -274,7 +275,7 @@ public final class FrontierWorldRuntimeDefinition {
             }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.structureSettlement(state.bootstrap(), damage.structureId()), damage)));
         }
-        if (command.payload() instanceof PhysicalDeltaObserved observed) return FrontierWorldPhysicalObservationProcess.plan(state, observed);
+        if (command.payload() instanceof PhysicalDeltaObserved observed) return FrontierWorldPhysicalObservationProcess.plan(state, observed, command.submittedAt().ticks());
         if (command.payload() instanceof ResourceDeposited deposited) return FrontierWorldPhysicalObservationProcess.planResourceDeposit(state, deposited);
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
@@ -349,6 +350,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive_route_engagement.combat" -> HiveRouteEngagementProcess.planCombat(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action, autonomousInterception);
+            case "frontier.objective.reconsider" -> StrategicObjectiveProcess.planReconsideration(state, action);
             case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };

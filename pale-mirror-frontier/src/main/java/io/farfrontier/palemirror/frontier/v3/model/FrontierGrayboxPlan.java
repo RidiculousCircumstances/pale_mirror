@@ -183,9 +183,11 @@ public final class FrontierGrayboxPlan {
 
     public static int intactOrganCellCount(HiveOrgan organ) {
         Objects.requireNonNull(organ, "organ");
-        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        addOrgan(cells, organ);
-        return cells.size();
+        // addOrgan creates a 5x5 top (25 cells) plus the three lower perimeter rings
+        // (3 * 16). A STORE adds its otherwise hollow central socket at y=0. Keep this
+        // exact geometry formula beside the compiler instead of allocating a temporary
+        // position/cell map on every infection or storage capability check.
+        return 25 + 3 * 16 + (organ.containerId().isPresent() ? 1 : 0);
     }
 
     private static GrayboxCell intactOrganCell(HiveOrgan organ, BlockPosition position) {

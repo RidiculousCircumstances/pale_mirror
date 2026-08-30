@@ -43,6 +43,8 @@ class StrategicObjectiveProcessTest {
     @Test
     void settlementUtilityUsesOnlyItsLocalInfectionAndCannotDuplicateItsActiveObjective() {
         FrontierWorldState state = initial("frontier:strategic-settlement", 402L); Settlement settlement = state.bootstrap().settlements().getFirst();
+        ExactInventory foodInventory = state.inventory();
+        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat")));
         InfectionCell nearby = InfectionCell.at(settlement.anchor()); state = state.withInfection(nearby, new FixedRatio(new FixedScalar(750_000L)));
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 40L));
@@ -51,10 +53,14 @@ class StrategicObjectiveProcessTest {
         assertEquals(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, selected.objective().kind()); assertEquals(nearby, selected.objective().infectionTarget().orElseThrow());
         state = StrategicObjectiveProcess.reduceObjective(state, settlement.id(), selected);
         state = StrategicObjectiveProcess.reduceTask(state, settlement.id(), assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload()));
+        state = state.withInventory(foodInventory);
         List<ProposedEvent> activeReview = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 2, 240L));
-        assertEquals(3, activeReview.size(), "an already-active strategic lane still emits the exact health and quarantine facts before its next review");
-        assertInstanceOf(ResidentHealthTransition.class, activeReview.getFirst().payload());
-        assertInstanceOf(SettlementQuarantineTransition.class, activeReview.get(1).payload());
+        StrategicTaskTransition preempted = assertInstanceOf(StrategicTaskTransition.class, activeReview.getFirst().payload());
+        assertEquals(StrategicTaskStatus.BLOCKED, preempted.status());
+        StrategicObjectiveSelected food = assertInstanceOf(StrategicObjectiveSelected.class, activeReview.get(1).payload());
+        assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, food.objective().kind(),
+                "food must preempt containment that is still waiting on its separate infirmary reagent");
+        assertTrue(state.strategicPlans().hasActiveObjective(settlement.id(), StrategicObjectiveLane.STRATEGIC));
     }
 
     @Test
@@ -172,6 +178,32 @@ class StrategicObjectiveProcessTest {
         assertTrue(compacted.tasks().containsKey(produced.id()));
         assertTrue(compacted.objectives().containsKey(new SubjectId("objective:retention-next")));
         assertEquals(StrategicPlanState.MAX_OBJECTIVES, compacted.objectives().size());
+    }
+
+    @Test
+    void retentionCompactionKeepsTheProspectiveBreadPredecessorUntilTheSameTransactionAddsDeliveryTasks() {
+        SubjectId owner = new SubjectId("settlement:1");
+        StrategicObjective production = new StrategicObjective(new SubjectId("objective:future-source"), owner,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
+        StrategicTask produced = new StrategicTask(new SubjectId("task:future-source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
+                StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.COMPLETED);
+        Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>(); objectives.put(production.id(), production);
+        InfectionCell target = new InfectionCell(0, 0);
+        for (int ordinal = 2; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {
+            StrategicObjective filler = new StrategicObjective(new SubjectId("objective:future-filler-" + ordinal), owner,
+                    StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(target), ordinal, StrategicObjectiveStatus.COMPLETED);
+            objectives.put(filler.id(), filler);
+        }
+        StrategicPlanState full = new StrategicPlanState(objectives, Map.of(produced.id(), produced), Map.of(), Map.of());
+
+        StrategicPlanState compacted = full.addObjective(new StrategicObjective(new SubjectId("objective:future-delivery"), owner,
+                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), StrategicPlanState.MAX_OBJECTIVES + 1,
+                StrategicObjectiveStatus.ACTIVE));
+
+        assertTrue(compacted.objectives().containsKey(production.id()));
+        assertTrue(compacted.tasks().containsKey(produced.id()),
+                "the new delivery task is reduced after its objective and must retain this exact predecessor");
     }
 
     @Test

@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierResourceSitePlanTest {
@@ -17,6 +19,8 @@ class FrontierResourceSitePlanTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:resource-sites"), 91L);
         Map<SubjectId, ResourceSite> first = FrontierResourceSitePlan.compile(bootstrap);
         Map<SubjectId, ResourceSite> second = FrontierResourceSitePlan.compile(bootstrap);
+        assertSame(first, second, "one immutable bootstrap must reuse only its derived field geometry");
+        assertThrows(UnsupportedOperationException.class, () -> first.clear(), "cached field geometry must remain immutable");
         Set<BlockPosition> structureCells = FrontierGrayboxPlan.compile(FrontierWorldState.initial(bootstrap)).cells().keySet();
         Set<BlockPosition> cropCells = new HashSet<>();
 

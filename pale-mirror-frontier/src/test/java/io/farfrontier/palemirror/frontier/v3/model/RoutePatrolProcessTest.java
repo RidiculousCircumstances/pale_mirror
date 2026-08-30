@@ -51,7 +51,9 @@ class RoutePatrolProcessTest {
         CommandId id = new CommandId("command:route-patrol-observation");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, id, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta))));
-        for (long tick = 1L; tick <= 2_600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        // The physical observation wakes this affected settlement at the next tick.  Do not
+        // accidentally regress this into waiting for the 2,000-tick background review.
+        for (long tick = 1L; tick <= 600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RoutePatrol patrol = after.strategicPlans().routePatrols().values().stream().filter(value -> value.settlementId().equals(settlement)).findFirst().orElseThrow();
         assertEquals(RoutePatrolStatus.OBSTRUCTION_CONFIRMED, patrol.status());
