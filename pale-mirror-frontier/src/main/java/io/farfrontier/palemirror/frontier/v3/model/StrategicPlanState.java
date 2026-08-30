@@ -2,10 +2,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Canonical bounded owner of retained utility decisions and their durable task graphs. */
 final class StrategicPlanState {
@@ -129,12 +132,16 @@ final class StrategicPlanState {
     Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
 
     void validate(FrontierBootstrap bootstrap, HumanPopulation humanPopulation) {
+        // Resource-site geometry is immutable for one bootstrap.  Validation may visit many
+        // retained terminal objectives after an unrelated state transition, so compiling the
+        // same twelve-site catalogue per objective is needless allocation rather than safety.
+        Map<SubjectId, ResourceSite> resourceSites = FrontierResourceSitePlan.compile(bootstrap);
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
             if (!knownOwner) throw new IllegalArgumentException("strategic objective has a foreign owner");
             objective.resourceSiteTarget().ifPresent(siteId -> {
-                ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(siteId);
+                ResourceSite site = resourceSites.get(siteId);
                 if (site == null || !site.settlementId().equals(objective.ownerId())) {
                     throw new IllegalArgumentException("strategic harvest objective has a foreign resource site");
                 }
@@ -254,11 +261,13 @@ final class StrategicPlanState {
     private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks, List<SubjectId> protectedTaskIds) {
+        if (objectives.size() + newObjectives <= MAX_OBJECTIVES && tasks.size() + newTasks <= MAX_TASKS) return this;
         Map<SubjectId, StrategicObjective> retainedObjectives = new LinkedHashMap<>(objectives);
         Map<SubjectId, StrategicTask> retainedTasks = new LinkedHashMap<>(tasks);
         while (retainedObjectives.size() + newObjectives > MAX_OBJECTIVES || retainedTasks.size() + newTasks > MAX_TASKS) {
+            RetentionIndex retention = RetentionIndex.forTasks(retainedTasks);
             StrategicObjective discard = retainedObjectives.values().stream().filter(value -> value.status() != StrategicObjectiveStatus.ACTIVE)
-                    .filter(value -> removable(value, retainedTasks, protectedTaskIds))
+                    .filter(value -> retention.removable(value.id(), protectedTaskIds))
                     .sorted(java.util.Comparator.comparingInt(StrategicObjective::decisionOrdinal).thenComparing(StrategicObjective::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("strategic plan retention capacity exhausted by active work"));
             retainedObjectives.remove(discard.id());
@@ -317,11 +326,29 @@ final class StrategicPlanState {
         return new StrategicPlanState(objectives, nextTasks, routePatrols, nextEngagements);
     }
 
-    private static boolean removable(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks, List<SubjectId> protectedTaskIds) {
-        java.util.Set<SubjectId> owned = tasks.values().stream().filter(task -> task.objectiveId().equals(objective.id())).map(StrategicTask::id)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return java.util.Collections.disjoint(owned, protectedTaskIds)
-                && tasks.values().stream().filter(task -> !task.objectiveId().equals(objective.id())).noneMatch(task -> task.dependencies().stream().anyMatch(owned::contains));
+    /**
+     * One compaction pass needs only task ownership and cross-objective dependency indexes.
+     * Rebuilding those bounded indexes once per discarded objective preserves the exact same
+     * retention rule without multiplying a 512-task scan by every terminal candidate.
+     */
+    private record RetentionIndex(Map<SubjectId, Set<SubjectId>> ownedByObjective, Set<SubjectId> externallyReferenced) {
+        static RetentionIndex forTasks(Map<SubjectId, StrategicTask> tasks) {
+            Map<SubjectId, Set<SubjectId>> owned = new HashMap<>();
+            for (StrategicTask task : tasks.values()) {
+                owned.computeIfAbsent(task.objectiveId(), ignored -> new HashSet<>()).add(task.id());
+            }
+            Set<SubjectId> external = new HashSet<>();
+            for (StrategicTask task : tasks.values()) for (SubjectId dependency : task.dependencies()) {
+                StrategicTask predecessor = tasks.get(dependency);
+                if (predecessor != null && !predecessor.objectiveId().equals(task.objectiveId())) external.add(dependency);
+            }
+            return new RetentionIndex(owned, external);
+        }
+
+        boolean removable(SubjectId objectiveId, List<SubjectId> protectedTaskIds) {
+            Set<SubjectId> owned = ownedByObjective.getOrDefault(objectiveId, Set.of());
+            return java.util.Collections.disjoint(owned, protectedTaskIds) && java.util.Collections.disjoint(owned, externallyReferenced);
+        }
     }
 
     private static void validateDeliveryDecomposition(StrategicObjective objective, Map<SubjectId, StrategicTask> tasks) {

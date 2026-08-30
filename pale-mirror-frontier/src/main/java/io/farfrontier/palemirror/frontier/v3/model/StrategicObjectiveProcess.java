@@ -75,6 +75,10 @@ final class StrategicObjectiveProcess {
         List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
                 : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         Optional<Candidate> candidate = candidate(state, owner, allowHiveInterception);
+        if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
+                && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
+            return concatenate(health, next);
+        }
         List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
         if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return concatenate(health, next);
         if (candidate.isEmpty()) return concatenate(health, next);

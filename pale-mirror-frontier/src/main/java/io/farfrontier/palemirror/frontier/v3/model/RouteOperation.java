@@ -29,15 +29,17 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         if (stage == OperationStage.ASSEMBLING && routeIndex != 0) throw new IllegalArgumentException("assembling operation must begin at its first route point");
         if (stage == OperationStage.EN_ROUTE && routeIndex == route.size() - 1) throw new IllegalArgumentException("en-route operation cannot already be at its final route point");
         if (stage == OperationStage.ARRIVED && routeIndex != route.size() - 1) throw new IllegalArgumentException("arrived operation must be at final route point");
+        if (stage == OperationStage.RETURNING && routeIndex == 0) throw new IllegalArgumentException("returning operation cannot already be home");
+        if (stage == OperationStage.COMPLETED && routeIndex != 0) throw new IllegalArgumentException("completed operation must be home");
         if (stage == OperationStage.ASSEMBLING && (activeAssembly.isEmpty() || activeTravel.isPresent())) throw new IllegalArgumentException("assembling operation needs one assembly and no travel");
         if (stage != OperationStage.ASSEMBLING && activeAssembly.isPresent()) throw new IllegalArgumentException("only assembling operation owns assembly");
         if (activeAssembly.isPresent() && !activeAssembly.orElseThrow().members().keySet().equals(java.util.Set.copyOf(participantIds))) throw new IllegalArgumentException("assembly membership differs from operation formation");
         if (activeTravel.isPresent()) {
             OperationTravel travel = activeTravel.orElseThrow();
-            boolean inProgress = stage == OperationStage.EN_ROUTE && routeIndex < route.size() - 1 && !travel.arrived()
-                    && travel.corridor().getFirst().equals(route.get(routeIndex)) && travel.corridor().getLast().equals(route.get(routeIndex + 1));
-            boolean arrivedAwaitingHandOff = stage == OperationStage.EN_ROUTE && routeIndex < route.size() - 1 && travel.arrived()
-                    && travel.corridor().getFirst().equals(route.get(routeIndex)) && travel.corridor().getLast().equals(route.get(routeIndex + 1));
+            int next = stage == OperationStage.RETURNING ? routeIndex - 1 : routeIndex + 1;
+            boolean moving = (stage == OperationStage.EN_ROUTE && routeIndex < route.size() - 1) || (stage == OperationStage.RETURNING && routeIndex > 0);
+            boolean inProgress = moving && !travel.arrived() && travel.corridor().getFirst().equals(route.get(routeIndex)) && travel.corridor().getLast().equals(route.get(next));
+            boolean arrivedAwaitingHandOff = moving && travel.arrived() && travel.corridor().getFirst().equals(route.get(routeIndex)) && travel.corridor().getLast().equals(route.get(next));
             boolean completed = travel.arrived() && travel.corridor().getLast().equals(route.get(routeIndex));
             if ((!inProgress && !arrivedAwaitingHandOff && !completed) || !travel.formation().keySet().equals(java.util.Set.copyOf(participantIds))) {
                 throw new IllegalArgumentException("operation travel must exactly own the next strategic segment and formation");
@@ -59,7 +61,7 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
      * a stale formation at the previous milestone.</p>
      */
     public boolean hasInProgressTravel() {
-        return stage == OperationStage.EN_ROUTE && activeTravel.filter(travel -> !travel.arrived()).isPresent();
+        return (stage == OperationStage.EN_ROUTE || stage == OperationStage.RETURNING) && activeTravel.filter(travel -> !travel.arrived()).isPresent();
     }
 
     /** Supply operations persist the hauler first; assembly makes the same identity explicit before departure. */
@@ -83,7 +85,8 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         if (!previous.arrived() || !previous.formation().equals(travel.formation()) || !previous.cargoAnchor().equals(travel.cargoAnchor())) {
             throw new IllegalArgumentException("next operation travel must retain the arrived formation and cargo anchor");
         }
-        return new RouteOperation(id, settlementId, cargoId, destinationId, participantIds, route, routeIndex, OperationStage.EN_ROUTE, Optional.empty(), Optional.of(travel));
+        OperationStage nextStage = stage == OperationStage.ARRIVED || stage == OperationStage.RETURNING ? OperationStage.RETURNING : OperationStage.EN_ROUTE;
+        return new RouteOperation(id, settlementId, cargoId, destinationId, participantIds, route, routeIndex, nextStage, Optional.empty(), Optional.of(travel));
     }
 
     public RouteOperation withTravel(OperationTravel travel) {
@@ -93,8 +96,9 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
     public RouteOperation completeTravelSegment() {
         OperationTravel travel = activeTravel.orElseThrow(() -> new IllegalArgumentException("operation has no exact travel to complete"));
         if (!travel.arrived()) throw new IllegalArgumentException("operation travel segment has not arrived");
-        int nextIndex = routeIndex + 1;
-        OperationStage nextStage = nextIndex == route.size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
+        int nextIndex = stage == OperationStage.RETURNING ? routeIndex - 1 : routeIndex + 1;
+        OperationStage nextStage = stage == OperationStage.RETURNING ? (nextIndex == 0 ? OperationStage.COMPLETED : OperationStage.RETURNING)
+                : (nextIndex == route.size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE);
         return new RouteOperation(id, settlementId, cargoId, destinationId, participantIds, route, nextIndex, nextStage, Optional.empty(), Optional.of(travel));
     }
 }

@@ -70,6 +70,16 @@ class FrontierWorldStateTest {
     }
 
     @Test
+    void canonicalMapIndexesRetainOrdinaryLookupAndImmutabilitySemantics() {
+        FrontierWorldState state = initial();
+        SubjectId resident = new SubjectId("resident:1-1");
+
+        assertTrue(state.actorLocations().containsKey(resident));
+        assertEquals(state.actorLocations().get(resident), state.actorLocations().getOrDefault(resident, null));
+        assertThrows(UnsupportedOperationException.class, () -> state.actorLocations().put(resident, state.actorLocations().get(resident)));
+    }
+
+    @Test
     void codecRoundTripsCanonicalMutableStateAndRejectsInvalidState() {
         FrontierWorldState baseline = initial();
         SubjectId container = new SubjectId("container:1-depot");

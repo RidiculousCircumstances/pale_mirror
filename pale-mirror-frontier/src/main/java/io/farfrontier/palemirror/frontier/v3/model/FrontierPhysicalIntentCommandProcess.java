@@ -37,18 +37,18 @@ final class FrontierPhysicalIntentCommandProcess {
                 case PRODUCTION_TRANSFORMATION -> productionTransition(state, intent, transition);
                 case CARGO_LOADING -> new CommandPlan.Accepted(SupplyOperationProcess.planCargoLoadingTransition(
                         state, intent, transition, command.submittedAt().ticks()));
-                case CARGO_HANDOFF -> routeTransition(state, intent, transition);
+                case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);
-                default -> routeTransition(state, intent, transition);
+                default -> routeTransition(state, intent, transition, command.submittedAt().ticks());
             };
         } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
     }
 
-    private static CommandPlan routeTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    private static CommandPlan routeTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null) return rejected("physical intent has no owning operation");
-        if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition));
+        if (intent.kind() == PhysicalIntentKind.CARGO_HANDOFF) return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition, now));
         return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
     }
 

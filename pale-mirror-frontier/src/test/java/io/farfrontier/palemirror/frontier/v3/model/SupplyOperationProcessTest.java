@@ -161,6 +161,26 @@ class SupplyOperationProcessTest {
         assertEquals(StrategicTaskStatus.BLOCKED, ((StrategicTaskTransition) unknown.get(2).payload()).status());
     }
 
+    @Test
+    void preEffectCargoFailureDurablyAbandonsItsExactOrderedContractInsteadOfLeakingIt() {
+        FrontierWorldState state = loadingState("frontier:cargo-abandoned");
+        SupplyContract contract = state.contracts().values().iterator().next();
+        state = state.withHumanPopulation(state.humanPopulation().transitionQuarantine(contract.settlementId(), SettlementQuarantineStatus.QUARANTINED, 500L));
+
+        List<ProposedEvent> planned = SupplyOperationProcess.planCargoLoad(state, actionFor(contract), false);
+
+        assertEquals(List.of(SupplyContractAbandoned.class, StrategicTaskTransition.class, StrategicTaskTransition.class),
+                planned.stream().map(event -> event.payload().getClass()).toList());
+        SupplyContractAbandoned abandoned = assertInstanceOf(SupplyContractAbandoned.class, planned.getFirst().payload());
+        assertEquals(contract.id(), abandoned.contractId());
+        assertEquals(abandoned, FrontierWorldRuntimeDefinition.payloadCodecs().decode(abandoned.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(abandoned)));
+
+        FrontierWorldState reduced = state.abandonOrderedSupplyContract(abandoned.contractId());
+        assertEquals(null, reduced.contracts().get(contract.id()));
+        assertEquals(contract.id(), state.contracts().get(contract.id()).id(), "the pre-effect source snapshot stays exact");
+    }
+
     private static FrontierWorldState loadingState(String world) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId(world), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());

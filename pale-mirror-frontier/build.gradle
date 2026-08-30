@@ -10,9 +10,10 @@ dependencies {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
-    if (name != 'wave1Benchmark') {
+    if (name != 'wave1Benchmark' && name != 'frontierV3AnnualAudit') {
         useJUnitPlatform {
             excludeTags 'benchmark'
+            excludeTags 'annual-audit'
         }
     }
 }
@@ -24,6 +25,23 @@ tasks.register('wave1Benchmark', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform { includeTags 'benchmark' }
     include '**/FrontierKernelBenchmarkTest.class'
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
+}
+
+tasks.register('frontierV3AnnualAudit', Test) {
+    group = 'verification'
+    description = 'Runs the deterministic four-seed Frontier v3 annual COLD-autonomy audit.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'annual-audit' }
+    include '**/FrontierV3AnnualAutonomyAuditTest.class'
+    def selectedSeeds = providers.systemProperty('pale_mirror.frontier_v3.annual_audit.seeds').orNull
+    if (selectedSeeds != null && !selectedSeeds.isBlank()) {
+        systemProperty 'pale_mirror.frontier_v3.annual_audit.seeds', selectedSeeds
+    }
     testLogging {
         events 'passed', 'failed'
         showStandardStreams = true

@@ -139,8 +139,8 @@ final class HumanPopulationStateSupport {
 
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
         return FrontierSceneAdmission.available(state, java.util.List.of(residentId))
-                && state.operations().values().stream().noneMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)
-                && operation.participantIds().contains(residentId));
+                && !FrontierWorldStateSupport.activeOperationClaim(state, residentId)
+                && !FrontierWorldStateSupport.activePatrolClaim(state, residentId);
     }
 
     static ResidentMigrationBlockReason migrationBlockReason(FrontierWorldState state, ResidentMigrationJourney journey) {

@@ -139,8 +139,9 @@ final class PopulationMigrationProcess {
         return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas());
     }
     private static boolean coldAvailable(FrontierWorldState state, SubjectId residentId) {
-        return FrontierSceneAdmission.available(state, List.of(residentId)) && state.operations().values().stream().noneMatch(operation ->
-                FrontierWorldStateSupport.retainsParticipantClaim(state, operation) && operation.participantIds().contains(residentId));
+        return FrontierSceneAdmission.available(state, List.of(residentId))
+                && !FrontierWorldStateSupport.activeOperationClaim(state, residentId)
+                && !FrontierWorldStateSupport.activePatrolClaim(state, residentId);
     }
     private static long journeysFrom(FrontierWorldState state, SubjectId settlementId) {
         return state.humanPopulation().migrations().values().stream().filter(journey -> journey.originSettlementId().equals(settlementId)).count();

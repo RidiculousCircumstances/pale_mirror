@@ -32,7 +32,8 @@ final class SupplyOperationProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = preparationTask(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        if (state.humanPopulation().quarantined(settlement.id()) || !dependenciesCompleted(state, task) || bread(state, settlement).isEmpty()) {
+        if (state.humanPopulation().quarantined(settlement.id()) || !dependenciesCompleted(state, task) || bread(state, settlement).isEmpty()
+                || !participantsAvailable(state, settlement)) {
             return blockPreparation(state, task);
         }
         SupplyContract contract = contract(state, task, settlement, bread(state, settlement).orElseThrow());
@@ -50,11 +51,11 @@ final class SupplyOperationProcess {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
         StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
         StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
-        if (state.humanPopulation().quarantined(settlement.id())) return blockPreparation(state, preparation);
+        if (state.humanPopulation().quarantined(settlement.id())) return abandonPreparation(state, preparation, contract);
         ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(value -> value.itemKind().equals(contract.itemKind())
                 && value.count() == contract.itemCount() && value.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);
-        if (item == null || !participantsAvailable(state, settlement)) return blockPreparation(state, preparation);
+        if (item == null || !participantsAvailable(state, settlement)) return abandonPreparation(state, preparation, contract);
         ContainerSurface surface = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id()));
         if (surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE) {
             return List.of(new ProposedEvent(contract.settlementId(), new PhysicalIntentPrepared(cargoLoadingIntent(contract, item, surface))));
@@ -134,13 +135,22 @@ final class SupplyOperationProcess {
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RouteOperation operation = state.operations().get(action.subject());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
+        if (operation != null && operation.stage() == OperationStage.ARRIVED
+                && contractForOperation(state, operation).status() == ContractStatus.DELIVERED) {
+            return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
+                    schedule(operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
+        }
+        if (operation != null && operation.stage() == OperationStage.ARRIVED) {
+            List<ProposedEvent> arrival = arrivalEvents(state, operation, action.dueAt().ticks());
+            return arrival.isEmpty() ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id()))) : arrival;
+        }
+        if (operation == null || (operation.stage() != OperationStage.EN_ROUTE && operation.stage() != OperationStage.RETURNING)) {
             // A terminal operation can retain an older persisted progress action after recovery.
             // It is not harmless to return no events: record the exact cancellation rather than
             // pretending the action never existed or allowing the kernel to quarantine.
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
-        boolean heldAtIntercept = state.strategicPlans().routeEngagements().values().stream()
+        boolean heldAtIntercept = operation.stage() == OperationStage.EN_ROUTE && state.strategicPlans().routeEngagements().values().stream()
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
                         && operation.currentPosition().equals(engagement.intercept()));
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
@@ -166,14 +176,18 @@ final class SupplyOperationProcess {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced)),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
-        int completedIndex = operation.routeIndex() + 1;
+        int completedIndex = operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
         List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationTravelSegmentCompleted(operation.id()))));
-        if (completedIndex == operation.route().size() - 1) events.add(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
+        if (operation.stage() == OperationStage.RETURNING) {
+            if (completedIndex > 0) events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        } else if (completedIndex == operation.route().size() - 1) {
+            events.addAll(arrivalEvents(state, operation, action.dueAt().ticks()));
+        }
         else events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         return List.copyOf(events);
     }
 
-    static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         if (intent.kind() != PhysicalIntentKind.CARGO_HANDOFF) throw new IllegalArgumentException("supply transition has an invalid physical intent kind");
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !intent.subjectIds().equals(List.of(operation.id(), operation.cargoId()))) {
@@ -181,9 +195,18 @@ final class SupplyOperationProcess {
         }
         StrategicTask task = deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE);
         ProposedEvent physical = new ProposedEvent(operation.settlementId(), transition);
-        if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, transition(task, StrategicTaskStatus.COMPLETED));
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, transition(task, StrategicTaskStatus.COMPLETED),
+                schedule(operationProgress(operation, Math.addExact(now, 20L))));
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return List.of(physical, transition(task, StrategicTaskStatus.BLOCKED));
         return List.of(physical);
+    }
+
+    static FrontierWorldState reduceDelivered(FrontierWorldState state, SubjectId subject, CargoDelivered delivered) {
+        RouteOperation operation = state.operations().get(delivered.operationId());
+        if (operation == null || !subject.equals(operation.settlementId()) || !operation.cargoId().equals(delivered.cargoId())) {
+            throw new IllegalArgumentException("cold cargo delivery has a foreign operation owner");
+        }
+        return state.completeColdCargoHandoff(delivered.operationId(), delivered.cargoId(), delivered.placements());
     }
 
     static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason) {
@@ -205,8 +228,9 @@ final class SupplyOperationProcess {
         return travelForNextSegment(operation, participantPositions(state, operation), cargoAnchor);
     }
     private static OperationTravel travelForNextSegment(RouteOperation operation, java.util.Map<SubjectId, BlockPosition> formation, BlockPosition cargoAnchor) {
-        if (operation.routeIndex() >= operation.route().size() - 1) throw new IllegalArgumentException("arrived operation has no next travel segment");
-        List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(operation.routeIndex() + 1));
+        int next = operation.stage() == OperationStage.ARRIVED || operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
+        if (next < 0 || next >= operation.route().size()) throw new IllegalArgumentException("operation has no next travel segment");
+        List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(next));
         return new OperationTravel(corridor, 0, formation, cargoAnchor);
     }
 
@@ -234,6 +258,29 @@ final class SupplyOperationProcess {
         List<BlockPosition> corridor = new ArrayList<>(); int deltaX = Integer.compare(to.x(), from.x()), deltaZ = Integer.compare(to.z(), from.z());
         for (BlockPosition cursor = from;; cursor = cursor.offset(deltaX, 0, deltaZ)) { corridor.add(cursor); if (cursor.equals(to)) return List.copyOf(corridor); }
     }
+    private static List<ProposedEvent> arrivalEvents(FrontierWorldState state, RouteOperation operation, long now) {
+        SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
+        if (state.inventory().surfaces().get(receiver).status() == ContainerSurfaceStatus.ACTIVE) {
+            PhysicalIntentId intentId = cargoHandoffIntent(operation).id();
+            return state.physicalIntents().containsKey(intentId) ? List.of() : List.of(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
+        }
+        CargoDelivered delivery = coldDelivery(state, operation, receiver);
+        if (delivery == null) return List.of(schedule(operationProgress(operation, Math.addExact(now, 100L))));
+        return List.of(new ProposedEvent(operation.settlementId(), delivery), transition(deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE), StrategicTaskStatus.COMPLETED),
+                schedule(operationProgress(operation, Math.addExact(now, 20L))));
+    }
+
+    private static CargoDelivered coldDelivery(FrontierWorldState state, RouteOperation operation, SubjectId receiver) {
+        CargoBatch cargo = state.inventory().cargo().get(operation.cargoId());
+        if (cargo == null) throw new IllegalStateException("arrived operation has no exact cargo");
+        java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>(); int nextSlot = 0;
+        for (SubjectId itemId : cargo.itemIds().stream().sorted().toList()) {
+            while (state.inventory().itemAt(receiver, nextSlot).isPresent()) nextSlot++;
+            if (nextSlot >= state.inventory().containers().get(receiver).slotCount()) return null;
+            placements.add(new CargoHandoffPlacement(itemId, new InventoryCustody.ContainerSlot(receiver, nextSlot++)));
+        }
+        return new CargoDelivered(operation.id(), cargo.id(), placements);
+    }
 
     private static PhysicalIntent cargoLoadingIntent(SupplyContract contract, ExactItemStack item, ContainerSurface surface) {
         BlockPosition position = surface.position();
@@ -247,6 +294,10 @@ final class SupplyOperationProcess {
     }
     private static List<ProposedEvent> blockPreparation(FrontierWorldState state, StrategicTask preparation) {
         return List.of(transition(preparation, StrategicTaskStatus.BLOCKED), transition(deliveryTask(state, preparation, StrategicTaskStatus.PENDING), StrategicTaskStatus.BLOCKED));
+    }
+    private static List<ProposedEvent> abandonPreparation(FrontierWorldState state, StrategicTask preparation, SupplyContract contract) {
+        return List.of(new ProposedEvent(contract.settlementId(), new SupplyContractAbandoned(contract.id())),
+                transition(preparation, StrategicTaskStatus.BLOCKED), transition(deliveryTask(state, preparation, StrategicTaskStatus.PENDING), StrategicTaskStatus.BLOCKED));
     }
     private static StrategicTask preparationTask(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {
         StrategicTask task = state.strategicPlans().tasks().get(taskId);
@@ -307,6 +358,17 @@ final class SupplyOperationProcess {
         String settlement = task.ownerId().value().substring("settlement:".length()); String suffix = settlement + "-" + objective.decisionOrdinal();
         return new SupplyContract(new SubjectId("contract:supply-" + suffix), task.ownerId(), state.bootstrap().hive().id(),
                 new SubjectId("cargo:supply-" + suffix), "minecraft:bread", 1, ContractStatus.ORDERED);
+    }
+
+    /** Normal supply IDs form one stable exact pair; fixtures may retain an arbitrary pair. */
+    private static SupplyContract contractForOperation(FrontierWorldState state, RouteOperation operation) {
+        String cargo = operation.cargoId().value();
+        if (cargo.startsWith("cargo:supply-")) {
+            SupplyContract direct = state.contracts().get(new SubjectId("contract:" + cargo.substring("cargo:".length())));
+            if (direct != null && direct.cargoId().equals(operation.cargoId())) return direct;
+        }
+        return state.contracts().values().stream().filter(contract -> contract.cargoId().equals(operation.cargoId())).findFirst()
+                .orElseThrow(() -> new IllegalStateException("route operation has no matching supply contract"));
     }
     private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
         BlockPosition target = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(target.x()), FixedScalar.whole(target.y()), FixedScalar.whole(target.z()));

@@ -9,7 +9,9 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -140,6 +142,39 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
+    void retentionCompactionKeepsACompletedProductionTaskReferencedByAnotherTerminalObjective() {
+        SubjectId owner = new SubjectId("settlement:1");
+        StrategicObjective production = new StrategicObjective(new SubjectId("objective:source"), owner,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
+        StrategicTask produced = new StrategicTask(new SubjectId("task:source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
+                StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.COMPLETED);
+        StrategicObjective delivery = new StrategicObjective(new SubjectId("objective:delivery"), owner,
+                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), 2, StrategicObjectiveStatus.COMPLETED);
+        StrategicTask prepared = new StrategicTask(new SubjectId("task:delivery-prepare"), delivery.id(), owner, StrategicTaskKind.PREPARE_BREAD_CARGO,
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), List.of(produced.id()), StrategicTaskStatus.COMPLETED);
+        StrategicTask delivered = new StrategicTask(new SubjectId("task:delivery-deliver"), delivery.id(), owner, StrategicTaskKind.DELIVER_BREAD_TO_HIVE,
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER,
+                StrategicTaskRequirement.AVAILABLE_GUARD), List.of(prepared.id()), StrategicTaskStatus.COMPLETED);
+        Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
+        objectives.put(production.id(), production); objectives.put(delivery.id(), delivery);
+        for (int ordinal = 3; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {
+            StrategicObjective filler = new StrategicObjective(new SubjectId("objective:retention-filler-" + ordinal), owner,
+                    StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), ordinal, StrategicObjectiveStatus.COMPLETED);
+            objectives.put(filler.id(), filler);
+        }
+        StrategicPlanState full = new StrategicPlanState(objectives, Map.of(produced.id(), produced, prepared.id(), prepared, delivered.id(), delivered), Map.of(), Map.of());
+
+        StrategicPlanState compacted = full.addObjective(new StrategicObjective(new SubjectId("objective:retention-next"), owner,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), StrategicPlanState.MAX_OBJECTIVES + 1, StrategicObjectiveStatus.ACTIVE));
+
+        assertTrue(compacted.objectives().containsKey(production.id()));
+        assertTrue(compacted.tasks().containsKey(produced.id()));
+        assertTrue(compacted.objectives().containsKey(new SubjectId("objective:retention-next")));
+        assertEquals(StrategicPlanState.MAX_OBJECTIVES, compacted.objectives().size());
+    }
+
+    @Test
     void scheduledWorldWorkPersistsOneUtilityPlanPerEligibleSide() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:strategic-scheduled"), 404L));
 
@@ -179,6 +214,26 @@ class StrategicObjectiveProcessTest {
         assertEquals(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, selected.objective().kind());
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
                 && created.action().kind().equals("frontier.objective.review")));
+    }
+
+    @Test
+    void pendingInterceptionIsTheDurableHiveLaneClaimUntilItsStartRuns() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+                new WorldId("frontier:strategic-intercept-pending"), 91L));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId hive = state.bootstrap().hive().id();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+
+        List<ProposedEvent> first = StrategicObjectiveProcess.planOpportunity(state,
+                StrategicObjectiveProcess.interceptOpportunity(hive, operation, 100L));
+        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, first.getFirst().payload());
+        StrategicTaskPlanned plannedTask = assertInstanceOf(StrategicTaskPlanned.class, first.get(1).payload());
+        state = StrategicObjectiveProcess.reduceObjective(state, hive, selected);
+        state = StrategicObjectiveProcess.reduceTask(state, hive, plannedTask);
+
+        List<ProposedEvent> repeated = StrategicObjectiveProcess.planOpportunity(state,
+                StrategicObjectiveProcess.interceptOpportunity(hive, operation, 120L));
+        assertTrue(repeated.isEmpty(), "a second opportunity must not schedule a duplicate start for the retained task");
     }
 
     private static FrontierWorldState initial(String world, long seed) {

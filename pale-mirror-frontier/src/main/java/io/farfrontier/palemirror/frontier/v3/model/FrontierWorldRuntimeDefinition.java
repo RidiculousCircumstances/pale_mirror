@@ -28,43 +28,43 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only deterministic scene fixture; production always uses {@link #configuration(WorldId, long)}. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotSceneStrikeConfiguration(WorldId worldId, long seed) {
         FrontierWorldState initial = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, initial, new SimInstant(2_600L), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(initial.bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), List.of(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), List.of(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only real-economy fixture; the named runner must physically consume biomass before outputs exist. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHiveGrowthConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveGrowthFixture fixture = FrontierDevelopmentScenarios.hiveGrowthFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only HOT/COLD continuity fixture; production always begins at the normal world bootstrap. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentRouteSceneReturnConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only exact HOT assembly fixture; the pilot supplies every movement observation. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentOperationAssemblyConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.OperationAssemblyFixture fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only exposure fixture; the first ordinary settlement review produces the health result. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHealthQuarantineConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HealthQuarantineFixture fixture = FrontierDevelopmentScenarios.healthQuarantineFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only exact-person Transit fixture; it owns no materialized body or shortcut. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentResidentTransitConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.ResidentTransitFixture fixture = FrontierDevelopmentScenarios.residentTransitFixture(worldId, seed);
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
@@ -353,6 +353,10 @@ public final class FrontierWorldRuntimeDefinition {
         }
     }
     private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+        return FrontierWorldState.duringReducerTransition(() -> reduceUnchecked(state, event));
+    }
+
+    private static FrontierWorldState reduceUnchecked(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition || event.payload() instanceof AmbientLeaseReleased) {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }
@@ -362,7 +366,9 @@ public final class FrontierWorldRuntimeDefinition {
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> ProductionProcess.reduceBlocked(state, event.subject(), blocked);
             case SupplyContractCreated created -> reduceContractCreated(state, event.subject(), created);
+            case SupplyContractAbandoned abandoned -> reduceContractAbandoned(state, event.subject(), abandoned);
             case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
+            case CargoDelivered delivered -> SupplyOperationProcess.reduceDelivered(state, event.subject(), delivered);
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
             case OperationAssemblyAdvanced advanced -> reduceOperationAssemblyAdvanced(state, event.subject(), advanced);
@@ -394,7 +400,9 @@ public final class FrontierWorldRuntimeDefinition {
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
             case ResourceSiteGrowthAdvanced advanced -> ResourceSiteProcess.reduceGrowth(state, event.subject(), advanced);
             case ResourceSitePreparationStarted started -> ResourceSiteProcess.reducePreparationStarted(state, event.subject(), started);
+            case ResourceSitePrepared prepared -> ResourceSiteProcess.reducePrepared(state, event.subject(), prepared);
             case ResourceSiteHarvestStarted started -> ResourceSiteHarvestProcess.reduceStarted(state, event.subject(), started);
+            case ResourceSiteHarvested harvested -> ResourceSiteHarvestProcess.reduceHarvested(state, event.subject(), harvested);
             case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
@@ -406,6 +414,7 @@ public final class FrontierWorldRuntimeDefinition {
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             case HiveGrowthStarted started -> HiveGrowthProcess.reduceStarted(state, event.subject(), started);
+            case HiveGrowthBiomassConsumed consumed -> HiveGrowthProcess.reduceConsumed(state, event.subject(), consumed);
             case HiveGrowthCompleted completed -> HiveGrowthProcess.reduceCompleted(state, event.subject(), completed);
             case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
             case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
@@ -465,6 +474,11 @@ public final class FrontierWorldRuntimeDefinition {
                 && item.count() == contract.itemCount() && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
         if (!backed) throw new IllegalArgumentException("supply contract has no exact depot-backed item");
         return state.createSupplyContract(created.contract());
+    }
+    private static FrontierWorldState reduceContractAbandoned(FrontierWorldState state, SubjectId subject, SupplyContractAbandoned abandoned) {
+        SupplyContract contract = state.contracts().get(abandoned.contractId());
+        if (contract == null || !subject.equals(contract.settlementId())) throw new IllegalArgumentException("abandoned contract has a foreign settlement owner");
+        return state.abandonOrderedSupplyContract(abandoned.contractId());
     }
     private static FrontierWorldState reduceCargoLoaded(FrontierWorldState state, SubjectId subject, CargoLoaded loaded) {
         SupplyContract contract = state.contracts().get(loaded.contractId());

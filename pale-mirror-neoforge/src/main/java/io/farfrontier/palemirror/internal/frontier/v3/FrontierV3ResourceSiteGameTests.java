@@ -72,6 +72,24 @@ public final class FrontierV3ResourceSiteGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-resource-site-cold", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void coldCompletedFieldProjectsOnceFromNeutralBaselineButNeverOverwritesForeignBlocks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-cold-game-test");
+        prepareGrayboxBaseline(level, site);
+        helper.runAfterDelay(10, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 5), FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
+                    "a COLD-completed field may materialize its canonical stage from one neutral unloaded-world baseline");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 5) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
+                    "one deterministic projection claim owns the complete canonical field after its first loaded visit");
+            BlockPos changed = minecraft(site.cropSlots().getFirst()); level.setBlock(changed, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 6), FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT,
+                    "a later foreign block remains conflict evidence instead of a desired-state overwrite");
+            helper.assertTrue(level.getBlockState(changed).is(Blocks.DIAMOND_BLOCK), "the foreign world block remains untouched after conflict");
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-resource-site-foreign", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void foreignFieldCellIsNeverAdoptedOrOverwritten(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN));

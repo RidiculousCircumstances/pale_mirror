@@ -9,9 +9,15 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,6 +60,85 @@ class HiveInfectionProcessTest {
         assertEquals(List.of(new ProposedEvent(state.bootstrap().hive().id(), new StrategicTaskTransition(onlyTask(state).id(), StrategicTaskStatus.BLOCKED))), planned);
     }
 
+    @Test
+    void compactedPreemptedTaskLeavesItsStalePulseAsOneSafeNoOp() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-stale"), 107L));
+        SubjectId staleTask = new SubjectId("task:hive-preempted-infection");
+        var action = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:hive-infection-task-hive-preempted-infection-1"),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(100L), 0, staleTask, "frontier.hive.infection.task", 1);
+
+        assertEquals(List.of(new ProposedEvent(staleTask, new ScheduleEffect.Cancelled(action.id()))), HiveInfectionProcess.plan(state, action));
+    }
+
+    @Test
+    void expansionTargetRetainsTheFormerCompleteFrontierOrderingWithoutSortingIt() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-order"), 108L));
+        for (InfectionCell cell : List.copyOf(state.infection().keySet())) state = state.withInfection(cell, new FixedRatio(FixedScalar.ZERO));
+        state = state.withInfection(new InfectionCell(-12, -8), new FixedRatio(new FixedScalar(750_000L)));
+        state = state.withInfection(new InfectionCell(-11, -8), new FixedRatio(new FixedScalar(125_000L)));
+        state = state.withInfection(new InfectionCell(-10, -8), new FixedRatio(new FixedScalar(500_000L)));
+        state = state.withInfection(new InfectionCell(30, 14), new FixedRatio(new FixedScalar(250_000L)));
+
+        assertEquals(sortedReferenceTarget(state), HiveInfectionProcess.expansionTarget(state));
+    }
+
+    @Test
+    void persistentFrontierMatchesTheCompleteReferenceAcrossGrowthAndRetreat() {
+        WorldBounds bounds = new WorldBounds(-64, -64, 128, 128);
+        Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
+        FrontierInfectionFrontier frontier = FrontierInfectionFrontier.compile(bounds, infection);
+        Random random = new Random(884422L);
+
+        for (int step = 0; step < 512; step++) {
+            InfectionCell changed = new InfectionCell(-15 + random.nextInt(31), -15 + random.nextInt(31));
+            Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
+            if (random.nextInt(5) == 0) next.remove(changed);
+            else next.put(changed, new FixedRatio(new FixedScalar((1L + random.nextInt(8)) * 125_000L)));
+            frontier = frontier.changed(infection, next, changed);
+            infection = next;
+            assertEquals(sortedReferenceTarget(bounds, infection), frontier.best(infection), "step " + step);
+        }
+    }
+
+    @Test
+    void sparsePersistentMapRetainsExactMembershipAcrossBoundedDeltaCompaction() {
+        Map<InfectionCell, FixedRatio> reference = new LinkedHashMap<>();
+        PersistentInfectionMap persistent = PersistentInfectionMap.from(reference);
+        Random random = new Random(912_441L);
+
+        for (int step = 0; step < 256; step++) {
+            InfectionCell changed = new InfectionCell(-16 + random.nextInt(33), -16 + random.nextInt(33));
+            if (random.nextInt(4) == 0) {
+                reference.remove(changed);
+                persistent = persistent.changed(changed, null);
+            } else {
+                FixedRatio value = new FixedRatio(new FixedScalar((1L + random.nextInt(8)) * 125_000L));
+                reference.put(changed, value);
+                persistent = persistent.changed(changed, value);
+            }
+            assertEquals(reference, persistent, "delta step " + step);
+            assertEquals(reference.entrySet(), persistent.entrySet(), "enumerated delta view at step " + step);
+            for (InfectionCell candidate : List.of(changed, new InfectionCell(changed.x() + 1, changed.z()),
+                    new InfectionCell(changed.x() - 1, changed.z()))) {
+                assertEquals(reference.containsKey(candidate), persistent.containsKey(candidate), "membership at step " + step);
+                assertEquals(reference.get(candidate), persistent.get(candidate), "value at step " + step);
+            }
+        }
+    }
+
+    @Test
+    void oneInfectionPulseAndItsTaskTransitionShareTheDependencyAwarePreWalAudit() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-combined-audit"), 109L));
+        InfectionCell target = HiveInfectionProcess.expansionTarget(initial).orElseThrow();
+        FrontierWorldState previous = withTask(initial, target);
+        StrategicTask task = onlyTask(previous);
+        FrontierWorldState next = previous.withInfection(target, new FixedRatio(new FixedScalar(250_000L)))
+                .withStrategicPlans(previous.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+
+        assertDoesNotThrow(() -> next.validateTransitionFrom(previous));
+    }
+
     private static FrontierWorldState withTask(FrontierWorldState state, InfectionCell target) {
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-infection"), hive, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
@@ -64,4 +149,18 @@ class HiveInfectionProcessTest {
     }
 
     private static StrategicTask onlyTask(FrontierWorldState state) { return state.strategicPlans().tasks().values().stream().findFirst().orElseThrow(); }
+
+    private static Optional<InfectionCell> sortedReferenceTarget(FrontierWorldState state) {
+        return sortedReferenceTarget(state.bootstrap().bounds(), state.infection());
+    }
+
+    private static Optional<InfectionCell> sortedReferenceTarget(WorldBounds bounds, Map<InfectionCell, FixedRatio> infection) {
+        LinkedHashSet<InfectionCell> candidates = new LinkedHashSet<>();
+        infection.keySet().stream().sorted(Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).forEach(source ->
+                List.of(new InfectionCell(source.x() + 1, source.z()), new InfectionCell(source.x(), source.z() + 1),
+                        new InfectionCell(source.x() - 1, source.z()), new InfectionCell(source.x(), source.z() - 1)).stream()
+                        .filter(cell -> bounds.contains(cell.originAtY(64))).forEach(candidates::add));
+        return candidates.stream().sorted(Comparator.comparingLong((InfectionCell cell) -> infection
+                .getOrDefault(cell, new FixedRatio(FixedScalar.ZERO)).value().raw()).thenComparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst();
+    }
 }

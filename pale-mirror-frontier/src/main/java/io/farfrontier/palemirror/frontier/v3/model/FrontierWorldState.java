@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.HashSet; import java.util.LinkedHashMap; import java.util.List; import java.util.Map; import java.util.Objects; import java.util.Set; import java.util.function.Supplier;
     public record FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
         Map<SubjectId, SupplyContract> contracts, Map<SubjectId, RouteOperation> operations, Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         HumanPopulation humanPopulation, ResourceSiteState resourceSites) {
     private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
+    private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
     public FrontierWorldState { Objects.requireNonNull(bootstrap, "bootstrap");
         actorLocations = FrontierWorldStateSupport.immutableMap(actorLocations, "actor locations"); structureConditions = FrontierWorldStateSupport.immutableMap(structureConditions, "structure conditions");
         infection = FrontierWorldStateSupport.immutableMap(infection, "infection"); Objects.requireNonNull(inventory, "inventory");
@@ -20,7 +21,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         structureDamage = FrontierWorldStateSupport.immutableMap(structureDamage, "structure damage"); physicalDeltas = FrontierWorldStateSupport.immutableMap(physicalDeltas, "physical deltas");
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
         Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population");
-        Objects.requireNonNull(resourceSites, "resource sites"); resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation);
+        Objects.requireNonNull(resourceSites, "resource sites");
+        if (!fullValidationDeferred()) {
+            resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
         RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
@@ -36,6 +39,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             // A completed v3 migration deliberately changes the profile's household/settlement.
             if (profile == null) throw new IllegalArgumentException("bootstrap resident must remain in the canonical population register"); }
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
+        Map<SubjectId, SupplyContract> validatedContracts = contracts;
+        StrategicPlanState validatedPlans = strategicPlans;
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
             ActorLocation actor = actorLocations.get(journey.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(journey.currentPosition())) {
@@ -49,6 +54,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             AmbientActorLease ambient = ambientLeases.get(journey.residentId());
             if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED && ambient.goal() != AmbientGoalKind.TRANSIT) {
                 throw new IllegalArgumentException("migration journey resident may retain only its exact HOT transit executor");
+            }
+            boolean operationClaim = operations.values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(validatedContracts, operation)
+                    && operation.participantIds().contains(journey.residentId()));
+            boolean patrolClaim = validatedPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+                    && patrol.guardId().equals(journey.residentId()));
+            if (operationClaim || patrolClaim) {
+                throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
             }
         }
         if (ambientLeases.size() > MAX_AMBIENT_LEASES) throw new IllegalArgumentException("ambient lease retention limit exceeded"); Set<SubjectId> activelyAmbientLeased = new HashSet<>();
@@ -106,6 +118,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 throw new IllegalArgumentException("active production job input must remain in its exact settlement depot slot");
             }
         }
+        Map<SubjectId, SupplyContract> contractsByCargo = new LinkedHashMap<>();
         for (Map.Entry<SubjectId, SupplyContract> entry : contracts.entrySet()) {
             SupplyContract contract = entry.getValue();
             if (!entry.getKey().equals(contract.id())) throw new IllegalArgumentException("contract map key must match contract identity");
@@ -113,9 +126,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (!bootstrap.hive().id().equals(contract.recipientId())) throw new IllegalArgumentException("contract recipient must be the frontier hive");
             if (contract.status() == ContractStatus.LOADED && !inventory.cargo().containsKey(contract.cargoId())) throw new IllegalArgumentException("loaded contract must own its cargo");
             if (contract.status() != ContractStatus.LOADED && inventory.cargo().containsKey(contract.cargoId())) throw new IllegalArgumentException("only a loaded contract can own cargo");
+            contractsByCargo.putIfAbsent(contract.cargoId(), contract);
         }
         if (operations.size() > MAX_OPERATIONS) throw new IllegalArgumentException("route operation retention limit exceeded");
         Set<SubjectId> leaseHistoryOperations = sceneLeases.values().stream().map(SceneLease::operationId).collect(java.util.stream.Collectors.toSet());
+        Map<SubjectId, Set<SubjectId>> residentsBySettlement = new LinkedHashMap<>();
+        for (ResidentProfile resident : humanPopulation.residents().values()) {
+            residentsBySettlement.computeIfAbsent(resident.settlementId(), ignored -> new HashSet<>()).add(resident.id());
+        }
         Set<SubjectId> assignedCargo = new HashSet<>();
         Set<SubjectId> assignedParticipants = new HashSet<>();
         for (Map.Entry<SubjectId, RouteOperation> entry : operations.entrySet()) {
@@ -124,9 +142,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, operation.settlementId());
             if (!bootstrap.hive().id().equals(operation.destinationId())) throw new IllegalArgumentException("route operation destination must be the frontier hive");
             CargoBatch cargo = inventory.cargo().get(operation.cargoId());
-            SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(operation.cargoId())).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("route operation cargo has no contract"));
-            if (operation.stage() == OperationStage.ARRIVED && contract.status() == ContractStatus.DELIVERED) {
+            SupplyContract contract = contractsByCargo.get(operation.cargoId());
+            if (contract == null) throw new IllegalArgumentException("route operation cargo has no contract");
+            if ((operation.stage() == OperationStage.ARRIVED || operation.stage() == OperationStage.RETURNING || operation.stage() == OperationStage.COMPLETED)
+                    && contract.status() == ContractStatus.DELIVERED) {
                 if (cargo != null) throw new IllegalArgumentException("delivered operation cannot retain cargo");
             } else if (operation.stage() == OperationStage.INTERRUPTED && contract.status() == ContractStatus.INTERRUPTED) {
                 if (cargo != null) throw new IllegalArgumentException("interrupted operation cannot retain cargo");
@@ -134,8 +153,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 throw new IllegalArgumentException("route operation must own settlement cargo");
             }
             if (!assignedCargo.add(operation.cargoId())) throw new IllegalArgumentException("cargo cannot be assigned to multiple route operations");
-            Set<SubjectId> settlementResidents = humanPopulation.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                    .map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
+            Set<SubjectId> settlementResidents = residentsBySettlement.getOrDefault(settlement.id(), Set.of());
             if (operation.participantIds().size() != 2) throw new IllegalArgumentException("supply route operation must retain one hauler and one guard");
             ResidentProfile hauler = humanPopulation.resident(operation.participantIds().getFirst());
             ResidentProfile guard = humanPopulation.resident(operation.participantIds().get(1));
@@ -147,10 +165,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation) && !assignedParticipants.add(participant)) {
                     throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
                 }
-                if (operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
+                boolean patrolClaim = strategicPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+                        && patrol.guardId().equals(participant));
+                if (FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation)
+                        && (humanPopulation.migrations().containsKey(participant) || patrolClaim)) {
+                    throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
+                }
+                if (operation.stage() != OperationStage.COMPLETED && operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
                         && !leaseHistoryOperations.contains(operation.id())
-                        && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())
-                        && lease.members().stream().anyMatch(member -> member.actorId().equals(participant)))
                         && !actorLocations.get(participant).position().equals(operation.activeTravel().map(travel -> travel.formation().get(participant))
                         .orElseGet(() -> operation.activeAssembly().map(assembly -> assembly.positions().get(participant)).orElseGet(operation::currentPosition)))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
@@ -248,7 +270,151 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         }
+        }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
+
+    /**
+     * Reducer-local state construction is allowed to defer the complete aggregate audit until
+     * the kernel has assembled the whole transaction. The enclosing kernel must call
+     * {@link #validateComplete()} before WAL durability; this is deliberately package-private
+     * so adapters and codecs keep the strict public constructor boundary.
+     */
+    static <T> T duringReducerTransition(Supplier<T> transition) {
+        Objects.requireNonNull(transition, "transition");
+        int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
+        DEFERRED_FULL_VALIDATION_DEPTH.set(depth + 1);
+        try { return transition.get(); }
+        finally {
+            if (depth == 0) DEFERRED_FULL_VALIDATION_DEPTH.remove();
+            else DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
+        }
+    }
+
+    /** Runs the same complete invariant audit as strict construction, without altering this snapshot. */
+    void validateComplete() {
+        int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
+        DEFERRED_FULL_VALIDATION_DEPTH.remove();
+        try {
+            new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, contracts,
+                    operations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas,
+                    ambientLeases, routeConstructions, routeTopology, strategicPlans, humanPopulation, resourceSites);
+        } finally {
+            if (depth != 0) DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
+        }
+    }
+
+    /**
+     * Pre-WAL dependency-aware audit for the one high-frequency sparse-field transition.
+     * Everything outside the infection field remains the exact same immutable object, therefore
+     * it was already proven by the preceding accepted state. Unknown construction paths fall
+     * back to the complete audit instead of trusting an inferred delta.
+     */
+    void validateTransitionFrom(FrontierWorldState previous) {
+        Objects.requireNonNull(previous, "previous state");
+        if (onlyInfectionPlannerAndHealthChangedFrom(previous)) {
+            validatePlannerAndHealthTransition();
+            validateInfectionTransition(previous);
+            return;
+        }
+        if (onlyPlannerAndHealthChangedFrom(previous)) {
+            validatePlannerAndHealthTransition();
+            return;
+        }
+        if (!onlyInfectionChangedFrom(previous)) { validateComplete(); return; }
+        validateInfectionTransition(previous);
+    }
+
+    /**
+     * A hive infection task commonly changes its one sparse cell and its task/plan state in the
+     * same atomic transaction. Both mutable domains have complete local validators; enumerating
+     * every untouched infection cell merely because the task transitioned is unnecessary.
+     */
+    private boolean onlyInfectionPlannerAndHealthChangedFrom(FrontierWorldState previous) {
+        return infection != previous.infection && onlyPlannerAndHealthChangedFrom(previous, false);
+    }
+
+    private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous) {
+        return onlyPlannerAndHealthChangedFrom(previous, true);
+    }
+
+    private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous, boolean requirePlannerOrHealthChange) {
+        if (bootstrap != previous.bootstrap || actorLocations != previous.actorLocations || structureConditions != previous.structureConditions
+                || (requirePlannerOrHealthChange && infection != previous.infection) || inventory != previous.inventory || productionJobs != previous.productionJobs
+                || contracts != previous.contracts || operations != previous.operations || physicalIntents != previous.physicalIntents
+                || physicalObservations != previous.physicalObservations || sceneLeases != previous.sceneLeases || hiveColony != previous.hiveColony
+                || structureDamage != previous.structureDamage || physicalDeltas != previous.physicalDeltas || ambientLeases != previous.ambientLeases
+                || routeConstructions != previous.routeConstructions || routeTopology != previous.routeTopology || resourceSites != previous.resourceSites
+                || (strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation)) return false;
+        if (!sceneLeases.isEmpty() || !physicalIntents.isEmpty() || !physicalObservations.isEmpty()) return false;
+        return humanPopulation.households() == previous.humanPopulation.households()
+                && humanPopulation.residents() == previous.humanPopulation.residents()
+                && humanPopulation.birthJobs() == previous.humanPopulation.birthJobs()
+                && humanPopulation.migrations() == previous.humanPopulation.migrations();
+    }
+
+    private void validateInfectionTransition(FrontierWorldState previous) {
+        FrontierInfectionFrontier.InfectionChange change = FrontierWorldStateSupport.infectionChange(infection, bootstrap.bounds()).orElse(null);
+        PersistentInfectionMap before = FrontierWorldStateSupport.persistentInfection(previous.infection);
+        PersistentInfectionMap after = FrontierWorldStateSupport.persistentInfection(infection);
+        if (change == null || !after.directlyFollows(before, change.cell(), change.previousRaw(), change.nextRaw())) {
+            validateComplete(); return;
+        }
+        FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), change.cell().originAtY(0));
+        FixedRatio current = infection.get(change.cell());
+        if ((change.nextRaw() == 0L) != (current == null)
+                || current != null && (current.value().raw() != change.nextRaw() || current.value().raw() == 0L)
+                || raw(previous.infection.get(change.cell())) != change.previousRaw()) {
+            throw new IllegalArgumentException("infection transition does not match its retained sparse-field delta");
+        }
+    }
+
+    private boolean onlyInfectionChangedFrom(FrontierWorldState previous) {
+        return bootstrap == previous.bootstrap && actorLocations == previous.actorLocations && structureConditions == previous.structureConditions
+                && inventory == previous.inventory && productionJobs == previous.productionJobs && contracts == previous.contracts
+                && operations == previous.operations && physicalIntents == previous.physicalIntents && physicalObservations == previous.physicalObservations
+                && sceneLeases == previous.sceneLeases && hiveColony == previous.hiveColony && structureDamage == previous.structureDamage
+                && physicalDeltas == previous.physicalDeltas && ambientLeases == previous.ambientLeases && routeConstructions == previous.routeConstructions
+                && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation
+                && resourceSites == previous.resourceSites && infection != previous.infection;
+    }
+
+    private void validatePlannerAndHealthTransition() {
+        Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) {
+            throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
+        }
+        strategicPlans.validate(bootstrap, humanPopulation);
+        validatePlannerActorClaims();
+        FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
+    }
+
+    /** Exact COLD authority remains exclusive even when only a route patrol plan has changed. */
+    private void validatePlannerActorClaims() {
+        Set<SubjectId> operationParticipants = new HashSet<>();
+        for (RouteOperation operation : operations.values()) {
+            if (!FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation)) continue;
+            for (SubjectId participant : operation.participantIds()) {
+                if (!operationParticipants.add(participant)) {
+                    throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
+                }
+                boolean patrolClaim = strategicPlans.routePatrols().values().stream()
+                        .anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.guardId().equals(participant));
+                if (humanPopulation.migrations().containsKey(participant) || patrolClaim) {
+                    throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
+                }
+            }
+        }
+        for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
+            boolean patrolClaim = strategicPlans.routePatrols().values().stream()
+                    .anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.guardId().equals(journey.residentId()));
+            if (patrolClaim) throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
+        }
+    }
+
+    private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); }
+
+    private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
     FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures, Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory, Map<SubjectId, ProductionJob> jobs,
                                     Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations, Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                                     Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage, Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
@@ -294,9 +460,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState withInfection(InfectionCell cell, FixedRatio intensity) {
         Objects.requireNonNull(cell, "infection cell"); Objects.requireNonNull(intensity, "infection intensity");
         FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), cell.originAtY(0));
-        Map<InfectionCell, FixedRatio> next = new LinkedHashMap<>(infection);
-        if (intensity.equals(ZERO_INFECTION)) next.remove(cell); else next.put(cell, intensity);
-        return next(actorLocations, structureConditions, next, inventory, productionJobs, contracts, operations,
+        PersistentInfectionMap next = FrontierWorldStateSupport.persistentInfection(infection)
+                .changed(cell, intensity.equals(ZERO_INFECTION) ? null : intensity);
+        FrontierInfectionFrontier frontier = FrontierWorldStateSupport.infectionFrontier(infection, bootstrap.bounds()).changed(infection, next, cell);
+        return next(actorLocations, structureConditions, FrontierWorldStateSupport.infectionMap(next, frontier), inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState withInventory(ExactInventory nextInventory) {
@@ -345,6 +512,19 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, next, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
+    public FrontierWorldState abandonOrderedSupplyContract(SubjectId contractId) {
+        SupplyContract contract = contracts.get(Objects.requireNonNull(contractId, "contract id"));
+        if (contract == null || contract.status() != ContractStatus.ORDERED) throw new IllegalArgumentException("only an ordered supply contract may be abandoned");
+        if (inventory.cargo().containsKey(contract.cargoId())
+                || operations.values().stream().anyMatch(operation -> operation.cargoId().equals(contract.cargoId()))
+                || physicalIntents.values().stream().anyMatch(intent -> intent.causeSubjectId().equals(contract.id())
+                || intent.subjectIds().contains(contract.id()) || intent.subjectIds().contains(contract.cargoId()))) {
+            throw new IllegalArgumentException("a supply contract with acquired cargo or physical work may not be abandoned");
+        }
+        Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.remove(contract.id());
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, next, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
     public FrontierWorldState loadContractCargo(SubjectId contractId, CargoBatch cargo) {
         SupplyContract contract = contracts.get(contractId);
         if (contract == null || contract.status() != ContractStatus.ORDERED || !contract.cargoId().equals(cargo.id())) throw new IllegalArgumentException("cargo load does not match an ordered contract");
@@ -352,6 +532,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         next.put(contractId, new SupplyContract(contract.id(), contract.settlementId(), contract.recipientId(), contract.cargoId(), contract.itemKind(), contract.itemCount(), ContractStatus.LOADED));
         return next(actorLocations, structureConditions, infection, inventory.loadCargo(cargo), productionJobs,
                 next, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    public FrontierWorldState completeColdCargoHandoff(SubjectId operationId, SubjectId cargoId, List<CargoHandoffPlacement> placements) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "cold cargo operation id"));
+        if (operation == null || operation.stage() != OperationStage.ARRIVED || !operation.cargoId().equals(cargoId)) {
+            throw new IllegalArgumentException("cold cargo handoff does not match an arrived operation");
+        }
+        SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
+        if (placements.stream().anyMatch(placement -> !receiver.equals(placement.receiverSlot().containerId()))) {
+            throw new IllegalArgumentException("cold cargo handoff targets a foreign receiver");
+        }
+        SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargoId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("cold cargo handoff has no supply contract"));
+        if (contract.status() != ContractStatus.LOADED) throw new IllegalArgumentException("only loaded cold cargo can arrive");
+        Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts); nextContracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
+        return next(actorLocations, structureConditions, infection, inventory.completeCargoHandoff(cargoId, placements), productionJobs, nextContracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState createOperation(RouteOperation operation) {
         Objects.requireNonNull(operation, "route operation");
@@ -590,6 +786,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); }
     public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
+    public FrontierWorldState consumeHiveGrowthBiomass(SubjectId jobId, SubjectId itemId) { return HiveGrowthStateSupport.consume(this, jobId, itemId); }
     public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
     public boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
     public static SubjectId depotId(SubjectId settlementId) {

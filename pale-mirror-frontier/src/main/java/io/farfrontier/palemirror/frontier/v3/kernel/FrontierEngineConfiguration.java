@@ -6,13 +6,15 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /** Complete pure policy bundle for one canonical Frontier v3 world engine. */
 public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         WorldId worldId, S initialState, SimInstant initialInstant,
         CommandPlanner<S> commandPlanner, ScheduledActionPlanner<S> scheduledPlanner,
         EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
-        EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter
+        EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter,
+        StateValidator<S> stateValidator
 ) {
     public FrontierEngineConfiguration {
         Objects.requireNonNull(worldId, "world id");
@@ -26,11 +28,35 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         Objects.requireNonNull(limits, "limits");
         initialSchedules = List.copyOf(initialSchedules);
         Objects.requireNonNull(transactionCommitter, "transaction committer");
+        Objects.requireNonNull(stateValidator, "state validator");
+    }
+
+    /** Compatibility constructor for small kernel fixtures that have no aggregate-specific audit. */
+    public FrontierEngineConfiguration(
+            WorldId worldId, S initialState, SimInstant initialInstant,
+            CommandPlanner<S> commandPlanner, ScheduledActionPlanner<S> scheduledPlanner,
+            EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
+            EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter
+    ) {
+        this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none());
     }
 
     /** Rebinds the pure aggregate to the owning server host's mandatory write-ahead boundary. */
     public FrontierEngineConfiguration<S, P> withTransactionCommitter(TransactionCommitter replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
-                reducer, stateCodec, projectionMapper, limits, initialSchedules, replacement);
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, replacement, stateValidator);
+    }
+
+    /** Installs the aggregate's complete invariant audit at every commit/recovery boundary. */
+    public FrontierEngineConfiguration<S, P> withStateValidator(Consumer<S> replacement) {
+        return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(replacement));
+    }
+
+    /** Installs an aggregate-specific validator that can prove safe incremental transitions. */
+    public FrontierEngineConfiguration<S, P> withTransitionValidator(StateValidator<S> replacement) {
+        return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, replacement);
     }
 }

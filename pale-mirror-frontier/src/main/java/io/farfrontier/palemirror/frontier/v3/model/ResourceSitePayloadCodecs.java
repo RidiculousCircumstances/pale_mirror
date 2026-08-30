@@ -66,6 +66,46 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec prepared() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_prepared"; }
+            @Override public byte[] encode(FrontierPayload payload) { return preparationBytes(((ResourceSitePrepared) payload).job()); }
+            @Override public FrontierPayload decode(byte[] bytes) { return new ResourceSitePrepared(readPreparation(bytes)); }
+        };
+    }
+    static PayloadCodec harvested() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_harvested"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceSiteHarvested harvested = (ResourceSiteHarvested) payload; ResourceSiteHarvestJob job = harvested.job(); ExactItemStack output = harvested.output();
+                byte[][] values = { bytes(job.id().value()), bytes(job.taskId().value()), bytes(job.siteId().value()), bytes(job.workerId().value()), bytes(job.outputItemId().value()),
+                        bytes(job.outputSlot().containerId().value()), bytes(job.intentId().value()), bytes(output.id().value()), bytes(output.economicOwnerId().value()), bytes(output.itemKind()) };
+                int size = Integer.BYTES * 2 + 10; for (byte[] value : values) size = Math.addExact(size, value.length);
+                return ByteBuffer.allocate(size).put((byte) values[0].length).put(values[0]).put((byte) values[1].length).put(values[1]).put((byte) values[2].length).put(values[2])
+                        .put((byte) values[3].length).put(values[3]).put((byte) values[4].length).put(values[4]).put((byte) values[5].length).put(values[5]).putInt(job.outputSlot().slot())
+                        .put((byte) values[6].length).put(values[6]).put((byte) values[7].length).put(values[7]).put((byte) values[8].length).put(values[8])
+                        .put((byte) values[9].length).put(values[9]).putInt(output.count()).array();
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                ByteBuffer input = ByteBuffer.wrap(bytes); String id = read(input), task = read(input), site = read(input), worker = read(input), outputId = read(input), depot = read(input);
+                if (input.remaining() < Integer.BYTES + 1) throw new IllegalArgumentException("truncated resource-site harvested payload");
+                int slot = input.getInt(); String intent = read(input), itemId = read(input), owner = read(input), kind = read(input);
+                if (input.remaining() != Integer.BYTES) throw new IllegalArgumentException("malformed resource-site harvested payload");
+                int count = input.getInt(); ResourceSiteHarvestJob job = new ResourceSiteHarvestJob(new SubjectId(id), new SubjectId(task), new SubjectId(site), new SubjectId(worker), new SubjectId(outputId),
+                        new InventoryCustody.ContainerSlot(new SubjectId(depot), slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent));
+                return new ResourceSiteHarvested(job, new ExactItemStack(new SubjectId(itemId), new SubjectId(owner), kind, count, job.outputSlot()));
+            }
+        };
+    }
+    private static byte[] preparationBytes(ResourceSitePreparationJob job) {
+        byte[] id = bytes(job.id().value()), site = bytes(job.siteId().value()), intent = bytes(job.intentId().value());
+        return ByteBuffer.allocate(3 + id.length + site.length + intent.length).put((byte) id.length).put(id).put((byte) site.length).put(site).put((byte) intent.length).put(intent).array();
+    }
+    private static ResourceSitePreparationJob readPreparation(byte[] bytes) {
+        ByteBuffer input = ByteBuffer.wrap(bytes); if (input.remaining() < 3) throw new IllegalArgumentException("truncated resource-site preparation payload");
+        String id = read(input), site = read(input), intent = read(input); if (input.hasRemaining()) throw new IllegalArgumentException("trailing resource-site preparation payload");
+        return new ResourceSitePreparationJob(new SubjectId(id), new SubjectId(site), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent));
+    }
     static PayloadCodec conflictObserved() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_conflict_observed"; }

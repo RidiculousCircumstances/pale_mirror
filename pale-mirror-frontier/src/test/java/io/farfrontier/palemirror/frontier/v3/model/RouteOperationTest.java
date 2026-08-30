@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RouteOperationTest {
@@ -24,6 +25,14 @@ class RouteOperationTest {
         OperationTravel travel = new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
                 Map.of(hauler, new BlockPosition(0, 64, 1)), new BlockPosition(0, 64, 0));
         assertDoesNotThrow(() -> operation.withTravel(travel));
+    }
+
+    @Test void persistedStageCodesPreserveLegacyFailureMeaningsAndAppendReturnStates() {
+        assertEquals(OperationStage.FAILED, OperationStage.fromWireCode(3));
+        assertEquals(OperationStage.INTERRUPTED, OperationStage.fromWireCode(4));
+        assertEquals(OperationStage.RETURNING, OperationStage.fromWireCode(5));
+        assertEquals(OperationStage.COMPLETED, OperationStage.fromWireCode(6));
+        assertThrows(IllegalArgumentException.class, () -> OperationStage.fromWireCode(7));
     }
 
     private static RouteOperation operation(List<SubjectId> participants, int routeIndex, OperationStage stage) {

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Single-threaded bounded kernel implementation for deterministic tests. It intentionally has
@@ -43,11 +44,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final ProjectionMapper<S, P> projectionMapper;
     private final EngineLimits limits;
     private final TransactionCommitter transactionCommitter;
+    private final StateValidator<S> stateValidator;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
     private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
-    /** Immutable codec output for the current state revision; snapshots must not re-encode unchanged state. */
+    /** Immutable codec output for the current state revision; null means a newer WAL-backed state awaits its next snapshot. */
     private byte[] encodedState;
     private Revision revision = Revision.ZERO;
     private SimInstant instant;
@@ -66,7 +68,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             List<ScheduledAction> initialSchedules
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, TransactionCommitter.noOp());
+                projectionMapper, limits, initialSchedules, TransactionCommitter.noOp(), StateValidator.none());
     }
 
     InMemoryFrontierEngine(
@@ -82,6 +84,24 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             List<ScheduledAction> initialSchedules,
             TransactionCommitter transactionCommitter
     ) {
+        this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none());
+    }
+
+    InMemoryFrontierEngine(
+            WorldId worldId,
+            S initialState,
+            SimInstant initialInstant,
+            CommandPlanner<S> commandPlanner,
+            ScheduledActionPlanner<S> scheduledPlanner,
+            EventReducer<S> reducer,
+            StateCodec<S> stateCodec,
+            ProjectionMapper<S, P> projectionMapper,
+            EngineLimits limits,
+            List<ScheduledAction> initialSchedules,
+            TransactionCommitter transactionCommitter,
+            StateValidator<S> stateValidator
+    ) {
         this.worldId = Objects.requireNonNull(worldId, "world id");
         this.state = Objects.requireNonNull(initialState, "initial state");
         this.instant = Objects.requireNonNull(initialInstant, "initial instant");
@@ -92,9 +112,23 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.projectionMapper = Objects.requireNonNull(projectionMapper, "projection mapper");
         this.limits = Objects.requireNonNull(limits, "limits");
         this.transactionCommitter = Objects.requireNonNull(transactionCommitter, "transaction committer");
+        this.stateValidator = Objects.requireNonNull(stateValidator, "state validator");
+        this.stateValidator.validateInitial(initialState);
         List.copyOf(initialSchedules).forEach(schedules::schedule);
         encodedState = stateCodec.encode(initialState);
         if (encodedState == null) throw new IllegalStateException("state codec returned null");
+    }
+
+    /** Compatibility constructor for existing kernel fixtures with a complete-state consumer. */
+    InMemoryFrontierEngine(
+            WorldId worldId, S initialState, SimInstant initialInstant,
+            CommandPlanner<S> commandPlanner, ScheduledActionPlanner<S> scheduledPlanner,
+            EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
+            EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter,
+            Consumer<S> stateValidator
+    ) {
+        this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(stateValidator));
     }
 
     static <S, P extends FrontierProjection> InMemoryFrontierEngine<S, P> recovered(
@@ -103,7 +137,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     ) {
         InMemoryFrontierEngine<S, P> engine = new InMemoryFrontierEngine<>(configuration.worldId(), replay.state(), replay.instant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
-                configuration.projectionMapper(), configuration.limits(), replay.schedules(), configuration.transactionCommitter());
+                configuration.projectionMapper(), configuration.limits(), replay.schedules(), configuration.transactionCommitter(),
+                configuration.stateValidator());
         engine.revision = replay.revision();
         for (CommandReceipt receipt : receipts) {
             if (engine.receipts.put(receipt.commandId(), receipt) != null) throw new IllegalArgumentException("duplicate recovered command receipt");
@@ -208,7 +243,20 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override
     public CheckpointImage checkpoint() {
         requireOwnerThread();
-        return new CheckpointImage(worldId, revision, instant, encodedState, schedules.snapshot(), List.copyOf(receipts.values()));
+        return new CheckpointImage(worldId, revision, instant, currentEncodedState(), schedules.snapshot(), List.copyOf(receipts.values()));
+    }
+
+    @Override
+    public Optional<SimInstant> nextScheduledInstantAfter(SimInstant after) {
+        requireOwnerThread();
+        return schedules.nextDueAfter(after);
+    }
+
+    @Override
+    public void compact(Revision coveredRevision) {
+        requireOwnerThread(); Objects.requireNonNull(coveredRevision, "covered revision");
+        if (coveredRevision.compareTo(revision) > 0) throw new IllegalArgumentException("cannot compact beyond the current canonical revision");
+        transactions.removeIf(record -> record.revision().compareTo(coveredRevision) <= 0);
     }
 
     @Override
@@ -252,7 +300,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         TransactionId transactionId = new TransactionId("transaction:revision-" + nextRevision.value());
         List<FrontierEvent> events = new ArrayList<>(proposed.size());
         S nextState = state;
-        ScheduledActionQueue nextSchedules = schedules.copy();
+        ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
         for (int index = 0; index < proposed.size(); index++) {
             ProposedEvent next = proposed.get(index);
             FrontierEvent event = new FrontierEvent(
@@ -266,10 +314,17 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             }
             events.add(event);
         }
-        byte[] encoded = stateCodec.encode(nextState);
-        if (encoded == null) {
-            throw new IllegalStateException("state codec returned null");
-        }
+        // Reducers may construct several transient immutable aggregate snapshots for one
+        // transaction. Validate their final state exactly once, before WAL durability and
+        // before it becomes canonical; this keeps the failure boundary strict without making
+        // every one-field state transition scan the entire 12-settlement world.
+        if (nextState != state) stateValidator.validateTransition(state, nextState);
+        // WAL commits are already durable before the state becomes authoritative. A complete
+        // snapshot is needed only at the explicit checkpoint boundary; eagerly encoding every
+        // immutable state transition turns ordinary COLD background work into repeated full
+        // serialization. Schedule-only transactions retain the existing bytes, while a changed
+        // world state marks the snapshot cache dirty until checkpoint() requests it.
+        byte[] encoded = nextState == state ? encodedState : null;
         TransactionRecord transaction = new TransactionRecord(transactionId, worldId, nextRevision, eventInstant, events,
                 acceptedCommandReceipt);
         Durability durability = events.stream().anyMatch(event -> event.payload().requiresDurableBeforeEffect())
@@ -278,9 +333,17 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         state = nextState;
         encodedState = encoded;
         revision = nextRevision;
-        schedules = nextSchedules;
+        nextSchedules.commit();
         transactions.add(transaction);
         return transactionId;
+    }
+
+    private byte[] currentEncodedState() {
+        if (encodedState == null) {
+            encodedState = stateCodec.encode(state);
+            if (encodedState == null) throw new IllegalStateException("state codec returned null");
+        }
+        return encodedState;
     }
 
     private CommandResult.Rejected rejected(FrontierCommand command, RejectionCode code, String detail) {

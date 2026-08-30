@@ -17,7 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import java.util.List;
 import java.util.OptionalInt;
 
-/** Plans one durable 64-cell harvest only when its real settlement dependencies are available. */
+/** Plans one exact 64-cell COLD harvest; loaded-world projection follows canonical completion. */
 final class ResourceSiteHarvestProcess {
     static final long RETRY_INTERVAL = 200L;
     private ResourceSiteHarvestProcess() { }
@@ -43,21 +43,35 @@ final class ResourceSiteHarvestProcess {
         ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
         if (farmer == null) return blocked(task);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return blocked(task);
         OptionalInt slot = state.inventory().firstFreeSlot(depot); if (slot.isEmpty()) return blocked(task);
         ResourceSiteHarvestJob job = job(lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
-        BlockPosition origin = site.cropSlots().getFirst(); PhysicalIntent intent = new PhysicalIntent(job.intentId(), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
-                PhysicalIntentStatus.PREPARED, lifecycle.siteId(), List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()),
-                new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
-                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED);
+        ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), "minecraft:wheat", 64, job.outputSlot());
+        ResourceSiteLifecycle harvested = lifecycle.harvesting(job).harvested();
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
-                new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)));
+                new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvested(job, output)), transition(task, StrategicTaskStatus.COMPLETED),
+                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(harvested,
+                        Math.addExact(action.dueAt().ticks(), ResourceSiteProcess.WHEAT_STAGE_INTERVAL)))));
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
         ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
         return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+    }
+
+    static FrontierWorldState reduceHarvested(FrontierWorldState state, SubjectId subject, ResourceSiteHarvested harvested) {
+        ResourceSiteHarvestJob job = harvested.job();
+        if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest completion has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        validateJob(state, lifecycle, job);
+        ExactItemStack output = harvested.output();
+        if (!output.id().equals(job.outputItemId()) || !output.custody().equals(job.outputSlot()) || output.count() != 64
+                || !output.itemKind().equals("minecraft:wheat") || state.inventory().items().containsKey(output.id())) {
+            throw new IllegalArgumentException("resource-site harvest completion has an invalid exact output");
+        }
+        ResourceSite site = site(state, lifecycle.siteId());
+        if (!output.economicOwnerId().equals(site.settlementId())) throw new IllegalArgumentException("resource-site harvest completion has a foreign output owner");
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.harvested())).withInventory(state.inventory().store(output));
     }
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
@@ -102,7 +116,12 @@ final class ResourceSiteHarvestProcess {
     }
 
     private static void validateJob(FrontierWorldState state, ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job) {
-        if (lifecycle.phase() != ResourceSitePhase.READY || lifecycle.growthStage() != ResourceSiteLifecycle.MATURE_STAGE) throw new IllegalArgumentException("resource-site harvest requires a ready field");
+        if ((lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING)
+                || lifecycle.growthStage() != ResourceSiteLifecycle.MATURE_STAGE) throw new IllegalArgumentException("resource-site harvest requires a ready field");
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING && lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).filter(job::equals).isEmpty()) {
+            throw new IllegalArgumentException("resource-site harvest completion does not match active work");
+        }
         ResourceSite site = site(state, job.siteId()); Settlement settlement = settlement(state, site.settlementId());
         StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
         if (!task.ownerId().equals(settlement.id()) || !task.resourceSiteTarget().equals(java.util.Optional.of(job.siteId()))) {
@@ -112,8 +131,7 @@ final class ResourceSiteHarvestProcess {
         ResidentProfile worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
         if (worker == null || !worker.id().equals(job.workerId())) throw new IllegalArgumentException("resource-site harvest worker is unavailable");
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (!job.outputSlot().containerId().equals(depot) || state.inventory().itemAt(depot, job.outputSlot().slot()).isPresent()
-                || state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) {
+        if (!job.outputSlot().containerId().equals(depot) || state.inventory().itemAt(depot, job.outputSlot().slot()).isPresent()) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");

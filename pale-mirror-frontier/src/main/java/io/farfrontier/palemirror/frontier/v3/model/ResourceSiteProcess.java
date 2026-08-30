@@ -16,9 +16,9 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.List;
 
-/** Advances a confirmed prepared field by COLD server time; it neither inspects nor changes Minecraft. */
+/** Advances a canonical field by COLD server time; projection never gates its food economy. */
 final class ResourceSiteProcess {
-    /** A durable early intent waits for a naturally loaded site before any physical execution. */
+    /** The first canonical preparation occurs without requiring a loaded Minecraft chunk. */
     static final long INITIAL_PREPARATION_TICK = 1L;
     static final long WHEAT_STAGE_INTERVAL = 3_000L;
     static final String PREPARATION_ACTION = "frontier.resource_site.prepare";
@@ -42,10 +42,9 @@ final class ResourceSiteProcess {
         String suffix = lifecycle.siteId().value().substring("site:".length()); ResourceSitePreparationJob job = new ResourceSitePreparationJob(
                 new SubjectId("job:site-prepare-" + suffix), lifecycle.siteId(), new PhysicalIntentId("intent:site-prepare-" + suffix));
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); BlockPosition origin = site.cropSlots().getFirst();
-        PhysicalIntent intent = new PhysicalIntent(job.intentId(), PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.PREPARED,
-                lifecycle.siteId(), List.of(lifecycle.siteId(), job.id()), new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())),
-                0, PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED);
-        return List.of(new ProposedEvent(lifecycle.siteId(), new ResourceSitePreparationStarted(job)), new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)));
+        ResourceSiteLifecycle prepared = lifecycle.preparing(job).prepared();
+        return List.of(new ProposedEvent(lifecycle.siteId(), new ResourceSitePreparationStarted(job)), new ProposedEvent(lifecycle.siteId(), new ResourceSitePrepared(job)),
+                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(prepared, Math.addExact(action.dueAt().ticks(), WHEAT_STAGE_INTERVAL)))));
     }
 
     static FrontierWorldState reducePreparationStarted(FrontierWorldState state, SubjectId subject, ResourceSitePreparationStarted started) {
@@ -53,6 +52,16 @@ final class ResourceSiteProcess {
         if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site preparation has a foreign event owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         return state.withResourceSites(state.resourceSites().replace(lifecycle.preparing(job)));
+    }
+
+    static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, ResourceSitePrepared prepared) {
+        ResourceSitePreparationJob job = prepared.job();
+        if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site preparation completion has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        ResourceSitePreparationJob active = lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
+                .orElseThrow(() -> new IllegalArgumentException("resource-site preparation completion has no active work"));
+        if (!active.equals(job)) throw new IllegalArgumentException("resource-site preparation completion does not match active work");
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.prepared()));
     }
 
     static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {

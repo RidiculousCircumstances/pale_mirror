@@ -55,9 +55,14 @@ final class DecontaminationStateSupport {
         }
         DecontaminationProcess.owner(bootstrap, intent.causeSubjectId());
         InfectionCell cell = cell(intent); long expected = Math.max(0L, Math.subtractExact(observation.priorRaw(), DecontaminationPolicy.REDUCTION_RAW));
-        FixedRatio actual = infection.get(cell);
-        if (!observation.cell().equals(cell) || observation.remainingRaw() != expected || !intent.subjectIds().contains(observation.itemId())
-                || expected == 0L != (actual == null) || actual != null && actual.value().raw() != expected) throw new IllegalArgumentException("decontamination observation is invalid");
+        // A confirmed observation is historical evidence. The atomic completion path above
+        // verifies the live field before it writes this receipt; a later ordinary hive pulse may
+        // legitimately reinfect the exact same cell. Requiring the present field to preserve an
+        // old receipt's remaining intensity would make that physical consequence impossible and
+        // turn valid autonomous re-infection into recovery corruption.
+        if (!observation.cell().equals(cell) || observation.remainingRaw() != expected || !intent.subjectIds().contains(observation.itemId())) {
+            throw new IllegalArgumentException("decontamination observation is invalid");
+        }
     }
 
     static InfectionCell cell(PhysicalIntent intent) {

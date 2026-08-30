@@ -79,6 +79,24 @@ class ExactInventoryTest {
     }
 
     @Test
+    void derivedSlotIndexFindsOnlyItsExactStackAndRejectsForgedIndex() {
+        SubjectId container = new SubjectId("container:indexed");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId item = new SubjectId("item:indexed");
+        InventoryCustody.ContainerSlot occupied = new InventoryCustody.ContainerSlot(container, 7);
+        ExactItemStack stack = new ExactItemStack(item, owner, "minecraft:iron_ingot", 64, occupied);
+        Map<SubjectId, ContainerRecord> containers = Map.of(container, new ContainerRecord(container, owner, 9));
+        Map<SubjectId, ContainerSurface> surfaces = surfaceFor(container);
+
+        ExactInventory inventory = new ExactInventory(containers, Map.of(item, stack), Map.of(), Map.of(), Map.of(), Map.of(), surfaces);
+
+        assertEquals(item, inventory.itemAt(container, 7).orElseThrow().id());
+        assertEquals(java.util.Optional.empty(), inventory.itemAt(container, 8));
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(containers, Map.of(item, stack), Map.of(), Map.of(), Map.of(), Map.of(), surfaces,
+                Map.of(new InventoryCustody.ContainerSlot(container, 8), item)));
+    }
+
+    @Test
     void loadingCargoMovesTheSameExactStackWithoutDuplicatingIt() {
         SubjectId container = new SubjectId("container:depot");
         SubjectId owner = new SubjectId("settlement:one");

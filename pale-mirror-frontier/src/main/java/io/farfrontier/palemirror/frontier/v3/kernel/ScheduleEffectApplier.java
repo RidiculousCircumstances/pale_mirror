@@ -4,7 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 final class ScheduleEffectApplier {
     private ScheduleEffectApplier() {}
 
-    static void apply(ScheduledActionQueue schedules, ScheduleEffect effect) {
+    static void apply(ScheduledActionQueue.Mutation schedules, ScheduleEffect effect) {
         if (effect instanceof ScheduleEffect.Created created) {
             schedules.schedule(created.action());
         } else if (effect instanceof ScheduleEffect.Cancelled cancelled) {
@@ -13,7 +13,7 @@ final class ScheduleEffectApplier {
             require(schedules.cancel(rescheduled.scheduleId()), rescheduled.scheduleId());
             schedules.schedule(rescheduled.replacement());
         } else if (effect instanceof ScheduleEffect.Consumed consumed) {
-            ScheduledAction head = schedules.snapshot().isEmpty() ? null : schedules.snapshot().getFirst();
+            ScheduledAction head = schedules.head();
             if (head == null || !head.id().equals(consumed.scheduleId())) {
                 throw new IllegalStateException("schedule consumption is not the due queue head: " + consumed.scheduleId().value());
             }

@@ -54,6 +54,26 @@ class ScheduledActionQueueTest {
         assertEquals(0, queue.size());
     }
 
+    @Test
+    void transactionOverlayLeavesFutureWorkUntouchedUntilItsCanonicalCommit() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction first = action("schedule:first", 10L, 0, "settlement:a", 1);
+        ScheduledAction second = action("schedule:second", 20L, 0, "settlement:b", 1);
+        ScheduledAction replacement = action("schedule:replacement", 15L, 0, "settlement:c", 1);
+        queue.schedule(first); queue.schedule(second);
+
+        ScheduledActionQueue.Mutation mutation = queue.beginMutation();
+        assertTrue(mutation.cancel(first.id()));
+        mutation.schedule(replacement);
+
+        assertEquals(List.of(first, second), queue.snapshot(), "a failed WAL append must leave canonical future work unchanged");
+        assertEquals(replacement, mutation.head(), "the pending transaction still validates its own effective queue");
+
+        mutation.commit();
+        assertEquals(List.of(replacement, second), queue.snapshot());
+        assertThrows(IllegalStateException.class, () -> mutation.schedule(first));
+    }
+
     private static ScheduledAction action(String id, long dueAt, int priority, String subject, int weight) {
         return new ScheduledAction(new ScheduleId(id), new SimInstant(dueAt), priority,
                 new SubjectId(subject), "process.tick", weight);

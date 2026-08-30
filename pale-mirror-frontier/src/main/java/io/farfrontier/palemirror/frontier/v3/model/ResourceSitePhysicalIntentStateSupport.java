@@ -80,8 +80,12 @@ final class ResourceSitePhysicalIntentStateSupport {
             if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.activeWork().isEmpty()) continue;
             PhysicalIntent intent = intents.get(intentId(lifecycle.siteId()));
             if (intent == null) {
+                // COLD preparation is a canonical event.  Its loaded-world field is a deferred
+                // desired-state projection, not a physical-intent prerequisite for food.
                 if (lifecycle.phase() == ResourceSitePhase.UNPREPARED && lifecycle.activeWork().isPresent()) continue;
-                if (lifecycle.phase() == ResourceSitePhase.CONFLICT || lifecycle.phase() == ResourceSitePhase.DESTROYED) continue;
+                if (lifecycle.phase() == ResourceSitePhase.CONFLICT || lifecycle.phase() == ResourceSitePhase.DESTROYED
+                        || lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
+                        || lifecycle.phase() == ResourceSitePhase.HARVESTING) continue;
                 throw new IllegalArgumentException("resource-site lifecycle lacks its preparation intent");
             }
             if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || !intent.causeSubjectId().equals(lifecycle.siteId())) {

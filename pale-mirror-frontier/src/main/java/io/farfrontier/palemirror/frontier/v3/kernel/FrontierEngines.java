@@ -19,7 +19,8 @@ public final class FrontierEngines {
         Objects.requireNonNull(configuration, "configuration");
         return new InMemoryFrontierEngine<>(configuration.worldId(), configuration.initialState(), configuration.initialInstant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
-                configuration.projectionMapper(), configuration.limits(), configuration.initialSchedules(), configuration.transactionCommitter());
+                configuration.projectionMapper(), configuration.limits(), configuration.initialSchedules(), configuration.transactionCommitter(),
+                configuration.stateValidator());
     }
 
     public static <S, P extends FrontierProjection> FrontierEngine<P> recover(
@@ -44,7 +45,7 @@ public final class FrontierEngines {
         if (receipts.size() > configuration.limits().maxReceipts()) throw new IllegalStateException("recovery checkpoint exceeds bounded receipt retention");
 
         TransactionReplayer.ReplayResult<S> replay = TransactionReplayer.replayFrom(configuration.worldId(), state, revision, instant,
-                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec());
+                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec(), configuration.stateValidator());
         return InMemoryFrontierEngine.recovered(configuration, replay, receipts, image.walTail());
     }
 }

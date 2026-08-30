@@ -4,8 +4,10 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Deterministic v3 graybox plan derived only from canonical state.
@@ -46,6 +48,73 @@ public final class FrontierGrayboxPlan {
     public Map<BlockPosition, GrayboxCell> cells() { return cells; }
     /** Sparse source cells; the dedicated overlay projects one owned marker for each loaded 4×4 cell. */
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
+
+    /**
+     * Exact current semantic body occupancy for pure COLD route planners.  Visible route cells
+     * are deliberate floor support, not body geometry: an actor standing on one needs the two
+     * cells above it clear.  This avoids compiling the whole render plan merely to answer that
+     * collision question while retaining the same structure, organ and physical-loss rules.
+     */
+    static Set<BlockPosition> currentBodyGeometry(FrontierWorldState state) {
+        Objects.requireNonNull(state, "body geometry state");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
+                addStructure(cells, structure, state.structureConditions().get(structure.id()))));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
+        state.physicalDeltas().keySet().forEach(cells::remove);
+        return Set.copyOf(cells.keySet());
+    }
+
+    /**
+     * Tests whether one settlement's current semantic structures still touch a live infection
+     * cell. Health reviews reuse the exact structure-cell grammar but never construct the
+     * unrelated world plan or temporary GrayboxCell map on their recurring COLD path.
+     */
+    static boolean settlementHasInfectionContact(FrontierWorldState state, Settlement settlement) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(settlement, "settlement");
+        if (state.infection().isEmpty()) return false;
+        for (SettlementStructure structure : settlement.structures()) {
+            StructureCondition condition = state.structureConditions().get(structure.id());
+            Set<InfectionCell> candidates = infectedStructureCells(state, structure, condition);
+            if (candidates.isEmpty()) continue;
+            // Every non-destroyed structure has a semantic foundation at every footprint column.
+            // With no aftermath, the small grid-cell candidate query is already an exact contact
+            // answer; do not perform one sparse-map lookup for every wall and roof block.
+            if (state.physicalDeltas().isEmpty()) return true;
+            if (visitStructureCells(structure, condition, (position, ignored) ->
+                    candidates.contains(InfectionCell.at(position)) && !state.physicalDeltas().containsKey(position))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns only live sparse infection cells that can geometrically intersect this structure.
+     * The rectangle covers its complete foundation; Hall access cells are added separately
+     * because they can extend beyond the box.  A physical aftermath still takes the exact
+     * semantic-cell path above, so this is an index, never an approximate disease rule.
+     */
+    private static Set<InfectionCell> infectedStructureCells(FrontierWorldState state, SettlementStructure structure,
+                                                              StructureCondition condition) {
+        if (condition == StructureCondition.DESTROYED) return Set.of();
+        int width = structureWidth(structure.kind()), depth = structureDepth(structure.kind());
+        int minX = structure.anchor().x() - width / 2, maxX = structure.anchor().x() + (width - 1) / 2;
+        int minZ = structure.anchor().z() - depth / 2, maxZ = structure.anchor().z() + (depth - 1) / 2;
+        Set<InfectionCell> candidates = new LinkedHashSet<>();
+        for (int x = Math.floorDiv(minX, InfectionCell.BLOCKS); x <= Math.floorDiv(maxX, InfectionCell.BLOCKS); x++) {
+            for (int z = Math.floorDiv(minZ, InfectionCell.BLOCKS); z <= Math.floorDiv(maxZ, InfectionCell.BLOCKS); z++) {
+                InfectionCell cell = new InfectionCell(x, z);
+                if (state.infection().containsKey(cell)) candidates.add(cell);
+            }
+        }
+        if (structure.kind() == StructureKind.HALL) {
+            for (BlockPosition access : SettlementAccessPort.forHall(structure).ownedSurfaceCells()) {
+                InfectionCell cell = InfectionCell.at(access);
+                if (state.infection().containsKey(cell)) candidates.add(cell);
+            }
+        }
+        return candidates;
+    }
 
     /** Deterministic inactive cells that an exact-material replacement project must build. */
     public static java.util.List<BlockPosition> routeConstructionCells(FrontierWorldState state, RouteConstruction project) {
@@ -126,32 +195,49 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, SettlementStructure structure, StructureCondition condition) {
-        if (condition == StructureCondition.DESTROYED) return;
-        int width = switch (structure.kind()) {
-            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, INFIRMARY -> 7; case HOUSING -> 6;
-        };
-        int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
-        };
-        int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
-            case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
-        };
         GrayboxMaterial material = switch (structure.kind()) {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
             case WORKSHOP -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
+        visitStructureCells(structure, condition, (position, part) -> {
+            add(cells, position, structure.id(), material, part);
+            return false;
+        });
+    }
+
+    /** Iterates precisely the semantic cells used by materialization, stopping on visitor demand. */
+    private static boolean visitStructureCells(SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
+        if (condition == StructureCondition.DESTROYED) return false;
+        int width = structureWidth(structure.kind());
+        int depth = structureDepth(structure.kind());
+        int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
+            case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
+        };
         SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
-            add(cells, structure.anchor().offset(x, 0, z), structure.id(), material, GrayboxSemanticPart.FOUNDATION);
+            if (visitor.visit(structure.anchor().offset(x, 0, z), GrayboxSemanticPart.FOUNDATION)) return true;
             for (int y = 1; y < height; y++) if (x == -width / 2 || x == (width - 1) / 2 || z == -depth / 2 || z == (depth - 1) / 2) {
                 BlockPosition wall = structure.anchor().offset(x, y, z);
-                if (access == null || !access.throatAirCells().contains(wall)) add(cells, wall, structure.id(), material, GrayboxSemanticPart.WALL);
+                if ((access == null || !access.throatAirCells().contains(wall)) && visitor.visit(wall, GrayboxSemanticPart.WALL)) return true;
             }
-            add(cells, structure.anchor().offset(x, height, z), structure.id(), material, GrayboxSemanticPart.ROOF);
+            if (visitor.visit(structure.anchor().offset(x, height, z), GrayboxSemanticPart.ROOF)) return true;
         }
         if (access != null) for (BlockPosition surface : access.ownedSurfaceCells()) {
-            add(cells, surface, structure.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+            if (visitor.visit(surface, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
+        return false;
+    }
+
+    private static int structureWidth(StructureKind kind) {
+        return switch (kind) {
+            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, INFIRMARY -> 7; case HOUSING -> 6;
+        };
+    }
+
+    private static int structureDepth(StructureKind kind) {
+        return switch (kind) {
+            case HALL, FARM, WORKSHOP, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
+        };
     }
 
     private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, HiveOrgan organ) {
@@ -177,6 +263,11 @@ public final class FrontierGrayboxPlan {
         GrayboxCell prior = cells.putIfAbsent(position, cell);
         if (prior != null && !prior.equals(cell)) throw new IllegalArgumentException("overlapping graybox cells at " + position);
         if (cells.size() > MAX_CELLS) throw new IllegalArgumentException("graybox plan cell limit exceeded");
+    }
+
+    @FunctionalInterface
+    private interface StructureCellVisitor {
+        boolean visit(BlockPosition position, GrayboxSemanticPart part);
     }
 
 }

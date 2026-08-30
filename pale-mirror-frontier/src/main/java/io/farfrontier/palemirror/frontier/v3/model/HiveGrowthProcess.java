@@ -40,6 +40,11 @@ final class HiveGrowthProcess {
         if (!capacity || biomass.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);
+        SubjectId store = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
+        if (state.inventory().surfaces().get(store).status() != ContainerSurfaceStatus.ACTIVE) {
+            return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(hive, new HiveGrowthStarted(job)),
+                    new ProposedEvent(hive, new HiveGrowthBiomassConsumed(job.id(), job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 200L)));
+        }
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId()),
                 new FixedPosition(FixedScalar.whole(nest.anchor().x()), FixedScalar.whole(nest.anchor().y()), FixedScalar.whole(nest.anchor().z())), 0,
@@ -53,7 +58,13 @@ final class HiveGrowthProcess {
         if (job == null) throw new IllegalStateException("hive growth completion has no active job: " + action.subject().value());
         StrategicTask task = activeTask(state, job.hiveId());
         PhysicalIntent consumption = state.physicalIntents().get(job.consumptionIntentId());
-        if (consumption == null || consumption.status() != PhysicalIntentStatus.CONFIRMED) throw new IllegalStateException("hive growth completion has no confirmed biomass receipt");
+        if (consumption == null) {
+            if (state.inventory().items().containsKey(job.consumedItemId())) {
+                throw new IllegalStateException("cold hive growth completion retains its exact biomass");
+            }
+        } else if (consumption.status() != PhysicalIntentStatus.CONFIRMED) {
+            throw new IllegalStateException("hive growth completion has no confirmed biomass receipt");
+        }
         return List.of(new ProposedEvent(job.hiveId(), new HiveGrowthCompleted(job.id())), transition(task, StrategicTaskStatus.COMPLETED));
     }
 
@@ -61,6 +72,19 @@ final class HiveGrowthProcess {
         HiveGrowthJob job = started.job(); ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (!subject.equals(job.hiveId()) || input == null || !BIOMASS.equals(input.itemKind()) || input.count() != 64) throw new IllegalArgumentException("hive growth start lacks exact biomass");
         activeTask(state, job.hiveId()); return state.startHiveGrowth(job);
+    }
+
+    static FrontierWorldState reduceConsumed(FrontierWorldState state, SubjectId subject, HiveGrowthBiomassConsumed consumed) {
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(consumed.jobId());
+        if (job == null || !subject.equals(job.hiveId()) || !job.consumedItemId().equals(consumed.itemId())) {
+            throw new IllegalArgumentException("cold hive growth consumption has no matching job");
+        }
+        ExactItemStack item = state.inventory().items().get(consumed.itemId());
+        if (item == null || !BIOMASS.equals(item.itemKind()) || item.count() != 64 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
+                || !state.isHiveStore(slot.containerId()) || state.inventory().surfaces().get(slot.containerId()).status() == ContainerSurfaceStatus.ACTIVE) {
+            throw new IllegalArgumentException("cold hive growth consumption bypasses its exact inactive store");
+        }
+        activeTask(state, job.hiveId()); return state.consumeHiveGrowthBiomass(job.id(), item.id());
     }
 
     static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, HiveGrowthCompleted completed) {

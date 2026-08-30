@@ -85,6 +85,30 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void completeStateAuditRejectsAReducerResultBeforeWalDurabilityOrCanonicalInstall() {
+        List<TransactionRecord> durable = new ArrayList<>();
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
+                (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(),
+                (transaction, durability) -> durable.add(transaction),
+                state -> {
+                    if (state.value() != 0) throw new IllegalArgumentException("synthetic complete-state invariant failure");
+                });
+
+        assertRejected(engine.submit(command("command:state-audit", Revision.ZERO, 1)), RejectionCode.INVARIANT_FAILURE);
+        assertEquals(0, engine.projection(ProjectionQuery.summary()).value());
+        assertEquals(Revision.ZERO, engine.projection(ProjectionQuery.summary()).revision());
+        assertTrue(engine.transactions().isEmpty());
+        assertTrue(durable.isEmpty(), "invalid reduced state must never reach the WAL committer");
+        assertEquals("QUARANTINED", engine.status().kind().name());
+    }
+
+    @Test
     void writeAheadCommitReceivesTheCompleteTransactionBeforeAcknowledgement() {
         List<TransactionRecord> committed = new ArrayList<>();
         InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false,
@@ -153,6 +177,23 @@ class InMemoryFrontierEngineTest {
         assertTrue(engine.scheduledActions().isEmpty());
         assertEquals(List.of("kernel.schedule_cancelled"), engine.transactions().getFirst().events().stream()
                 .map(event -> event.payload().type()).toList());
+    }
+
+    @Test
+    void scheduleOnlyTransactionDoesNotReauditTheSameImmutableStateSnapshot() {
+        ScheduledAction action = scheduled("schedule:audit-free", "settlement:a", 10L, 1);
+        AtomicInteger validations = new AtomicInteger();
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Cancelled(due.id()))),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(action), TransactionCommitter.noOp(), ignored -> validations.incrementAndGet());
+
+        engine.advanceTo(new SimInstant(10L), new WorkBudget(1, 1));
+
+        assertEquals(1, validations.get(), "only construction validates; a pure schedule transition has no new aggregate snapshot");
     }
 
     @Test
@@ -237,6 +278,19 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void compactionDropsOnlySnapshotCoveredTransactions() {
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:compact-one", Revision.ZERO, 1)));
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:compact-two", new Revision(1L), 1)));
+
+        engine.compact(new Revision(1L));
+
+        assertEquals(1, engine.transactions().size());
+        assertEquals(new Revision(2L), engine.transactions().getFirst().revision());
+        assertThrows(IllegalArgumentException.class, () -> engine.compact(new Revision(3L)));
+    }
+
+    @Test
     void checkpointReusesTheEncodedStateUntilACommittedRevisionChangesIt() {
         AtomicInteger encodes = new AtomicInteger();
         StateCodec<Counter> codec = new StateCodec<>() {
@@ -255,7 +309,13 @@ class InMemoryFrontierEngineTest {
 
         engine.checkpoint(); engine.checkpoint();
         assertEquals(1, encodes.get());
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:cache", Revision.ZERO, 2)));
+        ScheduledAction schedule = scheduled("schedule:cached-state", "settlement:cached", 10L, 1);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:schedule-only", Revision.ZERO,
+                new ScheduleEffect.Created(schedule))));
+        assertEquals(1, encodes.get(), "schedule-only transactions must reuse exact canonical-state bytes");
+        assertEquals(List.of(schedule), engine.checkpoint().schedules());
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:cache", new Revision(1L), 2)));
+        assertEquals(1, encodes.get(), "a WAL-backed state change waits for the next explicit checkpoint");
         engine.checkpoint(); engine.checkpoint();
         assertEquals(2, encodes.get());
     }

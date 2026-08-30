@@ -5,10 +5,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 /** Engine-owned schedule index. Its only mutation path is explicit schedule or cancellation events. */
@@ -32,14 +36,17 @@ public final class ScheduledActionQueue {
         return action != null && ordered.remove(action);
     }
 
-    public ScheduledActionQueue copy() {
-        ScheduledActionQueue copy = new ScheduledActionQueue();
-        snapshot().forEach(copy::schedule);
-        return copy;
-    }
-
     public boolean isHead(ScheduledAction action) {
         return action.equals(ordered.isEmpty() ? null : ordered.first());
+    }
+
+    /**
+     * Prepares one atomic schedule transition without cloning the whole future-work index.
+     * The caller may commit the transition only after the matching canonical transaction is
+     * durable; a rejected reducer or failed WAL append leaves this queue untouched.
+     */
+    public Mutation beginMutation() {
+        return new Mutation(this);
     }
 
     /**
@@ -81,5 +88,77 @@ public final class ScheduledActionQueue {
 
     public int size() {
         return ordered.size();
+    }
+
+    /** First queued due instant strictly after the caller's canonical instant. */
+    public Optional<SimInstant> nextDueAfter(SimInstant instant) {
+        Objects.requireNonNull(instant, "instant");
+        return ordered.stream().map(ScheduledAction::dueAt).filter(value -> value.compareTo(instant) > 0).findFirst();
+    }
+
+    /** Small copy-on-write overlay for exactly one canonical transaction. */
+    static final class Mutation {
+        private final ScheduledActionQueue base;
+        private final Map<ScheduleId, ScheduledAction> created = new LinkedHashMap<>();
+        private final Set<ScheduleId> removed = new LinkedHashSet<>();
+        private boolean committed;
+
+        private Mutation(ScheduledActionQueue base) {
+            this.base = Objects.requireNonNull(base, "base");
+        }
+
+        void schedule(ScheduledAction action) {
+            requireOpen(); Objects.requireNonNull(action, "action");
+            if (find(action.id()) != null) {
+                throw new IllegalArgumentException("scheduled action already exists: " + action.id().value());
+            }
+            // ScheduledAction's final ordering key is its globally unique ID, so a distinct
+            // ID cannot collide with an unchanged queue entry. Avoid scanning all future work.
+            created.put(action.id(), action);
+        }
+
+        boolean cancel(ScheduleId id) {
+            requireOpen(); Objects.requireNonNull(id, "schedule id");
+            ScheduledAction action = find(id);
+            if (action == null) return false;
+            if (created.remove(id) == null) removed.add(id);
+            return true;
+        }
+
+        ScheduledAction head() {
+            ScheduledAction retained = base.ordered.stream().filter(action -> !removed.contains(action.id())).findFirst().orElse(null);
+            ScheduledAction added = created.values().stream().min(ScheduledAction::compareTo).orElse(null);
+            if (retained == null) return added;
+            if (added == null) return retained;
+            return retained.compareTo(added) <= 0 ? retained : added;
+        }
+
+        void acknowledge(ScheduledAction action) {
+            requireOpen(); Objects.requireNonNull(action, "action");
+            ScheduledAction current = head();
+            if (!action.equals(current)) {
+                throw new IllegalStateException("scheduled action acknowledgement is not the queue head: " + action.id().value());
+            }
+            if (created.remove(action.id()) == null) removed.add(action.id());
+        }
+
+        /** Applies a prevalidated overlay. No allocation proportional to unchanged future work occurs. */
+        void commit() {
+            requireOpen();
+            removed.forEach(base::cancel);
+            created.values().forEach(base::schedule);
+            committed = true;
+        }
+
+        private ScheduledAction find(ScheduleId id) {
+            ScheduledAction added = created.get(id);
+            if (added != null) return added;
+            if (removed.contains(id)) return null;
+            return base.byId.get(id);
+        }
+
+        private void requireOpen() {
+            if (committed) throw new IllegalStateException("schedule mutation is already committed");
+        }
     }
 }

@@ -31,6 +31,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
@@ -221,6 +222,23 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void installedSnapshotsReleaseCoveredEngineHistoryBeforeTheBoundedTransactionCap(@TempDir Path directory) {
+        FrontierEngineConfiguration<Counter, CounterProjection> base = configuration();
+        FrontierEngineConfiguration<Counter, CounterProjection> bounded = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), new EngineLimits(128, 100L, 2),
+                base.initialSchedules(), base.transactionCommitter());
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(bounded, new FrontierFileStore(directory, codecs()), 1);
+        for (int value = 0; value < 12; value++) {
+            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+            assertInstanceOf(CommandResult.Accepted.class, runtime.submit(command("command:compact-" + value, checkpoint.revision(), checkpoint.instant(), 1)).orElseThrow());
+            runtime.tick(new WorkBudget(4, 8));
+        }
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+        assertEquals(12, runtime.projection(ProjectionQuery.summary()).orElseThrow().value());
+        assertEquals(0, new FrontierFileStore(directory, codecs()).recover(WORLD).walTail().size());
+    }
+
+    @Test
     void decodedStateIsSharedUntilACommittedRevisionChangesIt(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
         Counter first = runtime.decodedState().orElseThrow();
@@ -252,7 +270,7 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
-    void restartLeavesCargoHandoffRunningForItsLoadedChunkPostconditionInspector(@TempDir Path directory) {
+    void restartRetainsAnUnloadedColdCargoDeliveryWithoutAStalledMaterializationIntent(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:restart-safety");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
         var configuration = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L);
@@ -260,18 +278,16 @@ class FrontierV3ServerRuntimeTest {
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
 
-        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
-        CheckpointImage prepared = runtime.checkpointImage().orElseThrow();
-        CommandId runningCommand = new CommandId("test:mark-running");
-        assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, runningCommand, world,
-                prepared.revision(), prepared.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(runningCommand),
-                new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()))).orElseThrow());
+        FrontierWorldState delivered = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        assertEquals(ContractStatus.DELIVERED, delivered.contracts().get(new SubjectId("contract:supply-1-2")).status());
+        assertFalse(delivered.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")),
+                "unloaded COLD delivery may not create an intent that requires a materializer to finish");
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        assertEquals(0, FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(recovered));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(intentId).status());
+        assertEquals(ContractStatus.DELIVERED, state.contracts().get(new SubjectId("contract:supply-1-2")).status());
+        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
         assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
     }
 

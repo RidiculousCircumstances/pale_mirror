@@ -118,7 +118,13 @@ final class FrontierDevelopmentScenarios {
      * east store and let its ordinary executor consume the real tagged stack.
      */
     static HiveGrowthFixture hiveGrowthFixture(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        var base = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed);
+        SubjectId store = new SubjectId("container:hive-east-store");
+        FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE));
+        var engine = FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
+                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                base.initialSchedules(), base.transactionCommitter()));
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
             if (tick % 20L != 0L) continue;

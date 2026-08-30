@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 55, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 56, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -66,7 +66,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
-                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51 && version != 52 && version != 53 && version != 54 && version != VERSION) {
+                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51 && version != 52 && version != 53 && version != 54 && version != 55 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -376,7 +376,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (SubjectId participant : operation.participantIds()) writeString(output, participant.value());
             writeCount(output, operation.route().size());
             for (BlockPosition point : operation.route()) writePosition(output, point);
-            output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+            output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
             output.writeBoolean(operation.activeAssembly().isPresent());
             if (operation.activeAssembly().isPresent()) writeAssembly(output, operation.activeAssembly().orElseThrow());
             output.writeBoolean(operation.activeTravel().isPresent());
@@ -395,7 +395,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
             java.util.Optional<OperationAssembly> assembly = hasAssembly && input.readBoolean() ? java.util.Optional.of(readAssembly(input, hasAssemblyDeferral, hasDeferralObstruction)) : java.util.Optional.empty();
             java.util.Optional<OperationTravel> travel = hasTravel && input.readBoolean() ? java.util.Optional.of(readTravel(input)) : java.util.Optional.empty();
-            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage], assembly, travel)) != null) {
+            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }

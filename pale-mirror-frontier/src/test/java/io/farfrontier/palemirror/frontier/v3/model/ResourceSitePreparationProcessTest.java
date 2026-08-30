@@ -1,8 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -11,7 +8,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSitePreparationProcessTest {
     @Test
-    void freshWorldDurablyPreparesEveryFieldBeforeTheFirstNaturalChunkVisit() {
+    void freshWorldCanonicallyPreparesEveryFieldBeforeTheFirstNaturalChunkVisit() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resource-site-schedule"), 77L);
         assertEquals(12, configuration.initialSchedules().stream()
                 .filter(action -> action.kind().equals(ResourceSiteProcess.PREPARATION_ACTION))
@@ -35,106 +31,54 @@ class ResourceSitePreparationProcessTest {
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
-        assertEquals(12, state.physicalIntents().values().stream().filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION).count());
-        assertTrue(state.resourceSites().sites().values().stream().allMatch(site -> site.phase() == ResourceSitePhase.UNPREPARED && site.activeWork().isPresent()));
+        assertEquals(0, state.physicalIntents().values().stream().filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION).count());
+        assertTrue(state.resourceSites().sites().values().stream().allMatch(site -> site.phase() == ResourceSitePhase.GROWING && site.growthStage() == 0));
+        assertEquals(12, engine.checkpoint().schedules().stream().filter(action -> action.kind().equals("frontier.resource_site.growth")).count());
     }
 
     @Test
-    void trustedExecutorCanStartPreparedFieldThroughThePublicCommandBoundary() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resource-site-command"), 77L));
-        for (long tick = 100L; tick <= 4_100L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-
-        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        PhysicalIntent intent = prepared.physicalIntents().values().stream()
-                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION)
-                .findFirst().orElseThrow();
-        var checkpoint = engine.checkpoint();
-        var command = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:resource-site-preparation-running");
-
-        assertTrue(engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(),
-                checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(command),
-                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted);
-        FrontierWorldState running = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(PhysicalIntentStatus.RUNNING, running.physicalIntents().get(intent.id()).status());
+    void canonicalPreparationPayloadRoundTripsAndCannotCompleteTheWrongJob() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-command"), 77L));
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparation(initial, ResourceSiteProcess.preparation(site, 4_000L));
+        ResourceSitePrepared prepared = (ResourceSitePrepared) planned.get(1).payload();
+        assertEquals(prepared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(prepared.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(prepared)));
+        FrontierWorldState preparing = ResourceSiteProcess.reducePreparationStarted(initial, site, (ResourceSitePreparationStarted) planned.getFirst().payload());
+        assertEquals(ResourceSitePhase.GROWING, ResourceSiteProcess.reducePrepared(preparing, site, prepared).resourceSites().site(site).phase());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reducePrepared(preparing, site,
+                new ResourceSitePrepared(new ResourceSitePreparationJob(new SubjectId("job:site-prepare-2-wheat-field"), new SubjectId("site:2-wheat-field"),
+                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-prepare-2-wheat-field")))));
     }
 
     @Test
-    void confirmedPreparationMakesOneGrowingFieldAndPersistsItsFirstColdStage() {
-        Prepared prepared = prepared();
-        FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        ResourceSitePreparationObservation receipt = receipt(prepared.site(), prepared.intent());
-        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparationTransition(running, prepared.intent(), confirmed, 8_000L);
-
-        assertEquals(2, planned.size());
-        assertTrue(planned.get(1).payload() instanceof ScheduleEffect.Created);
-        assertEquals(8_000L + ResourceSiteProcess.WHEAT_STAGE_INTERVAL,
-                ((ScheduleEffect.Created) planned.get(1).payload()).action().dueAt().ticks());
-        FrontierWorldState confirmedState = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        assertEquals(ResourceSitePhase.GROWING, confirmedState.resourceSites().site(prepared.site()).phase());
-        assertEquals(1L, confirmedState.resourceSites().site(prepared.site()).growthEpoch());
-        assertEquals(receipt, confirmedState.physicalObservations().get(receipt.id()));
-        assertEquals(confirmedState, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmedState)));
-        assertEquals(confirmed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(confirmed.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(confirmed)));
-    }
-
-    @Test
-    void foreignReceiptCannotAdvanceAFieldAndUnknownPreparationBecomesVisibleConflict() {
-        Prepared prepared = prepared();
-        FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        ResourceSitePreparationObservation foreign = new ResourceSitePreparationObservation(new PhysicalObservationId("observation:site-prepare-foreign"),
-                prepared.intent().id(), new SubjectId("site:2-wheat-field"), 64, 64);
-
-        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(foreign)));
-        FrontierWorldState conflicted = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
-        assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(prepared.site()).phase());
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, conflicted.physicalIntents().get(prepared.intent().id()).status());
-        assertEquals(conflicted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(conflicted)));
-        assertThrows(IllegalArgumentException.class, () -> prepared.state().withResourceSites(prepared.state().resourceSites()
-                .replace(prepared.state().resourceSites().site(prepared.site()).prepared())));
-    }
-
-    @Test
-    void destroyedFarmRetiresItsPendingPreparationWithoutReclassifyingTheFieldAsConflict() {
-        Prepared prepared = prepared();
-        FrontierWorldState destroyed = prepared.state().withStructureCondition(new SubjectId("structure:1-farm"), StructureCondition.DESTROYED);
-        PhysicalIntentTransition unknown = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
-
-        assertEquals(ResourceSitePhase.DESTROYED, destroyed.resourceSites().site(prepared.site()).phase());
-        assertEquals(1, ResourceSiteProcess.planPreparationTransition(destroyed, prepared.intent(), unknown, 9_000L).size());
-        FrontierWorldState resolved = destroyed.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
-        assertEquals(ResourceSitePhase.DESTROYED, resolved.resourceSites().site(prepared.site()).phase());
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, resolved.physicalIntents().get(prepared.intent().id()).status());
+    void canonicalPreparationSchedulesOneFirstColdStage() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-prepared"), 77L));
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 8_000L));
+        assertEquals(3, planned.size()); assertTrue(planned.get(2).payload() instanceof ScheduleEffect.Created);
+        assertEquals(8_000L + ResourceSiteProcess.WHEAT_STAGE_INTERVAL, ((ScheduleEffect.Created) planned.get(2).payload()).action().dueAt().ticks());
+        state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) planned.getFirst().payload());
+        FrontierWorldState prepared = ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) planned.get(1).payload());
+        assertEquals(ResourceSitePhase.GROWING, prepared.resourceSites().site(site).phase());
+        assertEquals(prepared, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(prepared)));
     }
 
     @Test
     void oneObservedOwnedCropLossIsDurablySiteSpecificAndCannotNameForeignGeometry() {
-        Prepared prepared = prepared();
-        FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        FrontierWorldState growing = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt(prepared.site(), prepared.intent())));
-        BlockPosition crop = FrontierResourceSitePlan.compile(growing.bootstrap()).get(prepared.site()).cropSlots().getFirst();
-        ResourceSiteConflictObserved loss = new ResourceSiteConflictObserved(prepared.site(), crop, "player:test");
+        FrontierWorldState growing = prepared(); BlockPosition crop = FrontierResourceSitePlan.compile(growing.bootstrap()).get(new SubjectId("site:1-wheat-field")).cropSlots().getFirst();
+        ResourceSiteConflictObserved loss = new ResourceSiteConflictObserved(new SubjectId("site:1-wheat-field"), crop, "player:test");
 
-        assertEquals(ResourceSitePhase.CONFLICT, ResourceSiteProcess.reduceConflict(growing, prepared.site(), loss).resourceSites().site(prepared.site()).phase());
+        assertEquals(ResourceSitePhase.CONFLICT, ResourceSiteProcess.reduceConflict(growing, loss.siteId(), loss).resourceSites().site(loss.siteId()).phase());
         assertEquals(loss, FrontierWorldRuntimeDefinition.payloadCodecs().decode(loss.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)));
-        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceConflict(growing, prepared.site(),
-                new ResourceSiteConflictObserved(prepared.site(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), "player:test")));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceConflict(growing, loss.siteId(),
+                new ResourceSiteConflictObserved(loss.siteId(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), "player:test")));
     }
 
-    private static Prepared prepared() {
+    private static FrontierWorldState prepared() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-preparation"), 77L));
         SubjectId site = new SubjectId("site:1-wheat-field");
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4_000L));
         state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) planned.getFirst().payload());
-        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(1).payload()).intent();
-        return new Prepared(ResourceSiteProcess.reducePrepared(state, site, intent), site, intent);
+        return ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) planned.get(1).payload());
     }
-
-    private static ResourceSitePreparationObservation receipt(SubjectId site, PhysicalIntent intent) {
-        return new ResourceSitePreparationObservation(new PhysicalObservationId("observation:site-prepare-1"), intent.id(), site, 64, 64);
-    }
-
-    private record Prepared(FrontierWorldState state, SubjectId site, PhysicalIntent intent) { }
 }

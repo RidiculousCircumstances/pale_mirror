@@ -26,6 +26,19 @@ final class HiveRouteEngagementProcess {
                 .sorted(Comparator.comparing(RouteOperation::id)).map(RouteOperation::id).findFirst();
     }
 
+    /**
+     * The strategic lane may be reconsidered often while a caravan remains en route.
+     * A pending start is already a durable claim on that lane; scheduling another start
+     * for it would fork one exact operation before either start can run.
+     */
+    static boolean hasPendingOrActiveInterception(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream()
+                .anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
+                        && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE))
+                || state.strategicPlans().routeEngagements().values().stream()
+                .anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED);
+    }
+
     static ScheduledAction start(StrategicTask task, long due) {
         if (task.kind() != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION) throw new IllegalArgumentException("invalid hive interception task schedule");
         return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-start-" + task.id().value().replace(':', '-')), new SimInstant(due), 0,
@@ -118,8 +131,6 @@ final class HiveRouteEngagementProcess {
             events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
             if (outcome == RouteEngagementOutcome.HIVE_VICTORY) {
                 events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
-            } else {
-                events.add(schedule(SupplyOperationProcess.operationProgress(state.operations().get(engagement.operationId()), action.dueAt().ticks() + STEP_INTERVAL)));
             }
         } else events.add(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
         return List.copyOf(events);

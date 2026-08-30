@@ -24,6 +24,13 @@ final class HiveGrowthStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
+    static FrontierWorldState consume(FrontierWorldState state, SubjectId jobId, SubjectId itemId) {
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "hive growth job id"));
+        if (job == null || !job.consumedItemId().equals(itemId)) throw new IllegalArgumentException("hive growth biomass does not match its active job");
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withoutItem(itemId), state.productionJobs(), state.contracts(), state.operations(),
+                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+    }
+
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().cancelGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());

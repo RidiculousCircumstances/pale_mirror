@@ -64,11 +64,7 @@ final class HumanHealthProcess {
 
     /** Read-only semantic contact query shared by scheduling, validation and player projection. */
     static boolean localExposure(FrontierWorldState state, Settlement settlement) {
-        return FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .filter(cell -> cell.ownerId().value().startsWith("structure:"))
-                .filter(cell -> FrontierWorldStateSupport.structureSettlement(state.bootstrap(), cell.ownerId()).equals(settlement.id()))
-                .map(cell -> InfectionCell.at(cell.position()))
-                .distinct().anyMatch(state.infection()::containsKey);
+        return FrontierGrayboxPlan.settlementHasInfectionContact(state, settlement);
     }
 
     private static ResidentProfile nextResident(FrontierWorldState state, SubjectId settlementId, boolean contaminated, long now) {

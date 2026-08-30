@@ -115,6 +115,29 @@ class DecontaminationProcessTest {
         assertTrue(!complete.infection().containsKey(cell) && !complete.inventory().items().containsKey(item));
     }
 
+    @Test
+    void historicalDecontaminationReceiptDoesNotForbidLaterAutonomousReinfection() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:decontamination-reinfection"), 109L);
+        Settlement settlement = settlement(bootstrap, "settlement:9");
+        SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:reinfection-reagent");
+        InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
+        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+        state = state.withInfection(cell, new FixedRatio(new FixedScalar(DecontaminationPolicy.REDUCTION_RAW)));
+        state = activateAndPrepare(state, settlement);
+        PhysicalIntent intent = onlyIntent(state);
+        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        DecontaminationObservation receipt = new DecontaminationObservation(new PhysicalObservationId("observation:reinfection"), intent.id(), item,
+                cell, DecontaminationPolicy.REDUCTION_RAW, 0L);
+
+        FrontierWorldState cleared = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        FrontierWorldState reinfected = cleared.withInfection(cell, new FixedRatio(new FixedScalar(125_000L)));
+
+        assertEquals(125_000L, reinfected.infection().get(cell).value().raw());
+        assertEquals(reinfected, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reinfected)));
+    }
+
     private static FrontierWorldState activateAndPrepare(FrontierWorldState state, Settlement settlement) {
         List<ProposedEvent> events = DecontaminationProcess.plan(state, DecontaminationProcess.scan(1, 1_000L));
         StrategicTaskTransition activation = events.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)

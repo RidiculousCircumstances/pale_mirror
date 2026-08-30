@@ -10,7 +10,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,7 +30,11 @@ final class HiveInfectionProcess {
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = state.strategicPlans().tasks().get(action.subject());
         if (task == null || task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.ownerId().equals(state.bootstrap().hive().id())) {
-            throw new IllegalStateException("hive infection schedule has no owned expansion task");
+            // A strategic interception may terminate and compact an older expansion task
+            // before this persisted due action reaches the scheduler.  The task lifecycle,
+            // not the historical schedule entry, owns whether the pulse still exists.  The
+            // kernel still needs the explicit cancellation so it cannot silently drop work.
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
         if (task.status() == StrategicTaskStatus.BLOCKED || task.status() == StrategicTaskStatus.COMPLETED) return List.of();
         if (!hasOperationalHeart(state)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
@@ -53,11 +56,7 @@ final class HiveInfectionProcess {
     static Optional<InfectionCell> expansionTarget(FrontierWorldState state) {
         if (!hasOperationalHeart(state)) return Optional.empty();
         if (state.infection().isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
-        LinkedHashSet<InfectionCell> candidates = new LinkedHashSet<>();
-        state.infection().keySet().stream().sorted(Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z))
-                .forEach(source -> adjacent(source).stream().filter(cell -> state.bootstrap().bounds().contains(cell.originAtY(64))).forEach(candidates::add));
-        return candidates.stream().sorted(Comparator.comparingLong((InfectionCell cell) -> state.infection()
-                .getOrDefault(cell, new FixedRatio(FixedScalar.ZERO)).value().raw()).thenComparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst();
+        return FrontierWorldStateSupport.infectionFrontier(state.infection(), state.bootstrap().bounds()).best(state.infection());
     }
 
     static boolean hasOperationalHeart(FrontierWorldState state) { return !roots(state).isEmpty(); }
@@ -67,11 +66,6 @@ final class HiveInfectionProcess {
     }
 
     private static int pulse(ScheduledAction action) { return FrontierWorldScheduleSupport.ordinal(action.id().value()); }
-
-    private static List<InfectionCell> adjacent(InfectionCell source) {
-        return List.of(new InfectionCell(source.x() + 1, source.z()), new InfectionCell(source.x(), source.z() + 1),
-                new InfectionCell(source.x() - 1, source.z()), new InfectionCell(source.x(), source.z() - 1));
-    }
 
     private static List<HiveOrgan> roots(FrontierWorldState state) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())

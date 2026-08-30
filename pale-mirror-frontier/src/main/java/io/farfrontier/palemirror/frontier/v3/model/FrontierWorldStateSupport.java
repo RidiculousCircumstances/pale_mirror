@@ -2,9 +2,11 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -83,8 +85,9 @@ final class FrontierWorldStateSupport {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
-                        && operation.participantIds().contains(resident.id())))
+                .filter(resident -> !activeOperationClaim(state, resident.id()))
+                .filter(resident -> !activePatrolClaim(state, resident.id()))
+                .filter(resident -> !state.humanPopulation().migrations().containsKey(resident.id()))
                 .sorted(byRoleSkill(role)).findFirst();
     }
 
@@ -105,11 +108,22 @@ final class FrontierWorldStateSupport {
 
     static boolean retainsParticipantClaim(Map<SubjectId, SupplyContract> contracts, RouteOperation operation) {
         return switch (operation.stage()) {
-            case ASSEMBLING, EN_ROUTE -> true;
-            case ARRIVED -> contracts.values().stream().anyMatch(contract -> contract.cargoId().equals(operation.cargoId())
-                    && contract.status() == ContractStatus.LOADED);
-            case FAILED, INTERRUPTED -> false;
+            case ASSEMBLING, EN_ROUTE, RETURNING -> true;
+            // Delivery acknowledgement does not release people: the same exact residents still
+            // own their return journey until the operation reaches its home route point.
+            case ARRIVED -> true;
+            case COMPLETED, FAILED, INTERRUPTED -> false;
         };
+    }
+
+    static boolean activeOperationClaim(FrontierWorldState state, SubjectId residentId) {
+        return state.operations().values().stream().anyMatch(operation -> retainsParticipantClaim(state, operation)
+                && operation.participantIds().contains(residentId));
+    }
+
+    static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
+        return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+                && patrol.guardId().equals(residentId));
     }
 
     private static Comparator<ResidentProfile> byRoleSkill(ResidentRole role) {
@@ -152,9 +166,74 @@ final class FrontierWorldStateSupport {
     }
 
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {
-        Objects.requireNonNull(input, label);
-        LinkedHashMap<K, V> copy = new LinkedHashMap<>();
-        input.forEach((key, value) -> copy.put(Objects.requireNonNull(key, label + " key"), Objects.requireNonNull(value, label + " value")));
-        return Map.copyOf(copy);
+        return immutableMap(input, label, null);
     }
+
+    static Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infectionMap(
+            PersistentInfectionMap input, FrontierInfectionFrontier frontier
+    ) {
+        return new ValidatedImmutableMap<>(Collections.unmodifiableMap(input),
+                new InfectionMetadata(input, Objects.requireNonNull(frontier, "infection frontier")));
+    }
+
+    static FrontierInfectionFrontier infectionFrontier(
+            Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection, WorldBounds bounds
+    ) {
+        if (infection instanceof ValidatedImmutableMap<?, ?> marker && marker.attachment instanceof InfectionMetadata metadata) return metadata.frontier();
+        return FrontierInfectionFrontier.compile(bounds, infection);
+    }
+
+    static PersistentInfectionMap persistentInfection(Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection) {
+        if (infection instanceof ValidatedImmutableMap<?, ?> marker && marker.attachment instanceof InfectionMetadata metadata) return metadata.field();
+        return PersistentInfectionMap.from(infection);
+    }
+
+    static Optional<FrontierInfectionFrontier.InfectionChange> infectionChange(
+            Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection, WorldBounds bounds
+    ) {
+        return infectionFrontier(infection, bounds).change();
+    }
+
+    private static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label, Object attachment) {
+        Objects.requireNonNull(input, label);
+        if (input instanceof ValidatedImmutableMap<?, ?>) {
+            @SuppressWarnings("unchecked") ValidatedImmutableMap<K, V> trusted = (ValidatedImmutableMap<K, V>) input;
+            return attachment == null || attachment == trusted.attachment ? trusted : trusted.withAttachment(attachment);
+        }
+        // A world-state transition replaces one owned index but passes every
+        // untouched index back through this constructor.  Map.copyOf retains an
+        // already immutable map.  Keep a private marker around that validated
+        // copy so later strict audits can distinguish it from an arbitrary
+        // externally supplied Map without repeating a full entry scan.
+        input.forEach((key, value) -> {
+            Objects.requireNonNull(key, label + " key");
+            Objects.requireNonNull(value, label + " value");
+        });
+        return new ValidatedImmutableMap<>(Map.copyOf(input), attachment);
+    }
+
+    /** Immutable, validated map identity local to canonical state construction. */
+    private static final class ValidatedImmutableMap<K, V> extends AbstractMap<K, V> {
+        private final Map<K, V> values;
+        private final Object attachment;
+
+        private ValidatedImmutableMap(Map<K, V> values, Object attachment) {
+            this.values = values; this.attachment = attachment;
+        }
+
+        private ValidatedImmutableMap<K, V> withAttachment(Object nextAttachment) { return new ValidatedImmutableMap<>(values, nextAttachment); }
+
+        @Override public Set<Entry<K, V>> entrySet() { return values.entrySet(); }
+        @Override public V get(Object key) { return values.get(key); }
+        @Override public boolean containsKey(Object key) { return values.containsKey(key); }
+        @Override public boolean containsValue(Object value) { return values.containsValue(value); }
+        @Override public int size() { return values.size(); }
+        @Override public Set<K> keySet() { return values.keySet(); }
+        @Override public Collection<V> values() { return values.values(); }
+        @Override public boolean equals(Object other) { return values.equals(other); }
+        @Override public int hashCode() { return values.hashCode(); }
+        @Override public String toString() { return values.toString(); }
+    }
+
+    private record InfectionMetadata(PersistentInfectionMap field, FrontierInfectionFrontier frontier) { }
 }

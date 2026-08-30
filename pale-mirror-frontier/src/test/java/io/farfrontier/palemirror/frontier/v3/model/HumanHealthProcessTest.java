@@ -15,6 +15,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HumanHealthProcessTest {
+    @Test void localExposureMatchesTheCurrentGrayboxStructureProjectionAcrossConditions() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:health-geometry"), 101L));
+        for (Settlement settlement : state.bootstrap().settlements()) {
+            InfectionCell contact = contactCell(state, settlement);
+            FrontierWorldState infected = state.withInfection(contact, new FixedRatio(new FixedScalar(FixedScalar.SCALE)));
+            assertEquals(referenceExposure(infected, settlement), HumanHealthProcess.localExposure(infected, settlement));
+
+            FrontierWorldState destroyed = infected;
+            for (SettlementStructure structure : settlement.structures()) destroyed = destroyed.withStructureCondition(structure.id(), StructureCondition.DESTROYED);
+            assertEquals(referenceExposure(destroyed, settlement), HumanHealthProcess.localExposure(destroyed, settlement));
+        }
+    }
+
     @Test void semanticInfectionContactProgressesOneExactResidentAndActivatesQuarantine() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:health-contact"), 41L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
@@ -85,5 +98,12 @@ class HumanHealthProcessTest {
                 .filter(cell -> cell.ownerId().value().startsWith("structure:"))
                 .filter(cell -> FrontierWorldStateSupport.structureSettlement(state.bootstrap(), cell.ownerId()).equals(settlement.id()))
                 .map(cell -> InfectionCell.at(cell.position())).findFirst().orElseThrow();
+    }
+
+    private static boolean referenceExposure(FrontierWorldState state, Settlement settlement) {
+        return FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().value().startsWith("structure:"))
+                .filter(cell -> FrontierWorldStateSupport.structureSettlement(state.bootstrap(), cell.ownerId()).equals(settlement.id()))
+                .map(cell -> InfectionCell.at(cell.position())).distinct().anyMatch(state.infection()::containsKey);
     }
 }

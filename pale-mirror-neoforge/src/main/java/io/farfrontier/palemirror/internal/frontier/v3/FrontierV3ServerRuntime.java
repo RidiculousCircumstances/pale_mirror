@@ -114,20 +114,20 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     /**
      * Advances the ordinary ordered due-action engine by a bounded operator-requested interval.
-     * Every unit retains its normal WAL-backed transition; snapshots may be coalesced because
-     * recovery can replay the complete WAL tail after an interrupted request.
+     * Every unit retains its normal WAL-backed transition. Checkpoints remain periodic within
+     * a long request so bounded retained history cannot turn an operator fast-forward into a
+     * different, self-quarantining execution path.
      */
     Optional<AdvanceResult> advance(int ticks, WorkBudget budget) {
         if (ticks < 1) throw new IllegalArgumentException("advance ticks must be positive");
         Objects.requireNonNull(budget, "budget");
         AdvanceResult latest = null;
         for (int index = 0; index < ticks; index++) {
-            Optional<AdvanceResult> result = advanceOne(budget, false);
+            Optional<AdvanceResult> result = advanceOne(budget, true);
             if (result.isEmpty()) return Optional.empty();
             latest = result.orElseThrow();
             if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.of(latest);
         }
-        if (ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
         return Optional.of(Objects.requireNonNull(latest, "advanced result"));
     }
 
@@ -168,6 +168,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 throw new IllegalStateException("v3 store returned a mismatched snapshot receipt");
             }
             store.compact(configuration.worldId(), checkpoint.revision());
+            // The checksum-bound snapshot and its WAL compaction have succeeded. Only now may
+            // the running engine release the same retained transaction history.
+            engine.compact(checkpoint.revision());
             ticksSinceCheckpoint = 0;
             return Optional.of(receipt);
         } catch (RuntimeException error) {

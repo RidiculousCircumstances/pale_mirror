@@ -14,7 +14,8 @@ import java.util.UUID;
 public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                              Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
                              Map<UUID, List<SubjectId>> worldCarrierItems, Map<SubjectId, InventoryConflict> conflicts,
-                             Map<SubjectId, ContainerSurface> surfaces) {
+                             Map<SubjectId, ContainerSurface> surfaces,
+                             Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots) {
     private static final int MAX_WORLD_CARRIERS = 4_096;
     private static final int MAX_CONFLICTS = 4_096;
     public ExactInventory {
@@ -22,7 +23,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         playerItems = playerItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
         worldCarrierItems = worldCarrierItems.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
         conflicts = Map.copyOf(conflicts);
-        surfaces = Map.copyOf(surfaces);
+        surfaces = Map.copyOf(surfaces); occupiedSlots = Map.copyOf(occupiedSlots);
         if (worldCarrierItems.size() > MAX_WORLD_CARRIERS) throw new IllegalArgumentException("world carrier retention limit exceeded");
         if (conflicts.size() > MAX_CONFLICTS) throw new IllegalArgumentException("inventory conflict retention limit exceeded");
         Map<InventoryCustody.ContainerSlot, SubjectId> slots = new HashMap<>();
@@ -78,6 +79,19 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             requireDistinct(carrier.getValue(), "world carrier custody");
             for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
         }
+        if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
+    }
+
+    /**
+     * The slot index is a derived immutable acceleration structure, never a second custody
+     * source of truth.  Deserializers and ordinary callers supply only canonical item custody;
+     * the strict canonical constructor proves that its reconstructed index is exact.
+     */
+    public ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
+                          Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems,
+                          Map<UUID, List<SubjectId>> worldCarrierItems, Map<SubjectId, InventoryConflict> conflicts,
+                          Map<SubjectId, ContainerSurface> surfaces) {
+        this(containers, items, cargo, playerItems, worldCarrierItems, conflicts, surfaces, occupiedSlots(items));
     }
     public ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<SubjectId, ExactItemStack> items,
                           Map<SubjectId, CargoBatch> cargo, Map<UUID, List<SubjectId>> playerItems) {
@@ -92,10 +106,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     /** Returns the exact stack occupying this physical container slot, if any. */
     public Optional<ExactItemStack> itemAt(SubjectId containerId, int slot) {
         Objects.requireNonNull(containerId, "container id");
-        return items.values().stream()
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot location
-                        && location.containerId().equals(containerId) && location.slot() == slot)
-                .findFirst();
+        return Optional.ofNullable(occupiedSlots.get(new InventoryCustody.ContainerSlot(containerId, slot))).map(items::get);
     }
 
     /** Lowest available semantic slot; callers must still validate the container's owner and use. */
@@ -350,6 +361,13 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
     private static void requireDistinct(List<SubjectId> values, String label) {
         if (values.stream().distinct().count() != values.size()) throw new IllegalArgumentException(label + " must contain distinct exact item identities");
+    }
+    private static Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots(Map<SubjectId, ExactItemStack> items) {
+        Map<InventoryCustody.ContainerSlot, SubjectId> result = new HashMap<>();
+        for (ExactItemStack item : items.values()) if (item.custody() instanceof InventoryCustody.ContainerSlot slot) {
+            result.put(slot, item.id());
+        }
+        return result;
     }
     private void requireContainerClaim(ExactItemStack item) {
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();

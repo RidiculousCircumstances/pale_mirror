@@ -22,9 +22,7 @@ final class OperationAssemblyCorridor {
     static List<BlockPosition> compile(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
         Objects.requireNonNull(state, "assembly state"); Objects.requireNonNull(actorId, "assembly actor"); Objects.requireNonNull(destination, "assembly destination");
         BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").position();
-        Set<BlockPosition> bodyGeometry = new LinkedHashSet<>();
-        FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .map(GrayboxCell::position).forEach(bodyGeometry::add);
+        Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);
         Set<BlockPosition> occupiedFloors = new LinkedHashSet<>();
         // COLD records are not physical obstacles. Only an actor which already owns a live
         // ambient body can occupy this loaded-world floor before assembly; the later HOT

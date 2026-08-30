@@ -9,7 +9,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
+                new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
@@ -22,8 +22,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
-                new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
-                ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.conflictObserved(),
+                new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
+                ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(),
+                ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvested(), ResourceSitePayloadCodecs.conflictObserved(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
                 StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition()))); }
@@ -107,6 +108,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SupplyContractCreated(readContract(input))); }
     }
+    private static final class ContractAbandonedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.supply_contract_abandoned"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((SupplyContractAbandoned) payload).contractId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new SupplyContractAbandoned(readSubject(input).value())); }
+    }
     private static final class CargoLoadedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.cargo_loaded"; } @Override public byte[] encode(FrontierPayload payload) {
             CargoLoaded loaded = (CargoLoaded) payload;
@@ -122,6 +128,27 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items));
         }); }
     }
+    private static final class CargoDeliveredCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.cargo_delivered"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            CargoDelivered delivered = (CargoDelivered) payload;
+            return encodeProduction(output -> {
+                writeSubject(output, delivered.operationId()); writeSubject(output, delivered.cargoId()); output.writeByte(delivered.placements().size());
+                for (CargoHandoffPlacement placement : delivered.placements()) {
+                    writeSubject(output, placement.itemId()); writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
+                }
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input); int count = input.readUnsignedByte();
+            java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
+            for (int index = 0; index < count; index++) {
+                SubjectIdHolder item = readSubject(input); SubjectIdHolder receiver = readSubject(input);
+                placements.add(new CargoHandoffPlacement(item.value(), new InventoryCustody.ContainerSlot(receiver.value(), input.readUnsignedByte())));
+            }
+            return new CargoDelivered(operation.value(), cargo.value(), placements);
+        }); }
+    }
     private static final class OperationCreatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeOperation(output, ((OperationCreated) payload).operation())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationCreated(readOperation(input))); }
@@ -129,12 +156,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class OperationAdvancedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_advanced"; } @Override public byte[] encode(FrontierPayload payload) {
             OperationAdvanced advanced = (OperationAdvanced) payload;
-            return encodeProduction(output -> { writeSubject(output, advanced.operationId()); output.writeByte(advanced.routeIndex()); output.writeByte(advanced.stage().ordinal()); });
+            return encodeProduction(output -> { writeSubject(output, advanced.operationId()); output.writeByte(advanced.routeIndex()); output.writeByte(advanced.stage().wireCode()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder id = readSubject(input); int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-            if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
-            return new OperationAdvanced(id.value(), routeIndex, OperationStage.values()[stage]);
+            return new OperationAdvanced(id.value(), routeIndex, OperationStage.fromWireCode(stage));
         }); }
     }
     private static final class OperationAssemblyAdvancedCodec implements PayloadCodec {
@@ -381,6 +407,17 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveGrowthJob(output, ((HiveGrowthStarted) payload).job())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveGrowthStarted(readHiveGrowthJob(input))); }
     }
+    private static final class HiveGrowthBiomassConsumedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_growth_biomass_consumed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            HiveGrowthBiomassConsumed consumed = (HiveGrowthBiomassConsumed) payload;
+            writeSubject(output, consumed.jobId()); writeSubject(output, consumed.itemId());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectIdHolder job = readSubject(input); SubjectIdHolder item = readSubject(input);
+            return new HiveGrowthBiomassConsumed(job.value(), item.value());
+        }); }
+    }
     private static final class HiveGrowthCompletedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_completed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((HiveGrowthCompleted) payload).jobId())); }
@@ -451,7 +488,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (var participant : operation.participantIds()) writeSubject(output, participant);
         output.writeByte(operation.route().size());
         for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
-        output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+        output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
         // 0xA5 separates the v3 assembly-aware envelope from the legacy one-byte travel flag.
         output.writeByte(0xA5); output.writeBoolean(operation.activeAssembly().isPresent());
         if (operation.activeAssembly().isPresent()) writeOperationAssembly(output, operation.activeAssembly().orElseThrow());
@@ -465,7 +502,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-        if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
         int marker = input.available() > 0 ? input.readUnsignedByte() : 0;
         java.util.Optional<OperationAssembly> assembly = java.util.Optional.empty();
         java.util.Optional<OperationTravel> travel;
@@ -475,7 +511,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         } else if (marker == 0 || marker == 1) {
             travel = marker == 1 ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
         } else throw new IllegalArgumentException("unknown route operation payload envelope");
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage], assembly, travel);
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         output.writeShort(travel.corridor().size()); for (BlockPosition point : travel.corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }

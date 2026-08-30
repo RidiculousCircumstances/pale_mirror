@@ -95,6 +95,18 @@ class OperationAssemblyTest {
         }));
     }
 
+    @Test
+    void bodyOccupancyIsExactlyTheNonRoutePartOfTheCurrentGrayboxProjection() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-body-geometry"), 92L));
+
+        java.util.Set<BlockPosition> projected = FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE)
+                .map(GrayboxCell::position).collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+        assertEquals(projected, FrontierGrayboxPlan.currentBodyGeometry(state));
+    }
+
     private static OperationAssembly.Member member(int cursor, int z) {
         return new OperationAssembly.Member(List.of(new BlockPosition(0, 64, z), new BlockPosition(1, 64, z)), cursor);
     }

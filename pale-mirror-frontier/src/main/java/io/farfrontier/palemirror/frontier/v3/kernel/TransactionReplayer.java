@@ -16,17 +16,19 @@ public final class TransactionReplayer {
             WorldId worldId, S initialState, SimInstant initialInstant, List<ScheduledAction> initialSchedules,
             List<TransactionRecord> transactions, EventReducer<S> reducer, StateCodec<S> stateCodec
     ) {
-        return replayFrom(worldId, initialState, Revision.ZERO, initialInstant, initialSchedules, transactions, reducer, stateCodec);
+        return replayFrom(worldId, initialState, Revision.ZERO, initialInstant, initialSchedules, transactions, reducer, stateCodec, StateValidator.none());
     }
 
     /** Replays the retained WAL tail from a verified checkpoint boundary. */
     public static <S> ReplayResult<S> replayFrom(
             WorldId worldId, S initialState, Revision initialRevision, SimInstant initialInstant,
             List<ScheduledAction> initialSchedules, List<TransactionRecord> transactions,
-            EventReducer<S> reducer, StateCodec<S> stateCodec
+            EventReducer<S> reducer, StateCodec<S> stateCodec, StateValidator<S> stateValidator
     ) {
         Objects.requireNonNull(worldId, "world id");
         S state = Objects.requireNonNull(initialState, "initial state");
+        Objects.requireNonNull(stateValidator, "state validator");
+        stateValidator.validateInitial(state);
         Revision revision = Objects.requireNonNull(initialRevision, "initial revision");
         SimInstant instant = Objects.requireNonNull(initialInstant, "initial instant");
         ScheduledActionQueue schedules = new ScheduledActionQueue();
@@ -34,14 +36,15 @@ public final class TransactionReplayer {
         for (TransactionRecord transaction : List.copyOf(transactions)) {
             validate(transaction, worldId, revision, instant);
             S next = state;
-            ScheduledActionQueue nextSchedules = schedules.copy();
+            ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
             for (FrontierEvent event : transaction.events()) {
                 if (event.payload() instanceof ScheduleEffect effect) ScheduleEffectApplier.apply(nextSchedules, effect);
                 else next = Objects.requireNonNull(reducer.apply(next, event), "reducer state");
             }
+            if (next != state) stateValidator.validateTransition(state, next);
             if (stateCodec.encode(next) == null) throw new IllegalStateException("state codec returned null");
             state = next;
-            schedules = nextSchedules;
+            nextSchedules.commit();
             revision = transaction.revision();
             instant = transaction.instant();
         }

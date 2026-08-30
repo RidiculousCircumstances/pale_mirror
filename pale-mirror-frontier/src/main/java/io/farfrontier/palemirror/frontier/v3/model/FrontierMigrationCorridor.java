@@ -34,9 +34,7 @@ final class FrontierMigrationCorridor {
         Objects.requireNonNull(residentId, "migration resident");
         Objects.requireNonNull(source, "migration source"); Objects.requireNonNull(destination, "migration destination");
         Objects.requireNonNull(arrival, "migration arrival");
-        Set<BlockPosition> structural = FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE)
-                .map(GrayboxCell::position).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Set<BlockPosition> structural = FrontierGrayboxPlan.currentBodyGeometry(state);
         java.util.LinkedHashSet<BlockPosition> blocked = new java.util.LinkedHashSet<>(structural);
         state.actorLocations().entrySet().stream()
                 .filter(entry -> !entry.getKey().equals(residentId))

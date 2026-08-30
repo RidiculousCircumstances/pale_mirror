@@ -36,7 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Loaded-chunk, crash-safe preparation of a whole fixed field; it never adopts or rewrites a foreign cell. */
+/** Loaded-chunk projection of canonical fields; it never adopts or rewrites a foreign cell. */
 final class FrontierV3ResourceSiteExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Integer> STAGE_CURSORS = new IdentityHashMap<>();
     // Only a process restart may revalidate a previously confirmed field whose
@@ -127,6 +127,15 @@ final class FrontierV3ResourceSiteExecutor {
         if (desiredStage < 0 || desiredStage > 7) throw new IllegalArgumentException("resource-site crop stage is invalid");
         if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (claim == null) {
+            // A COLD-completed field has a durable canonical stage but no historical Minecraft
+            // effect to inspect.  A neutral footprint is the only safe admission proof: claim
+            // and project it once; any player/world content remains a visible conflict.
+            if (!baseline(level, site)) return StageProjectionResult.CONFLICT;
+            ledger.reserve(site.id(), projectionClaim(site));
+            if (!placeWholeField(level, site)) { ledger.conflict(site.id()); return StageProjectionResult.CONFLICT; }
+            ledger.activate(site.id()); claim = ledger.claim(site.id());
+        }
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return StageProjectionResult.CONFLICT;
         if (!matches(level, site, claim.stage())) return StageProjectionResult.CONFLICT;
         if (claim.stage() == desiredStage) return StageProjectionResult.CURRENT;
@@ -171,8 +180,12 @@ final class FrontierV3ResourceSiteExecutor {
             if (site == null || !loaded(level, site)) continue;
             PhysicalIntent intent = state.physicalIntents().values().stream().filter(candidate -> candidate.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION
                     && candidate.status() == PhysicalIntentStatus.CONFIRMED && candidate.causeSubjectId().equals(siteId)).findFirst().orElse(null);
-            RestartReconciliation result = intent == null ? RestartReconciliation.CONFLICT
-                    : reconcileAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent.id(), lifecycle.growthStage());
+            RestartReconciliation result;
+            if (intent == null) {
+                StageProjectionResult projection = projectStage(level, FrontierV3ResourceSiteLedger.get(level), site, lifecycle.growthStage());
+                result = projection == StageProjectionResult.CONFLICT ? RestartReconciliation.CONFLICT
+                        : projection == StageProjectionResult.DEFERRED ? RestartReconciliation.DEFERRED : RestartReconciliation.CURRENT;
+            } else result = reconcileAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent.id(), lifecycle.growthStage());
             pending.remove(siteId);
             if (result == RestartReconciliation.CONFLICT) {
                 FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); ledger.conflict(siteId);
@@ -274,6 +287,9 @@ final class FrontierV3ResourceSiteExecutor {
                 || lifecycle.phase() == ResourceSitePhase.HARVESTING;
     }
     private static BlockState crop(int stage) { return Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, stage); }
+    private static PhysicalIntentId projectionClaim(ResourceSite site) {
+        return new PhysicalIntentId("intent:site-projection-" + site.id().value().substring("site:".length()));
+    }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
 
