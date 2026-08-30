@@ -85,6 +85,9 @@ final class FrontierV3GrayboxExecutor {
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), observed.orElseThrow()))
                     .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
+            PhysicalDelta delta = observed.orElseThrow().delta();
+            FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.physicalDeltaCorrelation(delta.position()),
+                    "physical_delta_observed", delta.ownerId().orElseThrow(), result);
             ledger.conflict(position); // revoke desired-state authority immediately before Minecraft mutates the block
             return BlockBreakObservation.ACCEPTED;
         } catch (RuntimeException failed) {

@@ -3,9 +3,13 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -89,6 +93,27 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(known.contains("\"correlation\":\"player:test\""));
         assertTrue(known.contains("\"acceptedRevision\":7"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
+    }
+
+    @Test
+    void exposesOneExactPhysicalDeltaWithoutLeakingThePlayerIdentity(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-delta-test"), 95L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        BlockPosition position = new BlockPosition(-380, 64, -304);
+        FrontierWorldState changed = runtime.decodedState().orElseThrow().recordPhysicalDelta(new PhysicalDelta(position,
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId("route:frontier-network")),
+                Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:123e4567-e89b-12d3-a456-426614174000"));
+
+        String delta = FrontierV3DiagnosticJson.render("physical_delta", "-380,64,-304", checkpoint, changed, Optional.empty());
+        String malformed = FrontierV3DiagnosticJson.render("physical_delta", "route:frontier-network", checkpoint, changed, Optional.empty());
+
+        assertTrue(delta.contains("\"status\":\"ok\"") && delta.contains("\"deltaKind\":\"KNOWN_SEMANTIC_LOSS\""));
+        assertTrue(delta.contains("\"owner\":\"route:frontier-network\"") && delta.contains("\"semanticPart\":\"ROUTE_SURFACE\""));
+        assertTrue(delta.contains("\"causeKind\":\"PLAYER\"") && delta.contains("\"trace\":\"physical-delta:-380,64,-304\""));
+        assertFalse(delta.contains("123e4567-e89b-12d3-a456-426614174000"));
+        assertTrue(malformed.contains("\"status\":\"not_found\""));
     }
 
     @Test

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayDeque;
@@ -19,6 +20,12 @@ final class FrontierV3DiagnosticTrace {
     private static final Map<MinecraftServer, Deque<Entry>> ENTRIES = new IdentityHashMap<>();
 
     private FrontierV3DiagnosticTrace() { }
+
+    /** Stable, bounded correlation for the one physical change at an exact canonical cell. */
+    static String physicalDeltaCorrelation(BlockPosition position) {
+        Objects.requireNonNull(position, "position");
+        return "physical-delta:" + position.x() + "," + position.y() + "," + position.z();
+    }
 
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");

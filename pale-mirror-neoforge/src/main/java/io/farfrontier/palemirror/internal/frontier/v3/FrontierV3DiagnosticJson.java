@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
@@ -68,6 +69,7 @@ final class FrontierV3DiagnosticJson {
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state);
+            case "physical_delta" -> physicalDelta(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
@@ -196,6 +198,20 @@ final class FrontierV3DiagnosticJson {
                 + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]}";
     }
 
+    /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */
+    private static String physicalDelta(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        BlockPosition position = parsePosition(id).orElse(null);
+        PhysicalDelta delta = position == null ? null : state.physicalDeltas().get(position);
+        if (delta == null) return unavailable("physical_delta", id, checkpoint, "not_found");
+        String owner = delta.ownerId().map(SubjectId::value).orElse("");
+        String part = delta.semanticPart().map(Enum::name).orElse("");
+        String causeKind = delta.cause().startsWith("player:") ? "PLAYER" : "SYSTEM";
+        return base("physical_delta", id, checkpoint) + ",\"status\":\"ok\",\"deltaKind\":\"" + delta.kind()
+                + "\",\"owner\":\"" + quote(owner) + "\",\"semanticPart\":\"" + quote(part)
+                + "\",\"causeKind\":\"" + causeKind + "\",\"trace\":\""
+                + quote(FrontierV3DiagnosticTrace.physicalDeltaCorrelation(position)) + "\"}";
+    }
+
     /** One stable engagement- or route-level view for player-piloted physical-scene evidence. */
     private static String scene(String id, CheckpointImage checkpoint, FrontierWorldState state,
                                 Optional<FrontierV3SceneExecutor.Readiness> readiness) {
@@ -274,6 +290,16 @@ final class FrontierV3DiagnosticJson {
     private static String base(String kind, String id, CheckpointImage checkpoint) {
         return "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id) + "\",\"world\":\""
                 + quote(checkpoint.worldId().value()) + "\",\"revision\":" + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
+    }
+
+    private static Optional<BlockPosition> parsePosition(String id) {
+        String[] parts = id.split(",", -1);
+        if (parts.length != 3) return Optional.empty();
+        try {
+            return Optional.of(new BlockPosition(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
+        } catch (NumberFormatException invalid) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<SubjectId> subject(String value) { try { return Optional.of(new SubjectId(value)); } catch (IllegalArgumentException invalid) { return Optional.empty(); } }
