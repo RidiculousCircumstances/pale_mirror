@@ -235,6 +235,13 @@ states.
   observed physical arrival at its next cursor. Leaving or restarting midway
   retains that same cursor and formation, never teleports the convoy to a
   milestone or lets a second COLD route action run.
+- A logistics operation may begin that travel only after a durable assembly has
+  brought its exact participants and cargo to a compiled public access port.
+  A settlement's strategic anchor or a resident's ambient hand-off slot is not
+  implicitly a convoy location. Access ports are semantic graybox geometry with
+  an unblocked two-body-high throat into the public route graph, so an operation
+  cannot hide an initial transfer through a wall or duplicate a body at its
+  first visible segment.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
   intents. If its hand-off surface remains naturally loaded, it durably closes

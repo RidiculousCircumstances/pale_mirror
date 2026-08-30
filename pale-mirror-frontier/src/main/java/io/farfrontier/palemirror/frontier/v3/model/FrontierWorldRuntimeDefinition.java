@@ -87,6 +87,18 @@ public final class FrontierWorldRuntimeDefinition {
             try { PopulationMigrationProcess.reduceHotAdvance(state, advanced); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
+        if (command.payload() instanceof OperationTravelAdvanced advanced) {
+            RouteOperation operation = state.operations().get(advanced.operationId());
+            if (operation == null) return rejected("operation travel observation has no active operation");
+            try { state.advanceOperationTravel(advanced.operationId(), advanced.travel()); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), advanced)));
+        }
+        if (command.payload() instanceof OperationTravelStarted started) {
+            RouteOperation operation = state.operations().get(started.operationId());
+            if (operation == null) return rejected("operation travel start has no active operation");
+            try { state.startOperationTravel(started.operationId(), started.travel()); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), started)));
+        }
         if (command.payload() instanceof PhysicalIntentTransition || command.payload() instanceof PhysicalIntentPrepared) {
             return FrontierPhysicalIntentCommandProcess.plan(state, command);
         }
@@ -269,6 +281,8 @@ public final class FrontierWorldRuntimeDefinition {
             case CargoLoaded loaded -> reduceCargoLoaded(state, event.subject(), loaded);
             case OperationCreated created -> reduceOperationCreated(state, event.subject(), created);
             case OperationAdvanced advanced -> reduceOperationAdvanced(state, event.subject(), advanced);
+            case OperationTravelStarted started -> reduceOperationTravelStarted(state, event.subject(), started);
+            case OperationTravelAdvanced advanced -> reduceOperationTravelAdvanced(state, event.subject(), advanced);
             case OperationColdSuspended suspended -> reduceOperationColdSuspended(state, event.subject(), suspended);
             case PhysicalIntentPrepared prepared -> reducePhysicalIntentPrepared(state, event.subject(), prepared);
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
@@ -392,6 +406,16 @@ public final class FrontierWorldRuntimeDefinition {
         RouteOperation operation = state.operations().get(advanced.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("route advancement subject does not own operation");
         return state.advanceOperation(advanced.operationId(), advanced.routeIndex(), advanced.stage());
+    }
+    private static FrontierWorldState reduceOperationTravelStarted(FrontierWorldState state, SubjectId subject, OperationTravelStarted started) {
+        RouteOperation operation = state.operations().get(started.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation travel subject does not own operation");
+        return state.startOperationTravel(started.operationId(), started.travel());
+    }
+    private static FrontierWorldState reduceOperationTravelAdvanced(FrontierWorldState state, SubjectId subject, OperationTravelAdvanced advanced) {
+        RouteOperation operation = state.operations().get(advanced.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation travel subject does not own operation");
+        return state.advanceOperationTravel(advanced.operationId(), advanced.travel());
     }
     private static FrontierWorldState reduceOperationColdSuspended(FrontierWorldState state, SubjectId subject, OperationColdSuspended suspended) {
         RouteOperation operation = state.operations().get(suspended.operationId());

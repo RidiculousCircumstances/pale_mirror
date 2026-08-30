@@ -19,7 +19,7 @@ final class FrontierSceneEngagementSupport {
     private static SceneEngagementCandidate candidate(FrontierWorldState state, RouteEngagement engagement) {
         RouteOperation operation = state.operations().get(engagement.operationId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE
-                || !operation.route().get(operation.routeIndex()).equals(engagement.intercept())) {
+                || !operation.currentPosition().equals(engagement.intercept())) {
             throw new IllegalStateException("COLD engagement has no current interception operation");
         }
         List<SubjectId> actors = new ArrayList<>(operation.participantIds()); actors.addAll(engagement.attackerIds()); actors.sort(Comparator.naturalOrder());

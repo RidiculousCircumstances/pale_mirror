@@ -112,7 +112,7 @@ final class SupplyOperationProcess {
         }
         boolean heldAtIntercept = state.strategicPlans().routeEngagements().values().stream()
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
-                        && operation.route().get(operation.routeIndex()).equals(engagement.intercept()));
+                        && operation.currentPosition().equals(engagement.intercept()));
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
         Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
                 && value.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();

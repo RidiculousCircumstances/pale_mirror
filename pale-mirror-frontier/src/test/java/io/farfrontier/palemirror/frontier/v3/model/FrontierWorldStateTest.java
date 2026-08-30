@@ -10,6 +10,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -96,6 +99,29 @@ class FrontierWorldStateTest {
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.physicalIntents(),
                 source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(),
                 source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.resourceSites()));
+    }
+
+    @Test
+    void exactOperationTravelMovesOnlyItsNamedFormationAndSurvivesSnapshotRecovery() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:operation-travel"), 91L));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        List<BlockPosition> corridor = adjacentSegment(operation.route().getFirst(), operation.route().get(1));
+        OperationTravel started = new OperationTravel(corridor, 0,
+                Map.of(operation.participantIds().getFirst(), operation.route().getFirst().offset(0, 0, 1),
+                        operation.participantIds().get(1), operation.route().getFirst().offset(0, 0, -1)), operation.route().getFirst());
+
+        FrontierWorldState active = before.startOperationTravel(operation.id(), started);
+        OperationTravel advanced = started.advance(corridor.size() - 1, Map.of(operation.participantIds().getFirst(), operation.route().get(1).offset(0, 0, 1),
+                operation.participantIds().get(1), operation.route().get(1).offset(0, 0, -1)), operation.route().get(1));
+        FrontierWorldState moved = active.advanceOperationTravel(operation.id(), advanced);
+
+        assertEquals(advanced, moved.operations().get(operation.id()).activeTravel().orElseThrow());
+        assertEquals(advanced.formation().get(operation.participantIds().getFirst()), moved.actorLocations().get(operation.participantIds().getFirst()).position());
+        assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
+        assertThrows(IllegalArgumentException.class, () -> active.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
+        assertThrows(IllegalArgumentException.class, () -> moved.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
     }
 
     @Test
@@ -242,5 +268,14 @@ class FrontierWorldStateTest {
 
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:state"), 1234L));
+    }
+
+    private static List<BlockPosition> adjacentSegment(BlockPosition from, BlockPosition to) {
+        java.util.ArrayList<BlockPosition> cells = new java.util.ArrayList<>();
+        int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
+        for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
+            cells.add(new BlockPosition(x, from.y(), z));
+            if (x == to.x() && z == to.z()) return List.copyOf(cells);
+        }
     }
 }

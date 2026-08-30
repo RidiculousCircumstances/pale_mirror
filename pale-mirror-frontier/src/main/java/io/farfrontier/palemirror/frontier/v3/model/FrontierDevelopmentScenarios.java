@@ -25,7 +25,7 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development scene needs one en-route operation"));
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.currentPosition();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
         }

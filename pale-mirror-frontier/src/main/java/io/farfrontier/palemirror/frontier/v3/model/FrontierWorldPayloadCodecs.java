@@ -9,7 +9,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
+                new ContractCreatedCodec(), new CargoLoadedCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
                 new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new SceneRecoveryPayloadCodec(),
@@ -134,6 +134,20 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
             return new OperationAdvanced(id.value(), routeIndex, OperationStage.values()[stage]);
         }); }
+    }
+    private static final class OperationTravelStartedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_travel_started"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelStarted started = (OperationTravelStarted) payload;
+            writeSubject(output, started.operationId()); writeOperationTravel(output, started.travel()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
+                new OperationTravelStarted(readSubject(input).value(), readOperationTravel(input))); }
+    }
+    private static final class OperationTravelAdvancedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.operation_travel_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationTravelAdvanced advanced = (OperationTravelAdvanced) payload;
+            writeSubject(output, advanced.operationId()); writeOperationTravel(output, advanced.travel()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input ->
+                new OperationTravelAdvanced(readSubject(input).value(), readOperationTravel(input))); }
     }
     private static final class OperationColdSuspendedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_cold_suspended"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationColdSuspended suspended = (OperationColdSuspended) payload;
@@ -408,6 +422,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeByte(operation.route().size());
         for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
         output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+        output.writeBoolean(operation.activeTravel().isPresent());
+        if (operation.activeTravel().isPresent()) writeOperationTravel(output, operation.activeTravel().orElseThrow());
     }
     private static RouteOperation readOperation(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
@@ -417,7 +433,23 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
         if (stage >= OperationStage.values().length) throw new IllegalArgumentException("unknown route operation stage");
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage]);
+        java.util.Optional<OperationTravel> travel = input.available() > 0 && input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.values()[stage], travel);
+    }
+    private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
+        output.writeShort(travel.corridor().size()); for (BlockPosition point : travel.corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
+        output.writeShort(travel.cursor()); output.writeByte(travel.formation().size());
+        for (var entry : travel.formation().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); output.writeInt(entry.getValue().x());
+            output.writeInt(entry.getValue().y()); output.writeInt(entry.getValue().z());
+        }
+        output.writeInt(travel.cargoAnchor().x()); output.writeInt(travel.cargoAnchor().y()); output.writeInt(travel.cargoAnchor().z());
+    }
+    private static OperationTravel readOperationTravel(DataInputStream input) throws IOException {
+        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        return new OperationTravel(corridor, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
     }
     private static void writePhysicalIntent(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) throws IOException {
         writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());

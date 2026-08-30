@@ -319,8 +319,17 @@ class FrontierWorldRuntimeDefinitionTest {
                 List.of(new SubjectId("resident:1-6"), new SubjectId("resident:1-4")), List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-420, 64, 420)), 0, OperationStage.EN_ROUTE);
         OperationCreated operationCreated = new OperationCreated(operation);
         OperationAdvanced operationAdvanced = new OperationAdvanced(operation.id(), 1, OperationStage.ARRIVED);
+        OperationTravel travel = new OperationTravel(List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-361, 64, -340)), 0,
+                Map.of(new SubjectId("resident:1-6"), new BlockPosition(-360, 64, -339), new SubjectId("resident:1-4"), new BlockPosition(-360, 64, -341)),
+                new BlockPosition(-360, 64, -340));
+        OperationTravelStarted travelStarted = new OperationTravelStarted(operation.id(), travel);
+        OperationTravelAdvanced travelAdvanced = new OperationTravelAdvanced(operation.id(), travel.advance(1,
+                Map.of(new SubjectId("resident:1-6"), new BlockPosition(-361, 64, -339), new SubjectId("resident:1-4"), new BlockPosition(-361, 64, -341)),
+                new BlockPosition(-361, 64, -340)));
         assertEquals(operationCreated, codecs.decode(operationCreated.type(), codecs.encode(operationCreated)));
         assertEquals(operationAdvanced, codecs.decode(operationAdvanced.type(), codecs.encode(operationAdvanced)));
+        assertEquals(travelStarted, codecs.decode(travelStarted.type(), codecs.encode(travelStarted)));
+        assertEquals(travelAdvanced, codecs.decode(travelAdvanced.type(), codecs.encode(travelAdvanced)));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"), PhysicalIntentKind.CARGO_HANDOFF,
                 PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
                 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);

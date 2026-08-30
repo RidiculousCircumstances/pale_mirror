@@ -123,7 +123,7 @@ final class FrontierV3SceneExecutor {
                 .filter(operation -> state.sceneLeases().values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
                         && lease.status() != SceneLeaseStatus.CLOSED))
                 .filter(operation -> !FrontierSceneAdmission.hasUnresolvedRouteEngagement(state, operation.id()))
-                .filter(operation -> demandExists(level, operation.route().get(operation.routeIndex()))).findFirst();
+                .filter(operation -> demandExists(level, operation.currentPosition())).findFirst();
         if (demand.isPresent()) {
             RouteOperation operation = demand.orElseThrow();
             SceneLease lease = lease(runtime, operation);
@@ -139,7 +139,7 @@ final class FrontierV3SceneExecutor {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + operation.id().value().substring("operation:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
-        return new SceneLease(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.route().get(operation.routeIndex()), checkpoint.instant(), checkpoint.revision().value(),
+        return new SceneLease(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, members);
     }
 

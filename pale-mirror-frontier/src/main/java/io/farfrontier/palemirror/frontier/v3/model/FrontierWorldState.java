@@ -151,8 +151,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && !leaseHistoryOperations.contains(operation.id())
                         && sceneLeases.values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.operationId().equals(operation.id())
                         && lease.members().stream().anyMatch(member -> member.actorId().equals(participant)))
-                        && !actorLocations.get(participant).position().equals(operation.route().get(operation.routeIndex()))) {
-                    throw new IllegalArgumentException("active route operation participant must be at its canonical route point");
+                        && !actorLocations.get(participant).position().equals(operation.activeTravel().map(travel -> travel.formation().get(participant))
+                        .orElseGet(operation::currentPosition))) {
+                    throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
                 }
             }
             operation.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
@@ -212,7 +213,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (operation == null || !operation.cargoId().equals(lease.cargoId())) {
                 throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
             }
-            boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.route().get(operation.routeIndex()).equals(lease.handoffPosition());
+            boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.currentPosition().equals(lease.handoffPosition());
             boolean interruptedScene = operation.stage() == OperationStage.INTERRUPTED
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
             boolean unresolvedRestartScene = operation.stage() == OperationStage.FAILED && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
@@ -357,8 +358,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (operations.containsKey(operation.id())) throw new IllegalArgumentException("route operation identity already exists: " + operation.id().value());
         Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations); next.put(operation.id(), operation);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        BlockPosition position = operation.route().get(operation.routeIndex());
-        operation.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
+        if (operation.activeTravel().isPresent()) operation.activeTravel().orElseThrow().formation()
+                .forEach((participant, position) -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
+        else {
+            BlockPosition position = operation.currentPosition();
+            operation.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
+        }
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, next,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
@@ -366,6 +371,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "route operation id"));
         if (operation == null) throw new IllegalArgumentException("unknown route operation: " + operationId.value());
         if (operation.stage() != OperationStage.EN_ROUTE || nextRouteIndex != operation.routeIndex() + 1) throw new IllegalArgumentException("route operation advancement is not sequential");
+        if (operation.activeTravel().isPresent()) {
+            throw new IllegalArgumentException("route operation must cross an exact travel boundary through its atomic segment hand-off");
+        }
         OperationStage expectedStage = nextRouteIndex == operation.route().size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE;
         if (nextStage != expectedStage) throw new IllegalArgumentException("route operation stage does not match route cursor");
         RouteOperation advanced = new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
@@ -374,6 +382,29 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         BlockPosition position = advanced.route().get(nextRouteIndex);
         advanced.participantIds().forEach(participant -> nextActors.put(participant, actorLocations.get(participant).withPosition(position)));
+        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    public FrontierWorldState startOperationTravel(SubjectId operationId, OperationTravel travel) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
+        if (operation == null || operation.activeTravel().isPresent()) throw new IllegalArgumentException("operation already owns exact travel or does not exist");
+        RouteOperation started = operation.withTravel(Objects.requireNonNull(travel, "operation travel"));
+        Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), started);
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
+        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
+        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
+        if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalArgumentException("operation has no active exact travel");
+        OperationTravel current = operation.activeTravel().orElseThrow();
+        if (!current.corridor().equals(travel.corridor()) || travel.cursor() <= current.cursor() || travel.cursor() > current.nextColdCursor()) {
+            throw new IllegalArgumentException("operation travel must advance its current bounded corridor");
+        }
+        RouteOperation advanced = operation.withTravel(travel); Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), advanced);
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
+        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }

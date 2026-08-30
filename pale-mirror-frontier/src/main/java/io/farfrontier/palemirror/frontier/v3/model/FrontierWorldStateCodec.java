@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 49, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 50, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -65,14 +65,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45 && version != 46 && version != 47 && version != VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
+            if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
+                    && version != 46 && version != 47 && version != 48 && version != 49 && version != VERSION) {
+                throw new IllegalArgumentException("unknown Frontier v3 state version");
+            }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
-                    readContracts(input), readOperations(input), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
+                    readContracts(input), readOperations(input, version >= 50), readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input, version >= 47, version >= 48),
                     ResourceSiteStateCodec.read(input));
@@ -373,9 +376,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeCount(output, operation.route().size());
             for (BlockPosition point : operation.route()) writePosition(output, point);
             output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().ordinal());
+            output.writeBoolean(operation.activeTravel().isPresent());
+            if (operation.activeTravel().isPresent()) writeTravel(output, operation.activeTravel().orElseThrow());
         }
     }
-    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input) throws IOException {
+    private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel) throws IOException {
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
@@ -384,11 +389,24 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
             for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage])) != null) {
+            java.util.Optional<OperationTravel> travel = hasTravel && input.readBoolean() ? java.util.Optional.of(readTravel(input)) : java.util.Optional.empty();
+            if (stage >= OperationStage.values().length || operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.values()[stage], travel)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }
         return operations;
+    }
+    private static void writeTravel(DataOutputStream output, OperationTravel travel) throws IOException {
+        writeCount(output, travel.corridor().size()); for (BlockPosition point : travel.corridor()) writePosition(output, point);
+        writeCount(output, travel.cursor()); writeCount(output, travel.formation().size());
+        for (var entry : travel.formation().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { writeString(output, entry.getKey().value()); writePosition(output, entry.getValue()); }
+        writePosition(output, travel.cargoAnchor());
+    }
+    private static OperationTravel readTravel(DataInputStream input) throws IOException {
+        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0, count = readCount(input); index < count; index++) corridor.add(readPosition(input));
+        int cursor = readCount(input); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) formation.put(new SubjectId(readString(input)), readPosition(input));
+        return new OperationTravel(corridor, cursor, formation, readPosition(input));
     }
     private static void writeSceneLeases(DataOutputStream output, Map<SceneLeaseId, SceneLease> leases) throws IOException {
         writeCount(output, leases.size());

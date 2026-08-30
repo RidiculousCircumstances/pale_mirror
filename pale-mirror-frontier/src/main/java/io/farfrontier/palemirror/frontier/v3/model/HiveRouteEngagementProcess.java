@@ -43,7 +43,7 @@ final class HiveRouteEngagementProcess {
         }
         // An interception claims the caravan's current COLD position. Selecting a future waypoint
         // would let the independently scheduled caravan arrive before distant guards can reach it.
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.currentPosition();
         List<EngagementAttacker> attackers = attackers(state, intercept);
         if (attackers.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         RouteEngagement engagement = new RouteEngagement(engagementId(task), task.id(), operation.id(), task.ownerId(), attackers,
@@ -92,7 +92,7 @@ final class HiveRouteEngagementProcess {
         if (!engagement.allAttackersAtIntercept() || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
             return abort(engagement);
         }
-        if (!operation.route().get(operation.routeIndex()).equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        if (!operation.currentPosition().equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
                 schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
     }
@@ -207,7 +207,7 @@ final class HiveRouteEngagementProcess {
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.combat", 1); }
     private static List<ProposedEvent> beginOrWait(FrontierWorldState state, RouteEngagement engagement, long now) {
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation.route().get(operation.routeIndex()).equals(engagement.intercept())) {
+        if (operation.currentPosition().equals(engagement.intercept())) {
             return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
                     schedule(combat(engagement, now + COMBAT_INTERVAL)));
         }
