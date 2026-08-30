@@ -32,8 +32,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
             ResidentProfile profile = humanPopulation.resident(bootstrapResident.id());
-            if (profile == null || !profile.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bootstrap resident must remain in the canonical population register"); }
+            // Bootstrap defines an exact person's immutable identity, not their permanent home.
+            // A completed v3 migration deliberately changes the profile's household/settlement.
+            if (profile == null) throw new IllegalArgumentException("bootstrap resident must remain in the canonical population register"); }
         for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
+        for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
+            ActorLocation actor = actorLocations.get(journey.residentId());
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(journey.currentPosition())) {
+                throw new IllegalArgumentException("migration journey must retain one living resident at its exact route cursor");
+            }
+            journey.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
+            if (sceneLeases.values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                    && lease.members().stream().anyMatch(member -> member.actorId().equals(journey.residentId())))
+                    || ambientLeases.get(journey.residentId()) != null && ambientLeases.get(journey.residentId()).status() != AmbientLeaseStatus.CLOSED) {
+                throw new IllegalArgumentException("migration journey resident may not retain a competing physical executor");
+            }
+        }
         if (ambientLeases.size() > MAX_AMBIENT_LEASES) throw new IllegalArgumentException("ambient lease retention limit exceeded"); Set<SubjectId> activelyAmbientLeased = new HashSet<>();
         for (Map.Entry<SubjectId, AmbientActorLease> entry : ambientLeases.entrySet()) {
             AmbientActorLease lease = entry.getValue();

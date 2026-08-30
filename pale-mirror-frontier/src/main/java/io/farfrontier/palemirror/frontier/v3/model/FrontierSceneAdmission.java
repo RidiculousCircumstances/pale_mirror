@@ -78,6 +78,10 @@ public final class FrontierSceneAdmission {
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
                 || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
                 && operation.participantIds().contains(actorId))
+                // This first migration slice is COLD-only.  Until the dedicated HOT journey
+                // executor exists, a journey reserves its resident rather than presenting a
+                // normal local-work body whose position would race the route cursor.
+                || state.humanPopulation().migrations().containsKey(actorId)
                 || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId));
     }
 }

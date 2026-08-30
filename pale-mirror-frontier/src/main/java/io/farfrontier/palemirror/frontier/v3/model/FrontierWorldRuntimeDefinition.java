@@ -59,6 +59,7 @@ public final class FrontierWorldRuntimeDefinition {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
         }
+        actions.add(PopulationMigrationProcess.review(1, 8_000L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
@@ -218,6 +219,8 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
+            case "frontier.population.migration.review" -> PopulationMigrationProcess.planReview(state, action);
+            case "frontier.population.migration.progress" -> PopulationMigrationProcess.planProgress(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
@@ -267,6 +270,10 @@ public final class FrontierWorldRuntimeDefinition {
             case AmbientActorObserved observation -> AmbientActorProcess.reduce(state, event.subject(), observation);
             case ResidentBorn birth -> reduceResidentBorn(state, event.subject(), birth);
             case ResidentMigrated migration -> reduceResidentMigrated(state, event.subject(), migration);
+            case ResidentMigrationStarted started -> reduceMigrationStarted(state, event.subject(), started);
+            case ResidentMigrationAdvanced advanced -> reduceMigrationAdvanced(state, event.subject(), advanced);
+            case ResidentMigrationBlocked blocked -> reduceMigrationBlocked(state, event.subject(), blocked);
+            case ResidentMigrationResumed resumed -> reduceMigrationResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
             case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
@@ -311,6 +318,25 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reduceResidentMigrated(FrontierWorldState state, SubjectId subject, ResidentMigrated migration) {
         if (!subject.equals(migration.destinationSettlementId())) throw new IllegalArgumentException("resident migration lacks destination settlement owner");
         return state.recordResidentMigration(migration);
+    }
+    private static FrontierWorldState reduceMigrationStarted(FrontierWorldState state, SubjectId subject, ResidentMigrationStarted started) {
+        if (!subject.equals(started.journey().originSettlementId())) throw new IllegalArgumentException("migration start lacks its origin settlement owner");
+        return HumanPopulationStateSupport.startMigration(state, started.journey());
+    }
+    private static FrontierWorldState reduceMigrationAdvanced(FrontierWorldState state, SubjectId subject, ResidentMigrationAdvanced advanced) {
+        ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
+        if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("migration advance lacks its origin settlement owner");
+        return HumanPopulationStateSupport.advanceMigration(state, advanced);
+    }
+    private static FrontierWorldState reduceMigrationBlocked(FrontierWorldState state, SubjectId subject, ResidentMigrationBlocked blocked) {
+        ResidentMigrationJourney journey = state.humanPopulation().migration(blocked.residentId());
+        if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("migration block lacks its origin settlement owner");
+        return HumanPopulationStateSupport.blockMigration(state, blocked);
+    }
+    private static FrontierWorldState reduceMigrationResumed(FrontierWorldState state, SubjectId subject, ResidentMigrationResumed resumed) {
+        ResidentMigrationJourney journey = state.humanPopulation().migration(resumed.residentId());
+        if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("migration resume lacks its origin settlement owner");
+        return HumanPopulationStateSupport.resumeMigration(state, resumed);
     }
     private static FrontierWorldState reduceContractCreated(FrontierWorldState state, SubjectId subject, SupplyContractCreated created) {
         SupplyContract contract = created.contract();

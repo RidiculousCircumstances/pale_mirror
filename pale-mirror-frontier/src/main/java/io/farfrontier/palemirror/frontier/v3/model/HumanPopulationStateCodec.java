@@ -10,7 +10,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Schema fragment for exact households, people and in-flight birth permits. */
+/** Schema fragment for exact households, people, birth permits and COLD migration journeys. */
 final class HumanPopulationStateCodec {
     private HumanPopulationStateCodec() { }
 
@@ -35,9 +35,18 @@ final class HumanPopulationStateCodec {
         for (Map.Entry<SubjectId, SettlementQuarantine> entry : population.quarantines().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
         }
+        FrontierWorldStateCodec.writeCount(output, population.migrations().size());
+        for (ResidentMigrationJourney journey : population.migrations().values().stream().sorted(Comparator.comparing(ResidentMigrationJourney::residentId)).toList()) {
+            FrontierWorldStateCodec.writeString(output, journey.residentId().value()); FrontierWorldStateCodec.writeString(output, journey.originSettlementId().value());
+            FrontierWorldStateCodec.writeString(output, journey.destinationHouseholdId().value()); FrontierWorldStateCodec.writeString(output, journey.destinationSettlementId().value());
+            FrontierWorldStateCodec.writeCount(output, journey.route().size());
+            for (BlockPosition position : journey.route()) FrontierWorldStateCodec.writePosition(output, position);
+            FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().ordinal()); output.writeBoolean(journey.blockReason().isPresent());
+            if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().ordinal());
+        }
     }
 
-    static HumanPopulation read(DataInputStream input, boolean hasHealth) throws IOException {
+    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -72,7 +81,28 @@ final class HumanPopulationStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate settlement quarantine");
             }
         }
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines);
+        if (!hasMigrations) return new HumanPopulation(households, residents, birthJobs, health, quarantines);
+        Map<SubjectId, ResidentMigrationJourney> migrations = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId resident = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId origin = new SubjectId(FrontierWorldStateCodec.readString(input));
+            SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId destination = new SubjectId(FrontierWorldStateCodec.readString(input));
+            java.util.List<BlockPosition> route = new java.util.ArrayList<>();
+            for (int point = 0, points = FrontierWorldStateCodec.readCount(input); point < points; point++) route.add(FrontierWorldStateCodec.readPosition(input));
+            int routeIndex = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean blocked = input.readBoolean();
+            if (status >= ResidentMigrationStatus.values().length) throw new IllegalArgumentException("unknown resident migration status");
+            java.util.Optional<ResidentMigrationBlockReason> reason = blocked
+                    ? java.util.Optional.of(readBlockReason(input)) : java.util.Optional.empty();
+            ResidentMigrationJourney journey = new ResidentMigrationJourney(resident, origin, household, destination, route, routeIndex,
+                    ResidentMigrationStatus.values()[status], reason);
+            if (migrations.put(resident, journey) != null) throw new IllegalArgumentException("duplicate resident migration journey");
+        }
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);
+    }
+
+    private static ResidentMigrationBlockReason readBlockReason(DataInputStream input) throws IOException {
+        int reason = input.readUnsignedByte();
+        if (reason >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
+        return ResidentMigrationBlockReason.values()[reason];
     }
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
