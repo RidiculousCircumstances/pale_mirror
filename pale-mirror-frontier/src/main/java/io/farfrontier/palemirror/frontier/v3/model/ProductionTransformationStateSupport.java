@@ -48,7 +48,7 @@ public final class ProductionTransformationStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.COMPLETED);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(),
-                state.inventory().withoutItem(input.id()).store(output), jobs, state.contracts(), state.operations(), nextIntents, observations,
+                state.inventory().withoutItem(input.id()).store(output), jobs, state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations,
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
                 state.routeTopology(), plans, state.humanPopulation(), state.resourceSites());
     }
@@ -67,7 +67,7 @@ public final class ProductionTransformationStateSupport {
         if (job == null) throw new IllegalArgumentException("production failure has no active job");
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.BLOCKED);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), plans,
                 state.humanPopulation(), state.resourceSites());
     }

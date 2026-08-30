@@ -16,6 +16,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new SceneRecoveryPayloadCodec(),
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(), new CargoCarrierReleasedPayloadCodec(),
+                new TerminalLogisticsCompactedCodec(),
                 HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
                 HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(),
                 HumanPopulationPayloadCodecs.transitAdvanced(), HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(),
@@ -358,6 +359,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.operation_failed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output, failed.reason()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input))); }
+    }
+    private static final class TerminalLogisticsCompactedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.terminal_logistics_compacted"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((TerminalLogisticsCompacted) payload).operationId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new TerminalLogisticsCompacted(readSubject(input).value())); }
     }
     private static final class ExactItemCustodyChangedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.exact_item_custody_changed"; }

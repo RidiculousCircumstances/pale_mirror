@@ -70,7 +70,7 @@ public final class AmbientActorProcess {
         var nextActors = new LinkedHashMap<>(state.actorLocations());
         nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.position()));
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(),
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
                 state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
@@ -82,7 +82,7 @@ public final class AmbientActorProcess {
         var nextActors = new LinkedHashMap<>(state.actorLocations());
         nextActors.put(observation.actorId(), new ActorLocation(observation.position(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health())));
         return new FrontierWorldState(state.bootstrap(), nextActors, state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(),
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
                 state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }

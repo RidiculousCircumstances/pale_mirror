@@ -691,7 +691,7 @@ class FrontierWorldRuntimeDefinitionTest {
                     SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList()));
         }
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), before.structureConditions(), before.infection(),
-                before.inventory(), before.productionJobs(), before.contracts(), before.operations(), before.physicalIntents(), before.physicalObservations(), retained,
+                before.inventory(), before.productionJobs(), before.contracts(), before.operations(), before.logisticsHistory(), before.physicalIntents(), before.physicalObservations(), retained,
                 before.hiveColony(), before.structureDamage(), before.physicalDeltas(), before.ambientLeases(), before.routeConstructions(),
                 before.routeTopology(), before.strategicPlans(), before.humanPopulation(), before.resourceSites());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");

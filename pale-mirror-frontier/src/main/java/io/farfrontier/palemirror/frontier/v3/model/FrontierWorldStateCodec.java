@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 58, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 59, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -47,6 +47,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeProductionJobs(output, state.productionJobs());
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
+                writeLogisticsHistory(output, state.logisticsHistory());
                 writePhysicalIntents(output, state.physicalIntents());
                 PhysicalEffectObservationStateCodec.write(output, state.physicalObservations());
                 writeSceneLeases(output, state.sceneLeases());
@@ -66,7 +67,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
-                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51 && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57 && version != VERSION) {
+                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
+                    && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
+                    && version != 58 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -76,6 +79,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input), readProductionJobs(input),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
+                    version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58),
@@ -400,6 +404,33 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         return operations;
+    }
+    private static void writeLogisticsHistory(DataOutputStream output, LogisticsHistory history) throws IOException {
+        output.writeLong(history.deliveredCount()); output.writeLong(history.failedCount()); output.writeLong(history.interruptedCount());
+        writeCount(output, history.receipts().size());
+        for (TerminalLogisticsReceipt receipt : history.receipts().values().stream().sorted(Comparator.comparing(TerminalLogisticsReceipt::operationId)).toList()) {
+            writeString(output, receipt.operationId().value()); writeString(output, receipt.contractId().value()); writeString(output, receipt.cargoId().value());
+            writeString(output, receipt.settlementId().value()); writeString(output, receipt.recipientId().value());
+            writeCount(output, receipt.participants().size()); for (SubjectId participant : receipt.participants()) writeString(output, participant.value());
+            output.writeByte(receipt.outcome().ordinal()); output.writeLong(receipt.terminalAtTick());
+        }
+    }
+    private static LogisticsHistory readLogisticsHistory(DataInputStream input) throws IOException {
+        long delivered = input.readLong(), failed = input.readLong(), interrupted = input.readLong();
+        Map<SubjectId, TerminalLogisticsReceipt> receipts = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId operation = new SubjectId(readString(input)); SubjectId contract = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input));
+            java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
+            for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
+            int outcome = input.readUnsignedByte(); long terminalAt = input.readLong();
+            if (outcome >= TerminalLogisticsReceipt.TerminalLogisticsOutcome.values().length
+                    || receipts.put(operation, new TerminalLogisticsReceipt(operation, contract, cargo, settlement, recipient, participants,
+                    TerminalLogisticsReceipt.TerminalLogisticsOutcome.values()[outcome], terminalAt)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate terminal logistics receipt");
+            }
+        }
+        return new LogisticsHistory(receipts, delivered, failed, interrupted);
     }
     private static void writeTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         writeCount(output, travel.corridor().size()); for (BlockPosition point : travel.corridor()) writePosition(output, point);

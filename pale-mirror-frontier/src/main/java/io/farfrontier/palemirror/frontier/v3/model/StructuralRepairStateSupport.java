@@ -53,7 +53,7 @@ final class StructuralRepairStateSupport {
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(state.physicalObservations()); nextObservations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), nextConditions, state.infection(), state.inventory().consumeOne(repair.itemId()), state.productionJobs(),
-                state.contracts(), state.operations(), nextIntents, nextObservations, state.sceneLeases(), state.hiveColony(), nextDamage, nextDeltas,
+                state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, nextObservations, state.sceneLeases(), state.hiveColony(), nextDamage, nextDeltas,
                 state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
 
@@ -67,7 +67,7 @@ final class StructuralRepairStateSupport {
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
-                state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), deltas, state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
 
@@ -77,7 +77,7 @@ final class StructuralRepairStateSupport {
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(); observations.putAll(state.physicalObservations()); observations.put(repair.id(), repair);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeOne(repair.itemId()),
-                state.productionJobs(), state.contracts(), state.operations(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), nextIntents, observations, state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), deltas, state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
 

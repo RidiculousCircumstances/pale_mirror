@@ -75,7 +75,7 @@ final class FrontierRouteEngagementStateSupport {
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors,
                                            Map<SubjectId, RouteOperation> operations, StrategicPlanState plans) {
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), operations, state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
+                state.productionJobs(), state.contracts(), operations, state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
                 state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
                 state.routeTopology(), plans, state.humanPopulation(), state.resourceSites());
     }

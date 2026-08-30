@@ -122,6 +122,8 @@ class FrontierV3AnnualAutonomyAuditTest {
         long unresolved = state.physicalIntents().values().stream().filter(intent -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                 || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING).count();
         assertEquals(0L, unresolved, "unloaded autonomous work may not stall behind a materialization-only physical intent");
+        assertFalse(state.operations().values().stream().anyMatch(operation -> state.canCompactTerminalLogistics(operation.id())),
+                "every fully settled logistics graph must have been detached into bounded retention evidence");
         return new AnnualResult(seed, checkpoint.revision().value(), state.humanPopulation().residents().size(), state.bootstrap().hive().bioforms().size() + state.hiveColony().spawnedBioforms().size(),
                 state.inventory().items().size(), state.contracts().size(), state.operations().size(), state.infection().size(), digest(checkpoint));
     }

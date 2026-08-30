@@ -122,6 +122,7 @@ public final class FrontierWorldRuntimeDefinition {
                     SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
         }
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
+        actions.add(TerminalLogisticsProcess.review(1, 8_100L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
@@ -327,6 +328,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action, autonomousInterception);
             case "frontier.operation.assembly" -> SupplyOperationProcess.planAssembly(state, action);
             case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
+            case "frontier.terminal_logistics.retention" -> TerminalLogisticsProcess.plan(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
             case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
@@ -464,6 +466,7 @@ public final class FrontierWorldRuntimeDefinition {
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
+            case TerminalLogisticsCompacted compacted -> reduceTerminalLogisticsCompacted(state, event.subject(), event.instant().ticks(), compacted);
             case ExactItemCustodyChanged changed -> reduceExactItemCustodyChanged(state, event.subject(), changed);
             case ExactItemDestroyed destroyed -> reduceExactItemDestroyed(state, event.subject(), destroyed);
             case CargoCarrierReleased released -> reduceCargoCarrierReleased(state, event.subject(), released);
@@ -750,6 +753,14 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("operation failure lacks a dead participant or observed route obstruction");
         }
         return state.failOperation(failed.operationId());
+    }
+    private static FrontierWorldState reduceTerminalLogisticsCompacted(FrontierWorldState state, SubjectId subject, long atTick,
+                                                                        TerminalLogisticsCompacted compacted) {
+        RouteOperation operation = state.operations().get(compacted.operationId());
+        if (operation == null || !subject.equals(operation.settlementId())) {
+            throw new IllegalArgumentException("terminal logistics receipt has a foreign operation owner");
+        }
+        return state.compactTerminalLogistics(compacted.operationId(), atTick);
     }
     private static FrontierWorldState reduceSceneLeaseRecoveryUnresolved(FrontierWorldState state, SubjectId subject, SceneLeaseRecoveryUnresolved unresolved) {
         SceneLease lease = state.sceneLeases().get(unresolved.leaseId());

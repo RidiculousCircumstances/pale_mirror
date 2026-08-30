@@ -249,7 +249,7 @@ class FrontierV3DiagnosticJsonTest {
 
     private static FrontierWorldState withRouteConstruction(FrontierWorldState state, RouteConstruction project) {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
+                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
                 state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), java.util.Map.of(project.id(), project),
                 state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
     }
