@@ -215,6 +215,46 @@ complete twelve-settlement world while all identities and clocks remain real.
 - Leave the scene, let COLD events change forces/infection/structures, return
   and materialize only the current continuation with the same surviving IDs.
 
+### Logistics assembly transition
+
+The first visible segment must not be created by moving residents from a Hall
+anchor. `RouteOperation` begins in `ASSEMBLING` with one bounded,
+versioned `OperationAssembly`: each named participant has an adjacent-cell
+approach cursor to a distinct compiled port slot; the cargo carrier is named;
+and no household, settlement membership or player/world position is changed by
+that record. The port exposes a two-body-clear throat, a public outer cargo
+slot and a distinct second participant slot; a wider future formation requires
+new compiled geometry rather than overlapping an unrelated route cell.
+
+The only valid lifecycle is:
+
+`cargo loaded -> durable assembly -> exact COLD/HOT approach -> all members and
+cargo at port -> atomic start of OperationTravel -> bounded segment cursor ->
+atomic segment hand-off -> next segment/arrival`.
+
+Creation must retain each actor's current canonical position. Assembly COLD
+movement uses the same pure clear-lane planner as Transit; HOT assembly uses
+an actor lease with a distinct `OPERATION_ASSEMBLY` goal and accepts only the
+next observed cursor. A naturally loaded obstruction at the throat or assigned
+slot defers visibly; it neither selects a hidden alternate slot nor changes the
+world. An interrupted/failed assembly releases only its own participant and
+cargo claims after the corresponding durable reason.
+
+`OperationTravel` is never cleared by a non-atomic `OperationAdvanced`.
+`OperationTravelSegmentCompleted` verifies the arrived cursor and advances the
+strategic route index in the same canonical transaction while retaining the
+formation/cargo positions. Scene demand, carrier projection, route engagement,
+death, cargo-loss, recovery and readability consult that same current
+position; they cannot assume a route milestone or treat `ASSEMBLING` as an
+attackable caravan.
+
+Required evidence is a pure lifecycle/recovery test plus a causal pilot:
+ordinary player reaches a naturally loaded port, sees the two named villagers
+approach and depart, obstructs the owned public sill or throat, observes the
+durable assembly deferral, restores ordinary passage, then verifies the same
+IDs and cursor after graceful restart. Foundry reports the port at `COMPILED`,
+then the pilot supplies `MATERIALIZED`/`RELOADED` evidence without force-load.
+
 ### Tests
 
 - Domain trajectory plus rejected insufficient-input/blocked-storage paths.

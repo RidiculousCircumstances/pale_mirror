@@ -242,6 +242,16 @@ states.
   an unblocked two-body-high throat into the public route graph, so an operation
   cannot hide an initial transfer through a wall or duplicate a body at its
   first visible segment.
+- `OperationAssembly` is a separate bounded movement truth, not a migration or
+  a formation teleport: every member has a distinct assigned port slot and
+  adjacent-cell cursor, while the named carrier retains cargo provenance.
+  Creation leaves all actor locations unchanged; only exact COLD/HOT cursor
+  transitions move them. Completion atomically starts the first
+  `OperationTravel`; an arrived travel atomically advances its strategic
+  segment while retaining the formation/cargo positions. Assembly is not an
+  attackable route operation, and a player/world obstruction of its compiled
+  throat or slot is a visible deferral or semantic damage observation, never
+  permission to choose a hidden alternative path.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
   intents. If its hand-off surface remains naturally loaded, it durably closes
