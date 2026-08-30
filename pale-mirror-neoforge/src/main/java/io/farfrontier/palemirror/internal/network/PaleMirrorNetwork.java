@@ -46,14 +46,20 @@ public final class PaleMirrorNetwork {
         }
     }
 
-    /** Pushes newly canonical knowledge only when the negotiated client actually supports Atlas. */
+    /**
+     * Pushes newly canonical knowledge only into the opted-in Atlas projection.
+     *
+     * <p>Discovery is background world state, not an interruption. In
+     * particular, this method must never put a line into chat or the action
+     * bar: a player who wants the detail opens the Atlas, while an unsupported
+     * client still has the physical discovered object as its explanation.</p>
+     */
     public static void synchronizeDiscoveredFeature(ServerPlayer player, String regionId,
                                                     KnownRegionalFeature feature) {
-        PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
         String notice = discoveryNotice(feature);
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(notice + " Press P to open the Atlas."));
         if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(
                 player.connection, AtlasSnapshotPayload.TYPE.id())) {
+            PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             PacketDistributor.sendToPlayer(player, runtime.atlasSnapshot(player, notice, false));
         }
     }

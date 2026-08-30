@@ -63,6 +63,7 @@ def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
 def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
 def frontierV3JavaSources = fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' }
 def apiJavaSources = fileTree('pale-mirror-api/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
+def playerNetworkSource = layout.projectDirectory.file('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/network/PaleMirrorNetwork.java').asFile
 def visualJavaSources = fileTree('pale-mirror-visuals/src/main/java') { include '**/*.java' }
 def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
     include '**/*.java'
@@ -150,6 +151,7 @@ tasks.register('verifyArchitecture') {
     group = 'verification'
     description = 'Checks Pale Mirror layer boundaries and required architecture invariants.'
     inputs.file(architectureFile)
+        inputs.file(playerNetworkSource)
         inputs.files(domainJavaSources, frontierV3JavaSources, apiJavaSources, visualJavaSources)
     doLast {
         if (!architectureFile.exists()) {
@@ -160,6 +162,11 @@ tasks.register('verifyArchitecture') {
             if (!architecture.contains(statement)) {
                 throw new GradleException("architecture.yml is missing required invariant: ${statement}")
             }
+        }
+
+        if (playerNetworkSource.getText('UTF-8').contains('sendSystemMessage(')
+                || playerNetworkSource.getText('UTF-8').contains('displayClientMessage(')) {
+            throw new GradleException('Player network boundary violation: Atlas synchronization must not write directly to chat or HUD')
         }
 
         def forbiddenDomainReferences = [
