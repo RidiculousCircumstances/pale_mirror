@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "disposable_northwatch_quarantine",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "health-quarantine" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "settlement", "id": "settlement:1", "expect": { "status": "ok" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -326 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "quarantine": "QUARANTINED", "activeCases": 1 }, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -360, "y": 66, "z": -322 } },
+    { "type": "assert_visible_board", "text": "QUARANTINE", "position": { "x": -360, "y": 66, "z": -322 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "interact_board", "text": "QUARANTINE", "title": "Northwatch", "position": { "x": -360, "y": 66, "z": -322 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "settlement", "id": "settlement:1" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -326 }, "settleMs": 1000 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "quarantine": "QUARANTINED" } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 2, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "quarantine": "QUARANTINED" } },
+    { "after": 6, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "quarantine": "QUARANTINED" } }
+  ],
+  "frames": [
+    { "after": 5, "name": "northwatch-quarantine-card", "presentation": "player" }
+  ]
+}

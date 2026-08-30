@@ -201,6 +201,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("scene-return") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("health-quarantine") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentHealthQuarantineConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         throw new IllegalStateException("Frontier v3 pilot profile is unavailable outside an identified disposable runner: " + profile);
     }
 

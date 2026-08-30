@@ -9,9 +9,10 @@ import net.minecraft.client.gui.GuiGraphics;
 
 /** Client-only, replace-not-stack rendering for one short contextual object card. */
 public final class PaleMirrorContextCardClient {
-    private static final int MIN_WIDTH = 168;
-    private static final int MAX_WIDTH = 306;
+    private static final int MIN_WIDTH = 154;
+    private static final int MAX_WIDTH = 260;
     private static final int MARGIN = 12;
+    private static final int MAX_SCREEN_PERCENT = 34;
     private static Card card = Card.empty();
     private static long clientTick;
 
@@ -35,8 +36,7 @@ public final class PaleMirrorContextCardClient {
         if (minecraft.player == null || minecraft.screen != null || clientTick >= card.expiresAt()) return;
         Font font = minecraft.font;
         int textWidth = Math.max(font.width(card.title()), card.lines().stream().mapToInt(font::width).max().orElse(0));
-        int available = Math.max(120, graphics.guiWidth() - MARGIN * 2);
-        int width = Math.min(available, Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, textWidth + 20)));
+        int width = layout(graphics.guiWidth(), textWidth).width();
         int height = 24 + card.lines().size() * 11;
         int x = graphics.guiWidth() - MARGIN - width;
         int y = MARGIN;
@@ -54,7 +54,28 @@ public final class PaleMirrorContextCardClient {
         return font.plainSubstrByWidth(value, Math.max(0, width - font.width("…"))) + "…";
     }
 
+    /**
+     * The inspection card is an intentional, temporary view, not a second
+     * HUD.  Its maximum is proportional to the current GUI surface so a
+     * large monitor or a low GUI scale cannot turn one object inspection into
+     * a screen-wide banner.
+     */
+    static Layout layout(int guiWidth, int textWidth) {
+        int available = Math.max(1, guiWidth - MARGIN * 2);
+        int minimum = Math.min(MIN_WIDTH, available);
+        int proportionalMaximum = Math.max(minimum, guiWidth * MAX_SCREEN_PERCENT / 100);
+        int maximum = Math.min(available, Math.min(MAX_WIDTH, proportionalMaximum));
+        int desired = Math.max(minimum, textWidth + 20);
+        return new Layout(Math.min(maximum, desired));
+    }
+
     static Card current() { return card; }
+
+    record Layout(int width) {
+        Layout {
+            if (width < 1) throw new IllegalArgumentException("card width must be positive");
+        }
+    }
 
     record Card(String title, List<String> lines, int accentRgb, long expiresAt) {
         static Card empty() { return new Card("", List.of(), 0, Long.MIN_VALUE); }

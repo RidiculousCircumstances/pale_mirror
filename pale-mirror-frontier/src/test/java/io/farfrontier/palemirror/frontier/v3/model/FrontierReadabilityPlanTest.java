@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,6 +64,20 @@ class FrontierReadabilityPlanTest {
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
         assertEquals(site.cropSlots().getFirst().offset(4, 3, -2), board.position());
+    }
+
+    @Test
+    void makesAnActiveSettlementQuarantineReadableAtItsInfirmaryWithoutHudState() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-quarantine"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId resident = settlement.residents().getFirst().id();
+        HumanPopulation population = state.humanPopulation().transitionHealth(resident, ResidentHealthStatus.EXPOSED, 100L)
+                .transitionQuarantine(settlement.id(), SettlementQuarantineStatus.QUARANTINED, 100L);
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state.withHumanPopulation(population)).boards().get(settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow().id());
+        assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
+        assertTrue(board.text().endsWith("QUARANTINE · 1 ACTIVE CASES"));
+        assertTrue(!board.text().contains(resident.value()));
     }
 
     @Test

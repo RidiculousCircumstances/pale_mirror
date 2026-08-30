@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadScenario, pilotServerPid, restartSegments } from './scenario.mjs';
+import { loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -43,18 +43,22 @@ try {
   } else {
     await writeScenario(beforeRestartScenario, recovery.before);
     await runPilot(beforeRestartScenario, beforeRestartManifest, server);
+    console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (recovery.mode === 'graceful') await stopServerSafely(server, serverLog, server.logOffset, port);
     else {
       abruptStopAttempted = true;
       await stopServerAbruptly(server, port);
     }
+    console.log('PMV3_ISOLATED recovery=server-stopped');
     server = null;
     server = await startServer(false);
+    console.log('PMV3_ISOLATED recovery=server-restarted');
     // The replacement server is a normal live JVM and must receive the
     // ordinary durable stop path if the after-restart pilot fails.
     abruptStopAttempted = false;
     await writeScenario(afterRestartScenario, recovery.after);
     await runPilot(afterRestartScenario, output, server);
+    console.log('PMV3_ISOLATED recovery=after-complete');
     const manifest = JSON.parse(await readFile(output, 'utf8'));
     manifest.recovery = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest };
     await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -71,7 +75,6 @@ try {
 console.log(JSON.stringify({ status: 'ok', profile: 'disposable_lite', world, port, manifest: output }));
 
 async function startServer(reset) {
-  const logOffset = await fileSize(serverLog);
   const serverRunId = randomUUID();
   const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
     `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
@@ -84,10 +87,11 @@ async function startServer(reset) {
   });
   let output = '';
   for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { process.stdout.write(chunk); output += chunk; });
-  const session = { child, output: () => output, logOffset, serverRunId, serverPid: undefined };
+  const session = { child, output: () => output, logOffset: 0, serverRunId, serverPid: undefined };
   await waitForServer(session, 180_000);
   session.serverPid = pilotServerPid(output, serverRunId);
   if (!Number.isInteger(session.serverPid)) throw new Error('disposable v3 server did not announce its exact JVM identity');
+  session.logOffset = await logOffsetAfter(serverLog, `PMV3_PILOT_SERVER runId=${serverRunId}`, 10_000);
   return session;
 }
 
@@ -141,16 +145,13 @@ async function stopServerSafely(server, logPath, offset, serverPort) {
   if (!await waitForPortClosed(serverPort, DURABLE_STOP_TIMEOUT_MS)) {
     throw new Error('disposable v3 server flushed but still owns its game port; preserving it for diagnosis');
   }
-  if (!await exitedWithin(server.child, 10_000)) {
-    // At this point Minecraft has durably saved and its listener is closed.
-    // This targets only the exact disposable Gradle wrapper, never a world
-    // process or a broad process group.
-    server.child.kill('SIGTERM');
-    if (!await exitedWithin(server.child, 10_000)) server.child.kill('SIGKILL');
-    if (!await exitedWithin(server.child, 5_000)) {
-      throw new Error('disposable Gradle wrapper survived after a closed saved server; preserving world for diagnosis');
-    }
-  }
+  // The launcher has no state authority once the exact Minecraft listener is
+  // closed and its save marker exists. It is a Gradle process, not a world
+  // process: waiting for it can deadlock a valid recovery run while adding no
+  // persistence evidence. Ask it to exit and release its stdio handles, but
+  // let the next exact server lifecycle be governed solely by the durable
+  // marker and closed game port above.
+  releaseWrapper(server.child);
 }
 async function stopServerAbruptly(server, serverPort) {
   if (!Number.isInteger(server.serverPid) || server.serverPid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
@@ -164,20 +165,27 @@ async function stopServerAbruptly(server, serverPort) {
   // TCP closure comes from that exact JVM. Give its OS file lock one scheduler
   // turn to release before the recovery JVM opens this world.
   await timeout(250);
-  if (!await exitedWithin(server.child, 10_000)) {
-    // After its exact game JVM is gone this is only the known disposable
-    // Gradle launcher, which cannot own a world lock or a live game port.
-    server.child.kill('SIGTERM');
-    if (!await exitedWithin(server.child, 5_000)) server.child.kill('SIGKILL');
-  }
+  releaseWrapper(server.child);
+}
+function releaseWrapper(child) {
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+  child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
 }
 function killIfPresent(pid) {
   try { process.kill(pid, 'SIGKILL'); }
   catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not abruptly stop exact disposable process ${pid}: ${failure}`); }
 }
-async function fileSize(path) {
-  try { return (await stat(path)).size; }
-  catch { return 0; }
+async function logOffsetAfter(path, marker, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const output = await readFile(path, 'utf8');
+      const offset = logOffsetAfterMarker(output, marker);
+      if (offset !== undefined) return offset;
+    } catch { /* The exact server has not created its current log line yet. */ }
+    await timeout(100);
+  }
+  throw new Error(`disposable v3 server did not write its exact run marker within ${timeoutMs}ms`);
 }
 async function waitForLog(path, offset, marker, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -209,8 +217,5 @@ function portOpen(serverPort) {
     socket.once('error', () => finish(false));
     socket.setTimeout(500, () => finish(false));
   });
-}
-async function exitedWithin(child, durationMs) {
-  return Promise.race([exited(child).then(() => true), timeout(durationMs).then(() => false)]);
 }
 function timeout(ms) { return new Promise((resolveTimeout) => setTimeout(() => resolveTimeout(null), ms)); }

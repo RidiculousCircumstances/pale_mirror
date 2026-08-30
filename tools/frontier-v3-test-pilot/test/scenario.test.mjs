@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, hasDiagnosticResponses, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticFromPilotLine, hasDiagnosticResponses, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -76,8 +76,10 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
   assert.doesNotThrow(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }], assertions: [], frames: [] }));
 });
 
-test('native pilot permits the isolated HOT/COLD route-return fixture only by its named profile', () => {
+test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
+  assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
 });
 
 test('isolated server view distance is bounded and explicit when a scenario needs a COLD chunk', () => {
@@ -152,6 +154,21 @@ test('runner waits for every requested asynchronous diagnostic response', () => 
   const trace = { value: { kind: 'trace', id: 'player:pilot' } };
   assert.equal(hasDiagnosticResponses([site], assertions), false);
   assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
+});
+
+test('native pilot diagnostics use the quiet structured marker before legacy chat', () => {
+  const quiet = diagnosticFromPilotLine('[Render thread] PMV3_PILOT_DIAGNOSTIC {"kind":"settlement","id":"settlement:1"}');
+  assert.deepEqual(quiet.value, { kind: 'settlement', id: 'settlement:1' });
+  const legacy = diagnosticFromPilotLine('PMV3_DIAG {"kind":"summary","id":""}');
+  assert.deepEqual(legacy.value, { kind: 'summary', id: '' });
+  assert.equal(diagnosticFromPilotLine('ordinary log line'), null);
+});
+
+test('recovery log boundary follows the unique current server marker, not stale log size', () => {
+  const marker = 'PMV3_PILOT_SERVER runId=current';
+  const log = `old data\nPMV3_PILOT_SERVER runId=foreign pid=1\n${marker} pid=2\nnew data\n`;
+  assert.equal(logOffsetAfterMarker(log, marker), log.indexOf('new data'));
+  assert.equal(logOffsetAfterMarker(log, 'absent'), undefined);
 });
 
 test('visual frames use a unique clean capture barrier unless player UI is explicit', () => {

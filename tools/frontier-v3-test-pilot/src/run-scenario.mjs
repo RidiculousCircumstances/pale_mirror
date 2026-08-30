@@ -5,7 +5,7 @@ import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { correlation, hasDiagnosticResponses, loadScenario, newManifest, saveManifest, selectMutterXauthority, traceRecord } from './scenario.mjs';
+import { correlation, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, saveManifest, selectMutterXauthority, traceRecord } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [manifest.json]');
@@ -59,10 +59,11 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
   const lines = buffer.split(/\r?\n/);
   buffers.set(stream, lines.pop());
   for (const line of lines) {
-    const marker = line.indexOf('PMV3_DIAG ');
-    if (marker >= 0) {
+    const pilotDiagnostic = diagnosticFromPilotLine(line);
+    if (pilotDiagnostic != null) {
       try {
-        const diagnostic = { at: new Date().toISOString(), value: JSON.parse(line.slice(marker + 'PMV3_DIAG '.length)), line: line.slice(marker) };
+        if (pilotDiagnostic.error) throw new Error(pilotDiagnostic.error);
+        const diagnostic = { at: new Date().toISOString(), value: pilotDiagnostic.value, line: pilotDiagnostic.line };
         diagnostics.push(diagnostic); trace('diagnostic_received', { correlation: activeAction, diagnostic: diagnostic.value });
       }
       catch { failure ??= `malformed diagnostic line: ${line}`; }

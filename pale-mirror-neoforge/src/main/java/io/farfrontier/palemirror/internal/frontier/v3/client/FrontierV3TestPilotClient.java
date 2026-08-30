@@ -79,6 +79,7 @@ public final class FrontierV3TestPilotClient {
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
             captureBarrier = null; diagnostics.clear();
+            clearPilotNoise(Minecraft.getInstance());
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
             actions = null;
@@ -89,19 +90,29 @@ public final class FrontierV3TestPilotClient {
     @SubscribeEvent
     public static void logout(ClientPlayerNetworkEvent.LoggingOut event) { reset(); }
 
-    /** Retains only the latest server-authored read-only diagnostic from ordinary client chat. */
+    /**
+     * Retains pilot diagnostics but never renders server command feedback in
+     * the visible test client.  The runner's JSONL and the client log remain
+     * the diagnostic evidence; ordinary player chat is deliberately outside
+     * this system-message-only development policy.
+     */
     @SubscribeEvent
     public static void diagnostic(ClientChatReceivedEvent.System event) {
+        if (actions == null) return;
         String message = event.getMessage().getString(); int marker = message.indexOf("PMV3_DIAG ");
-        if (marker < 0) return;
-        try {
-            JsonObject value = JsonParser.parseString(message.substring(marker + "PMV3_DIAG ".length())).getAsJsonObject();
-            if (!value.has("kind") || !value.has("id")) return;
-            Minecraft minecraft = Minecraft.getInstance(); long tick = minecraft.level == null ? Long.MIN_VALUE : minecraft.level.getGameTime();
-            diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
-        } catch (RuntimeException ignored) {
-            // Only the server command's prefixed JSON is useful to the pilot; other chat remains presentation.
+        if (marker >= 0) {
+            try {
+                JsonObject value = JsonParser.parseString(message.substring(marker + "PMV3_DIAG ".length())).getAsJsonObject();
+                if (value.has("kind") && value.has("id")) {
+                    Minecraft minecraft = Minecraft.getInstance(); long tick = minecraft.level == null ? Long.MIN_VALUE : minecraft.level.getGameTime();
+                    diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
+                    PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
+                }
+            } catch (RuntimeException ignored) {
+                // A malformed diagnostic remains absent from the terminal predicate.
+            }
         }
+        event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -109,6 +120,7 @@ public final class FrontierV3TestPilotClient {
         if (actions == null) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) return;
+        clearPilotNoise(minecraft);
         if (captureBarrier != null) {
             advanceCaptureBarrier(minecraft);
             return;
@@ -527,6 +539,11 @@ public final class FrontierV3TestPilotClient {
     }
 
     private static void clearCaptureNoise(Minecraft minecraft) {
+        clearPilotNoise(minecraft);
+    }
+
+    /** The visible pilot stays quiet for its whole run, not only at frame boundaries. */
+    private static void clearPilotNoise(Minecraft minecraft) {
         minecraft.gui.getChat().clearMessages(false);
         minecraft.getTutorial().stop();
         minecraft.getToasts().clear();

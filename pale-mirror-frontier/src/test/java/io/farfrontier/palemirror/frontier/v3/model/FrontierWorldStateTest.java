@@ -85,8 +85,8 @@ class FrontierWorldStateTest {
         assertEquals(source, codec.decode(encoded));
         assertEquals(1, codec.decode(encoded).inventory().conflicts().size());
         byte[] legacy = encoded.clone();
-        legacy[4] = 41;
-        assertEquals(source, codec.decode(legacy));
+        legacy[4] = 46;
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(legacy), "schema 46 has no resident-health tail and cannot be reinterpreted as v47");
         encoded[4] = 17;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
 

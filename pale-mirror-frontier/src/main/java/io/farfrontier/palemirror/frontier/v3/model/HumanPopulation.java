@@ -13,13 +13,15 @@ import java.util.Set;
  * households are relationships, never a cohort multiplier.
  */
 public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
-                              Map<SubjectId, ResidentBirthJob> birthJobs) {
+                              Map<SubjectId, ResidentBirthJob> birthJobs, Map<SubjectId, ResidentHealth> health,
+                              Map<SubjectId, SettlementQuarantine> quarantines) {
     public static final int MAX_HOUSEHOLDS = 1_024;
     public static final int MAX_RESIDENTS = 4_096;
     public static final int MAX_BIRTH_JOBS = 1_024;
 
     public HumanPopulation {
         households = immutable(households, "households"); residents = immutable(residents, "residents"); birthJobs = immutable(birthJobs, "resident birth jobs");
+        health = immutable(health, "resident health"); quarantines = immutable(quarantines, "settlement quarantines");
         if (households.size() > MAX_HOUSEHOLDS || residents.size() > MAX_RESIDENTS || birthJobs.size() > MAX_BIRTH_JOBS) throw new IllegalArgumentException("human population retention limit exceeded");
         for (Map.Entry<SubjectId, Household> entry : households.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("household map key must match identity");
@@ -32,6 +34,9 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 throw new IllegalArgumentException("resident must belong to a household in the same settlement");
             }
         }
+        if (!health.keySet().equals(residents.keySet())) throw new IllegalArgumentException("resident health must cover every and only exact resident");
+        java.util.Set<SubjectId> residentSettlements = residents.values().stream().map(ResidentProfile::settlementId).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!quarantines.keySet().containsAll(residentSettlements)) throw new IllegalArgumentException("settlement quarantine must cover every resident settlement");
         java.util.Set<PhysicalIntentId> intents = new java.util.HashSet<>();
         for (Map.Entry<SubjectId, ResidentBirthJob> entry : birthJobs.entrySet()) {
             ResidentBirthJob job = entry.getValue(); Household household = households.get(job.householdId());
@@ -40,6 +45,12 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 throw new IllegalArgumentException("resident birth job has invalid exact identity or household");
             }
         }
+    }
+
+    /** Compatibility constructor for population-only fixtures; all exact people start healthy and settlements normal. */
+    public HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
+                           Map<SubjectId, ResidentBirthJob> birthJobs) {
+        this(households, residents, birthJobs, healthy(residents), normalQuarantines(residents));
     }
 
     public static HumanPopulation bootstrap(FrontierBootstrap bootstrap) {
@@ -75,13 +86,20 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
 
     public Set<SubjectId> residentIds() { return residents.keySet(); }
     public ResidentProfile resident(SubjectId id) { return residents.get(id); }
+    public ResidentHealth health(SubjectId id) { return health.get(id); }
+    public SettlementQuarantine quarantine(SubjectId settlementId) { return quarantines.get(settlementId); }
+    public boolean quarantined(SubjectId settlementId) {
+        SettlementQuarantine policy = quarantine(settlementId);
+        if (policy == null) throw new IllegalArgumentException("unknown settlement quarantine: " + settlementId.value());
+        return policy.status() == SettlementQuarantineStatus.QUARANTINED;
+    }
 
     public HumanPopulation add(ResidentProfile resident) {
         Objects.requireNonNull(resident, "resident");
         if (residents.containsKey(resident.id())) throw new IllegalArgumentException("resident identity already exists");
         if (!households.containsKey(resident.householdId())) throw new IllegalArgumentException("resident birth needs an existing household");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
-        return new HumanPopulation(households, next, birthJobs);
+        return new HumanPopulation(households, next, birthJobs, withHealthy(health, resident.id(), resident.birthTick()), quarantines);
     }
 
     public HumanPopulation migrate(SubjectId residentId, SubjectId householdId, SubjectId settlementId) {
@@ -90,14 +108,14 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Household household = households.get(Objects.requireNonNull(householdId, "household id"));
         if (household == null || !household.settlementId().equals(settlementId)) throw new IllegalArgumentException("migration needs a household in its destination settlement");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(residentId, resident.relocated(settlementId, householdId));
-        return new HumanPopulation(households, next, birthJobs);
+        return new HumanPopulation(households, next, birthJobs, health, quarantines);
     }
 
     public HumanPopulation startBirth(ResidentBirthJob job) {
         Objects.requireNonNull(job, "resident birth job");
         if (birthJobs.containsKey(job.id()) || residents.containsKey(job.resident().id())) throw new IllegalArgumentException("resident birth identity already exists");
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.put(job.id(), job);
-        return new HumanPopulation(households, residents, next);
+        return new HumanPopulation(households, residents, next, health, quarantines);
     }
 
     public HumanPopulation completeBirth(SubjectId jobId) {
@@ -105,13 +123,50 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         if (job == null || residents.containsKey(job.resident().id())) throw new IllegalArgumentException("resident birth completion lacks a unique output");
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
         Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents); nextResidents.put(job.resident().id(), job.resident());
-        return new HumanPopulation(households, nextResidents, next);
+        return new HumanPopulation(households, nextResidents, next, withHealthy(health, job.resident().id(), job.resident().birthTick()), quarantines);
     }
 
     public HumanPopulation cancelBirth(SubjectId jobId) {
         if (!birthJobs.containsKey(Objects.requireNonNull(jobId, "resident birth job id"))) throw new IllegalArgumentException("unknown resident birth job");
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
-        return new HumanPopulation(households, residents, next);
+        return new HumanPopulation(households, residents, next, health, quarantines);
+    }
+
+    public HumanPopulation transitionHealth(SubjectId residentId, ResidentHealthStatus nextStatus, long tick) {
+        ResidentHealth current = health.get(Objects.requireNonNull(residentId, "resident health resident"));
+        if (current == null) throw new IllegalArgumentException("unknown resident health subject");
+        Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(health); next.put(residentId, current.transition(nextStatus, tick));
+        return new HumanPopulation(households, residents, birthJobs, next, quarantines);
+    }
+
+    public HumanPopulation transitionQuarantine(SubjectId settlementId, SettlementQuarantineStatus nextStatus, long tick) {
+        SettlementQuarantine current = quarantines.get(Objects.requireNonNull(settlementId, "quarantine settlement"));
+        if (current == null) throw new IllegalArgumentException("unknown settlement quarantine");
+        Map<SubjectId, SettlementQuarantine> next = new LinkedHashMap<>(quarantines); next.put(settlementId, current.transition(nextStatus, tick));
+        return new HumanPopulation(households, residents, birthJobs, health, next);
+    }
+
+    public int activeCases(SubjectId settlementId) {
+        return Math.toIntExact(residents.values().stream().filter(resident -> resident.settlementId().equals(settlementId))
+                .map(resident -> health.get(resident.id()).status()).filter(status -> status == ResidentHealthStatus.EXPOSED || status == ResidentHealthStatus.INFECTED).count());
+    }
+
+    private static Map<SubjectId, ResidentHealth> healthy(Map<SubjectId, ResidentProfile> residents) {
+        Map<SubjectId, ResidentHealth> values = new LinkedHashMap<>();
+        residents.values().forEach(resident -> values.put(resident.id(), ResidentHealth.healthyAt(resident.birthTick())));
+        return values;
+    }
+
+    private static Map<SubjectId, SettlementQuarantine> normalQuarantines(Map<SubjectId, ResidentProfile> residents) {
+        Map<SubjectId, SettlementQuarantine> values = new LinkedHashMap<>();
+        residents.values().stream().map(ResidentProfile::settlementId).distinct().forEach(id -> values.put(id, SettlementQuarantine.normalAt(0L)));
+        return values;
+    }
+
+    private static Map<SubjectId, ResidentHealth> withHealthy(Map<SubjectId, ResidentHealth> source, SubjectId id, long tick) {
+        Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(source);
+        if (next.putIfAbsent(id, ResidentHealth.healthyAt(tick)) != null) throw new IllegalArgumentException("resident health identity already exists");
+        return next;
     }
 
     private static <K, V> Map<K, V> immutable(Map<K, V> source, String name) {

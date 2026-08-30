@@ -66,10 +66,12 @@ final class StrategicObjectiveProcess {
         requireKnownOwner(state.bootstrap(), owner);
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
                 new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks() + REVIEW_INTERVAL)))) : List.of();
+        List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
+                : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         Optional<Candidate> candidate = candidate(state, owner);
         List<ProposedEvent> preempted = preemptForInterception(state, owner, candidate);
-        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return next;
-        if (candidate.isEmpty()) return next;
+        if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC) && preempted.isEmpty()) return concatenate(health, next);
+        if (candidate.isEmpty()) return concatenate(health, next);
         Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal);
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {
             StrategicTask preparation = cargoPreparationTask(state, objective); StrategicTask delivery = deliveryTask(objective, preparation);
@@ -77,34 +79,34 @@ final class StrategicObjectiveProcess {
             events.addAll(List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(preparation)),
                     new ProposedEvent(owner, new StrategicTaskPlanned(delivery)), new ProposedEvent(owner,
                             new ScheduleEffect.Created(SupplyOperationProcess.start(preparation, action.dueAt().ticks() + 100L)))));
-            events.addAll(next); return List.copyOf(events);
+            events.addAll(health); events.addAll(next); return List.copyOf(events);
         }
         StrategicTask task = task(state, objective);
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveInfectionProcess.task(task, 1, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) {
-            return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
+            return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RouteConstructionProcess.start(task, action.dueAt().ticks() + 100L))));
         }
-        return withPreemption(preempted, next, new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)));
+        return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)));
     }
 
     static FrontierWorldState reduceObjective(FrontierWorldState state, SubjectId subject, StrategicObjectiveSelected selected) {
@@ -138,6 +140,9 @@ final class StrategicObjectiveProcess {
         result.addAll(List.of(events)); result.addAll(next);
         return List.copyOf(result);
     }
+    private static List<ProposedEvent> concatenate(List<ProposedEvent> first, List<ProposedEvent> second) {
+        List<ProposedEvent> result = new java.util.ArrayList<>(first); result.addAll(second); return List.copyOf(result);
+    }
     private static Optional<Candidate> settlementCandidate(FrontierWorldState state, Settlement settlement) {
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
@@ -166,7 +171,8 @@ final class StrategicObjectiveProcess {
         if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), FixedScalar.SCALE));
         boolean bread = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:bread")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
-        return bread ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
+        return bread && !state.humanPopulation().quarantined(settlement.id())
+                ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state) {
         Optional<SubjectId> intercept = HiveRouteEngagementProcess.targetOperation(state);

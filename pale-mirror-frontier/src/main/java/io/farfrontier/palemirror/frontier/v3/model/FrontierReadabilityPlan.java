@@ -24,7 +24,8 @@ public final class FrontierReadabilityPlan {
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure -> {
             StructureCondition condition = state.structureConditions().get(structure.id());
             InfectionOverlayStage stage = contamination.get(structure.id());
-            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage),
+            boolean quarantine = structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id());
+            add(values, new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition), tone(condition, stage, quarantine),
                     settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
@@ -91,8 +92,8 @@ public final class FrontierReadabilityPlan {
         return firstCrop.offset(4, 3, -2);
     }
 
-    private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage) {
-        return condition == StructureCondition.INTACT && stage == null ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
+    private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage, boolean quarantine) {
+        return condition == StructureCondition.INTACT && stage == null && !quarantine ? FrontierObjectBoard.Tone.SETTLEMENT : FrontierObjectBoard.Tone.WARNING;
     }
 
     private static FrontierObjectBoard.Tone fieldTone(ResourceSitePhase phase) {
@@ -158,6 +159,9 @@ public final class FrontierReadabilityPlan {
     }
 
     private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition) {
+        if (structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id())) {
+            return "QUARANTINE · " + state.humanPopulation().activeCases(settlement.id()) + " ACTIVE CASES";
+        }
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();

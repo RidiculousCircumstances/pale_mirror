@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth or scene-return');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return', 'health-quarantine'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, scene-return or health-quarantine');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -219,6 +219,29 @@ export function correlation(runId, step) {
 /** A native client receives command replies on later render/network ticks. */
 export function hasDiagnosticResponses(diagnostics, assertions) {
   return assertions.every((assertion) => diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
+}
+
+/**
+ * Pilot diagnostics are emitted into the structured client log instead of
+ * rendering in Minecraft's system-chat surface. The legacy marker remains
+ * readable for historical manifests and offline-pilot compatibility.
+ */
+export function diagnosticFromPilotLine(line) {
+  for (const marker of ['PMV3_PILOT_DIAGNOSTIC ', 'PMV3_DIAG ']) {
+    const index = line.indexOf(marker);
+    if (index < 0) continue;
+    try { return { line: line.slice(index), value: JSON.parse(line.slice(index + marker.length)) }; }
+    catch { return { line: line.slice(index), error: 'malformed diagnostic' }; }
+  }
+  return null;
+}
+
+/** The exact run marker, not a stale byte count, bounds one server lifecycle's log. */
+export function logOffsetAfterMarker(output, marker) {
+  const index = output.lastIndexOf(marker);
+  if (index < 0) return undefined;
+  const end = output.indexOf('\n', index);
+  return end < 0 ? output.length : end + 1;
 }
 
 export function newManifest({ scenario, sha256, runId }) {

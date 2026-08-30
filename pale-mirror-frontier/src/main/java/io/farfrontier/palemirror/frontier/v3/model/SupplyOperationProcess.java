@@ -32,7 +32,7 @@ final class SupplyOperationProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = preparationTask(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        if (!dependenciesCompleted(state, task) || bread(state, settlement).isEmpty()) {
+        if (state.humanPopulation().quarantined(settlement.id()) || !dependenciesCompleted(state, task) || bread(state, settlement).isEmpty()) {
             return blockPreparation(state, task);
         }
         SupplyContract contract = contract(state, task, settlement, bread(state, settlement).orElseThrow());
@@ -50,6 +50,7 @@ final class SupplyOperationProcess {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
         StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
         StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
+        if (state.humanPopulation().quarantined(settlement.id())) return blockPreparation(state, preparation);
         ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(value -> value.itemKind().equals(contract.itemKind())
                 && value.count() == contract.itemCount() && value.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);

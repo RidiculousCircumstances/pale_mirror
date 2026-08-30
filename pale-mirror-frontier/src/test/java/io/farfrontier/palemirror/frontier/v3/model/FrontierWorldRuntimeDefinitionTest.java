@@ -167,6 +167,28 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void developmentHealthQuarantineProfileRequiresAnOrdinarySettlementReview() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHealthQuarantineConfiguration(
+                new WorldId("frontier:health-quarantine-profile"), 91L));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        Settlement settlement = before.bootstrap().settlements().getFirst();
+
+        assertEquals(SettlementQuarantineStatus.NORMAL, before.humanPopulation().quarantine(settlement.id()).status());
+        assertEquals(0, before.humanPopulation().activeCases(settlement.id()));
+        assertEquals(19, before.infection().size(), "the fixture adds one settlement contact to the eighteen bootstrap hive cells, not a completed disease result");
+
+        engine.advanceTo(new SimInstant(1L), new WorkBudget(64, 512));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId resident = settlement.residents().stream().map(Resident::id).sorted().findFirst().orElseThrow();
+
+        assertEquals(ResidentHealthStatus.EXPOSED, after.humanPopulation().health(resident).status());
+        assertEquals(SettlementQuarantineStatus.QUARANTINED, after.humanPopulation().quarantine(settlement.id()).status());
+        assertEquals(1, after.humanPopulation().activeCases(settlement.id()));
+        assertTrue(after.strategicPlans().hasActiveObjective(settlement.id(), StrategicObjectiveLane.STRATEGIC),
+                "the same review retains the real containment objective rather than a health-only test path");
+    }
+
+    @Test
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

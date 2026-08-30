@@ -49,7 +49,10 @@ class StrategicObjectiveProcessTest {
         assertEquals(StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, selected.objective().kind()); assertEquals(nearby, selected.objective().infectionTarget().orElseThrow());
         state = StrategicObjectiveProcess.reduceObjective(state, settlement.id(), selected);
         state = StrategicObjectiveProcess.reduceTask(state, settlement.id(), assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload()));
-        assertEquals(1, StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 2, 240L)).size());
+        List<ProposedEvent> activeReview = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 2, 240L));
+        assertEquals(3, activeReview.size(), "an already-active strategic lane still emits the exact health and quarantine facts before its next review");
+        assertInstanceOf(ResidentHealthTransition.class, activeReview.getFirst().payload());
+        assertInstanceOf(SettlementQuarantineTransition.class, activeReview.get(1).payload());
     }
 
     @Test

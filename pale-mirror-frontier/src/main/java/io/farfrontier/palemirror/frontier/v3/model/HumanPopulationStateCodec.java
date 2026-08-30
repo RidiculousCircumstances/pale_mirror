@@ -27,9 +27,17 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, job.householdId().value()); FrontierWorldStateCodec.writeString(output, job.foodItemId().value());
             FrontierWorldStateCodec.writeString(output, job.consumptionIntentId().value()); writeProfile(output, job.resident()); FrontierWorldStateCodec.writePosition(output, job.position());
         }
+        FrontierWorldStateCodec.writeCount(output, population.health().size());
+        for (Map.Entry<SubjectId, ResidentHealth> entry : population.health().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
+        }
+        FrontierWorldStateCodec.writeCount(output, population.quarantines().size());
+        for (Map.Entry<SubjectId, SettlementQuarantine> entry : population.quarantines().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
+        }
     }
 
-    static HumanPopulation read(DataInputStream input) throws IOException {
+    static HumanPopulation read(DataInputStream input, boolean hasHealth) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -48,7 +56,23 @@ final class HumanPopulationStateCodec {
                     readProfile(input), FrontierWorldStateCodec.readPosition(input));
             if (birthJobs.put(id, job) != null) throw new IllegalArgumentException("duplicate resident birth job");
         }
-        return new HumanPopulation(households, residents, birthJobs);
+        if (!hasHealth) return new HumanPopulation(households, residents, birthJobs);
+        Map<SubjectId, ResidentHealth> health = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
+            if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(ResidentHealthStatus.values()[status], input.readLong())) != null) {
+                throw new IllegalArgumentException("invalid or duplicate resident health");
+            }
+        }
+        Map<SubjectId, SettlementQuarantine> quarantines = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
+            if (status >= SettlementQuarantineStatus.values().length
+                    || quarantines.put(id, new SettlementQuarantine(SettlementQuarantineStatus.values()[status], input.readLong())) != null) {
+                throw new IllegalArgumentException("invalid or duplicate settlement quarantine");
+            }
+        }
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines);
     }
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {

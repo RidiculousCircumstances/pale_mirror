@@ -173,7 +173,7 @@ v2.
 
 ## Autonomous humans and hive
 
-Settlements own residents, households, roles, facilities, inventories,
+Settlements own residents, households, roles, exact disease state, quarantine policy, facilities, inventories,
 production processes, needs, governance, security, companies, contracts,
 credit, investment, prices, trade, migration, diplomacy and operations. A
 company or institution owns real accounts and custody; resources do not exist

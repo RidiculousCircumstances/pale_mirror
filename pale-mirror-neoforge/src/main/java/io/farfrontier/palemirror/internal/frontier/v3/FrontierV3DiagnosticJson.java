@@ -124,7 +124,9 @@ final class FrontierV3DiagnosticJson {
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
                 + ",\"harvestAdmission\":\"" + quote(value.harvestAdmission()) + "\",\"livingFarmers\":" + value.livingFarmers()
                 + ",\"availableFarmer\":\"" + quote(value.availableFarmerId()) + "\",\"farmStatus\":\"" + quote(value.farmStatus())
-                + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot() + "}";
+                + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot()
+                + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
+                + state.humanPopulation().activeCases(subject) + "}";
     }
 
     /** One named-polity diagnostic, bounded to aggregate counts plus the single next growth claim. */

@@ -17,6 +17,9 @@ final class HumanPopulationStateSupport {
         if (state.operations().values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)
                 && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
         ResidentProfile current = state.humanPopulation().resident(migration.residentId());
+        if (state.humanPopulation().quarantined(current.settlementId()) || state.humanPopulation().quarantined(migration.destinationSettlementId())) {
+            throw new IllegalArgumentException("resident migration cannot cross an active settlement quarantine");
+        }
         if (!current.settlementId().equals(migration.destinationSettlementId())) {
             int occupants = SettlementFacilityCapability.livingResidents(state, migration.destinationSettlementId());
             int beds = SettlementFacilityCapability.housingCapacity(state, migration.destinationSettlementId());

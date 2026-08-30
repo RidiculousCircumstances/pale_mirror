@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -91,6 +93,25 @@ final class FrontierDevelopmentScenarios {
         return new HiveGrowthFixture(state, checkpoint.instant(), checkpoint.schedules());
     }
 
+    /**
+     * Read-only starting condition for one real settlement assessment.  The fixture does not
+     * pre-write a disease result: the ordinary objective review must still emit the exact
+     * exposure and quarantine transition after the server starts.
+     */
+    static HealthQuarantineFixture healthQuarantineFixture(WorldId worldId, long seed) {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        Settlement settlement = bootstrap.settlements().getFirst();
+        SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
+                .findFirst().orElseThrow(() -> new IllegalStateException("health fixture needs one infirmary"));
+        InfectionCell contact = FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().equals(infirmary.id())).map(cell -> InfectionCell.at(cell.position()))
+                .sorted(java.util.Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("health fixture infirmary lacks semantic contact"));
+        state = state.withInfection(contact, new FixedRatio(new FixedScalar(FixedScalar.SCALE)));
+        return new HealthQuarantineFixture(state, SimInstant.ZERO, List.of(StrategicObjectiveProcess.review(settlement.id(), 1, 1L)), settlement.id(), contact);
+    }
+
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
             schedules = List.copyOf(schedules);
@@ -99,6 +120,13 @@ final class FrontierDevelopmentScenarios {
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         RouteSceneReturnFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record HealthQuarantineFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                   SubjectId settlementId, InfectionCell contact) {
+        HealthQuarantineFixture {
             schedules = List.copyOf(schedules);
         }
     }
