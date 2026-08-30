@@ -40,6 +40,12 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
+    /** Development-only HOT/COLD continuity fixture; production always begins at the normal world bootstrap. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentRouteSceneReturnConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp()); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));

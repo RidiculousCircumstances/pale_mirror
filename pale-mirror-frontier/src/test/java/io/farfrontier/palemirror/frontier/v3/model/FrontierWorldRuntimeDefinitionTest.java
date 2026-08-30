@@ -148,6 +148,25 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void developmentRouteReturnProfileRetainsOneExactColdNorthwatchShipment() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(new WorldId("frontier:route-return-profile"), 91L));
+
+        var checkpoint = engine.checkpoint();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+
+        assertEquals(2_550L, checkpoint.instant().ticks());
+        assertEquals(OperationStage.EN_ROUTE, operation.stage());
+        assertEquals(0, operation.routeIndex());
+        assertEquals(new BlockPosition(-360, 64, -340), operation.route().getFirst());
+        assertEquals(new BlockPosition(-366, 64, -340), operation.route().get(1));
+        assertEquals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")), operation.participantIds());
+        assertTrue(checkpoint.schedules().stream().noneMatch(action -> action.subject().equals(operation.id())
+                        && action.kind().equals("frontier.operation.progress")),
+                "the native profile must wait for ordinary HOT admission before arming its next COLD route step");
+    }
+
+    @Test
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

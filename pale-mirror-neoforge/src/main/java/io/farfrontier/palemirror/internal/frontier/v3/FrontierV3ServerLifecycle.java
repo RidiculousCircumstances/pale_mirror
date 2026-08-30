@@ -198,6 +198,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("hive-growth") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("scene-return") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         throw new IllegalStateException("Frontier v3 pilot profile is unavailable outside an identified disposable runner: " + profile);
     }
 
@@ -266,6 +269,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3InfectionOverlayExecutor.forget(runtime);
                 FrontierV3ObjectBoardExecutor.forget(runtime);
                 FrontierV3AmbientActorExecutor.forget(runtime);
+                FrontierV3SceneExecutor.forget(runtime);
                 runtime.shutdown();
             }
         } finally {

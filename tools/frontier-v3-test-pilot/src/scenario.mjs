@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike or hive-growth');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'scene-return'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth or scene-return');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');

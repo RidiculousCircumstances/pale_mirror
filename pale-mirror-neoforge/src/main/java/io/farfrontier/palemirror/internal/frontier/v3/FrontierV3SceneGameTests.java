@@ -66,6 +66,46 @@ import java.util.function.Consumer;
 public final class FrontierV3SceneGameTests {
     private FrontierV3SceneGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotSceneWaitsForStableAbsenceAndSafeDistanceBeforeColdHandoff(GameTestHelper helper) {
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-hysteresis-game-test"), 91L), new EphemeralStore(), 20_000);
+        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-hysteresis-game-test");
+        try {
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 1L, false, false),
+                    "the first absent-demand tick must retain a HOT scene instead of abruptly despawning it");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 200L, false, false),
+                    "the final tick before the bounded 200-tick hand-off window must remain HOT");
+            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 201L, false, false),
+                    "only sustained absent demand may permit a COLD hand-off");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 202L, true, false),
+                    "returning player demand must cancel the pending drain rather than leaving a latent despawn");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 203L, false, false),
+                    "a fresh departure begins a new bounded hysteresis interval");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 403L, false, true),
+                    "an otherwise absent player near an exact scene body prevents unsafe capture");
+            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 404L, false, false),
+                    "once safely distant after the hysteresis, the next durable release may proceed");
+        } finally {
+            FrontierV3SceneExecutor.forget(runtime);
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void logisticsSceneNeverAcquiresCombatAuthorityWithoutAnEngagement(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
+        SceneLease logistics = lease(origin);
+        SceneLease engagement = new SceneLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(), logistics.operationId(), logistics.cargoId(),
+                logistics.handoffPosition(), logistics.handoffInstant(), logistics.revision(), logistics.status(), Optional.of(new SubjectId("engagement:scene-combat-authority-game-test")), logistics.members());
+        helper.assertFalse(FrontierV3SceneExecutor.combatEnabled(logistics),
+                "a HOT route carrier may move exact cargo but must not invent combat against its own escort");
+        helper.assertTrue(FrontierV3SceneExecutor.combatEnabled(engagement),
+                "only a coupled canonical engagement lease may unlock the durable combat/effect executor");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedSceneCreatesOnlyItsExactVillagerBodies(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

@@ -45,6 +45,36 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * A read-only bootstrap at the first ordinary Northwatch shipment.  Unlike the strike
+     * fixture, this begins with the real route at its first hand-off but deliberately removes
+     * its already-due COLD progress action.  A native client needs time to connect before it
+     * can create the HOT scene; after that scene releases, the production release path creates
+     * the normal next COLD action.  This is a test-clock admission detail, not a production
+     * route rule.
+     */
+    static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        var checkpoint = engine.checkpoint();
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        BlockPosition start = new BlockPosition(-360, 64, -340);
+        BlockPosition next = new BlockPosition(-366, 64, -340);
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.routeIndex() != 0
+                || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
+                || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")))) {
+            throw new IllegalStateException("development route-return fixture did not retain its exact Northwatch shipment");
+        }
+        var schedules = checkpoint.schedules().stream()
+                .filter(action -> !action.subject().equals(operation.id()) || !action.kind().equals("frontier.operation.progress"))
+                .toList();
+        if (schedules.stream().anyMatch(action -> action.subject().equals(operation.id()) && action.kind().equals("frontier.operation.progress"))) {
+            throw new IllegalStateException("development route-return fixture retained a pre-HOT route progression");
+        }
+        return new RouteSceneReturnFixture(state, checkpoint.instant(), schedules);
+    }
+
+    /**
      * Retains the real 12-settlement schedule through the first hive decision, stopping only
      * at the durable exact-biomass physical boundary.  The native pilot must still load the
      * east store and let its ordinary executor consume the real tagged stack.
@@ -63,6 +93,12 @@ final class FrontierDevelopmentScenarios {
 
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
+        RouteSceneReturnFixture {
             schedules = List.copyOf(schedules);
         }
     }

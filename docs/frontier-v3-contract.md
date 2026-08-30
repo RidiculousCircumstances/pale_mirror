@@ -215,11 +215,17 @@ states.
   COLD rules do not execute the same action concurrently.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
-  intents. It durably closes the lease and removes the exact body before that
-  chunk can serialize it. A late Minecraft entity-leave callback never closes a
-  HOT lease: it is recovery evidence for the same UUID, not proof that a COLD
-  hand-off happened. Only then may physical custody be released and future
-  domain work scheduled.
+  intents. If its hand-off surface remains naturally loaded, it durably closes
+  the lease and removes the exact body before serializing the chunk. If vanilla
+  unloads the surface before the hysteresis elapses, the runtime may use only
+  its bounded last complete HOT observation to close the lease; the unchanged
+  serialized projection is removed on that chunk's ordinary next load before a
+  new scene can claim the actor. After restart, where that volatile observation
+  does not exist, DRAINING waits for natural inspection rather than inventing a
+  release. A late Minecraft entity-leave callback never closes a HOT lease: it
+  is recovery evidence for the same UUID, not proof that a COLD hand-off
+  happened. Only then may physical custody be released and future domain work
+  scheduled.
 - COLD-to-HOT first advances the scene to the lease instant, then reconstructs
   its current state. Dead actors and completed effects are never replayed to
   make a cinematic history.

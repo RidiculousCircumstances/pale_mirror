@@ -69,6 +69,10 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
   assert.doesNotThrow(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }], assertions: [], frames: [] }));
 });
 
+test('native pilot permits the isolated HOT/COLD route-return fixture only by its named profile', () => {
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+});
+
 test('semantic visible checks are bounded evidence actions, not world mutations', () => {
   const visible = { ...scenario, setup: [], actions: [
     { type: 'assert_visible_block', position: { x: 1, y: 64, z: 2 }, timeoutMs: 10_000 },
