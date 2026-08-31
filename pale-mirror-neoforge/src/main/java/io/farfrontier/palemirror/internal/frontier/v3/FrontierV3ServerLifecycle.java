@@ -213,6 +213,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("scene-return") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("hot-scout-sighting") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentHotScoutSightingConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         if (profile.equals("operation-assembly") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }

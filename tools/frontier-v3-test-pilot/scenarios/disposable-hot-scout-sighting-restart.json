@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_scout_sighting_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hot-scout-sighting" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 0,
+        "travelCargo": { "x": -367, "y": 64, "z": -340 } } },
+      { "view": "actor", "id": "bioform:west-1", "expect": { "status": "ok", "role": "SCOUT", "life": "ALIVE",
+        "position": { "x": -367, "y": 64, "z": -340 }, "ambientLease": "NONE" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "hot-scout-sighting:bioform:west-1", "expect": { "status": "ok",
+      "eventKind": "hot_scout_operation_observed", "subject": "bioform:west-1", "causal": { "operation": "operation:supply-1-2", "cargo": "cargo:supply-1-2" } }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "CLOSED" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 5 },
+  "assertions": [
+    { "after": 2, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
+    { "after": 3, "view": "trace", "id": "hot-scout-sighting:bioform:west-1", "expect": { "status": "ok",
+      "eventKind": "hot_scout_operation_observed", "subject": "bioform:west-1", "causal": { "operation": "operation:supply-1-2", "cargo": "cargo:supply-1-2" } } },
+    { "after": 5, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
+    { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } }
+  ],
+  "frames": []
+}

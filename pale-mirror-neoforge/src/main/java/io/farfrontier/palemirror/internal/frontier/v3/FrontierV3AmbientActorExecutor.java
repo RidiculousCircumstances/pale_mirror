@@ -24,6 +24,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.HotScoutOperationObserved;
+import io.farfrontier.palemirror.frontier.v3.model.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
@@ -46,12 +48,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -143,6 +147,10 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
+                if (observeHotScoutSighting(level, runtime, state, actorId, mob, lease)) {
+                    admitted++;
+                    continue;
+                }
                 if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
                 if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
             }
@@ -566,6 +574,32 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
         return true;
     }
+    /**
+     * The loaded Scout observes only an already-present exact cargo minecart.  It does not scan
+     * canonical operations for nearby coordinates: carrier provenance first resolves one HOT
+     * scene, then the pure reducer proves that scene and the Scout lease still match.
+     */
+    static boolean observeHotScoutSighting(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease scoutLease) {
+        if (!bioform(state, actorId) || bioformRole(state, actorId) != BioformRole.SCOUT
+                || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL) return false;
+        long now = runtime.checkpointImage().orElseThrow().instant().ticks();
+        SightedCarrier candidate = level.getEntitiesOfClass(MinecartChest.class, body.getBoundingBox().inflate(96.0D), entity -> !entity.isRemoved())
+                .stream().map(entity -> FrontierV3CargoCarrierExecutor.activeLease(state, entity)
+                        .map(lease -> new SightedCarrier(entity, lease))).flatMap(java.util.Optional::stream)
+                .filter(value -> sameFloorAnchor(level, new BlockPosition(value.carrier().getBlockX(), value.carrier().getBlockY(), value.carrier().getBlockZ()),
+                        value.lease().cargoPosition()))
+                .filter(value -> body.distanceToSqr(value.carrier()) <= 9_216.0D)
+                .sorted(Comparator.comparingDouble((SightedCarrier value) -> body.distanceToSqr(value.carrier()))
+                        .thenComparing(value -> value.lease().id())).findFirst().orElse(null);
+        if (candidate == null || !HivePerceptionProcess.shouldRefresh(state, candidate.lease().operationId(),
+                actorId, candidate.lease().cargoPosition(), now)) return false;
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-sighting",
+                actorId.value() + "-" + candidate.lease().id().value(), new HotScoutOperationObserved(candidate.lease().id(),
+                        candidate.lease().operationId(), actorId, candidate.lease().cargoPosition(), now));
+        FrontierV3DiagnosticTrace.recordScoutSighting(level.getServer(), "hot-scout-sighting:" + actorId.value(), candidate.lease(), actorId, result);
+        return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+    }
     private static boolean directedGoal(AmbientActorLease lease) {
         return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY || lease.goal() == AmbientGoalKind.SCOUT_PATROL;
     }
@@ -613,6 +647,7 @@ final class FrontierV3AmbientActorExecutor {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    private record SightedCarrier(MinecartChest carrier, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) { }
     private record LocalBrain(double radius, long periodTicks, int identityPhase) { }
     record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement, BlockPosition observedPosition) {
         private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null, null); }

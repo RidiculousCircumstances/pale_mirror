@@ -94,6 +94,24 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+    /** Disposable-only physical Scout-perception fixture; production never relocates a Scout for a carrier. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotScoutSightingConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutSightingFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> frozenScoutSightingProgress(state, action), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+
+    /**
+     * The disposable recovery proof observes one physical carrier fact, not a whole caravan
+     * lifecycle.  Once its HOT scene drains, consume only that operation's newly scheduled COLD
+     * progress action so elapsed native-client restart time cannot replace the asserted fact.
+     */
+    private static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action) {
+        if (action.subject().equals(new SubjectId("operation:supply-1-2")) && action.kind().equals("frontier.operation.progress")) {
+            return List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
+        }
+        return planScheduled(state, action, false);
+    }
     /** Development-only exact HOT assembly fixture; the pilot supplies every movement observation. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentOperationAssemblyConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.OperationAssemblyFixture fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(worldId, seed);
@@ -165,6 +183,11 @@ public final class FrontierWorldRuntimeDefinition {
             try { HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced); }
             catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), advanced)));
+        }
+        if (command.payload() instanceof HotScoutOperationObserved observed) {
+            try { HivePerceptionProcess.reduceHot(state, state.bootstrap().hive().id(), observed); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), observed)));
         }
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
@@ -525,6 +548,7 @@ public final class FrontierWorldRuntimeDefinition {
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
             case SettlementInfectionObserved observed -> SettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
+            case HotScoutOperationObserved observed -> HivePerceptionProcess.reduceHot(state, event.subject(), observed);
             case ScoutPatrolAdvanced advanced -> HiveScoutPatrolProcess.reduce(state, event.subject(), advanced);
             case RouteEngagementStarted started -> HiveRouteEngagementProcess.reduceStarted(state, event.subject(), started);
             case RouteEngagementAttackerAdvanced advanced -> HiveRouteEngagementProcess.reduceAdvanced(state, event.subject(), advanced);

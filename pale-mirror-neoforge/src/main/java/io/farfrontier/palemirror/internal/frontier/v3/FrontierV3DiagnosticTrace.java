@@ -47,6 +47,19 @@ final class FrontierV3DiagnosticTrace {
                         lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
     }
 
+    /**
+     * Records a physical perception fact without losing the carrier provenance that admitted it.
+     * The observing Scout is deliberately appended to the bounded scene-member list: it may be
+     * near the carrier without being a participant in the caravan scene.
+     */
+    static void recordScoutSighting(MinecraftServer server, String correlation, SceneLease lease, SubjectId scoutId, CommandResult result) {
+        Objects.requireNonNull(lease, "scene lease"); Objects.requireNonNull(scoutId, "scout id");
+        List<String> actors = java.util.stream.Stream.concat(lease.members().stream().map(member -> member.actorId().value()),
+                        java.util.stream.Stream.of(scoutId.value())).distinct().sorted().toList();
+        record(server, correlation, "hot_scout_operation_observed", scoutId, result,
+                new Context(lease.operationId().value(), lease.id().value(), lease.cargoId().value(), actors));
+    }
+
     private static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result, Context context) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result"); Objects.requireNonNull(context, "context");

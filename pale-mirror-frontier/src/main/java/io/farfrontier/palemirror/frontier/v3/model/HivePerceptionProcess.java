@@ -1,12 +1,14 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
-/** COLD visual range is the only bridge from an en-route caravan to hive strategic knowledge. */
-final class HivePerceptionProcess {
+/** Bounded COLD and physically proven HOT sighting are the only bridges into hive strategic knowledge. */
+public final class HivePerceptionProcess {
     static final long SIGHT_RADIUS_SQUARED = 9_216L, REFRESH_INTERVAL = 800L;
     private HivePerceptionProcess() { }
     static Refresh refresh(FrontierWorldState state, long now) {
@@ -35,9 +37,45 @@ final class HivePerceptionProcess {
         }
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }
+    /**
+     * The physical executor may enter only through a separate payload.  The durable event binds
+     * the already-observed minecart to its current HOT scene and binds the Scout to its live HOT
+     * patrol lease; it cannot manufacture knowledge from an operation-coordinate lookup.
+     */
+    static FrontierWorldState reduceHot(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                        HotScoutOperationObserved observed) {
+        if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("HOT hive sighting has a foreign owner");
+        RouteOperation operation = state.operations().get(observed.operationId());
+        Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), observed.scoutId());
+        AmbientActorLease scoutLease = state.ambientLeases().get(observed.scoutId());
+        SceneLease scene = state.sceneLeases().get(observed.sceneLeaseId());
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.activeTravel().isEmpty()
+                || scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
+                || scoutLease == null || scoutLease.status() != AmbientLeaseStatus.HOT || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL
+                || scene == null || scene.status() != SceneLeaseStatus.HOT || scene.engagementId().isPresent()
+                || !scene.operationId().equals(operation.id()) || !scene.cargoId().equals(operation.cargoId())
+                || !scene.cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
+                || !scene.cargoPosition().equals(observed.seenCarrierPosition())
+                || !nearby(state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
+            throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
+        }
+        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), observed.seenCarrierPosition(), observed.observedAt());
+        return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
+    }
+    /** Read-only HOT admission throttle; it never creates or changes knowledge. */
+    public static boolean shouldRefresh(FrontierWorldState state, SubjectId operationId, SubjectId scoutId, BlockPosition position, long now) {
+        HiveOperationKnowledge knowledge = state.strategicPlans().hiveOperationKnowledge();
+        HiveOperationKnowledge.Sighting previous = knowledge.entries().get(operationId);
+        return previous == null || !previous.scoutId().equals(scoutId) || !previous.position().equals(position)
+                || previous.observedAt() <= now - REFRESH_INTERVAL;
+    }
+    /** Narrow read-only projection for adapters/tests; it does not expose the mutable plan type. */
+    public static Optional<BlockPosition> observedCarrierPosition(FrontierWorldState state, SubjectId operationId) {
+        return Optional.ofNullable(state.strategicPlans().hiveOperationKnowledge().entries().get(operationId)).map(HiveOperationKnowledge.Sighting::position);
+    }
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
             .filter(value -> value.role() == BioformRole.SCOUT).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
             .filter(value -> { AmbientActorLease lease = state.ambientLeases().get(value.id()); return lease == null || lease.status() == AmbientLeaseStatus.CLOSED; }).toList(); }
-    private static boolean nearby(BlockPosition left, BlockPosition right) { long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z <= SIGHT_RADIUS_SQUARED; }
+    static boolean nearby(BlockPosition left, BlockPosition right) { long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z <= SIGHT_RADIUS_SQUARED; }
     record Refresh(HiveOperationKnowledge knowledge, List<ProposedEvent> events) { }
 }

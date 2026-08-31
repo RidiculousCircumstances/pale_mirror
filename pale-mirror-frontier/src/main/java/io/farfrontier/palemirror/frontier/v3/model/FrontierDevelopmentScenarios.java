@@ -96,6 +96,26 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Disposable physical-perception fixture.  It changes no operation, cargo or lease: one
+     * otherwise ordinary unleased Scout begins beside the exact first cargo anchor, so only a
+     * player-loaded HOT caravan can produce the subsequent observation.
+     */
+    static RouteSceneReturnFixture hotScoutSightingFixture(WorldId worldId, long seed) {
+        RouteSceneReturnFixture base = routeSceneReturnFixture(worldId, seed);
+        RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
+        Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
+                .filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
+        FrontierWorldState state = base.state().withActorLocation(scout.id(), operation.activeTravel().orElseThrow().cargoAnchor());
+        // This isolated proof must demonstrate physical HOT perception only.  Retain every
+        // ordinary route/actor schedule, but remove the one pre-existing COLD hive-review that
+        // could derive knowledge before a player loads the scene.
+        List<ScheduledAction> schedules = base.schedules().stream().filter(action -> !(action.kind().equals("frontier.objective.review")
+                && action.subject().equals(state.bootstrap().hive().id()))).toList();
+        return new RouteSceneReturnFixture(state, base.instant(), schedules);
+    }
+
+    /**
      * Stops at the ordinary cargo-loaded assembly boundary before its first COLD step.  The
      * disposable native pilot must load the port and advance these exact people through normal
      * HOT movement; it cannot use the fixture to start travel or move a resident.

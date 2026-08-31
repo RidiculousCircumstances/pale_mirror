@@ -53,6 +53,17 @@ final class StrategicPlanPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new HiveOperationObserved(new HiveOperationKnowledge.Sighting(
                 subject(input), subject(input), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong()))); }
     }; }
+    static PayloadCodec hotScoutOperationObserved() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.hot_scout_operation_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            HotScoutOperationObserved observed = (HotScoutOperationObserved) payload;
+            output.writeUTF(observed.sceneLeaseId().value()); subject(output, observed.operationId()); subject(output, observed.scoutId());
+            output.writeInt(observed.seenCarrierPosition().x()); output.writeInt(observed.seenCarrierPosition().y()); output.writeInt(observed.seenCarrierPosition().z()); output.writeLong(observed.observedAt());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new HotScoutOperationObserved(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(input.readUTF()), subject(input), subject(input),
+                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong())); }
+    }; }
     static PayloadCodec scoutPatrolAdvanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.scout_patrol_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {

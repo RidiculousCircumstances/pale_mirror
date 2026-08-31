@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
@@ -273,10 +274,12 @@ final class FrontierV3DiagnosticJson {
         String travel = operation.activeTravel().map(value -> ",\"travelCursor\":" + value.cursor() + ",\"travelLength\":" + value.corridor().size()
                 + ",\"travelCurrent\":" + position(value.currentPosition()) + ",\"travelCargo\":" + position(value.cargoAnchor())
                 + ",\"travelArrived\":" + value.arrived()).orElse("");
+        String hiveSighting = HivePerceptionProcess.observedCarrierPosition(state, operation.id())
+                .map(position -> ",\"hiveObservedCarrier\":" + position(position)).orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel
+                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting
                 + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
     }
 
