@@ -16,7 +16,8 @@ public enum PhysicalPostcondition {
     ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED,
     HIVE_NUTRIENT_DEPARTED_OBSERVED,
     HIVE_NUTRIENT_ARRIVED_OBSERVED,
-    EQUIPMENT_ISSUED_OBSERVED;
+    EQUIPMENT_ISSUED_OBSERVED,
+    EQUIPMENT_RETURNED_OBSERVED;
 
     public int wireTag() {
         return switch (this) {
@@ -35,6 +36,7 @@ public enum PhysicalPostcondition {
             case HIVE_NUTRIENT_DEPARTED_OBSERVED -> 12;
             case HIVE_NUTRIENT_ARRIVED_OBSERVED -> 13;
             case EQUIPMENT_ISSUED_OBSERVED -> 14;
+            case EQUIPMENT_RETURNED_OBSERVED -> 15;
         };
     }
 }

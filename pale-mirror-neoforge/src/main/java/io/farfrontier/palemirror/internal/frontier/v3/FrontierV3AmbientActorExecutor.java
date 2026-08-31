@@ -26,6 +26,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HotScoutOperationObserved;
+import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
@@ -185,9 +186,22 @@ final class FrontierV3AmbientActorExecutor {
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
+        hydrateExactHeldWeapon(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
+    }
+
+    /**
+     * A newly created exact body must reflect already canonical actor custody after ordinary
+     * COLD/restart materialization. Existing loaded bodies are never overwritten here: player
+     * changes on those bodies remain observation input, not desired-state repair.
+     */
+    private static void hydrateExactHeldWeapon(Mob body, FrontierWorldState state, SubjectId actorId) {
+        if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
+        state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()))
+                .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
+                .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(item)));
     }
 
     private static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import io.farfrontier.palemirror.frontier.v3.process.DefenderEquipmentProcess;
+import io.farfrontier.palemirror.frontier.v3.process.DefenderEquipmentReturnProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -83,6 +84,46 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withInventory(stored.moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(resident.id())));
 
         assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, resident.id()));
+    }
+
+    @Test
+    void resolvedAssaultReturnsTheSameExactWeaponOnlyToItsNamedEmptyDepotSlot() {
+        Fixture fixture = fixture();
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(), HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
+        SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        SubjectId depot = FrontierWorldState.depotId(assault.settlementId()), resident = assault.defenderIds().getFirst();
+        int sourceSlot = state.inventory().firstFreeSlot(depot).orElseThrow(); SubjectId sword = new SubjectId("item:tactical-return-sword");
+        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(sword, assault.settlementId(), "minecraft:iron_sword", 1, new InventoryCustody.ContainerSlot(depot, sourceSlot)))
+                .moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, sourceSlot), new InventoryCustody.Actor(resident)));
+        state = HiveSettlementAssaultProcess.reduceResolved(state, fixture.hive(), new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        SettlementAssault resolved = state.strategicPlans().settlementAssaults().get(assault.id());
+
+        PhysicalIntent returned = DefenderEquipmentReturnProcess.plan(state, DefenderEquipmentReturnProcess.review(resolved, 250L)).stream()
+                .map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast)
+                .map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
+        assertEquals(PhysicalIntentKind.EQUIPMENT_RETURN, returned.kind());
+        assertEquals(new io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot(depot, sourceSlot), returned.targetSlot().orElseThrow());
+        state = state.preparePhysicalIntent(returned).transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = state;
+        EquipmentReturnObservation forged = new EquipmentReturnObservation(new PhysicalObservationId("observation:tactical-return-forged"), returned.id(),
+                assault.id(), resident, sword, new InventoryCustody.ContainerSlot(depot, sourceSlot + 1));
+        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(forged)));
+        EquipmentReturnObservation receipt = new EquipmentReturnObservation(new PhysicalObservationId("observation:tactical-return"), returned.id(),
+                assault.id(), resident, sword, new InventoryCustody.ContainerSlot(depot, sourceSlot));
+        state = state.transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+
+        assertEquals(new InventoryCustody.ContainerSlot(depot, sourceSlot), state.inventory().items().get(sword).custody());
+        assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, resident));
+        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
+        assertEquals(receipt, ((PhysicalIntentTransition) FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                new PhysicalIntentTransition(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
+                .observation().orElseThrow());
     }
 
     private static Fixture fixture() {

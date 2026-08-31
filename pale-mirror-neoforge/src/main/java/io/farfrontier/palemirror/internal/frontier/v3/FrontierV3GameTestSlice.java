@@ -23,7 +23,8 @@ public final class FrontierV3GameTestSlice {
                     || batchName.startsWith("pm-frontier-v3-scout-");
             case ECONOMY -> batchName.equals("pm-frontier-v3-exact-consumption") || batchName.equals("pm-frontier-v3-production")
                     || batchName.equals("pm-frontier-v3-cargo-loading") || batchName.equals("pm-frontier-v3-hive-nutrient")
-                    || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue");
+                    || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue")
+                    || batchName.equals("pm-frontier-v3-equipment-return");
             default -> throw new IllegalArgumentException("unsupported Frontier v3 GameTest slice: " + configuredSlice);
         };
     }

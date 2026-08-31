@@ -61,6 +61,8 @@ final class FrontierWorldPhysicalObservationValidation {
                 }
             } else if (observation instanceof EquipmentIssueObservation issue) {
                 EquipmentIssueStateSupport.validateReceiptForRecovery(inventory, intent, issue);
+            } else if (observation instanceof EquipmentReturnObservation returned) {
+                EquipmentReturnStateSupport.validateReceiptForRecovery(inventory, intent, returned);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
     }

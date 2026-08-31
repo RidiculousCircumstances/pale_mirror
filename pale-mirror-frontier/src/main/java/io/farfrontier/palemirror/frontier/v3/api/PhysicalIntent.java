@@ -17,7 +17,8 @@ public record PhysicalIntent(
         FixedPosition origin,
         int radiusBlocks,
         PhysicalPostcondition postcondition,
-        Optional<PhysicalObservationId> postconditionObservationId
+        Optional<PhysicalObservationId> postconditionObservationId,
+        Optional<PhysicalContainerSlot> targetSlot
 ) {
     public PhysicalIntent {
         Objects.requireNonNull(id, "physical intent id");
@@ -28,6 +29,7 @@ public record PhysicalIntent(
         Objects.requireNonNull(origin, "physical intent origin");
         Objects.requireNonNull(postcondition, "physical intent postcondition");
         postconditionObservationId = Objects.requireNonNull(postconditionObservationId, "physical intent postcondition observation");
+        targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
         if (subjectIds.isEmpty() || subjectIds.size() > 32 || subjectIds.stream().distinct().count() != subjectIds.size()) {
             throw new IllegalArgumentException("physical intent must name one to thirty-two distinct subjects");
         }
@@ -98,6 +100,14 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("equipment issue must bind assault, defender and exact stack without an area radius");
                 }
             }
+            case EQUIPMENT_RETURN -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED || subjectIds.size() != 3 || targetSlot.isEmpty()) {
+                    throw new IllegalArgumentException("equipment return must bind assault, defender, exact stack and typed target slot without an area radius");
+                }
+            }
+        }
+        if (kind != PhysicalIntentKind.EQUIPMENT_RETURN && targetSlot.isPresent()) {
+            throw new IllegalArgumentException("only equipment return may retain a typed target slot");
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
@@ -106,10 +116,16 @@ public record PhysicalIntent(
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty());
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty());
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalContainerSlot targetSlot) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot));
     }
 
     public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId);
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot);
     }
 }

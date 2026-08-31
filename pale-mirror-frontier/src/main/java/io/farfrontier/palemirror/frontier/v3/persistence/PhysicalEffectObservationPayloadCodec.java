@@ -62,6 +62,11 @@ final class PhysicalEffectObservationPayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, issue.residentId()); FrontierWorldPayloadCodecs.writeSubject(output, issue.itemId());
             FrontierWorldPayloadCodecs.writeSubject(output, issue.sourceSlot().containerId()); output.writeByte(issue.sourceSlot().slot());
         }
+        else if (observation instanceof EquipmentReturnObservation returned) {
+            output.writeByte(16); ids(output, returned); FrontierWorldPayloadCodecs.writeSubject(output, returned.assaultId());
+            FrontierWorldPayloadCodecs.writeSubject(output, returned.residentId()); FrontierWorldPayloadCodecs.writeSubject(output, returned.itemId());
+            FrontierWorldPayloadCodecs.writeSubject(output, returned.targetSlot().containerId()); output.writeByte(returned.targetSlot().slot());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -89,6 +94,9 @@ final class PhysicalEffectObservationPayloadCodec {
             case 14 -> new HiveNutrientArrivalObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             case 15 -> new EquipmentIssueObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
+            case 16 -> new EquipmentReturnObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");

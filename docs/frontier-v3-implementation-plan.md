@@ -389,17 +389,17 @@ remains present because breadth, balance and product comprehension are not done.
   adding a second roster: exact assignment, leader identity, profession and
   actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
   `GUARD` or `SQUAD_LEADER`. It owns no equipment mutation.
-- The first owning human-mobilization slice is complete for one exact outbound
-  defender-equipment issue. One scheduled process binds assault/member/source
-  slot/item/body identity; its loaded executor durably enters `RUNNING`, moves
-  the tagged stack only from the naturally loaded active chest to the matching
-  owned Villager hand, then confirms only the exact empty-source/held-item
-  postcondition. Unloaded endpoints defer; forged, changed or mixed evidence,
+- The first owning human-mobilization slice is complete for exact outbound
+  issue and inverse return. Scheduled processes bind assault/member/source or
+  named-target slot/item/body identity; loaded executors durably enter
+  `RUNNING`, move the tagged stack only between the naturally loaded active
+  chest and matching owned Villager hand, then confirm only their exact inverse
+  postconditions. Unloaded endpoints defer; forged, changed or mixed evidence,
   including recovery, remains visible conflict/`UNKNOWN_AFTER_RESTART` rather
-  than a direct inventory rewrite or replacement. The native restart scenario
-  proves the same custody and player-visible derived defender role after a
-  graceful restart. The next slice is the separate inverse return lifecycle,
-  then loss/drop/destruction and the rest of readiness/role expansion.
+  than a direct inventory rewrite or replacement. Native restart scenarios
+  prove both custody directions, and the return scenario has the player open
+  the exact recovered depot slot. The next slice is observed
+  loss/drop/destruction, then readiness and role expansion.
 
 ### Verification matrix
 

@@ -123,6 +123,11 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue must be prepared by its settlement");
             return state.preparePhysicalIntent(intent);
         }
+        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
+            EquipmentReturnStateSupport.validateIntent(state, intent);
+            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return must be prepared by its settlement");
+            return state.preparePhysicalIntent(intent);
+        }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
@@ -187,6 +192,11 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {
             if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue transition lacks settlement ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
+            if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
+            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return transition lacks settlement ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {

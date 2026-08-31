@@ -744,7 +744,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         SceneStrikeStateSupport.validateIntent(this, intent); ResourceSitePhysicalIntentStateSupport.validateIntent(this, intent);
         ProductionTransformationStateSupport.validateIntent(this, intent); CargoLoadingStateSupport.validateIntent(this, intent);
-        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(this, intent);
+        if (HumanEquipmentStateSupport.owns(intent)) HumanEquipmentStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -848,7 +848,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.complete(this, current, evidence, next);
         if (HiveNutrientTransferStateSupport.isEndpointIntent(current)) return HiveNutrientTransferStateSupport.completeEndpoint(this, current, evidence, next);
-        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) return EquipmentIssueStateSupport.complete(this, current, EquipmentIssueStateSupport.requireReceipt(evidence), next);
+        if (HumanEquipmentStateSupport.owns(current)) return HumanEquipmentStateSupport.complete(this, current, evidence, next);
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
         }

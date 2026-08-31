@@ -15,7 +15,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(17, profiles.size());
+        assertEquals(18, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -47,5 +47,18 @@ class FrontierV3FixtureCatalogTest {
         assertEquals("minecraft:iron_sword", sword.itemKind());
         assertTrue(state.physicalIntents().isEmpty(), "the fixture may declare canonical preconditions but may not pre-issue the hand-off");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.population.defender_equipment.review")));
+    }
+
+    @Test
+    void defenderEquipmentReturnFixtureStartsWithOneResolvedExactActorHeldSwordAndNoPhysicalShortcut() {
+        var configuration = FrontierV3FixtureCatalog.defenderEquipmentReturnConfiguration(new WorldId("frontier:defender-equipment-return-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        ExactItemStack sword = state.inventory().items().get(new SubjectId("item:development-defender-return-sword"));
+
+        assertEquals("minecraft:iron_sword", sword.itemKind());
+        assertTrue(sword.custody() instanceof InventoryCustody.Actor);
+        assertEquals(SettlementAssaultStatus.RESOLVED, state.strategicPlans().settlementAssaults().values().iterator().next().status());
+        assertTrue(state.physicalIntents().isEmpty(), "the fixture may declare canonical custody but may not pre-return the physical stack");
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.population.defender_equipment_return.review")));
     }
 }

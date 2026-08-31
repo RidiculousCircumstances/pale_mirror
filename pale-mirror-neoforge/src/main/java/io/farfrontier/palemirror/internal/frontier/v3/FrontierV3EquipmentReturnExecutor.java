@@ -14,7 +14,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
-import io.farfrontier.palemirror.frontier.v3.model.EquipmentIssueObservation;
+import io.farfrontier.palemirror.frontier.v3.model.EquipmentReturnObservation;
+import io.farfrontier.palemirror.frontier.v3.model.EquipmentReturnStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
@@ -34,20 +35,14 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import java.util.Comparator;
 import java.util.Optional;
 
-/**
- * One loaded-chunk, durable-before-effect depot-to-Villager equipment hand-off.
- *
- * <p>The canonical item remains in its source slot until an exact tagged stack is observed in
- * the exact deterministic resident body hand. A RUNNING request may resume only from a wholly
- * unchanged source; every mixed physical result is retained as UNKNOWN rather than repaired.</p>
- */
-final class FrontierV3EquipmentIssueExecutor {
-    private FrontierV3EquipmentIssueExecutor() { }
+/** One loaded-chunk, durable-before-effect former-defender-hand to depot-slot equipment return. */
+final class FrontierV3EquipmentReturnExecutor {
+    private FrontierV3EquipmentReturnExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
-                .filter(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE)
+                .filter(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
                 .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
     }
@@ -57,11 +52,11 @@ final class FrontierV3EquipmentIssueExecutor {
         Target target = target(state, intent);
         if (target == null) { unknown(runtime, intent.id(), "canonical-conflict"); return; }
         if (!level.hasChunkAt(target.chestPosition())) return;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.targetSlot().containerId());
         Villager resident = resident(level, state, target.residentId());
         if (chest == null || resident == null) return;
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest, resident); return; }
-        if (!sourceMatches(chest, target) || !resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
+        if (!handMatches(resident, target) || !chest.getItem(target.targetSlot().slot()).isEmpty()) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
@@ -74,13 +69,16 @@ final class FrontierV3EquipmentIssueExecutor {
         SubjectId assaultId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(assaultId);
         ExactItemStack item = state.inventory().items().get(itemId);
-        if (assault == null || assault.status() == SettlementAssaultStatus.RESOLVED || !intent.causeSubjectId().equals(assault.settlementId())
-                || !assault.defenderIds().contains(residentId) || item == null || !(item.custody() instanceof InventoryCustody.ContainerSlot source)
-                || !source.containerId().equals(FrontierWorldState.depotId(assault.settlementId())) || !item.economicOwnerId().equals(assault.settlementId())
-                || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())) return null;
-        ContainerSurface surface = state.inventory().surfaces().get(source.containerId());
+        final InventoryCustody.ContainerSlot target;
+        try { target = EquipmentReturnStateSupport.targetSlot(state, intent); }
+        catch (IllegalArgumentException invalid) { return null; }
+        if (assault == null || assault.status() != SettlementAssaultStatus.RESOLVED || !intent.causeSubjectId().equals(assault.settlementId())
+                || !assault.defenderIds().contains(residentId) || item == null || !(item.custody() instanceof InventoryCustody.Actor actor)
+                || !actor.actorId().equals(residentId) || !item.economicOwnerId().equals(assault.settlementId())
+                || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()) || state.inventory().itemAt(target.containerId(), target.slot()).isPresent()) return null;
+        ContainerSurface surface = state.inventory().surfaces().get(target.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
-        return new Target(assaultId, residentId, item, source, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
+        return new Target(assaultId, residentId, item, target, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
     }
 
     private static Villager resident(ServerLevel level, FrontierWorldState state, SubjectId residentId) {
@@ -89,35 +87,33 @@ final class FrontierV3EquipmentIssueExecutor {
         return body instanceof Villager villager && FrontierV3AmbientActorExecutor.owned(villager, residentId, false) ? villager : null;
     }
 
-    private static boolean sourceMatches(ChestBlockEntity chest, Target target) {
-        return target.sourceSlot().slot() >= 0 && target.sourceSlot().slot() < chest.getContainerSize()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.sourceSlot().slot()), target.item());
+    private static boolean handMatches(Villager resident, Target target) {
+        return FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
     }
 
     static boolean handOff(ChestBlockEntity chest, Villager resident, Target target) {
-        if (!sourceMatches(chest, target) || !resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return false;
-        ItemStack stack = chest.getItem(target.sourceSlot().slot()); chest.setItem(target.sourceSlot().slot(), ItemStack.EMPTY); chest.setChanged();
-        resident.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        return chest.getItem(target.sourceSlot().slot()).isEmpty() && FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        if (!handMatches(resident, target) || !chest.getItem(target.targetSlot().slot()).isEmpty()) return false;
+        ItemStack stack = resident.getItemBySlot(EquipmentSlot.MAINHAND); resident.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+        chest.setItem(target.targetSlot().slot(), stack); chest.setChanged();
+        return resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()
+                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
     }
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
                                        ChestBlockEntity chest, Villager resident) {
-        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
-        if (!source && hand) { confirm(level, runtime, intent, target); return; }
-        if (source && resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, resident, target)) { confirm(level, runtime, intent, target); return; }
+        boolean hand = handMatches(resident, target), stored = FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
+        if (!hand && stored) { confirm(level, runtime, intent, target); return; }
+        if (hand && chest.getItem(target.targetSlot().slot()).isEmpty() && handOff(chest, resident, target)) { confirm(level, runtime, intent, target); return; }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
     private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
-        EquipmentIssueObservation observation = new EquipmentIssueObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                intent.id(), target.assaultId(), target.residentId(), target.item().id(), target.sourceSlot());
+        EquipmentReturnObservation observation = new EquipmentReturnObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
+                intent.id(), target.assaultId(), target.residentId(), target.item().id(), target.targetSlot());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) {
-            throw new IllegalStateException("equipment issue confirmation was rejected");
-        }
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("equipment return confirmation was rejected");
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.defenderEquipmentCorrelation(target.item().id()),
-                "defender_equipment_issued", target.assaultId(), result);
+                "defender_equipment_returned", target.assaultId(), result);
     }
 
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
@@ -140,9 +136,9 @@ final class FrontierV3EquipmentIssueExecutor {
 
     /** Revision makes each accepted executor command unique without embedding an unbounded semantic ID. */
     static CommandId commandId(String phase, io.farfrontier.palemirror.frontier.v3.api.Revision revision) {
-        return new CommandId("executor:equipment-issue-" + phase + "-r" + revision.value());
+        return new CommandId("executor:equipment-return-" + phase + "-r" + revision.value());
     }
 
-    record Target(SubjectId assaultId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot,
+    record Target(SubjectId assaultId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot targetSlot,
                   BlockPos chestPosition) { }
 }

@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 public sealed interface PhysicalEffectObservation permits CargoHandoffObservation, CargoLoadObservation, DecontaminationObservation, ExactItemConsumedObservation,
         ExplosionObservation, ProductionTransformationObservation, ResourceSiteHarvestObservation, ResourceSitePreparationObservation,
         RouteConstructionMaterialLoadObservation, RouteConstructionObservation, SceneStrikeObservation, StructuralRepairObservation,
-        HiveNutrientDepartureObservation, HiveNutrientArrivalObservation, EquipmentIssueObservation {
+        HiveNutrientDepartureObservation, HiveNutrientArrivalObservation, EquipmentIssueObservation, EquipmentReturnObservation {
     PhysicalObservationId id();
     PhysicalIntentId intentId();
 }

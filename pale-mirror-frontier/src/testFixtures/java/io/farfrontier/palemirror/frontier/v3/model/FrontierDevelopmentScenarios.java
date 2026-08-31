@@ -112,6 +112,25 @@ final class FrontierDevelopmentScenarios {
                 started.instant(), started.schedules(), started.assaultId());
     }
 
+    /**
+     * Read-only inverse boundary: a resolved assault retains the same exact defender and sword
+     * in actor custody. A natural visit must hydrate that body, materialize its depot and run the
+     * ordinary durable return request; the fixture never mutates the physical world itself.
+     */
+    static SettlementAssaultFixture defenderEquipmentReturnFixture(WorldId worldId, long seed) {
+        SettlementAssaultFixture started = startedSettlementAssaultFixture(worldId, seed);
+        SettlementAssault assault = started.state().strategicPlans().settlementAssaults().get(started.assaultId());
+        SubjectId defender = assault.defenderIds().getFirst();
+        SubjectId depot = FrontierWorldState.depotId(assault.settlementId()); int slot = started.state().inventory().firstFreeSlot(depot).orElseThrow();
+        ExactItemStack sword = new ExactItemStack(new SubjectId("item:development-defender-return-sword"), assault.settlementId(),
+                "minecraft:iron_sword", 1, new InventoryCustody.ContainerSlot(depot, slot));
+        FrontierWorldState state = started.state().withInventory(started.state().inventory().store(sword)
+                .moveObservedItem(sword.id(), sword.custody(), new InventoryCustody.Actor(defender)));
+        state = HiveSettlementAssaultProcess.reduceResolved(state, state.bootstrap().hive().id(),
+                new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        return new SettlementAssaultFixture(state, started.instant(), started.schedules(), started.assaultId());
+    }
+
     private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();

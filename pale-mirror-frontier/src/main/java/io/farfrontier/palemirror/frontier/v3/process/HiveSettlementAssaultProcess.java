@@ -59,6 +59,7 @@ public final class HiveSettlementAssaultProcess {
         events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
         events.add(schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         events.add(schedule(DefenderEquipmentProcess.review(assault, action.dueAt().ticks() + 1L)));
+        events.add(schedule(DefenderEquipmentReturnProcess.review(assault, action.dueAt().ticks() + 1L)));
         return List.copyOf(events);
     }
 

@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import net.minecraft.core.BlockPos;
@@ -41,6 +42,9 @@ public final class FrontierV3EquipmentIssueGameTests {
                 "restart inspection can prove one empty source and the same exact hand stack");
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(sword)); resident.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
         helper.assertTrue(!FrontierV3EquipmentIssueExecutor.handOff(chest, resident, target), "a nonempty hand is conflict evidence and is never overwritten");
+        helper.assertTrue(FrontierV3EquipmentIssueExecutor.commandId("running", new Revision(9_876L)).value()
+                        .equals("executor:equipment-issue-running-r9876"),
+                "an executor command stays valid even when the semantic intent ID is long");
         helper.succeed();
     }
 }

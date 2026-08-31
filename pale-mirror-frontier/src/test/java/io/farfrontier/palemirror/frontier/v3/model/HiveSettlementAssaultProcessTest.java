@@ -26,7 +26,9 @@ class HiveSettlementAssaultProcessTest {
         List<ProposedEvent> events = HiveSettlementAssaultProcess.planStart(fixture.state(),
                 HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
 
-        assertEquals(4, events.size());
+        assertTrue(events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast)
+                .anyMatch(created -> created.action().kind().equals(DefenderEquipmentReturnProcess.REVIEW_ACTION)),
+                "an assault schedules the independent post-resolution equipment-return review");
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, events.getFirst().payload()));
         SettlementAssaultStarted started = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload());

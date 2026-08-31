@@ -201,6 +201,39 @@ Losing a leader degrades coordination, reconsideration speed or morale; it does
 not freeze, despawn or automatically kill the remaining members. Replacement
 leadership must be selected from perceived surviving people.
 
+### Accepted initial unit composition
+
+The first playable human force is deliberately small and heterogeneous. It is
+not a new population tier and not a permanent set of Minecraft entity classes:
+each entry is an organization of the same exact residents, admitted from their
+current work only when its owner can name the people, equipment and objective.
+
+- **Settlement defence element:** normally four to eight residents. It has one
+  retained leader, armed defenders where exact weapons exist, and may add a
+  medic or field engineer only when their real equipment and assignment are
+  admitted. This is the first implementation target for an assault response.
+- **Patrol / scout pair:** two to four residents. Its purpose is local
+  observation, perimeter response and escort, not a hidden strategic sensor;
+  it contributes only observations physically or canonically available to it.
+- **Rail or cargo escort:** two to four residents attached to one named cargo
+  operation. It is distinct from the train crew: losing the escort must not
+  turn logistics workers into soldiers or permit the operation to invent a
+  replacement guard.
+- **Engineering / recovery team:** one to four residents for repair,
+  fortification, demolition, construction or aftermath recovery. It can be
+  guarded, but its engineering capacity and tools remain a separate exact
+  claim.
+- **Medical / evacuation team:** one to three residents, attached to named
+  patients or an evacuation operation. It is not a combat-healing aura; its
+  supplies, treatment and casualty outcomes are ordinary exact processes.
+
+Larger formations are compositions of these units under a named operation, not
+a cohort abstraction. The numeric ranges are ruleset calibration, not Java
+constants: a small settlement may field fewer people, and a depleted or
+unequipped settlement may field none. Unit labels and colours communicate the
+current assignment; they never grant a skill, weapon, medical capability or
+authority by themselves.
+
 ### Implemented foundation
 
 The first exact tactical organization is the defender unit owned by one
@@ -238,8 +271,12 @@ the outbound hand-off only after that request is `RUNNING`, and confirms only
 the exact empty-source/held-item observation. The normal actor projection then
 refreshes the resident to a visible `MILITIA`/`ARMED DEFENDER` nameplate without
 turning presentation into a roster. The first native scenario proves the
-outbound custody and graceful-restart inspection; inverse return and observed
-loss/drop/destruction remain separate work.
+outbound custody and graceful-restart inspection. The separate inverse-return
+flow is also implemented: after a resolved assault it reserves one named empty
+active-depot slot, moves the same tagged hand stack only through a durable
+request, and confirms the inverse receipt. Its native scenario proves terminal
+slot custody, correlation trace, player-opened depot and graceful restart.
+Observed loss, drop and destruction remain separate work.
 
 The implemented first read model is intentionally narrower than the full
 future roster. It derives `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`, `GUARD` and

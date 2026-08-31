@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 81; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 82; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -37,7 +37,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
                 writeLogisticsHistory(output, state.logisticsHistory());
-                writePhysicalIntents(output, state.physicalIntents());
+                PhysicalIntentStateCodec.write(output, state.physicalIntents());
                 PhysicalEffectObservationStateCodec.write(output, state.physicalObservations());
                 writeSceneLeases(output, state.sceneLeases());
                 AmbientLeaseStateCodec.write(output, state.ambientLeases());
@@ -59,7 +59,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -74,7 +74,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input, version >= 66),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
-                    readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
+                    PhysicalIntentStateCodec.read(input, version >= 82), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version),
                     HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81),
@@ -739,38 +739,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 return new SettlementAssaultSceneCause(assaultId, settlementId);
             }
         }
-    }
-    private static void writePhysicalIntents(DataOutputStream output, Map<PhysicalIntentId, PhysicalIntent> intents) throws IOException {
-        writeCount(output, intents.size());
-        for (PhysicalIntent intent : intents.values().stream().sorted(Comparator.comparing(PhysicalIntent::id)).toList()) {
-            writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
-            writeString(output, intent.causeSubjectId().value()); writeCount(output, intent.subjectIds().size());
-            for (SubjectId subject : intent.subjectIds()) writeString(output, subject.value());
-            output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
-            output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag());
-            output.writeBoolean(intent.postconditionObservationId().isPresent());
-            if (intent.postconditionObservationId().isPresent()) writeString(output, intent.postconditionObservationId().orElseThrow().value());
-        }
-    }
-    private static Map<PhysicalIntentId, PhysicalIntent> readPhysicalIntents(DataInputStream input) throws IOException {
-        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            PhysicalIntentId id = new PhysicalIntentId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
-            SubjectId cause = new SubjectId(readString(input)); java.util.ArrayList<SubjectId> subjects = new java.util.ArrayList<>();
-            for (int subject = 0, subjectCount = readCount(input); subject < subjectCount; subject++) subjects.add(new SubjectId(readString(input)));
-            FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
-            int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
-            java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId> observation = observed
-                    ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.empty();
-            PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind),
-                    FrontierWireTags.require(PhysicalIntentStatus.class, status), cause, subjects, origin, radius,
-                    FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation);
-            if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length
-                    || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
-                throw new IllegalArgumentException("invalid or duplicate physical intent");
-            }
-        }
-        return intents;
     }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

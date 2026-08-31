@@ -42,6 +42,7 @@ public final class FrontierPhysicalIntentCommandProcess {
                 case HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
                         state, intent, transition, command.submittedAt().ticks()));
                 case EQUIPMENT_ISSUE -> equipmentIssueTransition(state, intent, transition);
+                case EQUIPMENT_RETURN -> equipmentReturnTransition(state, intent, transition);
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case SCENE_STRIKE -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
@@ -71,6 +72,11 @@ public final class FrontierPhysicalIntentCommandProcess {
     }
     private static CommandPlan equipmentIssueTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
+    }
+
+    private static CommandPlan equipmentReturnTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
         return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
     }
 
@@ -106,6 +112,10 @@ public final class FrontierPhysicalIntentCommandProcess {
             }
             if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {
                 EquipmentIssueStateSupport.validateIntent(state, intent);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
+            }
+            if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
+                EquipmentReturnStateSupport.validateIntent(state, intent);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
             }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");

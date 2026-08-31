@@ -27,6 +27,7 @@ final class FrontierV3PhysicalExecutors {
             executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
             executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
             executor("defender-equipment-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("hive-nutrient-endpoints"), "defender-equipment-issue-effect", FrontierV3EquipmentIssueExecutor::tick),
+            executor("defender-equipment-return", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "defender-equipment-return-effect", FrontierV3EquipmentReturnExecutor::tick),
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
             executor("cargo-handoff", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "cargo-handoff-effect", FrontierV3CargoHandoffExecutor::tick),
