@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /** Bounded COLD and physically proven HOT sighting are the only bridges into hive strategic knowledge. */
@@ -59,6 +60,9 @@ public final class HivePerceptionProcess {
                 || !nearby(state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
             throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
         }
+        if (!shouldRefresh(state, operation.id(), scout.id(), observed.seenCarrierPosition(), observed.observedAt())) {
+            throw new IllegalArgumentException("HOT hive sighting is already retained or stale");
+        }
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), observed.seenCarrierPosition(), observed.observedAt());
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }
@@ -72,6 +76,16 @@ public final class HivePerceptionProcess {
     /** Narrow read-only projection for adapters/tests; it does not expose the mutable plan type. */
     public static Optional<BlockPosition> observedCarrierPosition(FrontierWorldState state, SubjectId operationId) {
         return Optional.ofNullable(state.strategicPlans().hiveOperationKnowledge().entries().get(operationId)).map(HiveOperationKnowledge.Sighting::position);
+    }
+    /** Bounded read-only task projection for diagnostics; it never exposes a mutable plan. */
+    public static Optional<InterceptTask> interceptTask(FrontierWorldState state, SubjectId operationId) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION)
+                .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
+                .filter(task -> task.operationTarget().filter(operationId::equals).isPresent()).sorted(java.util.Comparator.comparing(StrategicTask::id))
+                .map(task -> new InterceptTask(task.operationObservationPosition().orElseThrow(), task.status().name())).findFirst();
+    }
+    public record InterceptTask(BlockPosition position, String status) {
+        public InterceptTask { Objects.requireNonNull(position, "intercept position"); Objects.requireNonNull(status, "intercept task status"); }
     }
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
             .filter(value -> value.role() == BioformRole.SCOUT).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)

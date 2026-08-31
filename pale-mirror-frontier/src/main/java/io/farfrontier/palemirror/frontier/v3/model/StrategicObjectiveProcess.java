@@ -44,16 +44,29 @@ final class StrategicObjectiveProcess {
         return plan(state, action, false, true, action.id().value());
     }
 
-    static ScheduledAction interceptOpportunity(SubjectId hive, RouteOperation operation, long dueAt) {
-        return new ScheduledAction(new ScheduleId("schedule:objective-intercept-opportunity-" + operation.id().value().replace(':', '-') + "-1"),
+    /**
+     * One verified Scout sighting wakes the hive planner once.  The schedule identity retains
+     * the observed fact rather than a route coordinate obtained later from the operation.
+     * The planner still reads only the durable perception register when it chooses a task.
+     */
+    static ScheduledAction interceptOpportunity(SubjectId hive, HiveOperationKnowledge.Sighting sighting, long dueAt) {
+        return new ScheduledAction(interceptOpportunityId(sighting),
                 new SimInstant(dueAt), 0, hive, "frontier.objective.interrupt", 1);
     }
 
     static List<ProposedEvent> planOpportunity(FrontierWorldState state, ScheduledAction action) {
         if (!state.bootstrap().hive().id().equals(action.subject())) throw new IllegalArgumentException("intercept opportunity has a foreign owner");
-        // A future scout observation may schedule this kind.  Until then, a cargo-load event
-        // is not hive perception and therefore cannot create a hidden omniscient attack.
-        return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
+        if (!action.kind().equals("frontier.objective.interrupt")) throw new IllegalArgumentException("intercept opportunity has an invalid action kind");
+        // The wake-up itself contains no target authority.  It identifies exactly one retained
+        // Scout fact, so a second simultaneous sighting cannot retarget this task and a stale
+        // wake-up cannot fall through into an unrelated growth objective.
+        Optional<HiveOperationKnowledge.Sighting> sighting = state.strategicPlans().hiveOperationKnowledge().entries().values().stream()
+                .filter(value -> interceptOpportunityId(value).equals(action.id()))
+                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(), HivePerceptionProcess.REFRESH_INTERVAL)).findFirst();
+        if (sighting.isEmpty()) {
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
+        }
+        return plan(state, action, false, true, action.id().value(), sighting);
     }
 
     /** Development profiles may retain the same economy without admitting a competing hive strike. */
@@ -93,6 +106,11 @@ final class StrategicObjectiveProcess {
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
                                             boolean allowHiveInterception, String eventIdentity) {
+        return plan(state, action, recurring, allowHiveInterception, eventIdentity, Optional.empty());
+    }
+
+    private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
+                                            boolean allowHiveInterception, String eventIdentity, Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
@@ -106,7 +124,7 @@ final class StrategicObjectiveProcess {
                 : new HivePerceptionProcess.Refresh(state.strategicPlans().hiveOperationKnowledge(), List.of());
         FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge()).withHiveOperationKnowledge(hivePerception.knowledge()));
         List<ProposedEvent> observedAndHealth = concatenate(concatenate(perception.events(), hivePerception.events()), health);
-        Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks());
+        Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
             return concatenate(observedAndHealth, next);
@@ -171,8 +189,9 @@ final class StrategicObjectiveProcess {
         return state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), transition.status()));
     }
 
-    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner, boolean allowHiveInterception, long now) {
-        return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state, allowHiveInterception, now)
+    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId owner, boolean allowHiveInterception, long now,
+                                                  Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
+        return state.bootstrap().hive().id().equals(owner) ? hiveCandidate(state, allowHiveInterception, now, interceptSighting)
                 : settlementCandidate(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner));
     }
     private static List<ProposedEvent> preemptForInterception(FrontierWorldState state, SubjectId owner, Optional<Candidate> candidate) {
@@ -237,8 +256,10 @@ final class StrategicObjectiveProcess {
         return SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent() && !state.humanPopulation().quarantined(settlement.id())
                 ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
-    private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now) {
-        Optional<HiveOperationKnowledge.Sighting> sighted = allowInterception ? state.strategicPlans().hiveOperationKnowledge().freshest(now, HivePerceptionProcess.REFRESH_INTERVAL) : Optional.empty();
+    private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
+                                                      Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
+        Optional<HiveOperationKnowledge.Sighting> sighted = allowInterception
+                ? interceptSighting.or(() -> state.strategicPlans().hiveOperationKnowledge().freshest(now, HivePerceptionProcess.REFRESH_INTERVAL)) : Optional.empty();
         if (sighted.isPresent()) {
             HiveOperationKnowledge.Sighting observation = sighted.orElseThrow();
             return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.empty(),
@@ -257,6 +278,12 @@ final class StrategicObjectiveProcess {
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
         return objective(owner, candidate, ordinal, null);
+    }
+    private static ScheduleId interceptOpportunityId(HiveOperationKnowledge.Sighting sighting) {
+        String suffix = sighting.operationId().value().replace(':', '-') + "-" + sighting.scoutId().value().replace(':', '-')
+                + "-" + sighting.position().x() + "-" + sighting.position().y() + "-" + sighting.position().z()
+                + "-" + sighting.observedAt();
+        return new ScheduleId("schedule:objective-intercept-opportunity-" + suffix);
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
         String stem = eventIdentity == null ? owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal

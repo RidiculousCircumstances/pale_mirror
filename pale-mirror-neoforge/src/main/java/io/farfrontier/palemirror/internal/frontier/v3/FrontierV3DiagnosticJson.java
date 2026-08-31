@@ -276,10 +276,12 @@ final class FrontierV3DiagnosticJson {
                 + ",\"travelArrived\":" + value.arrived()).orElse("");
         String hiveSighting = HivePerceptionProcess.observedCarrierPosition(state, operation.id())
                 .map(position -> ",\"hiveObservedCarrier\":" + position(position)).orElse("");
+        String hiveIntercept = HivePerceptionProcess.interceptTask(state, operation.id())
+                .map(task -> ",\"hiveIntercept\":{\"position\":" + position(task.position()) + ",\"status\":\"" + quote(task.status()) + "\"}").orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting
+                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept
                 + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
     }
 

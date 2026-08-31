@@ -10,6 +10,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -64,6 +67,30 @@ class HotScoutOperationObservationTest {
         assertInstanceOf(CommandResult.Rejected.class, submitResult(fixture.engine(), fixture.world(), fixture.observation()),
                 "a former physical Scout cannot retain strategic sight after its HOT lease stops");
         assertTrue(state(fixture.engine()).strategicPlans().hiveOperationKnowledge().entries().isEmpty());
+    }
+
+    @Test
+    void verifiedHotSightingSurvivesRestartThenCreatesOnePinnedInterceptTask() {
+        Fixture fixture = fixture();
+        submit(fixture.engine(), fixture.world(), fixture.observation());
+        assertInstanceOf(CommandResult.Rejected.class, submitResult(fixture.engine(), fixture.world(), fixture.observation()),
+                "the same HOT observation must not fork a second queued intercept wake-up");
+        assertEquals(1L, fixture.engine().checkpoint().schedules().stream()
+                .filter(action -> action.kind().equals("frontier.objective.interrupt")).count());
+
+        var beforeRestart = fixture.engine().checkpoint();
+        var recovered = FrontierEngines.recover(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(fixture.world(), 41L),
+                new RecoveryImage(fixture.world(), Optional.of(new SnapshotRecord(beforeRestart, beforeRestart.revision().value())), java.util.List.of()));
+        assertEquals(beforeRestart.schedules(), recovered.checkpoint().schedules(), "the one-shot planner wake-up must be durable before execution");
+
+        recovered.advanceTo(new SimInstant(beforeRestart.instant().ticks() + 1L), new WorkBudget(64, 512));
+        StrategicTask task = state(recovered).strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION).findFirst().orElseThrow();
+        assertEquals(fixture.observation().operationId(), task.operationTarget().orElseThrow());
+        assertEquals(fixture.observation().seenCarrierPosition(), task.operationObservationPosition().orElseThrow(),
+                "the task must execute the observed position, not re-query the current caravan coordinate");
+        assertEquals(1L, state(recovered).strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION).count());
     }
 
     private static Fixture fixture() {

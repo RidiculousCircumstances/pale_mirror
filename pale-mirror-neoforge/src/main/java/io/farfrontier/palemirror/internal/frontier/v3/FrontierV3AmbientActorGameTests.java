@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
@@ -195,6 +196,10 @@ public final class FrontierV3AmbientActorGameTests {
                         "the Scout must create one durable sighting only after seeing the real exact carrier");
                 helper.assertValueEqual(HivePerceptionProcess.observedCarrierPosition(state(runtime), operation.id()).orElseThrow(), lease.cargoPosition(),
                         "the retained strategic fact must use the materialized carrier's canonical anchor");
+                helper.assertTrue(runtime.advance(1, new WorkBudget(64, 512)).isPresent(),
+                        "the durable sighting wake-up must execute through the ordinary server-tick lane");
+                helper.assertValueEqual(HivePerceptionProcess.interceptTask(state(runtime), operation.id()).orElseThrow().position(), lease.cargoPosition(),
+                        "the resulting intercept task must retain the physically seen carrier anchor rather than re-querying the caravan");
                 ordinary.discard(); Entity carrier = helper.getLevel().getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 if (carrier != null) carrier.discard(); body.discard(); helper.succeed();
             } finally {

@@ -150,7 +150,7 @@ public final class FrontierV3SceneGameTests {
             // deliberately uses an off-template HOT scene, so load each fixture chunk
             // synchronously without creating a persistent force-load ticket.
             level.getChunkAt(position); prepareFloor(level, position);
-            addOwnedBody(helper, level, lease, lease.members().get(index), position);
+            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
         // addFreshEntity is accepted on this server tick but the UUID index becomes observable
         // on the next tick.  The proof is about strict admission, not an incidental indexing race.
@@ -341,7 +341,7 @@ public final class FrontierV3SceneGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-reclaim-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
         BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
         level.getChunkAt(handoff); prepareFloor(level, cargoPosition(handoff, lease));
@@ -384,7 +384,7 @@ public final class FrontierV3SceneGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
-            addOwnedBody(helper, level, lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
+            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
         }
 
         Zombie attacker = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
@@ -446,7 +446,7 @@ public final class FrontierV3SceneGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
         SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
                 .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
@@ -484,7 +484,7 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(56, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
         // The dedicated server runs fixture cells in parallel.  Scene-body UUIDs deliberately
         // derive from WorldId + actor, so a fixed fixture WorldId would collide with another
         // concurrent test using the same bootstrap actors.  The physical cell is stable for
@@ -501,7 +501,9 @@ public final class FrontierV3SceneGameTests {
         // vanilla TNT the same supported ground instead of allowing it to fall out of the fixture.
         for (int x = -2; x <= 8; x++) for (int z = -2; z <= 4; z++) prepareFloor(level, origin.offset(x, 0, z));
         for (int index = 0; index < lease.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, lease, lease.members().get(index), position);
+            BlockPos position = origin.offset(index & 1, 0, index / 2);
+            prepareFloor(level, position);
+            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
         BlockPos blastTarget = origin.east(3); prepareFloor(level, blastTarget); level.setBlock(blastTarget, Blocks.STONE.defaultBlockState(), 3);
         AtomicBoolean active = new AtomicBoolean(true), captured = new AtomicBoolean();
@@ -514,7 +516,10 @@ public final class FrontierV3SceneGameTests {
             }
         };
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ExplosionEvent.Detonate.class, listener);
-        helper.runAfterDelay(1L, () -> {
+        // In the full parallel suite entity indexing can lag one GameTest callback.  This
+        // fixture uses a deterministic UUID and needs the real indexed body, so wait two
+        // ordinary server ticks instead of asserting an incidental one-tick race.
+        helper.runAfterDelay(2L, () -> {
             try {
                 SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
                         .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
@@ -574,11 +579,13 @@ public final class FrontierV3SceneGameTests {
         int ordinal = lease.members().size();
         return anchor.offset((ordinal % 2) * 2 + 1, 0, (ordinal / 2) * 2);
     }
-    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, SceneLease lease, SceneMember member, BlockPos position) {
+    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member, BlockPos position) {
         boolean bioform = member.actorId().value().startsWith("bioform:");
         net.minecraft.world.entity.Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
-        body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setNoAi(true);
+        body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
+        if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
+                FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());

@@ -76,7 +76,9 @@ public final class FrontierV3CargoCarrierGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedCarrierStandsAboveLoadedRouteDeck(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 0));
+        // Keep the carrier inside this test's own template.  A distant relative coordinate is
+        // reclaimed by the parallel GameTest harness before the next-tick identity assertion.
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-deck-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-deck-test");
         BlockPos deck = cargoPosition(origin, lease); prepareFloor(level, deck); level.setBlock(deck, Blocks.GRAY_CARPET.defaultBlockState(), 3);

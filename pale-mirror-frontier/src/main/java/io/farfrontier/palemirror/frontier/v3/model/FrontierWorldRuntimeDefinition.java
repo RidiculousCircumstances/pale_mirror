@@ -187,7 +187,12 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof HotScoutOperationObserved observed) {
             try { HivePerceptionProcess.reduceHot(state, state.bootstrap().hive().id(), observed); }
             catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), observed)));
+            HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(observed.operationId(), observed.scoutId(),
+                    observed.seenCarrierPosition(), observed.observedAt());
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), observed),
+                    new ProposedEvent(state.bootstrap().hive().id(), new ScheduleEffect.Created(
+                            StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), sighting,
+                                    Math.addExact(command.submittedAt().ticks(), 1L))))));
         }
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());

@@ -224,17 +224,37 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
-    void cargoLoadingDoesNotGrantTheHiveHiddenKnowledgeOfAnOperation() {
+    void anInterceptWakeWithoutDurableScoutKnowledgeCannotCreateAnOmniscientAttack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
                 new WorldId("frontier:strategic-interrupt"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
 
-        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, operation, 100L));
+        HiveOperationKnowledge.Sighting untrusted = new HiveOperationKnowledge.Sighting(operation.id(), new SubjectId("bioform:west-1"),
+                operation.currentPosition(), 100L);
+        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, untrusted, 100L));
 
         assertEquals(1, planned.size());
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class, planned.getFirst().payload());
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected));
+    }
+
+    @Test
+    void anOlderInterceptWakeCannotRetargetToANewerSightingOfTheSameCaravan() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+                new WorldId("frontier:strategic-interrupt-retarget"), 91L));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        HiveOperationKnowledge.Sighting older = new HiveOperationKnowledge.Sighting(operation.id(), new SubjectId("bioform:west-1"), operation.currentPosition(), 100L);
+        HiveOperationKnowledge.Sighting replacement = new HiveOperationKnowledge.Sighting(operation.id(), older.scoutId(), operation.currentPosition().offset(4, 0, 0), 101L);
+        state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(HiveOperationKnowledge.empty().observe(older).observe(replacement)));
+
+        List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, older, 102L));
+
+        assertEquals(1, planned.size());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class, planned.getFirst().payload());
+        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected),
+                "a newer fact may schedule its own wake-up but never retarget an already queued one");
     }
 
     @Test
