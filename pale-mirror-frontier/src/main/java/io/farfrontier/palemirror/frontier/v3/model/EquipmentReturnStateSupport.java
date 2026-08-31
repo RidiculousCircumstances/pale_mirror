@@ -43,11 +43,6 @@ public final class EquipmentReturnStateSupport {
                 .equals(java.util.List.of(receipt.assaultId(), receipt.residentId(), receipt.itemId()))) {
             throw new IllegalArgumentException("equipment return receipt has foreign exact subjects");
         }
-        ExactItemStack item = inventory.items().get(receipt.itemId());
-        if (item == null || !item.custody().equals(receipt.targetSlot()) || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
-                || inventory.surfaces().get(receipt.targetSlot().containerId()) == null) {
-            throw new IllegalArgumentException("equipment return receipt lacks the exact returned depot stack");
-        }
     }
 
     static EquipmentReturnObservation requireReceipt(PhysicalEffectObservation evidence) {

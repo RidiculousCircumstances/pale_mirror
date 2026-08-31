@@ -207,10 +207,13 @@ class FrontierV3TestPilotScenarioTest {
     void permitsBoundedOrdinaryAttacksWithoutEntityIdentityAuthority() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
-                "maxDistance":8,"maxAttacks":4,"timeoutMs":30000}]}""");
+                "nameContains":"ARMED DEFENDER","maxDistance":8,"maxAttacks":4,"timeoutMs":30000}]}""");
         assertEquals(1, parsed.actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
                 "maxDistance":8,"maxAttacks":41,"timeoutMs":30000}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
+                "nameContains":"","maxDistance":8,"maxAttacks":4,"timeoutMs":30000}]}"""));
     }
 }

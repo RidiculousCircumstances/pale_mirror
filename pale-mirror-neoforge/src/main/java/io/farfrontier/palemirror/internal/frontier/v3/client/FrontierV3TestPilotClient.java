@@ -62,6 +62,7 @@ public final class FrontierV3TestPilotClient {
     private static int attackedEntityRuntimeId = -1;
     private static int entityAttackAttempts;
     private static long lastEntityAttackTick = Long.MIN_VALUE;
+    private static Vec3 lastAttackedEntityPosition;
     private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -81,7 +82,7 @@ public final class FrontierV3TestPilotClient {
             inspectSent = false;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
-            attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
+            attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
             captureBarrier = null; diagnostics.clear();
             clearPilotNoise(Minecraft.getInstance());
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
@@ -485,28 +486,47 @@ public final class FrontierV3TestPilotClient {
      * Repeats ordinary client attack packets against one initially nearest,
      * locally rendered entity. The scenario never supplies an entity UUID or
      * server-side target; after the first local choice, the client keeps that
-     * same body so a death cannot spill into a second nearby resident.
+     * same body so a death cannot spill into a second nearby resident. If that
+     * body walks a few blocks away, the normal client holds forward towards it
+     * rather than silently selecting another target.
      */
     private static void attackNearestEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
+        String expectedName = action.has("nameContains") ? action.get("nameContains").getAsString() : null;
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 8.0D;
         int maximumAttempts = action.get("maxAttacks").getAsInt();
         Entity target;
         if (attackedEntityRuntimeId < 0) {
             target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
-                            !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType))
+                            !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                                    && (expectedName == null || entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName)))
                     .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
                             .thenComparing(Entity::getUUID)).findFirst().orElse(null);
             if (target == null) { timeout(minecraft, action, "no nearby ordinary entity of type " + expectedType); return; }
             attackedEntityRuntimeId = target.getId();
         } else {
             target = minecraft.level.getEntity(attackedEntityRuntimeId);
-            if (target == null || target.isRemoved()) { advance("attack_nearest_entity"); return; }
+            if (target == null || target.isRemoved()) {
+                if (lastAttackedEntityPosition != null && approach(minecraft, lastAttackedEntityPosition, 0.35D)) return;
+                advance("attack_nearest_entity"); return;
+            }
             if (!BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).equals(expectedType)
-                    || target.distanceToSqr(minecraft.player) > maximum * maximum) {
-                throw new IllegalStateException("selected ordinary entity left the permitted attack range/type");
+                    || expectedName != null && (target.getCustomName() == null || !target.getCustomName().getString().contains(expectedName))) {
+                throw new IllegalStateException("selected ordinary entity changed its permitted type/name");
             }
         }
+        lastAttackedEntityPosition = target.position();
+        double distanceSquared = target.distanceToSqr(minecraft.player);
+        if (distanceSquared > (maximum + 8.0D) * (maximum + 8.0D)) {
+            throw new IllegalStateException("selected ordinary entity left the bounded local pursuit range");
+        }
+        if (distanceSquared > 3.5D * 3.5D) {
+            Vec3 current = minecraft.player.position(); Vec3 targetPosition = target.position();
+            minecraft.player.setYRot((float) (Mth.atan2(current.x - targetPosition.x, targetPosition.z - current.z) * Mth.RAD_TO_DEG));
+            minecraft.options.keyUp.setDown(true);
+            return;
+        }
+        minecraft.options.keyUp.setDown(false);
         long tick = minecraft.level.getGameTime();
         if (entityAttackAttempts < maximumAttempts && (lastEntityAttackTick == Long.MIN_VALUE || tick - lastEntityAttackTick >= 12L)) {
             minecraft.gameMode.attack(minecraft.player, target);
@@ -523,6 +543,14 @@ public final class FrontierV3TestPilotClient {
             return;
         }
         timeout(minecraft, action, "timed out attacking ordinary entity " + expectedType);
+    }
+
+    /** Walks only to the final locally rendered position of the already selected ordinary target. */
+    private static boolean approach(Minecraft minecraft, Vec3 target, double radius) {
+        Vec3 current = minecraft.player.position(); double dx = target.x - current.x, dz = target.z - current.z;
+        if (dx * dx + dz * dz <= radius * radius) { minecraft.options.keyUp.setDown(false); return false; }
+        minecraft.player.setYRot((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG)); minecraft.options.keyUp.setDown(true);
+        return true;
     }
 
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
@@ -700,7 +728,7 @@ public final class FrontierV3TestPilotClient {
         index++; actionStartedTick = -1L; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
-        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
+        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
         else if (reachedFrame != null) {
             JsonObject frame = reachedFrame;

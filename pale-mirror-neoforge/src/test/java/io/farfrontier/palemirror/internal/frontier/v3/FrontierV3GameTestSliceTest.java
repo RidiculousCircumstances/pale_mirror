@@ -21,6 +21,7 @@ class FrontierV3GameTestSliceTest {
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-object-boards"));
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-equipment-issue"));
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-equipment-return"));
+        assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-equipment-death"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-container-recovery"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-scene-explosion"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-resource-harvest"));

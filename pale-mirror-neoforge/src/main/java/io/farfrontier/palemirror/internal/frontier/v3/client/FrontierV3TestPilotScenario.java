@@ -227,7 +227,9 @@ final class FrontierV3TestPilotScenario {
 
     /** Bounded ordinary local attacks; the scenario deliberately contains no entity identity. */
     private static boolean validEntityAttack(JsonObject action) {
-        return validEntityInteraction(action) && wholeWithin(action, "maxAttacks", 1, 40);
+        return validEntityInteraction(action) && wholeWithin(action, "maxAttacks", 1, 40)
+                && (!action.has("nameContains") || action.get("nameContains").isJsonPrimitive()
+                && !action.get("nameContains").getAsString().isBlank() && action.get("nameContains").getAsString().length() <= 72);
     }
 
     private static boolean boundedOptionalNumber(JsonObject action, String field, double minimum, double maximum) {

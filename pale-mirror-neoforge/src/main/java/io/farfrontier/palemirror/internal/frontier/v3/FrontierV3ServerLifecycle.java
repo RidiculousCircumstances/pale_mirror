@@ -340,9 +340,13 @@ public final class FrontierV3ServerLifecycle {
     public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && (FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
-                || FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source));
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        boolean sceneBody = FrontierV3SceneExecutor.recognizes(runtime, entity);
+        boolean ambientBody = FrontierV3AmbientActorExecutor.recognizes(runtime, entity);
+        if (!sceneBody && !ambientBody) return false;
+        FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, entity);
+        return sceneBody ? FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
+                : FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source);
     }
 
     /** Captures an ambient body on normal world departure; false means it is not v3-owned. */

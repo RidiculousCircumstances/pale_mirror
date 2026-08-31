@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -69,6 +70,10 @@ class HumanTacticalFunctionProjectionTest {
                 new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
                 .observation().orElseThrow());
+
+        FrontierWorldState afterObservedLoss = state.withInventory(state.inventory().destroyObservedItem(sword, new InventoryCustody.Actor(militia)));
+        assertEquals(afterObservedLoss, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(afterObservedLoss)));
     }
 
     @Test
@@ -124,6 +129,11 @@ class HumanTacticalFunctionProjectionTest {
                 new PhysicalIntentTransition(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
                 .observation().orElseThrow());
+
+        FrontierWorldState afterPlayerPickup = state.withInventory(state.inventory().moveObservedItem(sword,
+                new InventoryCustody.ContainerSlot(depot, sourceSlot), new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000043"))));
+        assertEquals(afterPlayerPickup, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(afterPlayerPickup)));
     }
 
     private static Fixture fixture() {

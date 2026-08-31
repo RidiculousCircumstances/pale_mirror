@@ -27,18 +27,13 @@ public final class EquipmentIssueStateSupport {
     }
 
     /**
-     * Confirmed state retains the former exact source slot in the immutable receipt, while the
-     * stack itself has moved to the named actor. This is deliberately different from admission.
+     * A receipt is immutable evidence of the completed hand-off, not a perpetual custody claim.
+     * The exact stack may subsequently be returned, dropped, picked up or destroyed. Those later
+     * transitions must not invalidate this historical evidence during snapshot/WAL recovery.
      */
     public static void validateReceiptForRecovery(ExactInventory inventory, PhysicalIntent intent, EquipmentIssueObservation receipt) {
         if (intent.kind() != PhysicalIntentKind.EQUIPMENT_ISSUE || !intent.subjectIds().equals(java.util.List.of(receipt.assaultId(), receipt.residentId(), receipt.itemId()))) {
             throw new IllegalArgumentException("equipment issue receipt has foreign exact subjects");
-        }
-        ExactItemStack item = inventory.items().get(receipt.itemId());
-        if (item == null || !(item.custody() instanceof InventoryCustody.Actor actor) || !actor.actorId().equals(receipt.residentId())
-                || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
-                || inventory.surfaces().get(receipt.sourceSlot().containerId()) == null) {
-            throw new IllegalArgumentException("equipment issue receipt lacks the exact issued actor stack");
         }
     }
 
