@@ -13,13 +13,13 @@ import java.util.PriorityQueue;
 import java.util.Set;
 
 /** Compiles a bounded exact approach to one declared public port slot. */
-final class OperationAssemblyCorridor {
+public final class OperationAssemblyCorridor {
     private static final int MAX_SEARCHED_CELLS = 16_384;
     private static final List<Step> STEPS = List.of(new Step(0, -1), new Step(-1, 0), new Step(1, 0), new Step(0, 1));
 
     private OperationAssemblyCorridor() { }
 
-    static List<BlockPosition> compile(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
+    public static List<BlockPosition> compile(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
         Objects.requireNonNull(state, "assembly state"); Objects.requireNonNull(actorId, "assembly actor"); Objects.requireNonNull(destination, "assembly destination");
         BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").position();
         Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);

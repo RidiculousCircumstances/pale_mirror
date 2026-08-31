@@ -7,10 +7,10 @@ import java.util.Comparator;
 import java.util.List;
 
 /** Pure, fixed-point rules for the first deterministic COLD engagement slice. */
-final class RouteEngagementCombatRules {
+public final class RouteEngagementCombatRules {
     private RouteEngagementCombatRules() { }
 
-    static FixedScalar damage(FrontierWorldState state, SubjectId actor) {
+    public static FixedScalar damage(FrontierWorldState state, SubjectId actor) {
         Bioform bioform = bioform(state, actor);
         if (bioform != null) return switch (bioform.role()) {
             case GUARD -> FixedScalar.whole(4);
@@ -25,11 +25,11 @@ final class RouteEngagementCombatRules {
         };
     }
 
-    static List<SubjectId> livingAttackers(FrontierWorldState state, RouteEngagement engagement) {
+    public static List<SubjectId> livingAttackers(FrontierWorldState state, RouteEngagement engagement) {
         return engagement.attackerIds().stream().filter(id -> alive(state, id)).sorted().toList();
     }
 
-    static List<SubjectId> livingDefenders(FrontierWorldState state, RouteEngagement engagement) {
+    public static List<SubjectId> livingDefenders(FrontierWorldState state, RouteEngagement engagement) {
         return state.operations().get(engagement.operationId()).participantIds().stream().filter(id -> alive(state, id)).sorted().toList();
     }
 
@@ -42,12 +42,12 @@ final class RouteEngagementCombatRules {
         throw new IllegalArgumentException("route engagement still has living combatants");
     }
 
-    static SubjectId choose(List<SubjectId> candidates, int epoch) {
+    public static SubjectId choose(List<SubjectId> candidates, int epoch) {
         if (candidates.isEmpty()) throw new IllegalArgumentException("COLD combat has no living candidate");
         return candidates.get(Math.floorMod(epoch, candidates.size()));
     }
 
-    static boolean alive(FrontierWorldState state, SubjectId actor) {
+    public static boolean alive(FrontierWorldState state, SubjectId actor) {
         ActorLocation location = state.actorLocations().get(actor);
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE;
     }

@@ -7,14 +7,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Map;
 
 /** Validates the durable exact-member boundary for a non-replayable HOT scene strike. */
-final class SceneStrikeStateSupport {
+public final class SceneStrikeStateSupport {
     private SceneStrikeStateSupport() { }
 
-    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         validateIntent(state.operations(), state.sceneLeases(), state.actorLocations(), intent);
     }
 
-    static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
+    public static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                Map<SubjectId, ActorLocation> actors, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return;
         SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> FrontierSceneBehaviors.owns(value, intent.causeSubjectId()))
@@ -47,7 +47,7 @@ final class SceneStrikeStateSupport {
         validateMembers(intent, observation);
     }
 
-    static SubjectId owner(FrontierWorldState state, PhysicalIntent intent) {
+    public static SubjectId owner(FrontierWorldState state, PhysicalIntent intent) {
         SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
                 .filter(value -> FrontierSceneBehaviors.owns(value, intent.causeSubjectId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("scene strike has no HOT owned lease"));

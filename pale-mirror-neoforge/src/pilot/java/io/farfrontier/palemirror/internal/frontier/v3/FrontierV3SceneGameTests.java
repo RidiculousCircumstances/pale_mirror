@@ -13,7 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;

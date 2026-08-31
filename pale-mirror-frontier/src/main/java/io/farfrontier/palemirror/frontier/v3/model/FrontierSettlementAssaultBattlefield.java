@@ -12,11 +12,11 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Pure compiler for the exact, local floor columns of a settlement assault. */
-final class FrontierSettlementAssaultBattlefield {
+public final class FrontierSettlementAssaultBattlefield {
     private static final int MAX_HANDOFF_RADIUS = 32;
     private FrontierSettlementAssaultBattlefield() { }
 
-    static Optional<List<BlockPosition>> attackerFloors(FrontierWorldState state, HiveSettlementKnowledge.Sighting sighting,
+    public static Optional<List<BlockPosition>> attackerFloors(FrontierWorldState state, HiveSettlementKnowledge.Sighting sighting,
                                                          List<SubjectId> defenderIds, int attackerCount) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), sighting.settlementId());
         if (!settlement.anchor().equals(sighting.settlementAnchor()) || attackerCount < 1 || attackerCount > SettlementAssault.MAX_ATTACKERS) {
@@ -34,7 +34,7 @@ final class FrontierSettlementAssaultBattlefield {
         return choices.size() == attackerCount ? Optional.of(choices) : Optional.empty();
     }
 
-    static Optional<SettlementAssaultSceneCandidate> candidate(FrontierWorldState state, SettlementAssault assault) {
+    public static Optional<SettlementAssaultSceneCandidate> candidate(FrontierWorldState state, SettlementAssault assault) {
         if ((assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE && assault.status() != SettlementAssaultStatus.COLD_COMBAT)
                 || !FrontierSettlementAssaultSceneSupport.targetIntact(state, assault)) {
             return Optional.empty();

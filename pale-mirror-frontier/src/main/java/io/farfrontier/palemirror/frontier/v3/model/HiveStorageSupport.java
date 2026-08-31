@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 /** Resolves operational exact hive stores across bootstrap and growth state. */
-final class HiveStorageSupport {
+public final class HiveStorageSupport {
     private HiveStorageSupport() { }
 
     static boolean isOperationalStore(FrontierWorldState state, SubjectId containerId) {
@@ -12,7 +12,7 @@ final class HiveStorageSupport {
                         && state.isHiveOrganOperational(organ.id()));
     }
 
-    static HiveNest operationalNestForStore(FrontierWorldState state, SubjectId containerId) {
+    public static HiveNest operationalNestForStore(FrontierWorldState state, SubjectId containerId) {
         HiveOrgan store = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
                 .filter(organ -> organ.kind() == HiveOrganKind.STORE && organ.containerId().equals(java.util.Optional.of(containerId)))
                 .filter(organ -> state.isHiveOrganOperational(organ.id())).findFirst()

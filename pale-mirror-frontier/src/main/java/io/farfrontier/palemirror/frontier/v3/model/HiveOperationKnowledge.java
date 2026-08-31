@@ -24,11 +24,11 @@ public final class HiveOperationKnowledge {
 
     public static HiveOperationKnowledge empty() { return new HiveOperationKnowledge(Map.of()); }
     public Map<SubjectId, Sighting> entries() { return sightings; }
-    Optional<Sighting> freshest(long now, long maximumAge) {
+    public Optional<Sighting> freshest(long now, long maximumAge) {
         return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, maximumAge))
                 .sorted(java.util.Comparator.comparingLong(Sighting::observedAt).reversed().thenComparing(Sighting::operationId)).findFirst();
     }
-    HiveOperationKnowledge observe(Sighting sighting) {
+    public HiveOperationKnowledge observe(Sighting sighting) {
         Map<SubjectId, Sighting> next = new LinkedHashMap<>(sightings); next.put(sighting.operationId(), sighting);
         while (next.size() > MAX_SIGHTINGS) next.remove(next.values().stream()
                 .min(java.util.Comparator.comparingLong(Sighting::observedAt).thenComparing(Sighting::operationId)).orElseThrow().operationId());

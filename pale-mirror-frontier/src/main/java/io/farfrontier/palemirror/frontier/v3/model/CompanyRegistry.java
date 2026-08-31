@@ -40,7 +40,7 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
     public CompanyRegistry(Map<SubjectId, Company> companies) { this(companies, Map.of(), MarketOrderBook.empty()); }
     public static CompanyRegistry empty() { return new CompanyRegistry(Map.of(), Map.of(), MarketOrderBook.empty()); }
 
-    CompanyRegistry register(Company company) {
+    public CompanyRegistry register(Company company) {
         Objects.requireNonNull(company, "company");
         if (companies.containsKey(company.id())) throw new IllegalArgumentException("company identity already exists: " + company.id().value());
         if (companies.values().stream().anyMatch(existing -> existing.settlementId().equals(company.settlementId())
@@ -51,7 +51,7 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         return new CompanyRegistry(next, employmentContracts, market);
     }
 
-    CompanyRegistry openEmployment(EmploymentContract contract) {
+    public CompanyRegistry openEmployment(EmploymentContract contract) {
         Objects.requireNonNull(contract, "employment contract");
         Company company = companies.get(contract.companyId());
         if (company == null || company.status() != CompanyStatus.ACTIVE) throw new IllegalArgumentException("employment needs an active registered company");
@@ -65,31 +65,31 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         return new CompanyRegistry(companies, next, market);
     }
 
-    CompanyRegistry settle(SubjectId contractId) {
+    public CompanyRegistry settle(SubjectId contractId) {
         EmploymentContract contract = employmentContracts.get(Objects.requireNonNull(contractId, "employment contract id"));
         if (contract == null) throw new IllegalArgumentException("unknown employment contract");
         Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.settleOneCommittedJob());
         return new CompanyRegistry(companies, next, market);
     }
 
-    CompanyRegistry terminate(SubjectId contractId) {
+    public CompanyRegistry terminate(SubjectId contractId) {
         EmploymentContract contract = employmentContracts.get(Objects.requireNonNull(contractId, "employment contract id"));
         if (contract == null) throw new IllegalArgumentException("unknown employment contract");
         Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.terminate());
         return new CompanyRegistry(companies, next, market);
     }
 
-    CompanyRegistry withMarket(MarketOrderBook nextMarket) {
+    public CompanyRegistry withMarket(MarketOrderBook nextMarket) {
         return new CompanyRegistry(companies, employmentContracts, nextMarket);
     }
 
-    Optional<Company> activeWorksCompany(SubjectId settlementId) {
+    public Optional<Company> activeWorksCompany(SubjectId settlementId) {
         return companies.values().stream().filter(company -> company.settlementId().equals(settlementId)
                 && company.purpose() == CompanyPurpose.WORKS && company.status() == CompanyStatus.ACTIVE)
                 .sorted(Comparator.comparing(Company::id)).findFirst();
     }
 
-    Optional<EmploymentContract> activeEmployment(SubjectId companyId, SubjectId residentId) {
+    public Optional<EmploymentContract> activeEmployment(SubjectId companyId, SubjectId residentId) {
         return employmentContracts.values().stream().filter(contract -> contract.companyId().equals(companyId)
                 && contract.residentId().equals(residentId) && contract.status() == EmploymentContractStatus.ACTIVE)
                 .sorted(Comparator.comparing(EmploymentContract::id)).findFirst();

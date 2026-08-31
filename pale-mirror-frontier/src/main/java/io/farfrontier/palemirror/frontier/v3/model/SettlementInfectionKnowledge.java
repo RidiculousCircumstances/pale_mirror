@@ -32,9 +32,9 @@ public final class SettlementInfectionKnowledge {
     public static SettlementInfectionKnowledge empty() { return new SettlementInfectionKnowledge(Map.of()); }
 
     public Map<SubjectId, Map<InfectionCell, KnownInfection>> entries() { return bySettlement; }
-    Map<InfectionCell, KnownInfection> known(SubjectId settlementId) { return bySettlement.getOrDefault(settlementId, Map.of()); }
+    public Map<InfectionCell, KnownInfection> known(SubjectId settlementId) { return bySettlement.getOrDefault(settlementId, Map.of()); }
 
-    SettlementInfectionKnowledge observe(SubjectId settlementId, InfectionCell cell, FixedRatio intensity, long observedAt) {
+    public SettlementInfectionKnowledge observe(SubjectId settlementId, InfectionCell cell, FixedRatio intensity, long observedAt) {
         Objects.requireNonNull(settlementId, "knowledge settlement"); Objects.requireNonNull(cell, "knowledge cell"); Objects.requireNonNull(intensity, "knowledge intensity");
         if (observedAt < 0L) throw new IllegalArgumentException("knowledge observation tick must be non-negative");
         Map<SubjectId, Map<InfectionCell, KnownInfection>> next = new LinkedHashMap<>(bySettlement);
@@ -49,7 +49,7 @@ public final class SettlementInfectionKnowledge {
         bySettlement.forEach((settlement, cells) -> {
             Settlement owner = FrontierWorldStateSupport.settlement(bootstrap, settlement);
             for (KnownInfection known : cells.values()) {
-                if (!SettlementPerceptionProcess.locallyObservable(owner, known.cell())) {
+                if (!locallyObservable(owner, known.cell())) {
                     throw new IllegalArgumentException("settlement retained non-local infection knowledge");
                 }
             }
@@ -58,6 +58,15 @@ public final class SettlementInfectionKnowledge {
 
     @Override public boolean equals(Object other) { return other instanceof SettlementInfectionKnowledge value && bySettlement.equals(value.bySettlement); }
     @Override public int hashCode() { return bySettlement.hashCode(); }
+
+    private static boolean locallyObservable(Settlement settlement, InfectionCell cell) {
+        return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
+                .anyMatch(facility -> squaredDistance(facility.anchor(), cell.originAtY(facility.anchor().y())) <= 25_600L);
+    }
+
+    private static long squaredDistance(BlockPosition left, BlockPosition right) {
+        long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z;
+    }
 
     public record KnownInfection(InfectionCell cell, FixedRatio intensity, long observedAt) {
         public KnownInfection {

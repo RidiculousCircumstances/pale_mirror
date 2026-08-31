@@ -7,10 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Atomic canonical mutations spanning COLD combat actors, task ownership and route fate. */
-final class FrontierRouteEngagementStateSupport {
+public final class FrontierRouteEngagementStateSupport {
     private FrontierRouteEngagementStateSupport() { }
 
-    static FrontierWorldState strike(FrontierWorldState state, RouteEngagementStrike strike) {
+    public static FrontierWorldState strike(FrontierWorldState state, RouteEngagementStrike strike) {
         RouteEngagement engagement = requireColdEngagement(state, strike.engagementId());
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
             throw new IllegalArgumentException("COLD strike cannot mutate an ambient-leased combatant");
@@ -35,7 +35,7 @@ final class FrontierRouteEngagementStateSupport {
         return copy(state, actors, state.operations(), plans);
     }
 
-    static FrontierWorldState resolve(FrontierWorldState state, RouteEngagementResolved resolved) {
+    public static FrontierWorldState resolve(FrontierWorldState state, RouteEngagementResolved resolved) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resolved.engagementId());
         if (engagement == null || engagement.status() == RouteEngagementStatus.RESOLVED || engagement.status() == RouteEngagementStatus.HOT) {
             throw new IllegalArgumentException("route engagement cannot be resolved from its current lifecycle state");

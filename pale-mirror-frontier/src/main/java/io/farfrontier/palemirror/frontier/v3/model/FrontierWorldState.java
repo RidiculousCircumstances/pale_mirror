@@ -283,8 +283,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
                 boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING
                         && routeConstruction != null && routeConstruction.cargoId().isEmpty()
-                        && (subject.equals(RouteConstructionProcess.cargoId(routeConstruction))
-                        || subject.equals(RouteConstructionProcess.cargoItemId(routeConstruction)));
+                        && (subject.equals(routeConstruction.plannedCargoId())
+                        || subject.equals(routeConstruction.plannedCargoItemId()));
                 if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
@@ -320,7 +320,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
      * {@link #validateComplete()} before WAL durability; this is deliberately package-private
      * so adapters and codecs keep the strict public constructor boundary.
      */
-    static <T> T duringReducerTransition(Supplier<T> transition) {
+    public static <T> T duringReducerTransition(Supplier<T> transition) {
         Objects.requireNonNull(transition, "transition");
         int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
         DEFERRED_FULL_VALIDATION_DEPTH.set(depth + 1);
@@ -468,14 +468,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState withResourceSites(ResourceSiteState nextSites) { return withChanges(FrontierWorldStateUpdate.begin().resourceSites(nextSites)); }
     public FrontierWorldState withHumanPopulation(HumanPopulation nextPopulation) { return withChanges(FrontierWorldStateUpdate.begin().humanPopulation(nextPopulation)); }
     public FrontierWorldState withCompanies(CompanyRegistry nextCompanies) { return withChanges(FrontierWorldStateUpdate.begin().companies(nextCompanies)); }
-    FrontierWorldState registerCompany(Company company) {
+    public FrontierWorldState registerCompany(Company company) {
         Objects.requireNonNull(company, "company");
         EconomicLedger economics = inventory.economics().register(new EconomicAccount(company.id(), EconomicOwnerKind.COMPANY,
                 EconomicAccountStatus.ACTIVE, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO));
         return withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.withEconomics(economics)).companies(companies.register(company)));
     }
-    FrontierWorldState openEmployment(EmploymentContract contract) {
+    public FrontierWorldState openEmployment(EmploymentContract contract) {
         Objects.requireNonNull(contract, "employment contract");
         Company company = companies.companies().get(contract.companyId());
         ResidentProfile resident = humanPopulation.resident(contract.residentId());
@@ -495,7 +495,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public List<SceneEngagementCandidate> coldEngagementSceneCandidates() { return FrontierSceneEngagementSupport.candidates(this); }
     public List<SettlementAssaultSceneCandidate> coldSettlementAssaultSceneCandidates() { return FrontierSettlementAssaultSceneSupport.candidates(this); }
     public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) { return withActorLocation(actor, position, strategicPlans); }
-    FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
+    public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
         Objects.requireNonNull(actor, "actor"); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
         Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations); next.put(actor, actorLocations.get(actor).withPosition(position));
@@ -530,16 +530,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     /** A COLD job reserves its former source slot even though its exact stack is held by the job. */
-    boolean productionHoldReserves(InventoryCustody.ContainerSlot slot) {
+    public boolean productionHoldReserves(InventoryCustody.ContainerSlot slot) {
         Objects.requireNonNull(slot, "container slot");
         return productionJobs.values().stream().map(ProductionJob::inputHold).filter(ProductionInputHold.Cold.class::isInstance)
                 .map(ProductionInputHold.Cold.class::cast).map(ProductionInputHold.Cold::item)
                 .anyMatch(item -> item.custody().equals(slot));
     }
-    boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
+    public boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
         return inventory.itemAt(slot.containerId(), slot.slot()).isEmpty() && !productionHoldReserves(slot);
     }
-    java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
+    public java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
         ContainerRecord container = inventory.containers().get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         for (int slot = 0; slot < container.slotCount(); slot++) {
@@ -590,7 +590,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    FrontierWorldState cancelProductionJob(SubjectId jobId) {
+    public FrontierWorldState cancelProductionJob(SubjectId jobId) {
         ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
         ExactInventory nextInventory = switch (job.inputHold()) {
@@ -836,7 +836,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             FrontierWorldState consumedState = next(actorLocations, structureConditions, infection, inventory.consume(itemId, consumed.consumedCount()), productionJobs, contracts, operations,
                     next, observations, sceneLeases, consumedColony, structureDamage, physicalDeltas, ambientLeases);
             if (humanPopulation.provisions().values().stream().anyMatch(provision -> provision.activeIntentId().filter(current.id()::equals).isPresent())) {
-                return SettlementProvisionProcess.reducePhysicalConsumptionAfterInventory(consumedState, current, consumed);
+                return SettlementProvisionStateSupport.reducePhysicalConsumptionAfterInventory(consumedState, current, consumed);
             }
             return consumedState;
         }
@@ -896,7 +896,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         LogisticsHistory nextHistory = logisticsHistory.record(receipt);
         return withChanges(FrontierWorldStateUpdate.begin().contracts(nextContracts).operations(nextOperations).logisticsHistory(nextHistory));
     }
-    boolean canCompactTerminalLogistics(SubjectId operationId) {
+    public boolean canCompactTerminalLogistics(SubjectId operationId) {
         try { terminalLogisticsReceipt(operationId, 0L); return true; }
         catch (IllegalArgumentException notReady) { return false; }
     }

@@ -13,7 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Pure invariant helpers shared by the canonical frontier world state. */
-final class FrontierWorldStateSupport {
+public final class FrontierWorldStateSupport {
     private FrontierWorldStateSupport() { }
 
     static Set<SubjectId> bioformIds(FrontierBootstrap bootstrap) {
@@ -22,7 +22,7 @@ final class FrontierWorldStateSupport {
         return ids;
     }
 
-    static Bioform bioform(FrontierBootstrap bootstrap, HiveColony colony, SubjectId id) {
+    public static Bioform bioform(FrontierBootstrap bootstrap, HiveColony colony, SubjectId id) {
         return java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream(), colony.spawnedBioforms().values().stream())
                 .filter(bioform -> bioform.id().equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown hive bioform"));
     }
@@ -33,7 +33,7 @@ final class FrontierWorldStateSupport {
         return ids;
     }
 
-    static Settlement settlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    public static Settlement settlement(FrontierBootstrap bootstrap, SubjectId settlementId) {
         return bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown production settlement: " + settlementId.value()));
     }
@@ -49,24 +49,24 @@ final class FrontierWorldStateSupport {
                 .orElseThrow(() -> new IllegalArgumentException("unknown structure: " + structureId.value()));
     }
 
-    static SubjectId structureSettlement(FrontierBootstrap bootstrap, SubjectId structureId) {
+    public static SubjectId structureSettlement(FrontierBootstrap bootstrap, SubjectId structureId) {
         return bootstrap.settlements().stream().filter(settlement -> settlement.structures().stream()
                         .anyMatch(structure -> structure.id().equals(structureId))).map(Settlement::id).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown settlement structure: " + structureId.value()));
     }
 
-    static boolean isHiveOrgan(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
+    public static boolean isHiveOrgan(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
         return bootstrap.hive().organs().stream().anyMatch(organ -> organ.id().equals(ownerId)) || colony.addedOrgans().containsKey(ownerId);
     }
 
-    static SubjectId semanticOwner(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
+    public static SubjectId semanticOwner(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
         if (ownerId.value().startsWith("structure:")) return structureSettlement(bootstrap, ownerId);
         if (isHiveOrgan(bootstrap, colony, ownerId)) return bootstrap.hive().id();
         if (FrontierRouteNetwork.OWNER.equals(ownerId)) return ownerId;
         throw new IllegalArgumentException("unknown repairable semantic owner: " + ownerId.value());
     }
 
-    static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
+    public static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) return resident.settlementId();
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
@@ -79,14 +79,14 @@ final class FrontierWorldStateSupport {
         return resident;
     }
 
-    static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
                 .filter(resident -> workCapable(state, resident))
                 .sorted(byRoleSkill(role)).findFirst();
     }
 
-    static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+    public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
                 .filter(resident -> workCapable(state, resident))
@@ -96,7 +96,7 @@ final class FrontierWorldStateSupport {
                 .sorted(byRoleSkill(role)).findFirst();
     }
 
-    static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
+    public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
                 .filter(resident -> workCapable(state, resident))
@@ -131,17 +131,17 @@ final class FrontierWorldStateSupport {
         };
     }
 
-    static boolean activeOperationClaim(FrontierWorldState state, SubjectId residentId) {
+    public static boolean activeOperationClaim(FrontierWorldState state, SubjectId residentId) {
         return state.operations().values().stream().anyMatch(operation -> retainsParticipantClaim(state, operation)
                 && operation.participantIds().contains(residentId));
     }
 
-    static boolean activeEmploymentClaim(FrontierWorldState state, SubjectId residentId) {
+    public static boolean activeEmploymentClaim(FrontierWorldState state, SubjectId residentId) {
         return state.companies().employmentContracts().values().stream().anyMatch(contract -> contract.residentId().equals(residentId)
                 && contract.status() == EmploymentContractStatus.ACTIVE);
     }
 
-    static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
+    public static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
         return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
                 && patrol.guardId().equals(residentId));
     }
@@ -162,17 +162,17 @@ final class FrontierWorldStateSupport {
         };
     }
 
-    static void requirePosition(WorldBounds bounds, BlockPosition position) {
+    public static void requirePosition(WorldBounds bounds, BlockPosition position) {
         if (!bounds.contains(position)) throw new IllegalArgumentException("canonical state position is outside frontier bounds");
     }
 
-    static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
+    public static SubjectId itemOwner(FrontierWorldState state, ExactItemCustodyChanged changed) {
         ExactItemStack item = state.inventory().items().get(changed.itemId());
         if (item == null || !item.custody().equals(changed.from())) throw new IllegalArgumentException("item custody observation has no matching exact item");
         return item.economicOwnerId();
     }
 
-    static SubjectId itemOwner(FrontierWorldState state, ExactItemDestroyed destroyed) {
+    public static SubjectId itemOwner(FrontierWorldState state, ExactItemDestroyed destroyed) {
         ExactItemStack item = state.inventory().items().get(destroyed.itemId());
         if (item == null || !item.custody().equals(destroyed.source())) throw new IllegalArgumentException("destroyed item has no matching exact item");
         return item.economicOwnerId();
@@ -196,7 +196,7 @@ final class FrontierWorldStateSupport {
                 new InfectionMetadata(input, Objects.requireNonNull(frontier, "infection frontier")));
     }
 
-    static FrontierInfectionFrontier infectionFrontier(
+    public static FrontierInfectionFrontier infectionFrontier(
             Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection, WorldBounds bounds
     ) {
         if (infection instanceof ValidatedImmutableMap<?, ?> marker && marker.attachment instanceof InfectionMetadata metadata) return metadata.frontier();

@@ -41,8 +41,8 @@ NEOFORGE_PILOT = Path(
     "pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3"
 )
 RUNTIME_DEFINITION = FRONTIER_MAIN / "runtime/FrontierWorldRuntimeDefinition.java"
-COMMAND_PLANNER = FRONTIER_MAIN / "model/FrontierWorldCommandPlanner.java"
-EVENT_REDUCER = FRONTIER_MAIN / "model/FrontierWorldEventReducer.java"
+COMMAND_PLANNER = FRONTIER_MAIN / "process/FrontierWorldCommandPlanner.java"
+EVENT_REDUCER = FRONTIER_MAIN / "process/FrontierWorldEventReducer.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 MODEL_FORBIDDEN_IMPORT = re.compile(
@@ -101,7 +101,7 @@ def collect(root: Path) -> dict[str, Any]:
         root, (FRONTIER_MAIN,), ENUM_POSITION_TAG, codec_only=True
     )
     wire_tag_position_derivations = _counts(
-        root, (FRONTIER_MAIN / "model",), WIRE_TAG_POSITION_DERIVATION
+        root, (FRONTIER_MAIN / "persistence",), WIRE_TAG_POSITION_DERIVATION
     )
     wire_tag_position_derivations = {
         path: count

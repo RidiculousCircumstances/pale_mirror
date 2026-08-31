@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Pure atomic transitions that couple the exact-person register to the actor index. */
-final class HumanPopulationStateSupport {
+public final class HumanPopulationStateSupport {
     private HumanPopulationStateSupport() { }
 
     static FrontierWorldState recordMigration(FrontierWorldState state, ResidentMigrated migration) {
@@ -34,7 +34,7 @@ final class HumanPopulationStateSupport {
         return copy(state, actors, state.humanPopulation().completeMigration(migration.residentId(), migration.destinationHouseholdId(), migration.destinationSettlementId()));
     }
 
-    static FrontierWorldState startMigration(FrontierWorldState state, ResidentMigrationJourney journey) {
+    public static FrontierWorldState startMigration(FrontierWorldState state, ResidentMigrationJourney journey) {
         Objects.requireNonNull(journey, "migration journey");
         ActorLocation actor = state.actorLocations().get(journey.residentId()); ResidentProfile resident = state.humanPopulation().resident(journey.residentId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || resident == null || !resident.settlementId().equals(journey.originSettlementId())
@@ -48,7 +48,7 @@ final class HumanPopulationStateSupport {
         return copy(state, state.actorLocations(), state.humanPopulation().startMigration(journey));
     }
 
-    static FrontierWorldState advanceMigration(FrontierWorldState state, ResidentMigrationAdvanced advanced) {
+    public static FrontierWorldState advanceMigration(FrontierWorldState state, ResidentMigrationAdvanced advanced) {
         ResidentMigrationJourney journey = requireJourney(state, advanced.residentId()); ActorLocation actor = state.actorLocations().get(advanced.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() <= journey.routeIndex()
                 || advanced.nextRouteIndex() > journey.routeIndex() + ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS
@@ -61,7 +61,7 @@ final class HumanPopulationStateSupport {
         return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
     }
 
-    static FrontierWorldState advanceMigrationHot(FrontierWorldState state, ResidentTransitAdvanced advanced) {
+    public static FrontierWorldState advanceMigrationHot(FrontierWorldState state, ResidentTransitAdvanced advanced) {
         ResidentMigrationJourney journey = requireJourney(state, advanced.residentId());
         ActorLocation actor = state.actorLocations().get(advanced.residentId()); AmbientActorLease lease = state.ambientLeases().get(advanced.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() != journey.nextRouteIndex()
@@ -74,7 +74,7 @@ final class HumanPopulationStateSupport {
         return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
     }
 
-    static FrontierWorldState blockMigration(FrontierWorldState state, ResidentMigrationBlocked blocked) {
+    public static FrontierWorldState blockMigration(FrontierWorldState state, ResidentMigrationBlocked blocked) {
         ResidentMigrationJourney journey = requireJourney(state, blocked.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || migrationBlockReason(state, journey) != blocked.reason()) {
             throw new IllegalArgumentException("migration block reason is not the current exact precondition failure");
@@ -82,7 +82,7 @@ final class HumanPopulationStateSupport {
         return copy(state, state.actorLocations(), state.humanPopulation().blockMigration(blocked.residentId(), blocked.reason()));
     }
 
-    static FrontierWorldState resumeMigration(FrontierWorldState state, ResidentMigrationResumed resumed) {
+    public static FrontierWorldState resumeMigration(FrontierWorldState state, ResidentMigrationResumed resumed) {
         ResidentMigrationJourney journey = requireJourney(state, resumed.residentId());
         if (journey.status() != ResidentMigrationStatus.BLOCKED || migrationBlockReason(state, journey) != null) {
             throw new IllegalArgumentException("migration may resume only after its current exact blockers clear");
@@ -141,7 +141,7 @@ final class HumanPopulationStateSupport {
                 && !FrontierWorldStateSupport.activePatrolClaim(state, residentId);
     }
 
-    static ResidentMigrationBlockReason migrationBlockReason(FrontierWorldState state, ResidentMigrationJourney journey) {
+    public static ResidentMigrationBlockReason migrationBlockReason(FrontierWorldState state, ResidentMigrationJourney journey) {
         ResidentProfile resident = state.humanPopulation().resident(journey.residentId());
         if (state.humanPopulation().quarantined(resident.settlementId()) || state.humanPopulation().quarantined(journey.destinationSettlementId())) {
             return ResidentMigrationBlockReason.QUARANTINE;

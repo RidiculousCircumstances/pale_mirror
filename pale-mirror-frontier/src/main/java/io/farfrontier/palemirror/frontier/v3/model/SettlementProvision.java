@@ -49,11 +49,11 @@ public record SettlementProvision(SubjectId settlementId, int cycleOrdinal, long
         }
     }
 
-    static SettlementProvision idle(SubjectId settlementId) {
+    public static SettlementProvision idle(SubjectId settlementId) {
         return new SettlementProvision(settlementId, 0, 0L, 0, 0, List.of(), List.of(), 0, SettlementProvisionStatus.IDLE, Optional.empty());
     }
 
-    static SettlementProvision started(SubjectId settlementId, int cycleOrdinal, long tick, int required,
+    public static SettlementProvision started(SubjectId settlementId, int cycleOrdinal, long tick, int required,
                                        List<SubjectId> recipientIds, List<SettlementRationAllocation> allocations) {
         if (allocations.isEmpty()) {
             return new SettlementProvision(settlementId, cycleOrdinal, tick, required, 0, recipientIds, List.of(), 0,
@@ -63,20 +63,20 @@ public record SettlementProvision(SubjectId settlementId, int cycleOrdinal, long
                 SettlementProvisionStatus.IN_PROGRESS, Optional.empty());
     }
 
-    SettlementRationAllocation currentAllocation() {
+    public SettlementRationAllocation currentAllocation() {
         if (status != SettlementProvisionStatus.IN_PROGRESS || activeIntentId.isPresent() || nextAllocation >= allocations.size()) {
             throw new IllegalStateException("settlement provision has no ready allocation");
         }
         return allocations.get(nextAllocation);
     }
 
-    SettlementProvision beginPhysical(PhysicalIntentId intentId) {
+    public SettlementProvision beginPhysical(PhysicalIntentId intentId) {
         if (status != SettlementProvisionStatus.IN_PROGRESS || activeIntentId.isPresent()) throw new IllegalStateException("provision is not ready for physical consumption");
         return new SettlementProvision(settlementId, cycleOrdinal, startedAtTick, requiredRations, fulfilledRations, recipientIds, allocations,
                 nextAllocation, status, Optional.of(Objects.requireNonNull(intentId, "provision intent")));
     }
 
-    SettlementProvision consumeCurrent(SubjectId itemId, int count) {
+    public SettlementProvision consumeCurrent(SubjectId itemId, int count) {
         SettlementRationAllocation allocation = currentOrActiveAllocation();
         if (!allocation.itemId().equals(itemId) || allocation.count() != count) throw new IllegalArgumentException("provision receipt does not match current allocation");
         int fulfilled = Math.addExact(fulfilledRations, count); int next = Math.addExact(nextAllocation, 1);
@@ -86,19 +86,19 @@ public record SettlementProvision(SubjectId settlementId, int cycleOrdinal, long
                 fulfilled == requiredRations ? SettlementProvisionStatus.SECURE : SettlementProvisionStatus.RATIONED, Optional.empty());
     }
 
-    SettlementProvision shortage() {
+    public SettlementProvision shortage() {
         if (status != SettlementProvisionStatus.IN_PROGRESS || activeIntentId.isPresent()) throw new IllegalStateException("provision is not ready for shortage resolution");
         return new SettlementProvision(settlementId, cycleOrdinal, startedAtTick, requiredRations, fulfilledRations, recipientIds, List.of(), 0,
                 fulfilledRations == 0 ? SettlementProvisionStatus.SHORTAGE : SettlementProvisionStatus.RATIONED, Optional.empty());
     }
 
-    SettlementProvision conflict() {
+    public SettlementProvision conflict() {
         if (status != SettlementProvisionStatus.IN_PROGRESS) throw new IllegalStateException("only current provision can conflict");
         return new SettlementProvision(settlementId, cycleOrdinal, startedAtTick, requiredRations, fulfilledRations, recipientIds, List.of(), 0,
                 SettlementProvisionStatus.CONFLICT, Optional.empty());
     }
 
-    SettlementRationAllocation currentOrActiveAllocation() {
+    public SettlementRationAllocation currentOrActiveAllocation() {
         if (status != SettlementProvisionStatus.IN_PROGRESS || nextAllocation >= allocations.size()) throw new IllegalStateException("provision has no active allocation");
         return allocations.get(nextAllocation);
     }

@@ -33,12 +33,12 @@ public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjec
             throw new IllegalArgumentException("only a resource-harvest objective may retain its exact field target");
         }
     }
-    StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind, Optional<InfectionCell> infectionTarget,
+    public StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind, Optional<InfectionCell> infectionTarget,
                        int decisionOrdinal, StrategicObjectiveStatus status) {
         this(id, ownerId, kind, infectionTarget, Optional.empty(), decisionOrdinal, status);
     }
-    StrategicObjectiveLane lane() { return StrategicObjectiveLane.forKind(kind); }
-    StrategicObjective withStatus(StrategicObjectiveStatus nextStatus) {
+    public StrategicObjectiveLane lane() { return StrategicObjectiveLane.forKind(kind); }
+    public StrategicObjective withStatus(StrategicObjectiveStatus nextStatus) {
         return new StrategicObjective(id, ownerId, kind, infectionTarget, resourceSiteTarget, decisionOrdinal, nextStatus);
     }
 }

@@ -33,15 +33,15 @@ public record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operatio
         }
     }
 
-    List<SubjectId> attackerIds() { return attackers.stream().map(EngagementAttacker::actorId).toList(); }
-    boolean allAttackersAtIntercept() { return attackers.stream().allMatch(EngagementAttacker::atDestination); }
+    public List<SubjectId> attackerIds() { return attackers.stream().map(EngagementAttacker::actorId).toList(); }
+    public boolean allAttackersAtIntercept() { return attackers.stream().allMatch(EngagementAttacker::atDestination); }
 
-    RouteEngagement withStatus(RouteEngagementStatus next) {
+    public RouteEngagement withStatus(RouteEngagementStatus next) {
         if (next == RouteEngagementStatus.RESOLVED) throw new IllegalArgumentException("resolved engagement requires an exact outcome");
         return new RouteEngagement(id, taskId, operationId, hiveId, attackers, intercept, next, nextStrikeEpoch, Optional.empty());
     }
 
-    RouteEngagement advanceAttacker(SubjectId actorId, int nextRouteIndex) {
+    public RouteEngagement advanceAttacker(SubjectId actorId, int nextRouteIndex) {
         if (status != RouteEngagementStatus.APPROACHING) throw new IllegalArgumentException("only approaching engagement may advance");
         boolean found = false; java.util.ArrayList<EngagementAttacker> next = new java.util.ArrayList<>(attackers.size());
         for (EngagementAttacker attacker : attackers) {
@@ -52,7 +52,7 @@ public record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operatio
         return new RouteEngagement(id, taskId, operationId, hiveId, next, intercept, status, nextStrikeEpoch, outcome);
     }
 
-    RouteEngagement afterStrike(int expectedEpoch) {
+    public RouteEngagement afterStrike(int expectedEpoch) {
         if (status != RouteEngagementStatus.COLD_COMBAT || nextStrikeEpoch != expectedEpoch) {
             throw new IllegalArgumentException("route engagement strike does not match its current COLD epoch");
         }
@@ -60,7 +60,7 @@ public record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operatio
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
-    RouteEngagement resolve(RouteEngagementOutcome result) {
+    public RouteEngagement resolve(RouteEngagementOutcome result) {
         if (status == RouteEngagementStatus.RESOLVED || status == RouteEngagementStatus.HOT
                 || result != RouteEngagementOutcome.ABORTED && status != RouteEngagementStatus.COLD_COMBAT) {
             throw new IllegalArgumentException("only COLD combat may choose a combat outcome");
@@ -70,7 +70,7 @@ public record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operatio
     }
 
     /** A third-party physical interruption ends an engagement without attributing victory. */
-    RouteEngagement abort() {
+    public RouteEngagement abort() {
         if (status == RouteEngagementStatus.RESOLVED) throw new IllegalArgumentException("resolved engagement cannot be aborted");
         return new RouteEngagement(id, taskId, operationId, hiveId, attackers, intercept, RouteEngagementStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(RouteEngagementOutcome.ABORTED));

@@ -179,8 +179,8 @@ public final class FrontierReadabilityPlan {
 
     private static String foodText(FrontierWorldState state, SubjectId settlementId) {
         SettlementProvision provision = state.humanPopulation().provision(settlementId);
-        int available = SettlementProvisionProcess.availableFood(state, settlementId);
-        int reserve = SettlementProvisionProcess.reserveRequirement(state, settlementId);
+        int available = availableFood(state, settlementId);
+        int reserve = reserveRequirement(state, settlementId);
         return switch (provision.status()) {
             case IDLE -> "FOOD REVIEW PENDING · " + available + " / " + reserve;
             case IN_PROGRESS -> "FOOD SERVING · " + provision.fulfilledRations() + " / " + provision.requiredRations();
@@ -194,6 +194,22 @@ public final class FrontierReadabilityPlan {
     private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
         SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
         return status == SettlementProvisionStatus.RATIONED || status == SettlementProvisionStatus.SHORTAGE || status == SettlementProvisionStatus.CONFLICT;
+    }
+
+    private static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
+        int living = Math.toIntExact(state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count());
+        SettlementProvision provision = state.humanPopulation().provision(settlementId);
+        int pending = provision.status() == SettlementProvisionStatus.IN_PROGRESS ? provision.requiredRations() - provision.fulfilledRations() : 0;
+        return Math.addExact(Math.multiplyExact(living, 2), pending);
+    }
+
+    private static int availableFood(FrontierWorldState state, SubjectId settlementId) {
+        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        return state.inventory().items().values().stream().filter(item -> "minecraft:bread".equals(item.itemKind()))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
     }
 
     /**

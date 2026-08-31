@@ -7,10 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Map;
 
 /** Exact CARGO_HANDOFF invariants kept separate from aggregate canonical state ownership. */
-final class FrontierCargoValidation {
+public final class FrontierCargoValidation {
     private FrontierCargoValidation() { }
 
-    static SubjectId receiverStore(FrontierBootstrap bootstrap, RouteOperation operation) {
+    public static SubjectId receiverStore(FrontierBootstrap bootstrap, RouteOperation operation) {
         HiveNest nest = FrontierRouteNetwork.supplyNest(bootstrap);
         return bootstrap.hive().organs().stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE)
                 .findFirst().flatMap(HiveOrgan::containerId).orElseThrow(() -> new IllegalArgumentException("hive nest has no exact store receiver"));

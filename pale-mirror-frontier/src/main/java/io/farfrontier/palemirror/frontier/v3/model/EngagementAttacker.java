@@ -15,10 +15,10 @@ public record EngagementAttacker(SubjectId actorId, List<BlockPosition> route, i
         if (route.stream().distinct().count() != route.size()) throw new IllegalArgumentException("engagement attacker route cannot repeat a position");
     }
 
-    BlockPosition position() { return route.get(routeIndex); }
-    boolean atDestination() { return routeIndex == route.size() - 1; }
+    public BlockPosition position() { return route.get(routeIndex); }
+    public boolean atDestination() { return routeIndex == route.size() - 1; }
 
-    EngagementAttacker advance(int nextRouteIndex) {
+    public EngagementAttacker advance(int nextRouteIndex) {
         if (atDestination() || nextRouteIndex != routeIndex + 1) throw new IllegalArgumentException("engagement attacker advancement is not sequential");
         return new EngagementAttacker(actorId, route, nextRouteIndex);
     }

@@ -117,7 +117,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         return values;
     }
 
-    static Map<ResidentSkill, Integer> birthSkills(int ordinal) {
+    public static Map<ResidentSkill, Integer> birthSkills(int ordinal) {
         return skills(ResidentRole.FARMER, ordinal);
     }
 

@@ -18,12 +18,12 @@ import java.util.Set;
  * route for materialization.</p>
  */
 public final class FrontierRouteNetwork {
-    static final SubjectId OWNER = new SubjectId("route:frontier-network");
-    static final SubjectId MAINTENANCE_CONTAINER = new SubjectId("container:frontier-route-maintenance");
+    public static final SubjectId OWNER = new SubjectId("route:frontier-network");
+    public static final SubjectId MAINTENANCE_CONTAINER = new SubjectId("container:frontier-route-maintenance");
 
     private FrontierRouteNetwork() { }
 
-    static List<BlockPosition> supplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
+    public static List<BlockPosition> supplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));
@@ -52,7 +52,7 @@ public final class FrontierRouteNetwork {
         }
     }
 
-    static HiveNest supplyNest(FrontierBootstrap bootstrap) {
+    public static HiveNest supplyNest(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         return bootstrap.hive().seedNests().getFirst();
     }
@@ -62,16 +62,16 @@ public final class FrontierRouteNetwork {
      * settlement can fund it through normal item custody, but gray concrete elsewhere never
      * becomes route authority.
      */
-    static BlockPosition maintenanceContainerPosition(FrontierBootstrap bootstrap) {
+    public static BlockPosition maintenanceContainerPosition(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         return new BlockPosition(-405, 65, 250);
     }
 
-    static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {
+    public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {
         return surfaceCells(bootstrap, RouteTopology.initial());
     }
 
-    static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
+    public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
         Set<BlockPosition> cells = new LinkedHashSet<>();
         List<Settlement> settlements = bootstrap.settlements();
@@ -114,7 +114,7 @@ public final class FrontierRouteNetwork {
     }
 
     /** Cells that a replacement must physically create before the topology may become active. */
-    static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
+    public static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
                                                  List<BlockPosition> replacement) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(active, "active topology");
         validateSupplyWaypoints(bootstrap, settlementId, replacement);
@@ -130,19 +130,19 @@ public final class FrontierRouteNetwork {
      * this single-lane graybox corridor unavailable; future routing/repair can choose another
      * graph path, but must not move cargo through an observed physical hole.
      */
-    static boolean isPassable(FrontierBootstrap bootstrap, List<BlockPosition> waypoints,
+    public static boolean isPassable(FrontierBootstrap bootstrap, List<BlockPosition> waypoints,
                               Map<BlockPosition, PhysicalDelta> deltas) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(waypoints, "waypoints"); Objects.requireNonNull(deltas, "physical deltas");
         return deltas.keySet().stream().noneMatch(position -> containsOperationSurfaceCell(waypoints, position));
     }
 
-    static boolean containsOperationSurfaceCell(List<BlockPosition> waypoints, BlockPosition position) {
+    public static boolean containsOperationSurfaceCell(List<BlockPosition> waypoints, BlockPosition position) {
         Objects.requireNonNull(waypoints, "waypoints"); Objects.requireNonNull(position, "position");
         return operationSurfaceCells(waypoints).contains(position);
     }
 
     /** First physical delta on the segment a COLD patrol has just traversed, in stable block order. */
-    static java.util.Optional<BlockPosition> firstObstructionOnSegment(List<BlockPosition> waypoints, int fromWaypointIndex,
+    public static java.util.Optional<BlockPosition> firstObstructionOnSegment(List<BlockPosition> waypoints, int fromWaypointIndex,
                                                                         Map<BlockPosition, PhysicalDelta> deltas) {
         if (fromWaypointIndex < 0 || fromWaypointIndex >= waypoints.size() - 1) throw new IllegalArgumentException("route segment cursor is invalid");
         if (fromWaypointIndex == 0) return java.util.Optional.empty();

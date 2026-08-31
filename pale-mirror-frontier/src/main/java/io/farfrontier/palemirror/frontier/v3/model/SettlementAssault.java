@@ -17,8 +17,8 @@ import java.util.Optional;
 public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
                          List<SettlementAssaultAttacker> attackers, List<SubjectId> defenderIds,
                          SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
-    static final int MAX_ATTACKERS = 16;
-    static final int MAX_DEFENDERS = 24;
+    public static final int MAX_ATTACKERS = 16;
+    public static final int MAX_DEFENDERS = 24;
 
     public SettlementAssault {
         Objects.requireNonNull(id, "assault id");
@@ -42,12 +42,12 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         }
     }
 
-    SubjectId settlementId() { return sighting.settlementId(); }
-    BlockPosition settlementAnchor() { return sighting.settlementAnchor(); }
-    List<SubjectId> attackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).toList(); }
-    boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
+    public SubjectId settlementId() { return sighting.settlementId(); }
+    public BlockPosition settlementAnchor() { return sighting.settlementAnchor(); }
+    public List<SubjectId> attackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).toList(); }
+    public boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
 
-    SettlementAssault advanceAttacker(SubjectId actorId, int nextRouteIndex) {
+    public SettlementAssault advanceAttacker(SubjectId actorId, int nextRouteIndex) {
         if (status != SettlementAssaultStatus.APPROACHING) {
             throw new IllegalArgumentException("only an approaching assault may advance an attacker");
         }
@@ -63,14 +63,14 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         return new SettlementAssault(id, taskId, hiveId, sighting, next, defenderIds, status, nextStrikeEpoch, outcome);
     }
 
-    SettlementAssault withStatus(SettlementAssaultStatus next) {
+    public SettlementAssault withStatus(SettlementAssaultStatus next) {
         if (next == SettlementAssaultStatus.RESOLVED) {
             throw new IllegalArgumentException("resolved assault requires an exact outcome");
         }
         return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderIds, next, nextStrikeEpoch, Optional.empty());
     }
 
-    SettlementAssault afterStrike(int expectedEpoch) {
+    public SettlementAssault afterStrike(int expectedEpoch) {
         if (status != SettlementAssaultStatus.COLD_COMBAT || nextStrikeEpoch != expectedEpoch) {
             throw new IllegalArgumentException("assault strike does not match its current COLD epoch");
         }
@@ -78,7 +78,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
-    SettlementAssault resolve(SettlementAssaultOutcome result) {
+    public SettlementAssault resolve(SettlementAssaultOutcome result) {
         if (status == SettlementAssaultStatus.RESOLVED || status == SettlementAssaultStatus.HOT
                 || result != SettlementAssaultOutcome.ABORTED && status != SettlementAssaultStatus.COLD_COMBAT) {
             throw new IllegalArgumentException("only COLD assault combat may choose a combat outcome");
@@ -87,7 +87,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 nextStrikeEpoch, Optional.of(Objects.requireNonNull(result, "assault outcome")));
     }
 
-    SettlementAssault abort() {
+    public SettlementAssault abort() {
         if (status == SettlementAssaultStatus.RESOLVED) throw new IllegalArgumentException("resolved assault cannot be aborted");
         return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderIds, SettlementAssaultStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(SettlementAssaultOutcome.ABORTED));

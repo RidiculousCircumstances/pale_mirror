@@ -35,7 +35,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;

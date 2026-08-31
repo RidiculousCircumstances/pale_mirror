@@ -16,8 +16,8 @@ import java.util.Optional;
  * anchor and the instant at which that local fact was observed.</p>
  */
 public final class HiveSettlementKnowledge {
-    static final int MAX_SIGHTINGS = 32;
-    static final long MAX_AGE = 2_400L;
+    public static final int MAX_SIGHTINGS = 32;
+    public static final long MAX_AGE = 2_400L;
     private final Map<SubjectId, Sighting> sightings;
 
     public HiveSettlementKnowledge(Map<SubjectId, Sighting> sightings) {
@@ -35,12 +35,12 @@ public final class HiveSettlementKnowledge {
     public static HiveSettlementKnowledge empty() { return new HiveSettlementKnowledge(Map.of()); }
     public Map<SubjectId, Sighting> entries() { return sightings; }
 
-    Optional<Sighting> freshest(long now) {
+    public Optional<Sighting> freshest(long now) {
         return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, MAX_AGE))
                 .sorted(Comparator.comparingLong(Sighting::observedAt).reversed().thenComparing(Sighting::settlementId)).findFirst();
     }
 
-    HiveSettlementKnowledge observe(Sighting sighting) {
+    public HiveSettlementKnowledge observe(Sighting sighting) {
         Map<SubjectId, Sighting> next = new LinkedHashMap<>(sightings);
         Sighting previous = next.get(sighting.settlementId());
         if (previous != null && previous.observedAt() > sighting.observedAt()) return this;

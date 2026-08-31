@@ -11,11 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Pure validation and state reduction for one exact physical decontamination result. */
-final class DecontaminationStateSupport {
+public final class DecontaminationStateSupport {
     private DecontaminationStateSupport() { }
 
-    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
-        Settlement settlement = DecontaminationProcess.owner(state, intent.causeSubjectId());
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+        Settlement settlement = owner(state.bootstrap(), intent.causeSubjectId());
         if (intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) throw new IllegalArgumentException("decontamination intent subjects are invalid");
         SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElseThrow();
         ExactItemStack material = state.inventory().items().get(itemId);
@@ -52,7 +52,7 @@ final class DecontaminationStateSupport {
                 || intent.postcondition() != io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.DECONTAMINATION_OBSERVED) {
             throw new IllegalArgumentException("decontamination observation has a foreign physical intent");
         }
-        DecontaminationProcess.owner(bootstrap, intent.causeSubjectId());
+        owner(bootstrap, intent.causeSubjectId());
         InfectionCell cell = cell(intent); long expected = Math.max(0L, Math.subtractExact(observation.priorRaw(), DecontaminationPolicy.REDUCTION_RAW));
         // A confirmed observation is historical evidence. The atomic completion path above
         // verifies the live field before it writes this receipt; a later ordinary hive pulse may
@@ -64,7 +64,7 @@ final class DecontaminationStateSupport {
         }
     }
 
-    static InfectionCell cell(PhysicalIntent intent) {
+    public static InfectionCell cell(PhysicalIntent intent) {
         long scale = FixedScalar.SCALE;
         if (intent.origin().x().raw() % scale != 0L || intent.origin().y().raw() != 0L || intent.origin().z().raw() % scale != 0L) {
             throw new IllegalArgumentException("decontamination origin must be an infection-cell origin");
@@ -73,5 +73,12 @@ final class DecontaminationStateSupport {
         InfectionCell cell = InfectionCell.at(position);
         if (!cell.originAtY(0).equals(position)) throw new IllegalArgumentException("decontamination origin is not cell-aligned");
         return cell;
+    }
+
+    private static Settlement owner(FrontierBootstrap bootstrap, SubjectId facilityId) {
+        for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
+            if (structure.id().equals(facilityId) && structure.kind() == StructureKind.INFIRMARY) return settlement;
+        }
+        throw new IllegalArgumentException("decontamination facility is not a settlement infirmary: " + facilityId.value());
     }
 }

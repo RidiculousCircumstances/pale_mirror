@@ -27,7 +27,7 @@ public final class ExactItemConsumptionStateSupport {
             }
             SubjectId depot = FrontierWorldState.depotId(birth.settlementId());
             Claim claim = ownedActiveClaim(state, birth.foodItemId(), depot::equals, "settlement depot", 1);
-            if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals(PopulationBirthProcess.BREAD)) {
+            if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) {
                 throw new IllegalArgumentException("resident birth has no exact owned food stack");
             }
             return claim;
@@ -40,7 +40,7 @@ public final class ExactItemConsumptionStateSupport {
             }
             SubjectId depot = FrontierWorldState.depotId(provision.settlementId());
             Claim claim = ownedActiveClaim(state, allocation.itemId(), depot::equals, "settlement depot", allocation.count());
-            if (!claim.ownerId().equals(provision.settlementId()) || !claim.item().itemKind().equals(SettlementProvisionProcess.BREAD)) {
+            if (!claim.ownerId().equals(provision.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) {
                 throw new IllegalArgumentException("settlement provision has no exact owned food stack");
             }
             return claim;

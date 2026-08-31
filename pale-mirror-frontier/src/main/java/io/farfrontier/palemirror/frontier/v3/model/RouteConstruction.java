@@ -22,6 +22,15 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
         this(id, settlementId, waypoints, confirmedCells, status, Optional.empty());
     }
 
+    /** Stable planned identities for the one exact replacement-cell cargo, before it is loaded. */
+    public SubjectId plannedCargoId() {
+        return new SubjectId("cargo:route-build-" + id.value().substring("construction:".length()) + "-" + confirmedCells);
+    }
+
+    public SubjectId plannedCargoItemId() {
+        return new SubjectId("item:route-build-" + id.value().substring("construction:".length()) + "-" + confirmedCells);
+    }
+
     RouteConstruction withConfirmedCells(int nextConfirmedCells, RouteConstructionStatus nextStatus) {
         return new RouteConstruction(id, settlementId, waypoints, nextConfirmedCells, nextStatus, cargoId);
     }

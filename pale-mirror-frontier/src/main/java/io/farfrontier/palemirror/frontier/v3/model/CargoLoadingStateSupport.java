@@ -58,14 +58,14 @@ public final class CargoLoadingStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(nextIntents).physicalObservations(observations));
     }
 
-    static void validateReceipt(PhysicalIntent intent, CargoLoadObservation receipt) {
+    public static void validateReceipt(PhysicalIntent intent, CargoLoadObservation receipt) {
         if (intent.kind() != PhysicalIntentKind.CARGO_LOADING || !intent.id().equals(receipt.intentId())
                 || !intent.subjectIds().equals(List.of(receipt.contractId(), receipt.cargoId(), receipt.itemId()))) {
             throw new IllegalArgumentException("cargo-load receipt names a foreign intent or exact stack");
         }
     }
 
-    static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
+    public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         SupplyContract contract = state.contracts().get(intent.causeSubjectId());
         if (contract == null || !subject.equals(contract.settlementId())) {
             throw new IllegalArgumentException("cargo loading must be prepared by its contract settlement");
@@ -74,7 +74,7 @@ public final class CargoLoadingStateSupport {
         return state.preparePhysicalIntent(intent);
     }
 
-    static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntent intent,
+    public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntent intent,
                                                PhysicalIntentTransition transition) {
         SupplyContract contract = state.contracts().get(intent.causeSubjectId());
         if (contract == null || !subject.equals(contract.settlementId())) {

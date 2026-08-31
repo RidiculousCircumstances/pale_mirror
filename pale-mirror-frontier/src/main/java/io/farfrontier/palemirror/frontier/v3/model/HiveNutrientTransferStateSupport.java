@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Exact custody/state transitions for the hive organ-network nutrient corridor. */
-final class HiveNutrientTransferStateSupport {
+public final class HiveNutrientTransferStateSupport {
     private HiveNutrientTransferStateSupport() { }
 
     static void validate(FrontierBootstrap bootstrap, ExactInventory inventory, HiveColony colony, StrategicPlanState strategicPlans) {
@@ -47,7 +47,7 @@ final class HiveNutrientTransferStateSupport {
         }
     }
 
-    static FrontierWorldState start(FrontierWorldState state, HiveNutrientTransfer transfer) {
+    public static FrontierWorldState start(FrontierWorldState state, HiveNutrientTransfer transfer) {
         validateTopology(state.bootstrap(), state.inventory(), state.hiveColony(), state.strategicPlans(), transfer);
         ExactItemStack item = state.inventory().items().get(transfer.itemId());
         if (item == null || !item.custody().equals(transfer.sourceSlot()) || !item.economicOwnerId().equals(transfer.hiveId())) {
@@ -59,13 +59,13 @@ final class HiveNutrientTransferStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FrontierWorldState advance(FrontierWorldState state, SubjectId transferId, int cursor) {
+    public static FrontierWorldState advance(FrontierWorldState state, SubjectId transferId, int cursor) {
         HiveNutrientTransfer transfer = requireTransit(state, transferId); validateTransit(state, transfer);
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().advanceNutrientTransfer(transferId, cursor), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, HiveNutrientReceipt receipt) {
+    public static FrontierWorldState complete(FrontierWorldState state, HiveNutrientReceipt receipt) {
         HiveNutrientTransfer transfer = requireTransit(state, receipt.transferId()); validateTransit(state, transfer);
         if (!receipt.matches(transfer) || transfer.cursor() != transfer.corridor().size() - 1 || state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) {
             throw new IllegalArgumentException("hive nutrient arrival does not match its retained corridor or target slot");
@@ -75,19 +75,19 @@ final class HiveNutrientTransferStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FrontierWorldState block(FrontierWorldState state, SubjectId transferId, HiveNutrientTransferBlockReason reason) {
+    public static FrontierWorldState block(FrontierWorldState state, SubjectId transferId, HiveNutrientTransferBlockReason reason) {
         requireUnblocked(state, transferId);
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().blockNutrientTransfer(transferId, reason), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static HiveNutrientTransfer requireUnblocked(FrontierWorldState state, SubjectId transferId) {
+    public static HiveNutrientTransfer requireUnblocked(FrontierWorldState state, SubjectId transferId) {
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(transferId);
         if (transfer == null || transfer.phase() == HiveNutrientTransferPhase.BLOCKED) throw new IllegalArgumentException("hive nutrient transfer is not active");
         return transfer;
     }
 
-    static HiveNutrientTransfer requireTransit(FrontierWorldState state, SubjectId transferId) {
+    public static HiveNutrientTransfer requireTransit(FrontierWorldState state, SubjectId transferId) {
         HiveNutrientTransfer transfer = requireUnblocked(state, transferId);
         if (transfer.phase() != HiveNutrientTransferPhase.IN_TRANSIT) throw new IllegalArgumentException("hive nutrient transfer is not in transit");
         return transfer;
@@ -102,20 +102,20 @@ final class HiveNutrientTransferStateSupport {
         return intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL;
     }
 
-    static void validateTransit(FrontierWorldState state, HiveNutrientTransfer transfer) {
+    public static void validateTransit(FrontierWorldState state, HiveNutrientTransfer transfer) {
         validateTopology(state.bootstrap(), state.inventory(), state.hiveColony(), state.strategicPlans(), transfer);
         if (state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) {
             throw new IllegalArgumentException("hive nutrient transfer target slot is no longer available");
         }
     }
 
-    static PhysicalIntent departureIntent(FrontierWorldState state, HiveNutrientTransfer transfer) {
+    public static PhysicalIntent departureIntent(FrontierWorldState state, HiveNutrientTransfer transfer) {
         if (transfer.phase() != HiveNutrientTransferPhase.DEPARTURE_PENDING) throw new IllegalArgumentException("hive nutrient departure is not pending");
         return endpointIntent(transfer, transfer.sourceStoreId(), transfer.endpointIntentId().orElseThrow(), PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE,
                 PhysicalPostcondition.HIVE_NUTRIENT_DEPARTED_OBSERVED, state.inventory().surfaces().get(transfer.sourceStoreId()).position());
     }
 
-    static PhysicalIntent arrivalIntent(FrontierWorldState state, HiveNutrientTransfer transfer) {
+    public static PhysicalIntent arrivalIntent(FrontierWorldState state, HiveNutrientTransfer transfer) {
         if (transfer.phase() != HiveNutrientTransferPhase.ARRIVAL_PENDING) throw new IllegalArgumentException("hive nutrient arrival is not pending");
         return endpointIntent(transfer, transfer.targetStoreId(), transfer.endpointIntentId().orElseThrow(), PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL,
                 PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED, state.inventory().surfaces().get(transfer.targetStoreId()).position());

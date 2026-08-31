@@ -6,15 +6,15 @@ import java.util.HashSet;
 import java.util.Set;
 
 /** Typed owner and admission rules for cargo-free settlement-assault scenes. */
-final class FrontierSettlementAssaultSceneSupport {
+public final class FrontierSettlementAssaultSceneSupport {
     private static final int MAX_HANDOFF_RADIUS = 32;
     private FrontierSettlementAssaultSceneSupport() { }
 
-    static SettlementAssault require(FrontierWorldState state, SettlementAssaultSceneCause cause) {
+    public static SettlementAssault require(FrontierWorldState state, SettlementAssaultSceneCause cause) {
         return require(state.strategicPlans(), cause);
     }
 
-    static SettlementAssault require(StrategicPlanState plans, SettlementAssaultSceneCause cause) {
+    public static SettlementAssault require(StrategicPlanState plans, SettlementAssaultSceneCause cause) {
         SettlementAssault assault = plans.settlementAssaults().get(cause.assaultId());
         if (assault == null || !assault.settlementId().equals(cause.settlementId())) {
             throw new IllegalArgumentException("assault scene cause has no matching canonical assault");
@@ -22,7 +22,7 @@ final class FrontierSettlementAssaultSceneSupport {
         return assault;
     }
 
-    static SubjectId owner(FrontierWorldState state, SceneLease lease) {
+    public static SubjectId owner(FrontierWorldState state, SceneLease lease) {
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         return require(state, cause).hiveId();
     }

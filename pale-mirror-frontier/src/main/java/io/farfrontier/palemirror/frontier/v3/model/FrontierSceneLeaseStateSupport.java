@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Atomic coupled-scene transitions between persisted HOT lease and the same COLD engagement. */
-final class FrontierSceneLeaseStateSupport {
+public final class FrontierSceneLeaseStateSupport {
     private static final int MAX_SCENE_LEASES = 1_024;
     private FrontierSceneLeaseStateSupport() { }
 
@@ -80,7 +80,7 @@ final class FrontierSceneLeaseStateSupport {
      * hand-off or COLD continuation.  The owning operation is subsequently blocked by the same
      * transaction, so an uninspectable old scene cannot monopolize its settlement forever.
      */
-    static FrontierWorldState recoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
+    public static FrontierWorldState recoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
         SceneLease current = state.sceneLeases().get(unresolved.leaseId());
         if (current == null || current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent()) {
             throw new IllegalArgumentException("scene recovery evidence requires one uninspected unknown lease");

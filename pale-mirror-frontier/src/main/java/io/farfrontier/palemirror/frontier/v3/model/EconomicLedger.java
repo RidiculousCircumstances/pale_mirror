@@ -66,7 +66,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
     }
 
     /** Opens one explicitly authorized account; no money or resource claim is created by registration. */
-    EconomicLedger register(EconomicAccount account) {
+    public EconomicLedger register(EconomicAccount account) {
         Objects.requireNonNull(account, "economic account");
         if (accounts.containsKey(account.ownerId())) {
             throw new IllegalArgumentException("economic account identity already exists: " + account.ownerId().value());
@@ -84,7 +84,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
     }
 
     /** Reserves funds without moving them; another reservation cannot spend the same available balance or credit. */
-    EconomicLedger reserve(FinancialReservation reservation) {
+    public EconomicLedger reserve(FinancialReservation reservation) {
         Objects.requireNonNull(reservation, "financial reservation");
         if (reservations.containsKey(reservation.id())) throw new IllegalArgumentException("financial reservation identity already exists: " + reservation.id().value());
         EconomicAccount payer = require(reservation.payerId()); EconomicAccount payee = require(reservation.payeeId());
@@ -97,7 +97,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
     }
 
     /** Releases an unspent named hold; release is never an implicit transfer or mint. */
-    EconomicLedger release(SubjectId reservationId) {
+    public EconomicLedger release(SubjectId reservationId) {
         if (!reservations.containsKey(Objects.requireNonNull(reservationId, "financial reservation id"))) {
             throw new IllegalArgumentException("unknown financial reservation: " + reservationId.value());
         }
@@ -106,14 +106,14 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
     }
 
     /** Settles exactly one named hold, atomically removing it and transferring its held amount. */
-    EconomicLedger settle(SubjectId reservationId) {
+    public EconomicLedger settle(SubjectId reservationId) {
         FinancialReservation reservation = reservations.get(Objects.requireNonNull(reservationId, "financial reservation id"));
         if (reservation == null) throw new IllegalArgumentException("unknown financial reservation: " + reservationId.value());
         Map<SubjectId, FinancialReservation> remaining = new LinkedHashMap<>(reservations); remaining.remove(reservationId);
         return transfer(accounts, remaining, reservation.payerId(), reservation.payeeId(), reservation.amount());
     }
 
-    FixedScalar availableToReserve(SubjectId payerId) {
+    public FixedScalar availableToReserve(SubjectId payerId) {
         EconomicAccount payer = require(payerId);
         FixedScalar held = reservations.values().stream().filter(reservation -> reservation.payerId().equals(payerId))
                 .map(FinancialReservation::amount).reduce(FixedScalar.ZERO, FixedScalar::plus);

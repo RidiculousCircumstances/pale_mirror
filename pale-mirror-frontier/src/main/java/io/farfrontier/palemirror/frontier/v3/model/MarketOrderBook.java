@@ -59,7 +59,7 @@ public final class MarketOrderBook {
     public Map<SubjectId, CompanyQuote> quotes() { return quotes; }
     public Map<SubjectId, MarketWorkOrder> workOrders() { return workOrders; }
 
-    MarketOrderBook open(MarketDemand demand) {
+    public MarketOrderBook open(MarketDemand demand) {
         Objects.requireNonNull(demand, "market demand");
         if (demands.containsKey(demand.id()) || demands.values().stream().anyMatch(existing -> existing.reasonId().equals(demand.reasonId())
                 && existing.status() != MarketDemandStatus.CANCELLED && existing.status() != MarketDemandStatus.EXPIRED)) {
@@ -69,7 +69,7 @@ public final class MarketOrderBook {
         return new MarketOrderBook(next, quotes, workOrders);
     }
 
-    MarketOrderBook publish(CompanyQuote quote, long now) {
+    public MarketOrderBook publish(CompanyQuote quote, long now) {
         Objects.requireNonNull(quote, "market quote");
         MarketDemand demand = demands.get(quote.demandId());
         if (quotes.containsKey(quote.id()) || demand == null || demand.status() != MarketDemandStatus.OPEN || now < quote.quotedAtTick()
@@ -80,7 +80,7 @@ public final class MarketOrderBook {
         return new MarketOrderBook(demands, next, workOrders);
     }
 
-    MarketOrderBook accept(MarketWorkOrder order, long now) {
+    public MarketOrderBook accept(MarketWorkOrder order, long now) {
         Objects.requireNonNull(order, "market work order");
         MarketDemand demand = demands.get(order.demandId()); CompanyQuote quote = quotes.get(order.quoteId());
         if (workOrders.containsKey(order.id()) || demand == null || quote == null || demand.status() != MarketDemandStatus.OPEN
@@ -95,15 +95,15 @@ public final class MarketOrderBook {
         return new MarketOrderBook(nextDemands, quotes, nextOrders);
     }
 
-    MarketOrderBook complete(SubjectId orderId) { return terminal(orderId, MarketWorkOrderStatus.FULFILLED, MarketDemandStatus.FULFILLED); }
-    MarketOrderBook cancel(SubjectId orderId, MarketWorkOrderStatus outcome) {
+    public MarketOrderBook complete(SubjectId orderId) { return terminal(orderId, MarketWorkOrderStatus.FULFILLED, MarketDemandStatus.FULFILLED); }
+    public MarketOrderBook cancel(SubjectId orderId, MarketWorkOrderStatus outcome) {
         if (outcome != MarketWorkOrderStatus.CANCELLED && outcome != MarketWorkOrderStatus.CONFLICT) {
             throw new IllegalArgumentException("market cancellation needs a cancellation outcome");
         }
         return terminal(orderId, outcome, MarketDemandStatus.CANCELLED);
     }
 
-    MarketOrderBook expireOpen(long now) {
+    public MarketOrderBook expireOpen(long now) {
         Map<SubjectId, MarketDemand> next = new LinkedHashMap<>(demands); boolean changed = false;
         for (MarketDemand demand : demands.values()) {
             if (demand.status() == MarketDemandStatus.OPEN && now > demand.expiresAtTick()) {
@@ -113,7 +113,7 @@ public final class MarketOrderBook {
         return changed ? new MarketOrderBook(next, quotes, workOrders) : this;
     }
 
-    MarketOrderBook cancelOpen(SubjectId demandId) {
+    public MarketOrderBook cancelOpen(SubjectId demandId) {
         MarketDemand demand = demands.get(Objects.requireNonNull(demandId, "market demand id"));
         if (demand == null || demand.status() != MarketDemandStatus.OPEN) {
             throw new IllegalArgumentException("only an open market demand may be cancelled");
@@ -127,7 +127,7 @@ public final class MarketOrderBook {
      * Retains a compact recent audit tail only after the caller proves no live
      * job, money hold or physical intent refers to the commercial record.
      */
-    MarketOrderBook compactTerminal(Set<SubjectId> protectedIds) {
+    public MarketOrderBook compactTerminal(Set<SubjectId> protectedIds) {
         Objects.requireNonNull(protectedIds, "market protected references");
         List<MarketDemand> removable = demands.values().stream().filter(this::terminal).filter(demand -> safeToDrop(demand, protectedIds))
                 .sorted(Comparator.comparingLong(MarketDemand::openedAtTick).thenComparing(MarketDemand::id)).toList();
@@ -140,14 +140,14 @@ public final class MarketOrderBook {
         return new MarketOrderBook(nextDemands, nextQuotes, nextOrders);
     }
 
-    Optional<CompanyQuote> bestCurrentQuote(SubjectId demandId, long now) {
+    public Optional<CompanyQuote> bestCurrentQuote(SubjectId demandId, long now) {
         MarketDemand demand = demands.get(Objects.requireNonNull(demandId, "market demand id"));
         if (demand == null || demand.status() != MarketDemandStatus.OPEN || now > demand.expiresAtTick()) return Optional.empty();
         return quotes.values().stream().filter(quote -> quote.demandId().equals(demandId) && now <= quote.expiresAtTick())
                 .min(Comparator.comparing(CompanyQuote::totalPrice).thenComparing(CompanyQuote::id));
     }
 
-    Optional<MarketWorkOrder> acceptedForJob(SubjectId jobId) {
+    public Optional<MarketWorkOrder> acceptedForJob(SubjectId jobId) {
         return workOrders.values().stream().filter(order -> order.jobId().equals(Objects.requireNonNull(jobId, "production job id"))
                 && order.status() == MarketWorkOrderStatus.ACCEPTED).findFirst();
     }

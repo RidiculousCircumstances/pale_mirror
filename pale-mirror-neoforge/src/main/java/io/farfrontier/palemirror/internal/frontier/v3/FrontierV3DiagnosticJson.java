@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.HivePerceptionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;

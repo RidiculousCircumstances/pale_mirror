@@ -14,8 +14,8 @@ import java.util.Objects;
  * but may not scan the whole world field to discover a remote frontier.
  */
 public final class HiveTerritoryKnowledge {
-    static final int MAX_BELIEFS = 256;
-    static final long MAX_AGE = 2_400L;
+    public static final int MAX_BELIEFS = 256;
+    public static final long MAX_AGE = 2_400L;
     private final Map<InfectionCell, Belief> beliefs;
 
     public HiveTerritoryKnowledge(Map<InfectionCell, Belief> beliefs) {
@@ -31,7 +31,7 @@ public final class HiveTerritoryKnowledge {
     public static HiveTerritoryKnowledge empty() { return new HiveTerritoryKnowledge(Map.of()); }
     public Map<InfectionCell, Belief> entries() { return beliefs; }
 
-    HiveTerritoryKnowledge observe(Belief belief) {
+    public HiveTerritoryKnowledge observe(Belief belief) {
         Map<InfectionCell, Belief> next = new LinkedHashMap<>(beliefs);
         Belief previous = next.get(belief.cell());
         if (previous != null && previous.observedAt() > belief.observedAt()) return this;
@@ -44,7 +44,7 @@ public final class HiveTerritoryKnowledge {
         return new HiveTerritoryKnowledge(next);
     }
 
-    Map<InfectionCell, FixedRatio> freshInfection(long now) {
+    public Map<InfectionCell, FixedRatio> freshInfection(long now) {
         Map<InfectionCell, FixedRatio> result = new LinkedHashMap<>();
         beliefs.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, MAX_AGE))
                 .sorted(Comparator.comparingInt((Belief value) -> value.cell().x()).thenComparingInt(value -> value.cell().z()))
@@ -53,11 +53,42 @@ public final class HiveTerritoryKnowledge {
     }
 
     void validate(FrontierBootstrap bootstrap, HiveColony colony, Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures) {
-        for (Belief belief : beliefs.values()) HiveTerritoryPerceptionProcess.validateObservation(bootstrap, colony, actors, structures, belief);
+        for (Belief belief : beliefs.values()) validateObservation(bootstrap, colony, actors, belief);
     }
 
     @Override public boolean equals(Object other) { return other instanceof HiveTerritoryKnowledge value && beliefs.equals(value.beliefs); }
     @Override public int hashCode() { return beliefs.hashCode(); }
+
+    private static void validateObservation(FrontierBootstrap bootstrap, HiveColony colony, Map<SubjectId, ActorLocation> actors, Belief belief) {
+        sensorPosition(bootstrap, colony, actors, belief.observerId());
+        if (!nearby(belief.sensorPosition(), belief.cell().originAtY(belief.sensorPosition().y()), sensorRadius(bootstrap, colony, belief.observerId()))) {
+            throw new IllegalArgumentException("hive territory observation is outside its local sensor radius");
+        }
+    }
+
+    private static BlockPosition sensorPosition(FrontierBootstrap bootstrap, HiveColony colony, Map<SubjectId, ActorLocation> actors, SubjectId observer) {
+        HiveOrgan organ = organs(bootstrap, colony).stream().filter(value -> value.id().equals(observer)).findFirst().orElse(null);
+        if (organ != null) {
+            if (organ.kind() != HiveOrganKind.HEART) throw new IllegalArgumentException("hive territory observer is not a heart");
+            return organ.anchor();
+        }
+        Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, observer);
+        ActorLocation location = actors.get(scout.id());
+        if (scout.role() != BioformRole.SCOUT || location == null) throw new IllegalArgumentException("hive territory observer is not a live scout");
+        return location.position();
+    }
+
+    private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
+        return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer)) ? 32 : 48;
+    }
+
+    private static java.util.List<HiveOrgan> organs(FrontierBootstrap bootstrap, HiveColony colony) {
+        return java.util.stream.Stream.concat(bootstrap.hive().organs().stream(), colony.addedOrgans().values().stream()).toList();
+    }
+
+    private static boolean nearby(BlockPosition left, BlockPosition right, int radius) {
+        long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z <= (long) radius * radius;
+    }
 
     public record Belief(InfectionCell cell, FixedRatio intensity, SubjectId observerId, BlockPosition sensorPosition, long observedAt) {
         public Belief {

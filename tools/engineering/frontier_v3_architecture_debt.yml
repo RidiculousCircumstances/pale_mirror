@@ -7,8 +7,8 @@ audit: docs/frontier-v3-architecture-audit.md
 hotspot_line_ceiling:
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 960
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/runtime/FrontierWorldRuntimeDefinition.java: 80
-  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldCommandPlanner.java: 320
-  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldEventReducer.java: 480
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldCommandPlanner.java: 320
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldEventReducer.java: 480
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldPayloadCodecs.java: 833
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldStateCodec.java: 808
 
@@ -20,7 +20,7 @@ max_runtime_reducer_cases: 0
 max_event_reducer_cases: 104
 max_production_development_configurations: 0
 max_lifecycle_fixture_profile_branches: 0
-max_process_classes_in_model: 33
+max_process_classes_in_model: 0
 max_codec_classes_in_model: 0
 
 direct_world_state_construction:

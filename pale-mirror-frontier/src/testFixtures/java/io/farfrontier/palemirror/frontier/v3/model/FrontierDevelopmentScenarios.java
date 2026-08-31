@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;

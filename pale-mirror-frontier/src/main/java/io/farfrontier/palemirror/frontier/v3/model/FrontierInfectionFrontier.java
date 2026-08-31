@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Derived, bounded persistent priority index for deterministic infection-growth selection. */
-final class FrontierInfectionFrontier {
+public final class FrontierInfectionFrontier {
     private final WorldBounds bounds;
     private final HeapNode candidates;
     private final int retainedEntries;
@@ -48,7 +48,7 @@ final class FrontierInfectionFrontier {
         return nextEntries <= maxEntries(bounds) ? changedIndex : compile(bounds, after).withChange(mutation);
     }
 
-    Optional<InfectionCell> best(java.util.Map<InfectionCell, FixedRatio> infection) {
+    public Optional<InfectionCell> best(java.util.Map<InfectionCell, FixedRatio> infection) {
         HeapNode next = normalizedCandidates == null ? candidates : normalizedCandidates;
         while (next != null) {
             Priority priority = next.priority;
@@ -67,7 +67,7 @@ final class FrontierInfectionFrontier {
      * not allowed to manufacture an unseen infection cell: every candidate still has to border
      * the supplied exact infection map and remain inside the world bounds.
      */
-    Optional<InfectionCell> bestToward(java.util.Map<InfectionCell, FixedRatio> infection, BlockPosition destination) {
+    public Optional<InfectionCell> bestToward(java.util.Map<InfectionCell, FixedRatio> infection, BlockPosition destination) {
         return infection.keySet().stream().flatMap(cell -> adjacent(cell).stream()).distinct().filter(cell -> inside(bounds, cell))
                 .filter(cell -> hasInfectedNeighbor(infection, cell)).sorted(Comparator.comparingLong((InfectionCell cell) -> distanceSquared(cell, destination))
                         .thenComparingLong(cell -> raw(infection, cell)).thenComparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst();

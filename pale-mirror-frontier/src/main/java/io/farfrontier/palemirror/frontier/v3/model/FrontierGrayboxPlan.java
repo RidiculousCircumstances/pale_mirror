@@ -71,7 +71,7 @@ public final class FrontierGrayboxPlan {
      * cell. Health reviews reuse the exact structure-cell grammar but never construct the
      * unrelated world plan or temporary GrayboxCell map on their recurring COLD path.
      */
-    static boolean settlementHasInfectionContact(FrontierWorldState state, Settlement settlement) {
+    public static boolean settlementHasInfectionContact(FrontierWorldState state, Settlement settlement) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(settlement, "settlement");
         if (state.infection().isEmpty()) return false;
         for (SettlementStructure structure : settlement.structures()) {

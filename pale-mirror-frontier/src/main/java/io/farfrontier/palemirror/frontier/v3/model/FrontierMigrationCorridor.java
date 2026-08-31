@@ -22,13 +22,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
  * obstructions remain observations at the HOT boundary and never cause this compiler to rewrite
  * the route.</p>
  */
-final class FrontierMigrationCorridor {
+public final class FrontierMigrationCorridor {
     private static final int MAX_SEARCHED_CELLS_PER_SEGMENT = 32_768;
     private static final List<Step> STEPS = List.of(new Step(0, -1), new Step(-1, 0), new Step(1, 0), new Step(0, 1));
 
     private FrontierMigrationCorridor() { }
 
-    static List<BlockPosition> compile(FrontierWorldState state, SubjectId residentId, BlockPosition start, Settlement source, Settlement destination,
+    public static List<BlockPosition> compile(FrontierWorldState state, SubjectId residentId, BlockPosition start, Settlement source, Settlement destination,
                                        BlockPosition arrival) {
         Objects.requireNonNull(state, "migration state"); Objects.requireNonNull(start, "migration start");
         Objects.requireNonNull(residentId, "migration resident");

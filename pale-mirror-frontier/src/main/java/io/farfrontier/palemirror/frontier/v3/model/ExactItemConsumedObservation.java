@@ -16,5 +16,5 @@ public record ExactItemConsumedObservation(PhysicalObservationId id, PhysicalInt
         }
     }
 
-    int consumedCount() { return countBefore - countAfter; }
+    public int consumedCount() { return countBefore - countAfter; }
 }

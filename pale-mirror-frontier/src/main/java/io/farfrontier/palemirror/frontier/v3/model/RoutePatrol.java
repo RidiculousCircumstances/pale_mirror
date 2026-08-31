@@ -22,18 +22,18 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId gu
         }
         if (status == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && obstruction.isEmpty()) throw new IllegalArgumentException("obstructed patrol needs exact evidence");
     }
-    RoutePatrol advance(int nextIndex) {
+    public RoutePatrol advance(int nextIndex) {
         if (status != RoutePatrolStatus.EN_ROUTE || nextIndex != routeIndex + 1) throw new IllegalArgumentException("patrol advancement is not sequential");
         return new RoutePatrol(taskId, settlementId, guardId, route, nextIndex,
                 nextIndex == route.size() - 1 ? RoutePatrolStatus.ROUTE_CLEAR : RoutePatrolStatus.EN_ROUTE, Optional.empty());
     }
-    RoutePatrol confirm(BlockPosition position) {
+    public RoutePatrol confirm(BlockPosition position) {
         if (status != RoutePatrolStatus.EN_ROUTE || !FrontierRouteNetwork.containsOperationSurfaceCell(route, position)) {
             throw new IllegalArgumentException("patrol cannot confirm a foreign obstruction");
         }
         return new RoutePatrol(taskId, settlementId, guardId, route, routeIndex, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(position));
     }
-    RoutePatrol fail() {
+    public RoutePatrol fail() {
         if (status != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("only an active patrol may fail");
         return new RoutePatrol(taskId, settlementId, guardId, route, routeIndex, RoutePatrolStatus.FAILED, Optional.empty());
     }

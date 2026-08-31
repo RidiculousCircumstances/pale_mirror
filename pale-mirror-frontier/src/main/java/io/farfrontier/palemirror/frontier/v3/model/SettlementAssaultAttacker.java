@@ -18,10 +18,10 @@ public record SettlementAssaultAttacker(SubjectId actorId, List<BlockPosition> r
         }
     }
 
-    BlockPosition position() { return route.get(routeIndex); }
-    boolean atDestination() { return routeIndex == route.size() - 1; }
+    public BlockPosition position() { return route.get(routeIndex); }
+    public boolean atDestination() { return routeIndex == route.size() - 1; }
 
-    SettlementAssaultAttacker advance(int nextRouteIndex) {
+    public SettlementAssaultAttacker advance(int nextRouteIndex) {
         if (atDestination() || nextRouteIndex != routeIndex + 1) {
             throw new IllegalArgumentException("assault attacker advancement is not sequential");
         }

@@ -20,7 +20,7 @@ final class ResourceSitePhysicalIntentStateSupport {
 
     static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
-            ResourceSiteHarvestProcess.validateIntent(state, state.resourceSites().site(intent.causeSubjectId()), intent); return;
+            validateHarvestBinding(state.resourceSites().site(intent.causeSubjectId()), intent); return;
         }
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return;
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
@@ -53,7 +53,7 @@ final class ResourceSitePhysicalIntentStateSupport {
 
     static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); ResourceSiteHarvestJob job = ResourceSiteHarvestProcess.harvest(lifecycle, intent.id());
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
         validateHarvestReceipt(state.bootstrap(), intent, receipt); if (!receipt.siteId().equals(job.siteId()) || !receipt.workerId().equals(job.workerId())) {
             throw new IllegalArgumentException("resource-site harvest receipt has a foreign site or worker");
         }
@@ -136,7 +136,7 @@ final class ResourceSitePhysicalIntentStateSupport {
     }
 
     private static void validateHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {
-        ResourceSiteHarvestJob job = ResourceSiteHarvestProcess.harvest(lifecycle, intent.id());
+        ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || !intent.causeSubjectId().equals(lifecycle.siteId())
                 || !intent.subjectIds().equals(List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()))
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED) {

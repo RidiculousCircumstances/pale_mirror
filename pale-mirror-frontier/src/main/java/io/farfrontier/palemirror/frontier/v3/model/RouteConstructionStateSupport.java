@@ -41,7 +41,7 @@ public final class RouteConstructionStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(next));
     }
 
-    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION) throw new IllegalArgumentException("route construction intent kind is invalid");
         RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
@@ -52,14 +52,14 @@ public final class RouteConstructionStateSupport {
         ExactItemStack material = state.inventory().items().get(materialId);
         if (project.status() != RouteConstructionStatus.BUILDING || material == null || !material.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind())
                 || !material.custody().equals(new InventoryCustody.Cargo(cargoId)) || state.inventory().cargo().get(cargoId) == null
-                || !materialId.equals(RouteConstructionProcess.cargoItemId(project))
+                || !materialId.equals(project.plannedCargoItemId())
                 || !state.inventory().cargo().get(cargoId).itemIds().equals(java.util.List.of(materialId))) {
             throw new IllegalArgumentException("route construction intent lacks exact COLD work cargo");
         }
         if (!wholeBlock(intent).equals(nextCell(state, project))) throw new IllegalArgumentException("route construction intent does not target its next cell");
     }
 
-    static void validateMaterialLoadingIntent(FrontierWorldState state, PhysicalIntent intent) {
+    public static void validateMaterialLoadingIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)
                 || intent.subjectIds().size() != 5 || !intent.causeSubjectId().equals(intent.subjectIds().get(1))) {
             throw new IllegalArgumentException("route construction material loading has invalid ownership");
@@ -69,8 +69,8 @@ public final class RouteConstructionStateSupport {
             throw new IllegalArgumentException("route construction material loading has no unassigned active project");
         }
         SubjectId cargoId = intent.subjectIds().get(2), cargoItemId = intent.subjectIds().get(3), itemId = intent.subjectIds().get(4);
-        if (!cargoId.equals(RouteConstructionProcess.cargoId(project)) || state.inventory().cargo().containsKey(cargoId)
-                || !cargoItemId.equals(RouteConstructionProcess.cargoItemId(project)) || state.inventory().items().containsKey(cargoItemId)) {
+        if (!cargoId.equals(project.plannedCargoId()) || state.inventory().cargo().containsKey(cargoId)
+                || !cargoItemId.equals(project.plannedCargoItemId()) || state.inventory().items().containsKey(cargoItemId)) {
             throw new IllegalArgumentException("route construction material loading has invalid cargo identity");
         }
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -84,7 +84,7 @@ public final class RouteConstructionStateSupport {
         }
     }
 
-    static void validateMaterialLoadingReceipt(FrontierWorldState state, PhysicalIntent intent, RouteConstructionMaterialLoadObservation observation) {
+    public static void validateMaterialLoadingReceipt(FrontierWorldState state, PhysicalIntent intent, RouteConstructionMaterialLoadObservation observation) {
         validateMaterialLoadingIntent(state, intent);
         ExactItemStack item = state.inventory().items().get(observation.sourceItemId());
         if (!intent.id().equals(observation.intentId()) || !intent.causeSubjectId().equals(observation.projectId())
@@ -189,11 +189,11 @@ public final class RouteConstructionStateSupport {
                 .routeConstructions(projects).routeTopology(state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints())));
     }
 
-    static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
+    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction must be owned by the route network");
         return begin(state, started.project());
     }
-    static FrontierWorldState reduceMaterialLoaded(FrontierWorldState state, SubjectId subject, RouteConstructionMaterialLoaded loaded) {
+    public static FrontierWorldState reduceMaterialLoaded(FrontierWorldState state, SubjectId subject, RouteConstructionMaterialLoaded loaded) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material cargo must be owned by the route network");
         RouteConstruction project = state.routeConstructions().get(loaded.projectId());
         if (project == null || project.cargoId().isPresent() || !loaded.cargo().ownerId().equals(FrontierRouteNetwork.OWNER) || loaded.cargo().itemIds().size() != 1) {
@@ -213,7 +213,7 @@ public final class RouteConstructionStateSupport {
                 .extractOneToCargo(observation.sourceItemId(), loaded.cargo(), observation.cargoItemId())).routeConstructions(projects));
     }
 
-    static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {
+    public static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route topology cutover must be owned by the route network");
         return cutover(state, cutover.projectId());
     }

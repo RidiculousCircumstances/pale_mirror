@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Pure validation and terminal state assembly for one fully inspected physical blast. */
-final class ExplosionStateSupport {
+public final class ExplosionStateSupport {
     private ExplosionStateSupport() { }
 
     static void validateReceipt(PhysicalIntent intent, ExplosionObservation observation) {
@@ -19,7 +19,7 @@ final class ExplosionStateSupport {
         }
     }
 
-    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.PREPARED) {
             throw new IllegalArgumentException("explosion intent has invalid physical lifecycle");
         }

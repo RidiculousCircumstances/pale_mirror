@@ -46,22 +46,22 @@ public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId owner
             throw new IllegalArgumentException("only resource-harvest task may retain its exact field target");
         }
     }
-    StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
+    public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, List<StrategicTaskRequirement> requirements,
                   List<SubjectId> dependencies, StrategicTaskStatus status) {
         this(id, objectiveId, ownerId, kind, infectionTarget, Optional.empty(), Optional.empty(), requirements, dependencies, status, Optional.empty());
     }
-    StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
+    public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget,
                   List<StrategicTaskRequirement> requirements, List<SubjectId> dependencies, StrategicTaskStatus status) {
         this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, Optional.empty(), requirements, dependencies, status, Optional.empty());
     }
-    StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
+    public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget, Optional<SubjectId> resourceSiteTarget,
                   List<StrategicTaskRequirement> requirements, List<SubjectId> dependencies, StrategicTaskStatus status) {
         this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, status, Optional.empty());
     }
-    StrategicTask withStatus(StrategicTaskStatus nextStatus) {
+    public StrategicTask withStatus(StrategicTaskStatus nextStatus) {
         return new StrategicTask(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, nextStatus, operationObservationPosition);
     }
 }

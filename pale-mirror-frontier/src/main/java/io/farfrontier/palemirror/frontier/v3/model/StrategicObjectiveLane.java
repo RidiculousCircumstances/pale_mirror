@@ -8,7 +8,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
  * kind, not stored independently, so snapshots and WAL retain one source of
  * truth and old objective payloads remain unambiguous.</p>
  */
-enum StrategicObjectiveLane {
+public enum StrategicObjectiveLane {
     STRATEGIC,
     FACILITY;
 

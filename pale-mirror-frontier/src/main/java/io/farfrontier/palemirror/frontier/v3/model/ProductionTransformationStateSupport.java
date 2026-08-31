@@ -14,7 +14,7 @@ import java.util.Map;
 public final class ProductionTransformationStateSupport {
     private ProductionTransformationStateSupport() { }
 
-    static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION) return;
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         if (job == null || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId(), job.outputItemId()))) {
@@ -32,9 +32,9 @@ public final class ProductionTransformationStateSupport {
         StrategicTask task = activeTask(state, job);
         if (task.status() != StrategicTaskStatus.ACTIVE) throw new IllegalArgumentException("production transformation task is not active");
         java.util.Optional<EmploymentContract> contract = intent.status() == PhysicalIntentStatus.RUNNING
-                ? CompanyWorkPaymentProcess.settlementContractFor(state, job) : CompanyWorkPaymentProcess.contractFor(state, job);
+                ? CompanyWorkPaymentStateSupport.settlementContractFor(state, job) : CompanyWorkPaymentStateSupport.contractFor(state, job);
         contract.ifPresent(value -> {
-            FinancialReservation expected = CompanyWorkPaymentProcess.reservation(job, value);
+            FinancialReservation expected = CompanyWorkPaymentStateSupport.reservation(job, value);
             if (!state.inventory().economics().reservations().containsKey(expected.id())) {
                 throw new IllegalArgumentException("production transformation has no held company finance");
             }
@@ -54,7 +54,7 @@ public final class ProductionTransformationStateSupport {
                 || job.outputCount() != observation.outputCount()) {
             throw new IllegalArgumentException("production transformation receipt does not match its durable job");
         }
-        FrontierWorldState paidState = CompanyWorkPaymentProcess.settleCommittedPhysicalWork(state, job);
+        FrontierWorldState paidState = CompanyWorkPaymentStateSupport.settleCommittedPhysicalWork(state, job);
         java.util.Optional<MarketWorkOrder> order = paidState.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) {
             paidState = paidState.withCompanies(paidState.companies().withMarket(paidState.companies().market().complete(order.orElseThrow().id())));
