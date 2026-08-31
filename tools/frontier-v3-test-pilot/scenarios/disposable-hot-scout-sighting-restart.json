@@ -24,19 +24,25 @@
       "eventKind": "hot_scout_operation_observed", "subject": "bioform:west-1", "causal": { "operation": "operation:supply-1-2", "cargo": "cargo:supply-1-2" } }, "timeoutMs": 30000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "CLOSED" }, "timeoutMs": 60000 },
-    { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" }
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveIntercept": { "position": { "x": -367, "y": 64, "z": -340 } } }, "timeoutMs": 30000 }
   ],
-  "restart": { "mode": "graceful", "afterAction": 6 },
+  "restart": { "mode": "graceful", "afterAction": 7 },
   "assertions": [
     { "after": 2, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
       "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
     { "after": 3, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
       "hiveIntercept": { "position": { "x": -367, "y": 64, "z": -340 } } } },
-    { "after": 3, "view": "trace", "id": "hot-scout-sighting:bioform:west-1", "expect": { "status": "ok",
+    { "after": 4, "view": "trace", "id": "hot-scout-sighting:bioform:west-1", "expect": { "status": "ok",
       "eventKind": "hot_scout_operation_observed", "subject": "bioform:west-1", "causal": { "operation": "operation:supply-1-2", "cargo": "cargo:supply-1-2" } } },
-    { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
-      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
+    { "after": 6, "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "CLOSED" } },
     { "after": 7, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
+    { "after": 8, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveObservedCarrier": { "x": -367, "y": 64, "z": -340 } } },
+    { "after": 8, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
       "hiveIntercept": { "position": { "x": -367, "y": 64, "z": -340 } } } }
   ],
   "frames": []

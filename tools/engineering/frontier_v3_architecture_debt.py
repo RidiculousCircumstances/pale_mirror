@@ -36,8 +36,12 @@ FRONTIER_MAIN = Path(
 NEOFORGE_MAIN = Path(
     "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3"
 )
+NEOFORGE_PILOT = Path(
+    "pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3"
+)
 RUNTIME_DEFINITION = FRONTIER_MAIN / "model/FrontierWorldRuntimeDefinition.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
+FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -100,6 +104,14 @@ def collect(root: Path) -> dict[str, Any]:
     runtime = _text(root, RUNTIME_DEFINITION)
     lifecycle = _text(root, SERVER_LIFECYCLE)
     model_root = root / FRONTIER_MAIN / "model"
+    forced_chunk_loads: dict[str, int] = {}
+    for source_root in (NEOFORGE_MAIN, NEOFORGE_PILOT):
+        for path in _java_files(root, source_root):
+            if not path.name.endswith("GameTests.java"):
+                continue
+            count = len(FORCED_CHUNK_LOAD.findall(path.read_text(encoding="utf-8")))
+            if count:
+                forced_chunk_loads[path.relative_to(root).as_posix()] = count
     return {
         "hotspot_lines": {},
         "manual_executor_ticks": len(MANUAL_EXECUTOR_TICK.findall(lifecycle)),
@@ -122,6 +134,7 @@ def collect(root: Path) -> dict[str, Any]:
         "direct_world_state_construction": constructors,
         "persisted_enum_position_tags": enum_tags,
         "scene_cause_type_branches": scene_branches,
+        "v3_gametest_forced_chunk_loads": forced_chunk_loads,
     }
 
 
@@ -242,6 +255,7 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         "direct_world_state_construction",
         "persisted_enum_position_tags",
         "scene_cause_type_branches",
+        "v3_gametest_forced_chunk_loads",
     ):
         _validate_counted_files(metrics[label], policy.get(label), label)
 

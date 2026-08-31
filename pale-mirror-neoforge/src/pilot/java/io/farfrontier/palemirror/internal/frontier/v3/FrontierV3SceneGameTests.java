@@ -26,7 +26,6 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -160,9 +159,9 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void activeSceneBodiesCarryStrictGrayboxAdmissionProof(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:scene-admission-proof"), 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
@@ -170,21 +169,23 @@ public final class FrontierV3SceneGameTests {
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the admission fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+        List<net.minecraft.world.entity.Mob> admittedBodies = new java.util.ArrayList<>();
         for (int index = 0; index < lease.members().size(); index++) {
             BlockPos position = origin.offset((index % 2) * 2, 0, (index / 2) * 2);
-            // The vanilla 1x1 GameTest template only tickets its own chunk. This proof
-            // deliberately uses an off-template HOT scene, so load each fixture chunk
-            // synchronously without creating a persistent force-load ticket.
-            level.getChunkAt(position); prepareFloor(level, position);
-            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
+            prepareFloor(level, position);
+            admittedBodies.add(addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position));
         }
-        // addFreshEntity is accepted on this server tick but the UUID index becomes observable
-        // on the next tick.  The proof is about strict admission, not an incidental indexing race.
-        helper.runAfterDelay(1L, () -> {
+        // addFreshEntity is accepted on this server tick, but under the parallel GameTest
+        // runner its UUID index may settle one more tick later.  Retain the exact references
+        // and assert both their continued liveness and their indexed identities; the wait does
+        // not create/repair a body or affect canonical state.
+        helper.runAfterDelay(2L, () -> {
             try {
-                for (SceneMember member : lease.members()) {
+                for (int index = 0; index < lease.members().size(); index++) {
+                    SceneMember member = lease.members().get(index);
+                    Entity created = admittedBodies.get(index);
                     Entity body = level.getEntity(member.entityId());
-                    helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
+                    helper.assertTrue(!created.isRemoved() && body == created && FrontierV3SceneExecutor.recognizes(runtime, body),
                             "only a body whose UUID, kind, actor, lease and revision match an active canonical scene may pass Graybox admission: "
                                     + admissionDetail(runtime, member, body));
                 }
@@ -369,10 +370,8 @@ public final class FrontierV3SceneGameTests {
         for (int index = 0; index < lease.members().size(); index++) {
             BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
-        BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
-        level.getChunkAt(handoff); prepareFloor(level, cargoPosition(handoff, lease));
-        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
-                "restart reclamation requires the exact observed cargo carrier as well as every exact body");
+        BlockPos cargo = cargoPosition(origin, lease); prepareFloor(level, cargo);
+        MinecartChest carrier = addOwnedCarrier(helper, level, state(runtime), lease, cargo);
         helper.runAfterDelay(1L, () -> {
         helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "restart recovery must first retain the active scene as UNKNOWN");
@@ -391,7 +390,7 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
                 "a missing exact scene body must remain visible UNKNOWN and never be recreated during reclaim");
         lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
-        Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease)); if (carrier != null) carrier.discard();
+        if (!carrier.isRemoved()) carrier.discard();
         runtime.shutdown(); helper.succeed();
         });
     }
@@ -459,94 +458,6 @@ public final class FrontierV3SceneGameTests {
             if (body != null) body.discard();
         });
         runtime.shutdown(); helper.succeed();
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-assault", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void scoutRootedSettlementAssaultUsesExactCargoFreeBodiesStrikeAndRecovery(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos marker = helper.absolutePos(new BlockPos(36, 8, 0));
-        String fixture = "settlement-assault-game-test-" + marker.getX() + "-" + marker.getZ();
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L),
-                        new EphemeralStore(), 20_000);
-        try {
-            FrontierWorldState initial = state(runtime);
-            SettlementAssaultSceneCandidate battle = initial.coldSettlementAssaultSceneCandidates().getFirst();
-            BlockPos anchor = new BlockPos(battle.handoffPosition().x(), battle.handoffPosition().y(), battle.handoffPosition().z());
-            // This deliberate local GameTest load is not a runtime ticket. The production
-            // executor still sees only a naturally loaded player demand surface.
-            for (BlockPosition floor : battle.memberPositions().values()) {
-                BlockPos position = new BlockPos(floor.x(), floor.y(), floor.z()); level.getChunkAt(position); prepareFloor(level, position);
-            }
-            level.getChunkAt(anchor); prepareFloor(level, anchor);
-            var player = helper.makeMockServerPlayerInLevel();
-            player.teleportTo(level, anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D, java.util.Set.of(), 0.0F, 0.0F);
-
-            FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
-            SceneLease prepared = state(runtime).sceneLeases().values().stream().findFirst()
-                    .orElseThrow(() -> new IllegalStateException("assault must prepare one typed lease"));
-            helper.assertTrue(prepared.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause,
-                    "the Scout-rooted battle must retain a typed assault cause rather than a route/cargo surrogate");
-            helper.assertValueEqual(prepared.members().size(), battle.memberPositions().size(),
-                    "the exact COLD battlefield participant set is the only HOT body set");
-            FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
-
-            helper.runAfterDelay(2L, () -> {
-                try {
-                    SceneLease hot = state(runtime).sceneLeases().get(prepared.id());
-                    helper.assertValueEqual(hot.status(), SceneLeaseStatus.HOT, "all exact attacker and defender bodies must admit before the battle becomes HOT");
-                    for (SceneMember member : hot.members()) {
-                        Entity body = level.getEntity(member.entityId());
-                        helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
-                                "every typed assault participant must retain its exact owned physical identity: "
-                                        + admissionDetail(runtime, member, body));
-                        boolean bioform = member.actorId().value().startsWith("bioform:");
-                        helper.assertTrue(bioform ? body instanceof Zombie : body instanceof Villager,
-                                "graybox assault body kind must follow canonical person/bioform identity");
-                    }
-                    helper.assertTrue(level.getEntitiesOfClass(MinecartChest.class, new net.minecraft.world.phys.AABB(anchor).inflate(16.0D)).isEmpty(),
-                            "a settlement assault is cargo-free and must never materialize a logistics carrier");
-
-                    Zombie attacker = hot.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
-                            .findFirst().orElseThrow(() -> new IllegalStateException("typed assault needs one Zombie attacker"));
-                    Villager target = hot.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
-                            .findFirst().orElseThrow(() -> new IllegalStateException("typed assault needs one Villager defender"));
-                    attacker.setPos(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D);
-                    target.setPos(anchor.getX() + 1.25D, anchor.getY(), anchor.getZ() + 0.5D);
-                    FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
-                    PhysicalIntent preparedStrike = onlyStrike(state(runtime));
-                    helper.assertValueEqual(preparedStrike.causeSubjectId(), battle.assaultId(),
-                            "the durable strike must be owned by the assault, never a fabricated route operation");
-                    FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
-                    float before = target.getHealth(); FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
-                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFIRMED,
-                            "the typed assault strike must complete through the normal durable physical receipt boundary");
-                    helper.assertTrue(target.getHealth() < before, "only the physical exact defender may receive the real Minecraft hit");
-
-                    helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
-                            "restart first makes the assault lease explicit UNKNOWN rather than cloning its bodies");
-                    FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
-                    helper.assertValueEqual(state(runtime).sceneLeases().get(hot.id()).status(), SceneLeaseStatus.HOT,
-                            "the complete loaded exact body set reclaims the same typed assault lease after restart");
-
-                    FrontierV3CommandSubmission.submit(runtime, "assault-game-test-drain", hot.id().value(), new SceneLeaseTransition(hot.id(), SceneLeaseStatus.DRAINING));
-                    FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
-                    player.teleportTo(level, anchor.getX() + 256.0D, anchor.getY(), anchor.getZ() + 256.0D, java.util.Set.of(), 0.0F, 0.0F);
-                    FrontierV3SceneExecutor.tick(level, runtime);
-                    helper.assertTrue(hot.members().stream().map(SceneMember::entityId).map(level::getEntity).allMatch(java.util.Objects::isNull),
-                            "closed cargo-free assault cleanup must remove only its exact bodies and never query a legacy carrier");
-                    helper.succeed();
-                } finally {
-                    state(runtime).sceneLeases().values().forEach(lease -> lease.members().forEach(member -> {
-                        Entity body = level.getEntity(member.entityId()); if (body != null) body.discard();
-                    }));
-                    FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
-                    runtime.shutdown();
-                }
-            });
-        } catch (RuntimeException failure) {
-            FrontierV3SettlementAssaultSceneExecutor.forget(runtime); runtime.shutdown(); throw failure;
-        }
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -697,7 +608,8 @@ public final class FrontierV3SceneGameTests {
         int ordinal = lease.members().size();
         return anchor.offset((ordinal % 2) * 2 + 1, 0, (ordinal / 2) * 2);
     }
-    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member, BlockPos position) {
+    private static net.minecraft.world.entity.Mob addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
+                                                                SceneLease lease, SceneMember member, BlockPos position) {
         boolean bioform = member.actorId().value().startsWith("bioform:");
         net.minecraft.world.entity.Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
@@ -708,6 +620,22 @@ public final class FrontierV3SceneGameTests {
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
+        return body;
+    }
+    /** Local GameTest representation of one already-canonical exact cargo batch. */
+    private static MinecartChest addOwnedCarrier(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
+                                                 SceneLease lease, BlockPos position) {
+        MinecartChest cart = EntityType.CHEST_MINECART.create(level);
+        helper.assertTrue(cart != null, "the exact HOT cargo carrier fixture must be constructible");
+        cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
+        cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
+        cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
+        var cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
+        for (int slot = 0; slot < cargo.itemIds().size(); slot++) {
+            cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state.inventory().items().get(cargo.itemIds().get(slot))));
+        }
+        helper.assertTrue(level.addFreshEntity(cart), "the exact HOT cargo carrier fixture must enter the loaded world");
+        return cart;
     }
     private static PhysicalIntent onlyStrike(FrontierWorldState state) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE).reduce((left, right) -> right)

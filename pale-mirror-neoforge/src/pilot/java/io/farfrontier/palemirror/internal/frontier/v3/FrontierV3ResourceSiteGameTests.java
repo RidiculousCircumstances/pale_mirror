@@ -23,13 +23,11 @@ import java.util.List;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ResourceSiteGameTests {
-    private static final BlockPos FIXTURE_ORIGIN = new BlockPos(2, 8, 2);
-
     private FrontierV3ResourceSiteGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN));
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
@@ -74,7 +72,7 @@ public final class FrontierV3ResourceSiteGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-site-cold", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void coldCompletedFieldProjectsOnceFromNeutralBaselineButNeverOverwritesForeignBlocks(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-cold-game-test");
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-cold-game-test");
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
@@ -92,7 +90,7 @@ public final class FrontierV3ResourceSiteGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-site-foreign", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void foreignFieldCellIsNeverAdoptedOrOverwritten(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN));
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareBaseline(level, site); BlockPosition foreign = site.cropSlots().getFirst(); BlockPos position = minecraft(foreign);
         level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3ResourceSiteExecutor.baseline(level, site) || FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
@@ -105,7 +103,7 @@ public final class FrontierV3ResourceSiteGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-site-irrigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void irrigationIsOwnedFieldInfrastructureAndItsLossIsNeverRepairedBlindly(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-irrigation-game-test");
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-irrigation-game-test");
         prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
@@ -122,7 +120,7 @@ public final class FrontierV3ResourceSiteGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-site-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void externalBlastRetainsOneFieldWitnessAcrossSavedDataReload(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
             claims.reserve(site.id(), new PhysicalIntentId("intent:site-explosion-game-test"));
@@ -149,6 +147,12 @@ public final class FrontierV3ResourceSiteGameTests {
     private static ResourceSite field(BlockPos origin) {
         return field(origin, "site:resource-site-game-test");
     }
+    /** Fits every 8x8 field and its one-cell light border inside the GameTest's own loaded chunk. */
+    private static BlockPos fixtureOrigin(GameTestHelper helper) {
+        BlockPos template = helper.absolutePos(new BlockPos(0, 8, 0));
+        return new BlockPos(Math.floorDiv(template.getX(), 16) * 16 + 4, template.getY(),
+                Math.floorDiv(template.getZ(), 16) * 16 + 4);
+    }
     private static ResourceSite field(BlockPos origin, String id) {
         List<BlockPosition> crops = new ArrayList<>(64);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(origin.getX() + x, origin.getY(), origin.getZ() + z));
@@ -156,11 +160,7 @@ public final class FrontierV3ResourceSiteGameTests {
                 ResourceSiteKind.WHEAT_FIELD, crops);
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
-        // GameTest's vanilla 1x1 template only loads its own chunk, while an 8x8
-        // field can cross a random test-world chunk edge. These are fixture reads,
-        // not production tickets: load every exact field chunk before its baseline
-        // writes so an unavailable neighbour cannot look like a physical conflict.
-        site.managedSlots().forEach(slot -> level.getChunkAt(minecraft(slot)));
+        // fixtureOrigin keeps every managed slot inside this test's naturally loaded chunk.
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             // Production accepts grass or dirt; use dirt in the delayed fixture because
             // grass can receive a random tick before the ownership assertion runs.
@@ -173,11 +173,7 @@ public final class FrontierV3ResourceSiteGameTests {
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static void prepareGrayboxBaseline(ServerLevel level, ResourceSite site) {
-        // Keep the graybox COLD-projection fixture subject to the same exact-chunk
-        // setup as the ordinary baseline. An 8x8 field can cross the random
-        // 1x1 GameTest template boundary; this test-only admission load prevents
-        // an unavailable neighbouring cell from masquerading as player/world drift.
-        site.managedSlots().forEach(slot -> level.getChunkAt(minecraft(slot)));
+        // fixtureOrigin keeps every managed slot inside this test's naturally loaded chunk.
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
         site.irrigationSlots().forEach(irrigation -> { BlockPos position = minecraft(irrigation); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

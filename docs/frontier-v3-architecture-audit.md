@@ -36,6 +36,12 @@ JFR, restart or player-visible gates in the implementation plan.
 | V3-AUD-011 | P1 | Structural debt | The stable interface defines separate `model`, `process` and `persistence` ownership, but 33 `*Process` and 23 `*Codec(s)` source files currently reside in `frontier.v3.model`. |
 | V3-AUD-012 | P1 | Confirmed defect | `FrontierPayload` is open and `FrontierWorldPayloadCodecs.create()` manually enumerates codecs; no gate proves every process input/output payload has a wire codec. This mechanism already omitted `ResourceSiteHarvestObservation` once. |
 
+## Follow-up finding during closure
+
+| ID | Severity | Classification | Evidence discovered during remediation |
+|---|---:|---|---|
+| V3-AUD-013 | P1 | Confirmed defect | Seven v3 GameTest calls used `ServerLevel.getChunkAt` to force-load canonical scene/field chunks; two test-only v3 helpers also remained in `src/main` and were not rejected by packaged-JAR verification. A GameTest level is intentionally placed outside the finite canonical 1024×1024 world, so treating it as a real remote-scene integration world either forces chunks or creates invalid canonical positions. |
+
 ## Remediation status
 
 The evidence table above remains the immutable record of revision `5ca5291`.
@@ -56,6 +62,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-007 | OPEN — H0.5 | Add a persisted, hashed, explicitly selected `FrontierRuleset`. |
 | V3-AUD-009 | OPEN — H0.6 | Instrument then measure complete-domain allocation/validation pressure. |
 | V3-AUD-010 | OPEN — H0.6 | Prove deterministic fairness and bounded physical-stage pressure at multi-front scale. |
+| V3-AUD-013 | CLOSED | Test-only fixture helpers and the resource-site GameTest now live only on the pilot source set; `FrontierV3GameTestSceneLeases` and `FrontierV3ResourceSiteGameTests` are rejected from the production JAR. The fast debt validator enforces zero `getChunkAt` calls in every v3 GameTest. The focused scene slice passes 28/28. Fresh visible native runs on `DISPLAY=:0` passed both canonical-coordinate flows with a graceful restart: `disposable_hot_scout_sighting_restart` retained the exact observed carrier/intercept operation after its scene closed, while `disposable_settlement_assault_restart` reloaded a 27-member assault with its confirmed strike and durable ownership. These scenarios, not an out-of-bounds GameTest surrogate, prove physical canonical coordinates. |
 
 ## Findings and required corrections
 
@@ -255,6 +262,26 @@ module.
 Exit evidence: a negative composition test omits one codec and fails before
 engine start; every process descriptor round-trips one representative payload;
 the full registered payload set round-trips through snapshot/WAL recovery.
+
+### V3-AUD-013 — GameTest must not impersonate an off-template canonical world
+
+The GameTest server deliberately places its templates at arbitrary far-away
+coordinates. A v3 GameTest that creates a real canonical scene at its original
+1024×1024 coordinates must therefore force-load an unrelated chunk. Conversely,
+moving the physical actor to the template without a complete test-only coordinate
+transform makes canonical position evidence invalid. Both approaches make an
+apparently green test weaker than the real materialization boundary.
+
+Correction: keep GameTests inside their naturally loaded template chunks for
+local executor/ownership behavior. Put scenario fixtures and GameTest-only
+helpers in `src/pilot`; do not package them. Prove cross-coordinate scene
+materialization, player demand, restart and recovery through the native
+disposable test-pilot against a real 1024×1024 v3 world. The architecture debt
+validator rejects every v3 GameTest `getChunkAt` call.
+
+Exit evidence: zero forced v3 GameTest chunk loads; packaged-JAR rejection of
+the two moved test helpers; focused GameTest slice plus the named native scene
+scenarios remain green.
 
 ## Explicit non-defects
 

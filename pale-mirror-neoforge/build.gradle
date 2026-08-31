@@ -384,6 +384,8 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierDevelopmentScenarios.class',
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierV3FixtureCatalog.class',
                     'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotFixtureBootstrap.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3GameTestSceneLeases.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteGameTests.class',
                     'io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties'
             ]
             fixtureEntries.each { entry ->

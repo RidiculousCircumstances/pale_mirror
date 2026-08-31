@@ -36,6 +36,7 @@
 ## State
 
 ### Done
+- V3 test-boundary follow-up `V3-AUD-013` is closed: the test-only scene helper and resource-site GameTests now live only on the pilot classpath and are explicitly rejected from the production JAR. The architecture-debt validator rejects every `getChunkAt` in v3 GameTests. Cross-coordinate physical scene proofs remain the named native disposable scenarios, because a GameTest template is deliberately outside the finite canonical 1024×1024 map; it must not impersonate a remotely force-loaded canonical scene. Node pilot schema tests pass 26/26; focused scene/economy slices pass 28/28 and 11/11; the full critical gate passes 248/248 GameTests, build and JAR verification. Fresh visible native graceful-restart runs prove both the Scout observed-carrier/intercept flow and the 27-member confirmed settlement assault without a remote GameTest chunk load.
 - The user accepted replacement of the Python/source-parity direction with greenfield Frontier v3 and approved the stable contract, implementation-wave structure and legacy-removal policy.
 - The complete pre-v3 ledger is archived at `docs/archive/CONTINUITY_2026-08-27_pre_frontier_v3.md`.
 - `a1a6931` establishes the stable v3 contract, decision-complete implementation waves, valid version-3 architecture transition and explicit frozen-v2 notice.

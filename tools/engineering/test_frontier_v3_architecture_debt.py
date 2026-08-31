@@ -62,6 +62,12 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "process ownership spread"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_v3_gametest_chunk_load(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["v3_gametest_forced_chunk_loads"]["new/FrontierV3HiddenGameTests.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,9 +5,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
-import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
-import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
@@ -18,14 +16,6 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.model.HivePerceptionProcess;
-import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
-import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -46,8 +36,6 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Optional;
 
 /** Materialized recovery evidence for the ambient before-effect actor lease boundary. */
@@ -154,62 +142,6 @@ public final class FrontierV3AmbientActorGameTests {
         farmerBody.discard(); scoutBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-scout-physical-sighting", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
-    public static void hotScoutSeesOnlyTheLoadedExactCargoCarrier(GameTestHelper helper) {
-        WorldId world = new WorldId("frontier:hot-scout-physical-sighting");
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L), new EphemeralStore(), 10_000);
-        FrontierWorldState initial = state(runtime); SubjectId scout = new SubjectId("bioform:west-1");
-        RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
-        SceneLease lease = sceneLease(initial, runtime, operation, "lease:hot-scout-physical-sighting");
-        var logistics = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease);
-        BlockPos carrierFloor = new BlockPos(logistics.cargoPosition().x(), logistics.cargoPosition().y(), logistics.cargoPosition().z());
-        // This is an isolated GameTest fixture chunk, not a production materializer ticket.
-        helper.getLevel().getChunkAt(carrierFloor); prepareCanonicalFloor(helper.getLevel(), carrierFloor);
-        FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-position", scout.value(),
-                new AmbientActorObserved(scout, logistics.cargoPosition(), initial.actorLocations().get(scout).condition().health()));
-        FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-prepare", scout.value(),
-                new AmbientLeasePrepared(AmbientActorProcess.nextLease(state(runtime), scout, runtime.checkpointImage().orElseThrow().instant())));
-        FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-hot", scout.value(), new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
-        FrontierV3CommandSubmission.submit(runtime, "hot-scout-scene-prepare", lease.id().value(), new SceneLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "hot-scout-scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), state(runtime), scout, logistics.cargoPosition()),
-                FrontierV3AmbientActorExecutor.Result.APPLIED, "the exact HOT Scout must have one real loaded-world body");
-
-        // An ordinary nearby chest minecart is intentionally not a V3 carrier and may not
-        // create a side-channel sighting before the exact scene-owned cart exists.
-        net.minecraft.world.entity.vehicle.MinecartChest ordinary = net.minecraft.world.entity.EntityType.CHEST_MINECART.create(helper.getLevel());
-        if (ordinary == null) throw new IllegalStateException("GameTest could not create an ordinary minecart");
-        ordinary.setPos(carrierFloor.getX() + 3.5D, carrierFloor.getY() + 1.0D, carrierFloor.getZ() + 0.5D);
-        helper.assertTrue(helper.getLevel().addFreshEntity(ordinary), "the ordinary minecart fixture must enter the loaded chunk");
-        helper.runAfterDelay(1L, () -> {
-            try {
-                Zombie body = (Zombie) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), scout));
-                helper.assertTrue(body != null, "the exact Scout must be indexed before observing a carrier");
-                helper.assertFalse(FrontierV3AmbientActorExecutor.observeHotScoutSighting(helper.getLevel(), runtime, state(runtime), scout, body,
-                                state(runtime).ambientLeases().get(scout)),
-                        "a nearby but unowned minecart may not become hive perception");
-                helper.assertTrue(HivePerceptionProcess.observedCarrierPosition(state(runtime), operation.id()).isEmpty(),
-                        "no physical carrier means no durable hive knowledge");
-                helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(helper.getLevel(), state(runtime), lease),
-                        FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "the exact HOT carrier must materialize from its lease and exact cargo");
-                helper.assertTrue(FrontierV3AmbientActorExecutor.observeHotScoutSighting(helper.getLevel(), runtime, state(runtime), scout, body,
-                                state(runtime).ambientLeases().get(scout)),
-                        "the Scout must create one durable sighting only after seeing the real exact carrier");
-                helper.assertValueEqual(HivePerceptionProcess.observedCarrierPosition(state(runtime), operation.id()).orElseThrow(), logistics.cargoPosition(),
-                        "the retained strategic fact must use the materialized carrier's canonical anchor");
-                helper.assertTrue(runtime.advance(1, new WorkBudget(64, 512)).isPresent(),
-                        "the durable sighting wake-up must execute through the ordinary server-tick lane");
-                helper.assertValueEqual(HivePerceptionProcess.interceptTask(state(runtime), operation.id()).orElseThrow().position(), logistics.cargoPosition(),
-                        "the resulting intercept task must retain the physically seen carrier anchor rather than re-querying the caravan");
-                ordinary.discard(); Entity carrier = helper.getLevel().getEntity(FrontierV3CargoCarrierExecutor.id(lease));
-                if (carrier != null) carrier.discard(); body.discard(); helper.succeed();
-            } finally {
-                FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown();
-            }
-        });
-    }
-
     @GameTest(batch = "pm-frontier-v3-scout-patrol-cursor", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotScoutFollowsItsLeasedCanonicalPatrolStepRatherThanASeparateLocalCircle(GameTestHelper helper) {
         // Keep this footprint inside the stock template's isolated test cell: the full suite
@@ -308,22 +240,6 @@ public final class FrontierV3AmbientActorGameTests {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
-    }
-    private static void prepareCanonicalFloor(ServerLevel level, BlockPos anchor) {
-        level.setBlock(anchor, Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(anchor.above(), Blocks.AIR.defaultBlockState(), 3);
-        level.setBlock(anchor.above(2), Blocks.AIR.defaultBlockState(), 3);
-    }
-    private static SceneLease sceneLease(FrontierWorldState state, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                         RouteOperation operation, String id) {
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
-        List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> {
-            positions.put(actor, state.actorLocations().get(actor).position());
-            return new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor));
-        }).toList();
-        return SceneLease.atExactPositions(new SceneLeaseId(id), state.bootstrap().worldId(), operation.id(), operation.cargoId(),
-                operation.currentPosition(), operation.activeTravel().orElseThrow().cargoAnchor(), runtime.checkpointImage().orElseThrow().instant(),
-                runtime.checkpointImage().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members, positions);
     }
     private static void prepareSquareFloor(ServerLevel level, BlockPos center, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) prepareFloor(level, center.offset(x, 0, z));

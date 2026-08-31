@@ -90,62 +90,6 @@ public final class FrontierV3SceneDeathGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-deaths", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void releaseRefreshesAfterARealDeathChangesTheCanonicalScene(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        WorldId world = new WorldId("frontier:scene-death-release-refresh-game-test");
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
-        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
-        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-death-release-refresh-game-test");
-        var checkpoint = runtime.checkpointImage().orElseThrow();
-        SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
-        FrontierV3CommandSubmission.submit(runtime, "scene-death-release-refresh-prepare", leaseId.value(), new SceneLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "scene-death-release-refresh-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        BlockPos handoff = new BlockPos(candidate.handoffPosition().x(), candidate.handoffPosition().y(), candidate.handoffPosition().z());
-        level.getChunkAt(handoff);
-        for (int index = 0; index < lease.members().size(); index++) {
-            addOwnedBody(helper, level, lease, lease.members().get(index), handoff.offset(index & 1, 0, index / 2));
-        }
-        int carrierOrdinal = lease.members().size();
-        BlockPos carrierPosition = handoff.offset((carrierOrdinal % 2) * 2 + 1, 0, (carrierOrdinal / 2) * 2);
-        level.setBlock(carrierPosition.below(), Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(carrierPosition, Blocks.AIR.defaultBlockState(), 3);
-        level.setBlock(carrierPosition.above(), Blocks.AIR.defaultBlockState(), 3);
-        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state(runtime), lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
-                "a released HOT scene must retain its exact physical cargo carrier");
-
-        helper.runAfterDelay(1L, () -> {
-            List<Entity> bodies = lease.members().stream().map(member -> level.getEntity(member.entityId())).toList();
-            try {
-                bodies.forEach(body -> helper.assertTrue(body != null, "the exact scene body must remain indexed before release refresh"));
-                FrontierWorldState stale = state(runtime);
-                Entity victim = bodies.getFirst();
-                helper.assertTrue(victim != null && FrontierV3SceneExecutor.observeDeath(runtime, victim, null),
-                        "a real exact death must durably drain its HOT scene");
-                victim.discard();
-                lease.members().stream().skip(1).forEach(member -> helper.assertTrue(level.getEntity(member.entityId()) != null,
-                        "the surviving exact HOT body must remain indexed before executor release: " + member.actorId().value()));
-                SceneMember survivor = lease.members().get(1);
-                Entity survivorBody = level.getEntity(survivor.entityId());
-                helper.assertTrue(survivorBody != null, "one surviving exact HOT body must remain available for its position capture");
-                BlockPosition survivorPosition = new BlockPosition(survivorBody.getBlockX(), survivorBody.getBlockY(), survivorBody.getBlockZ());
-                FrontierV3SceneExecutor.release(level, runtime, stale.sceneLeases().get(leaseId));
-                helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
-                        "release must refresh canonical death evidence and capture only survivors");
-                helper.assertValueEqual(state(runtime).actorLocations().get(survivor.actorId()).position(), survivorPosition,
-                        "COLD continuation must retain the exact surviving HOT position rather than its old approach endpoint");
-                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
-                if (carrier != null) carrier.discard();
-                cleanup(bodies); runtime.shutdown(); helper.succeed();
-            } catch (RuntimeException failure) {
-                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
-                if (carrier != null) carrier.discard();
-                cleanup(bodies); runtime.shutdown(); throw failure;
-            }
-        });
-    }
-
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }
@@ -160,6 +104,7 @@ public final class FrontierV3SceneDeathGameTests {
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
     }
+
 
     private static void cleanup(List<Entity> bodies) {
         bodies.forEach(body -> { if (body != null) body.discard(); });
