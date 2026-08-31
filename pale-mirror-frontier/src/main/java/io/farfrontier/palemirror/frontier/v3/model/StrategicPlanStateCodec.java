@@ -30,7 +30,7 @@ final class StrategicPlanStateCodec {
             writeCount(output, task.requirements().size());
             for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.ordinal());
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
-            output.writeByte(task.status().ordinal());
+            output.writeByte(task.status().ordinal()); writeOptionalPosition(output, task.operationObservationPosition());
         }
         writeCount(output, plans.routePatrols().size());
         for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
@@ -60,16 +60,21 @@ final class StrategicPlanStateCodec {
                 writeTarget(output, Optional.of(known.cell())); output.writeLong(known.intensity().value().raw()); output.writeLong(known.observedAt());
             }
         }
+        writeCount(output, plans.hiveOperationKnowledge().entries().size());
+        for (HiveOperationKnowledge.Sighting sighting : plans.hiveOperationKnowledge().entries().values().stream().sorted(Comparator.comparing(HiveOperationKnowledge.Sighting::operationId)).toList()) {
+            writeSubject(output, sighting.operationId()); writeSubject(output, sighting.scoutId()); writePosition(output, sighting.position()); output.writeLong(sighting.observedAt());
+        }
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true); }
+    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true); }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, true);
+        return read(input, migrateLegacyProductionSlotRequirement, true, true, true);
     }
 
-    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge) throws IOException {
+    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
+                                   boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition) throws IOException {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
@@ -85,6 +90,7 @@ final class StrategicPlanStateCodec {
             SubjectId id = readSubject(input), objective = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
             Optional<SubjectId> operationTarget = readOptionalSubject(input); Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
+            Optional<BlockPosition> operationObservationPosition = hasOperationObservationPosition ? readOptionalPosition(input) : Optional.empty();
             if (migrateLegacyProductionSlotRequirement && kind < StrategicTaskKind.values().length
                     && StrategicTaskKind.values()[kind] == StrategicTaskKind.PRODUCE_BREAD) {
                 List<StrategicTaskRequirement> legacy = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
@@ -93,7 +99,7 @@ final class StrategicPlanStateCodec {
             }
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
                     || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget,
-                    requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {
+                    requirements, dependencies, StrategicTaskStatus.values()[status], operationObservationPosition)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }
@@ -132,7 +138,12 @@ final class StrategicPlanStateCodec {
             }
             if (knowledge.put(settlement, cells) != null) throw new IllegalArgumentException("duplicate settlement infection knowledge");
         }
-        return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge));
+        Map<SubjectId, HiveOperationKnowledge.Sighting> hiveKnowledge = new LinkedHashMap<>();
+        if (hasHiveOperationKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId operation = readSubject(input), scout = readSubject(input); HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation, scout, readPosition(input), input.readLong());
+            if (hiveKnowledge.put(operation, sighting) != null) throw new IllegalArgumentException("duplicate hive operation sighting");
+        }
+        return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge));
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {
@@ -157,6 +168,12 @@ final class StrategicPlanStateCodec {
     }
     private static Optional<SubjectId> readOptionalSubject(DataInputStream input) throws IOException {
         return input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
+    }
+    private static void writeOptionalPosition(DataOutputStream output, Optional<BlockPosition> value) throws IOException {
+        output.writeBoolean(value.isPresent()); if (value.isPresent()) writePosition(output, value.orElseThrow());
+    }
+    private static Optional<BlockPosition> readOptionalPosition(DataInputStream input) throws IOException {
+        return input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
     }
     private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");

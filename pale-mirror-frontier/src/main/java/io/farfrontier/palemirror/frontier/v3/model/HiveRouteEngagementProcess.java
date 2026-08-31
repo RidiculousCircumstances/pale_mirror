@@ -20,12 +20,6 @@ final class HiveRouteEngagementProcess {
     private static final int COLD_STEP_BLOCKS = 16;
     private HiveRouteEngagementProcess() { }
 
-    static Optional<SubjectId> targetOperation(FrontierWorldState state) {
-        return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.EN_ROUTE)
-                .filter(operation -> FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id()))
-                .sorted(Comparator.comparing(RouteOperation::id)).map(RouteOperation::id).findFirst();
-    }
-
     /**
      * The strategic lane may be reconsidered often while a caravan remains en route.
      * A pending start is already a durable claim on that lane; scheduling another start
@@ -51,12 +45,15 @@ final class HiveRouteEngagementProcess {
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || activeForOperation(state, operation.id())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
+        BlockPosition intercept = task.operationObservationPosition().orElse(null);
+        if (intercept == null) {
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
         if (!FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id())) {
             return List.of(schedule(start(task, action.dueAt().ticks() + STEP_INTERVAL)));
         }
-        // An interception claims the caravan's current COLD position. Selecting a future waypoint
-        // would let the independently scheduled caravan arrive before distant guards can reach it.
-        BlockPosition intercept = operation.currentPosition();
+        // The task retains the exact Scout-observed location.  The operation lookup above
+        // is only a liveness precondition, never a hidden targeting query.
         List<EngagementAttacker> attackers = attackers(state, intercept);
         if (attackers.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         RouteEngagement engagement = new RouteEngagement(engagementId(task), task.id(), operation.id(), task.ownerId(), attackers,

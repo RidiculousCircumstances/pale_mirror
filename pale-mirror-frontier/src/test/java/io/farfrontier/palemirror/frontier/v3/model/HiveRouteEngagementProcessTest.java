@@ -33,14 +33,14 @@ class HiveRouteEngagementProcessTest {
         SceneLease lease = routeLease(state, operation, "lease:intercept-exclusive", SceneLeaseStatus.PREPARED);
         state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
 
-        assertTrue(HiveRouteEngagementProcess.targetOperation(state).isEmpty(), "a COLD review must not claim an operation retained by HOT/recovery evidence");
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept-exclusive"), hive,
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-intercept-exclusive"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(operation.currentPosition()));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 3_000L);
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> deferred = HiveRouteEngagementProcess.planStart(state,
                 HiveRouteEngagementProcess.start(task, 3_000L));
@@ -75,8 +75,9 @@ class HiveRouteEngagementProcessTest {
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-intercept"), objective.id(), objective.ownerId(),
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 2_600L);
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> start = HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 2_600L));
         assertEquals(3, start.size());
@@ -84,6 +85,9 @@ class HiveRouteEngagementProcessTest {
         RouteEngagementStarted started = (RouteEngagementStarted) start.get(1).payload();
         assertEquals(operation.id(), started.engagement().operationId());
         assertEquals(Optional.of(operation.id()), task.operationTarget());
+        assertEquals(Optional.of(intercept), task.operationObservationPosition());
+        StrategicTaskPlanned persistedTask = new StrategicTaskPlanned(task);
+        assertEquals(persistedTask, FrontierWorldRuntimeDefinition.payloadCodecs().decode(persistedTask.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(persistedTask)));
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         state = HiveRouteEngagementProcess.reduceStarted(state, objective.ownerId(), started);
         ScheduledAction scheduled = ((ScheduleEffect.Created) start.get(2).payload()).action();
@@ -117,8 +121,9 @@ class HiveRouteEngagementProcessTest {
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-scene-conflict"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 3_000L);
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
             if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
@@ -160,6 +165,25 @@ class HiveRouteEngagementProcessTest {
         assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(plans));
     }
 
+    @Test void legacyInterceptTaskWithoutAnObservedPositionCannotAcquireOneAtExecutionTime() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-legacy-intercept"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-legacy-intercept"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planStart(state,
+                HiveRouteEngagementProcess.start(task, 3_000L));
+
+        assertEquals(List.of(new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED)),
+                events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).toList());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
     @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
@@ -172,8 +196,9 @@ class HiveRouteEngagementProcessTest {
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-cold-combat"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 3_000L);
 
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
@@ -282,8 +307,9 @@ class HiveRouteEngagementProcessTest {
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-cold-exclusive"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 3_000L);
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
             if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
@@ -314,8 +340,9 @@ class HiveRouteEngagementProcessTest {
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-ambient-recovery-exclusive"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = withSighting(state, operation, 3_000L);
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L))) {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
             if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
@@ -348,18 +375,26 @@ class HiveRouteEngagementProcessTest {
         assertEquals(3_060L, ((ScheduleEffect.Created) hotDeferred.getFirst().payload()).action().dueAt().ticks());
     }
 
-    @Test void autonomousSupplyProfileDoesNotInventAnUnscoutedHiveInterception() {
+    @Test void autonomousSupplyProfileInterceptsOnlyAfterAnExactScoutSighting() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentAutonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
         FrontierWorldState latest = null;
+        boolean sighted = false;
+        boolean interceptedFromBoundPosition = false;
 
         for (long tick = 20L; tick <= 10_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             latest = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            sighted |= !latest.strategicPlans().hiveOperationKnowledge().entries().isEmpty();
+            interceptedFromBoundPosition |= latest.strategicPlans().tasks().values().stream().anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
+                    && task.operationTarget().isPresent() && task.operationObservationPosition().isPresent());
         }
 
         FrontierWorldState finalState = latest;
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
-        assertTrue(finalState.strategicPlans().routeEngagements().isEmpty(), () -> "unscouted route unexpectedly received a hive engagement: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(sighted, "an interception must first retain a Scout-owned sighting");
+        assertTrue(interceptedFromBoundPosition, "the durable intercept task must retain the exact Scout-observed position");
+        assertTrue(finalState.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.outcome().isPresent()),
+                () -> "scouted route never reached a terminal engagement: " + finalState.strategicPlans().routeEngagements());
     }
 
     private static FrontierWorldState enRouteState() {
@@ -373,5 +408,12 @@ class HiveRouteEngagementProcessTest {
     private static SceneLease routeLease(FrontierWorldState state, RouteOperation operation, String id, SceneLeaseStatus status) {
         return FrontierTestSceneLeases.exact(state, new SceneLeaseId(id), operation.id(), operation.cargoId(),
                 operation.currentPosition(), SimInstant.ZERO, 0L, Optional.empty(), operation.participantIds()).withStatus(status);
+    }
+
+    private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        state = state.withActorLocation(scout.id(), operation.currentPosition());
+        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), operation.currentPosition(), observedAt);
+        return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }
 }

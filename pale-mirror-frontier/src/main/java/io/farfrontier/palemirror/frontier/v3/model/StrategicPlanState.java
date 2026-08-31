@@ -21,6 +21,7 @@ final class StrategicPlanState {
     private final Map<SubjectId, RoutePatrol> routePatrols;
     private final Map<SubjectId, RouteEngagement> routeEngagements;
     private final SettlementInfectionKnowledge infectionKnowledge;
+    private final HiveOperationKnowledge hiveOperationKnowledge;
 
     StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements) {
@@ -29,10 +30,15 @@ final class StrategicPlanState {
 
     StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge) {
+        this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, HiveOperationKnowledge.empty());
+    }
+    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+                       Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge) {
         this.objectives = immutable(objectives, "strategic objectives"); this.tasks = immutable(tasks, "strategic tasks");
         this.routePatrols = immutable(routePatrols, "route patrols");
         this.routeEngagements = immutable(routeEngagements, "route engagements");
         this.infectionKnowledge = Objects.requireNonNull(infectionKnowledge, "settlement infection knowledge");
+        this.hiveOperationKnowledge = Objects.requireNonNull(hiveOperationKnowledge, "hive operation knowledge");
         if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS
                 || this.routePatrols.size() > MAX_ROUTE_PATROLS || this.routeEngagements.size() > MAX_ROUTE_ENGAGEMENTS) {
             throw new IllegalArgumentException("strategic plan retention limit exceeded");
@@ -138,9 +144,13 @@ final class StrategicPlanState {
     Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
     Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
     SettlementInfectionKnowledge infectionKnowledge() { return infectionKnowledge; }
+    HiveOperationKnowledge hiveOperationKnowledge() { return hiveOperationKnowledge; }
 
     StrategicPlanState withInfectionKnowledge(SettlementInfectionKnowledge next) {
-        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next);
+        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next, hiveOperationKnowledge);
+    }
+    StrategicPlanState withHiveOperationKnowledge(HiveOperationKnowledge next) {
+        return hiveOperationKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, next);
     }
 
     void validate(FrontierBootstrap bootstrap, HumanPopulation humanPopulation) {
@@ -182,7 +192,7 @@ final class StrategicPlanState {
             throw new IllegalArgumentException("strategic objective is duplicate or owner work lane is already active");
         }
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
-        return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge);
+        return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge, retained.hiveOperationKnowledge);
     }
 
     StrategicPlanState addTask(StrategicTask task) {
@@ -193,7 +203,7 @@ final class StrategicPlanState {
             throw new IllegalArgumentException("strategic task identity or objective is invalid");
         }
         Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(retained.tasks); next.put(task.id(), task);
-        return new StrategicPlanState(retained.objectives, next, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge);
+        return new StrategicPlanState(retained.objectives, next, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge, retained.hiveOperationKnowledge);
     }
 
     StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
@@ -211,35 +221,35 @@ final class StrategicPlanState {
                 nextObjectives.put(objective.id(), objective.withStatus(blocked ? StrategicObjectiveStatus.BLOCKED : StrategicObjectiveStatus.COMPLETED));
             }
         }
-        return new StrategicPlanState(nextObjectives, nextTasks, routePatrols, routeEngagements, infectionKnowledge);
+        return new StrategicPlanState(nextObjectives, nextTasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState startPatrol(RoutePatrol patrol) {
         Objects.requireNonNull(patrol, "route patrol");
         if (routePatrols.containsKey(patrol.taskId())) throw new IllegalArgumentException("route patrol is already retained for its task");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(patrol.taskId(), patrol);
-        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState advancePatrol(SubjectId taskId, int routeIndex) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(routeIndex));
-        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState confirmPatrolObstruction(SubjectId taskId, BlockPosition position) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.confirm(position));
-        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState failPatrol(SubjectId taskId) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.fail());
-        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState startEngagement(RouteEngagement engagement) {
@@ -249,29 +259,29 @@ final class StrategicPlanState {
             throw new IllegalArgumentException("route engagement identity or active operation is already retained");
         }
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
-        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState transitionEngagement(SubjectId engagementId, RouteEngagementStatus nextStatus) {
         RouteEngagement current = routeEngagements.get(Objects.requireNonNull(engagementId, "route engagement id"));
         if (current == null || !allowed(current.status(), nextStatus)) throw new IllegalArgumentException("route engagement transition is not allowed");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.withStatus(nextStatus));
-        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge);
     }
 
     StrategicPlanState replaceEngagement(RouteEngagement engagement) {
         Objects.requireNonNull(engagement, "route engagement");
         if (!routeEngagements.containsKey(engagement.id())) throw new IllegalArgumentException("unknown route engagement");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
-        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge);
     }
 
     @Override public boolean equals(Object other) {
         return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks)
                 && routePatrols.equals(value.routePatrols) && routeEngagements.equals(value.routeEngagements)
-                && infectionKnowledge.equals(value.infectionKnowledge);
+                && infectionKnowledge.equals(value.infectionKnowledge) && hiveOperationKnowledge.equals(value.hiveOperationKnowledge);
     }
-    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge); }
+    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge); }
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
 
@@ -294,7 +304,7 @@ final class StrategicPlanState {
         retainedEngagements.values().removeIf(engagement -> !retainedTasks.containsKey(engagement.taskId()));
         return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) && retainedPatrols.equals(routePatrols)
                 && retainedEngagements.equals(routeEngagements) ? this
-                : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols, retainedEngagements, infectionKnowledge);
+                : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols, retainedEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
@@ -320,7 +330,7 @@ final class StrategicPlanState {
         RouteEngagement current = routeEngagements.get(Objects.requireNonNull(engagementId, "route engagement id"));
         if (current == null) throw new IllegalArgumentException("unknown route engagement");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.resolve(outcome));
-        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge);
+        return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge);
     }
 
     /** Blocks the affected delivery and aborts any active hive interception after a player takes its cargo. */
@@ -338,7 +348,7 @@ final class StrategicPlanState {
         routeEngagements.values().stream().filter(engagement -> engagement.operationId().equals(operationId))
                 .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
                 .forEach(engagement -> nextEngagements.put(engagement.id(), engagement.abort()));
-        return new StrategicPlanState(objectives, nextTasks, routePatrols, nextEngagements, infectionKnowledge);
+        return new StrategicPlanState(objectives, nextTasks, routePatrols, nextEngagements, infectionKnowledge, hiveOperationKnowledge);
     }
 
     /**

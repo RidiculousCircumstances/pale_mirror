@@ -22,6 +22,11 @@ final class FrontierWorldStateSupport {
         return ids;
     }
 
+    static Bioform bioform(FrontierBootstrap bootstrap, HiveColony colony, SubjectId id) {
+        return java.util.stream.Stream.concat(bootstrap.hive().bioforms().stream(), colony.spawnedBioforms().values().stream())
+                .filter(bioform -> bioform.id().equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown hive bioform"));
+    }
+
     static Set<SubjectId> structureIds(FrontierBootstrap bootstrap) {
         Set<SubjectId> ids = new HashSet<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> ids.add(structure.id())));

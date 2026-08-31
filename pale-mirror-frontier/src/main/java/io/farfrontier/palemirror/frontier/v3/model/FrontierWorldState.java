@@ -37,7 +37,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population");
         Objects.requireNonNull(companies, "company registry"); Objects.requireNonNull(resourceSites, "resource sites");
         if (!fullValidationDeferred()) {
-            resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation);
+            resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
         RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
