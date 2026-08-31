@@ -390,6 +390,12 @@ remains present because breadth, balance and product comprehension are not done.
   actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
   `GUARD` or `SQUAD_LEADER`. It deliberately does not issue, reserve or recover
   equipment; those remain owning-process work rather than presentation state.
+- The next human-mobilization slice is one exact defender-equipment issue and
+  inverse return lifecycle. It must retain assault/member/source-slot/item/body
+  identity, perform durable-before-effect transfer only between naturally loaded
+  active chest and matching owned Villager hand, and reconcile physical loss or
+  restart by postcondition inspection. A projection or direct inventory rewrite
+  is not equipment issue.
 
 ### Verification matrix
 

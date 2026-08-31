@@ -144,6 +144,46 @@ physical custody and can be lost, stolen or destroyed.
 Graybox colours, equipment silhouettes and nameplates may expose the derived
 function, but colour is presentation evidence only.
 
+### Exact equipment issue, loss and return
+
+Equipment is not granted by a role projection.  The first issue path is an
+owned, one-stack transfer from an active settlement depot to one named member
+of an active defender unit.  Its durable issue request retains the assault,
+resident, source container slot, exact item ID, intended physical hand slot and
+the expected resident body identity.  It is admitted only when all of these
+facts still agree: the resident is an exact active unit member, the source item
+is a suitable settlement-owned item in its claimed active slot, and neither
+another equipment request nor existing actor custody already claims that item.
+
+The loaded-chunk executor is deliberately a physical effect, not a canonical
+shortcut:
+
+1. it waits for both the active source chest and the exact owned Villager body
+   to be naturally loaded;
+2. after the request is durable, it moves the identity-tagged Minecraft stack
+   from that exact chest slot into the named body hand;
+3. it confirms only after observing the source slot empty and the same tagged
+   stack in that hand; the receipt then changes canonical custody from the
+   container to that resident.
+
+Until confirmation the item stays in its source custody.  An unloaded endpoint,
+foreign stack, changed hand, stolen source item or duplicate tag is a visible
+deferral or conflict, never permission to spawn a replacement weapon.  Recovery
+inspects the same two endpoints: a complete observed handoff may confirm, an
+unchanged source may resume, and any mixed or missing evidence becomes
+`UNKNOWN_AFTER_RESTART` for that exact request.  A missing body alone never
+proves that the person died or dropped the weapon.
+
+Return is a separate durable physical request after the unit releases the
+resident.  It moves the same tagged stack from the still-living resident's hand
+to a named free slot of the active home depot and confirms only the inverse
+postcondition.  If the resident dies, a player steals the item, a blast destroys
+it, or ordinary Minecraft drops it, the existing exact custody/destruction
+observation boundary records the actual result first; the tactical function then
+changes from that custody fact.  A leader loss therefore degrades the retained
+unit, and equipment loss degrades the same person, without either creating a
+replacement person, weapon or hidden reserve.
+
 ## Crews and tactical units
 
 A work crew or tactical unit retains:
