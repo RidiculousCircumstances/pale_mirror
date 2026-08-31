@@ -76,7 +76,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
-                    StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78),
+                    StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version),
                     HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81),
                     companies,
                     ResourceSiteStateCodec.read(input));
