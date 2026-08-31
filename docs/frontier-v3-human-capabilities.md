@@ -270,6 +270,19 @@ capability, then profession and stable ID. This is an organization/assignment
 foundation, not an implicit tool grant or a `SAPPER` label: exact tool issue,
 physical crew assembly and tool loss remain the next owner boundary.
 
+The next boundary reuses the common exact human-equipment protocol rather than
+creating an engineering-only inventory: an issue or return request binds one
+owning operation, one named resident, one existing exact depot stack and (for
+return) one named free depot slot. The loaded executor may move that same
+tagged Minecraft stack only after both endpoints are naturally loaded and it
+observes the stated postcondition. A stolen, dropped, destroyed, altered or
+missing tool remains its ordinary current custody/destruction fact; it is not
+recreated, and a replacement requires a separate existing depot stack and a
+new durable request. Route construction may progress only when its retained
+crew has the required confirmed tool custody. Before topology cutover it must
+settle every recoverable tool return, while unrecoverable loss remains visible
+in the owner history rather than blocking on an invented hand-off.
+
 ### Implemented foundation
 
 The first exact tactical organization is the defender unit owned by one
