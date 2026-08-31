@@ -67,6 +67,12 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof RouteConstructionMaterialLoadObservation loading) {
                 output.writeByte(12); string(output, loading.id().value()); string(output, loading.intentId().value()); string(output, loading.projectId().value());
                 string(output, loading.cargoId().value()); string(output, loading.sourceItemId().value()); string(output, loading.cargoItemId().value()); output.writeByte(loading.sourceRemainingCount());
+            } else if (observation instanceof HiveNutrientDepartureObservation departure) {
+                output.writeByte(13); string(output, departure.id().value()); string(output, departure.intentId().value()); string(output, departure.transferId().value());
+                string(output, departure.cargoId().value()); string(output, departure.itemId().value()); output.writeByte(departure.itemCount());
+            } else if (observation instanceof HiveNutrientArrivalObservation arrival) {
+                output.writeByte(14); string(output, arrival.id().value()); string(output, arrival.intentId().value()); string(output, arrival.transferId().value());
+                string(output, arrival.cargoId().value()); string(output, arrival.itemId().value()); output.writeByte(arrival.itemCount());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -90,6 +96,8 @@ final class PhysicalEffectObservationStateCodec {
                 case 11 -> throw new IllegalArgumentException("legacy unsplit route-material receipt is not recoverable");
                 case 12 -> new RouteConstructionMaterialLoadObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)),
                         new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
+                case 13 -> new HiveNutrientDepartureObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
+                case 14 -> new HiveNutrientArrivalObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

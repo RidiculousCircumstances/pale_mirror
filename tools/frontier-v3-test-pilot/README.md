@@ -14,7 +14,7 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare `"server": { "profile":
-"hot-scene-strike" }`, `"hive-growth" }`, `"scene-return" }`,
+"hot-scene-strike" }`, `"hive-growth" }`, `"hive-nutrient-transfer" }`, `"scene-return" }`,
 `"hot-scout-sighting" }`, `"hot-scout-intercept" }`, `"health-quarantine" }`
 or `"resident-transit" }`. These fail-closed development
 fixtures are available only to the named disposable pilot runner. The first
@@ -24,7 +24,9 @@ visit to the owned chest must cause the named organ, bioform and infection
 advance. `scene-return` exposes one real COLD route continuation, while
 `health-quarantine` begins with a contaminated infirmary and requires the
 ordinary first strategic review to create the exact exposure and quarantine
-facts. `resident-transit` begins with one genuine displaced resident, a bounded
+facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
+exact stack must leave one loaded chest, cross the retained COLD corridor, then
+enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded
 reserved-bed corridor and no HOT body; an ordinary visit must materialize and
 advance that same journey. The normal `world` profile remains the default. No profile gives the
 pilot a canonical mutation API or force-loads chunks.

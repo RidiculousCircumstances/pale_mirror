@@ -43,6 +43,7 @@ const args = [pilotTask, '--no-daemon',
 // cookie without serializing it; pass that private child environment to
 // Gradle as well, otherwise an explicitly XWayland pilot cannot start.
 const auditEnvironment = await x11AuditEnvironment(process.env);
+auditEnvironment.PALE_MIRROR_CLIENT_SCREENSHOTS = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-client/screenshots');
 const child = spawn(gradle, args, { cwd: project, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });
 let childExit;
 child.once('exit', (code) => { childExit = code ?? 1; });

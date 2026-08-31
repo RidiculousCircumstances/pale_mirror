@@ -35,6 +35,12 @@ final class FrontierV3DiagnosticTrace {
         return "route-construction:" + projectId.value();
     }
 
+    /** One exact cargo crossing between the two roots of the distributed hive organism. */
+    static String hiveNutrientCorrelation(SubjectId transferId) {
+        Objects.requireNonNull(transferId, "hive nutrient transfer");
+        return "hive-nutrient:" + transferId.value();
+    }
+
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
         record(server, correlation, kind, subject, result, Context.empty());
     }

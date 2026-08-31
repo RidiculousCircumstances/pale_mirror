@@ -69,7 +69,8 @@ final class FrontierV3PhysicalIntentRestartSafety {
         return switch (intent.kind()) {
             case CARGO_HANDOFF, STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION, DECONTAMINATION,
                     EXACT_ITEM_CONSUMPTION, RESOURCE_SITE_PREPARATION, RESOURCE_SITE_HARVEST,
-                    PRODUCTION_TRANSFORMATION, CARGO_LOADING, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> true;
+                    PRODUCTION_TRANSFORMATION, CARGO_LOADING, ROUTE_CONSTRUCTION_MATERIAL_LOADING,
+                    HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> true;
             case EXPLOSION -> hasManagedPostcondition.test(intent.id());
             default -> false;
         };

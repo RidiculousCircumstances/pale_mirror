@@ -101,6 +101,13 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
     }
 
+    HiveColony advanceNutrientTransferState(SubjectId transferId, HiveNutrientTransfer replacement) {
+        HiveNutrientTransfer current = nutrientTransfers.get(Objects.requireNonNull(transferId, "hive nutrient transfer id"));
+        if (current == null || !current.id().equals(replacement.id())) throw new IllegalArgumentException("unknown hive nutrient transfer state");
+        Map<SubjectId, HiveNutrientTransfer> next = new LinkedHashMap<>(nutrientTransfers); next.put(transferId, replacement);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
+    }
+
     public HiveColony blockNutrientTransfer(SubjectId transferId, HiveNutrientTransferBlockReason reason) {
         HiveNutrientTransfer current = nutrientTransfers.get(Objects.requireNonNull(transferId, "hive nutrient transfer id"));
         if (current == null) throw new IllegalArgumentException("unknown hive nutrient transfer: " + transferId.value());

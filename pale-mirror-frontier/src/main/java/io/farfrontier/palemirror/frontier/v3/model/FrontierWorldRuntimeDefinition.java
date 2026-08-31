@@ -68,6 +68,12 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+    /** Disposable-only physical inter-nest nutrient fixture; normal production never selects it. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHiveNutrientTransferConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.HiveNutrientTransferFixture fixture = FrontierDevelopmentScenarios.hiveNutrientTransferFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only exact ration fixture; an ordinary loaded depot must consume the named bread before residents become secure. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentSettlementProvisionConfiguration(WorldId worldId, long seed) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, false);
@@ -555,6 +561,7 @@ public final class FrontierWorldRuntimeDefinition {
             case HiveNutrientTransferAdvanced advanced -> HiveNutrientTransferProcess.reduceAdvanced(state, event.subject(), advanced);
             case HiveNutrientTransferCompleted completed -> HiveNutrientTransferProcess.reduceCompleted(state, event.subject(), completed);
             case HiveNutrientTransferBlocked blocked -> HiveNutrientTransferProcess.reduceBlocked(state, event.subject(), blocked);
+            case HiveNutrientTransferEndpointPrepared prepared -> HiveNutrientTransferProcess.reduceEndpointPrepared(state, event.subject(), prepared);
             case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
             case RouteConstructionMaterialLoaded loaded -> RouteConstructionStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
@@ -704,6 +711,10 @@ public final class FrontierWorldRuntimeDefinition {
             return state.preparePhysicalIntent(intent);
         }
         if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
+            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint intent must be prepared by the hive");
+            return state.preparePhysicalIntent(intent);
+        }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
@@ -765,6 +776,10 @@ public final class FrontierWorldRuntimeDefinition {
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition);
+        if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
+            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint transition lacks hive ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
             if (job != null) {

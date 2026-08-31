@@ -19,5 +19,9 @@ public enum PhysicalIntentKind {
     /** One exact active-depot stack leaves its physical slot before becoming a named cargo batch. */
     CARGO_LOADING,
     /** One exact maintenance stack leaves its owned chest before becoming a COLD route-work cargo. */
-    ROUTE_CONSTRUCTION_MATERIAL_LOADING
+    ROUTE_CONSTRUCTION_MATERIAL_LOADING,
+    /** One exact active hive STORE stack leaves its owned chest before entering the organ network. */
+    HIVE_NUTRIENT_DEPARTURE,
+    /** One exact in-transit hive nutrient enters its named active STORE slot. */
+    HIVE_NUTRIENT_ARRIVAL
 }

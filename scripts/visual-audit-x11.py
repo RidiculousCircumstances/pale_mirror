@@ -8,6 +8,7 @@ import ctypes
 import ctypes.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -115,6 +116,17 @@ X11.XGetGeometry.argtypes = [
     ctypes.POINTER(ctypes.c_uint),
 ]
 X11.XGetGeometry.restype = ctypes.c_int
+X11.XTranslateCoordinates.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_ulong,
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_ulong),
+]
+X11.XTranslateCoordinates.restype = ctypes.c_int
 
 
 def open_display() -> ctypes.c_void_p:
@@ -161,6 +173,60 @@ def window_size(display: ctypes.c_void_p, window: int) -> tuple[int, int]:
     ):
         raise RuntimeError("X11 could not read the Minecraft window geometry")
     return width.value, height.value
+
+
+def root_capture_geometry(display: ctypes.c_void_p, window: int) -> tuple[int, int, int, int, int]:
+    """Return the composited XWayland root backing a fullscreen audit client.
+
+    GLFW's child surface may legally return an all-black backing image under a
+    Wayland compositor even while the user sees a fully rendered game.  Root
+    capturing the fullscreen composited root reads the visible pixels instead,
+    without changing focus, camera or world state.
+    """
+    root = ctypes.c_ulong()
+    ignored_x = ctypes.c_int()
+    ignored_y = ctypes.c_int()
+    width = ctypes.c_uint()
+    height = ctypes.c_uint()
+    border = ctypes.c_uint()
+    depth = ctypes.c_uint()
+    if not X11.XGetGeometry(
+        display,
+        window,
+        ctypes.byref(root),
+        ctypes.byref(ignored_x),
+        ctypes.byref(ignored_y),
+        ctypes.byref(width),
+        ctypes.byref(height),
+        ctypes.byref(border),
+        ctypes.byref(depth),
+    ):
+        raise RuntimeError("X11 could not read the Minecraft window geometry")
+    root_x = ctypes.c_int()
+    root_y = ctypes.c_int()
+    root_width = ctypes.c_uint()
+    root_height = ctypes.c_uint()
+    root_border = ctypes.c_uint()
+    root_depth = ctypes.c_uint()
+    root_parent = ctypes.c_ulong()
+    if not X11.XGetGeometry(
+        display,
+        root.value,
+        ctypes.byref(root_parent),
+        ctypes.byref(root_x),
+        ctypes.byref(root_y),
+        ctypes.byref(root_width),
+        ctypes.byref(root_height),
+        ctypes.byref(root_border),
+        ctypes.byref(root_depth),
+    ):
+        raise RuntimeError("X11 could not read the composited root geometry")
+    if root_width.value <= 0 or root_height.value <= 0:
+        raise RuntimeError("X11 returned an empty composited root")
+    # The audit client is launched fullscreen. Capturing the root avoids a
+    # HiDPI mismatch between a GLFW window's framebuffer dimensions and the
+    # logical XWayland root, and avoids the black child-surface read above.
+    return root.value, 0, 0, root_width.value, root_height.value
 
 
 def keycode(display: ctypes.c_void_p, keysym_name: str) -> int:
@@ -292,34 +358,36 @@ def click(x: int, y: int) -> None:
 
 
 def capture(destination: Path) -> None:
-    try:
-        from PIL import Image
-    except ImportError as failure:
-        raise RuntimeError("Python Pillow is required for visual-audit capture") from failure
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    display = open_display()
-    window = minecraft_window()
-    width, height = window_size(display, window)
-    image = X11.XGetImage(display, window, 0, 0, width, height, ctypes.c_ulong(-1).value, 2)
-    if not image:
-        raise RuntimeError("X11 could not capture the Minecraft window")
-    try:
-        width = image.contents.width
-        height = image.contents.height
-        if width <= 0 or height <= 0:
-            raise RuntimeError("X11 returned an empty Minecraft window")
-        raw = ctypes.string_at(image.contents.data, image.contents.bytes_per_line * height)
-        Image.frombytes(
-            "RGBA",
-            (width, height),
-            raw,
-            "raw",
-            "BGRA",
-            image.contents.bytes_per_line,
-            1,
-        ).save(destination)
-    finally:
-        X11.XDestroyImage(image)
+    """Ask Minecraft itself for its rendered framebuffer, then copy that exact PNG.
+
+    XGetImage reads an XWayland backing surface, which may be black or have a
+    different logical size from the composited display. Minecraft's F2 path is
+    the authoritative client framebuffer and does not alter simulation state.
+    """
+    screenshot_root = os.environ.get("PALE_MIRROR_CLIENT_SCREENSHOTS")
+    if not screenshot_root:
+        raise RuntimeError("PALE_MIRROR_CLIENT_SCREENSHOTS is required for a native frame capture")
+    source_directory = Path(screenshot_root)
+    source_directory.mkdir(parents=True, exist_ok=True)
+    before = {path: path.stat().st_mtime_ns for path in source_directory.glob("*.png")}
+    send_key("F2")
+    deadline = time.monotonic() + 15.0
+    observed_sizes: dict[Path, int] = {}
+    while time.monotonic() < deadline:
+        candidates = [path for path in source_directory.glob("*.png") if path.stat().st_mtime_ns > before.get(path, -1)]
+        if candidates:
+            source = max(candidates, key=lambda path: path.stat().st_mtime_ns)
+            size = source.stat().st_size
+            # Screenshot writes asynchronously. Wait for a non-empty file to
+            # stop growing so the capture barrier never acknowledges a
+            # truncated PNG.
+            if size > 0 and observed_sizes.get(source) == size:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+                return
+            observed_sizes[source] = size
+        time.sleep(0.1)
+    raise RuntimeError("Minecraft did not create an F2 screenshot within 15 seconds")
 
 
 def main() -> int:

@@ -15,6 +15,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnos
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HivePerceptionProcess;
+import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
+import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
@@ -80,6 +82,7 @@ final class FrontierV3DiagnosticJson {
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
             case "hive" -> hive(id, checkpoint, state);
+            case "hive_transfer" -> hiveTransfer(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
@@ -174,6 +177,26 @@ final class FrontierV3DiagnosticJson {
         return base("hive", id, checkpoint) + ",\"status\":\"ok\",\"addedOrgans\":" + state.hiveColony().addedOrgans().size()
                 + ",\"spawnedBioforms\":" + state.hiveColony().spawnedBioforms().size() + ",\"growthJobs\":" + state.hiveColony().growthJobs().size()
                 + ",\"infectionCells\":" + state.infection().size() + growth + "}";
+    }
+
+    /** One exact nutrient corridor or terminal receipt; no aggregate hive stock is exposed. */
+    private static String hiveTransfer(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null); if (subject == null) return unavailable("hive_transfer", id, checkpoint, "not_found");
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(subject);
+        if (transfer != null) {
+            String endpoint = transfer.endpointIntentId().map(value -> ",\"endpointIntent\":\"" + quote(value.value()) + "\"").orElse("");
+            String blocked = transfer.blockReason().map(value -> ",\"blockReason\":\"" + quote(value.name()) + "\"").orElse("");
+            return base("hive_transfer", id, checkpoint) + ",\"status\":\"ok\",\"phase\":\"" + transfer.phase().name()
+                    + "\",\"cursor\":" + transfer.cursor() + ",\"corridorNodes\":" + transfer.corridor().size()
+                    + ",\"sourceStore\":\"" + quote(transfer.sourceStoreId().value()) + "\",\"targetStore\":\"" + quote(transfer.targetStoreId().value())
+                    + "\",\"cargo\":\"" + quote(transfer.cargoId().value()) + "\",\"item\":\"" + quote(transfer.itemId().value()) + "\"" + endpoint + blocked + "}";
+        }
+        HiveNutrientReceipt receipt = state.hiveColony().nutrientReceipts().get(subject);
+        if (receipt == null) return unavailable("hive_transfer", id, checkpoint, "not_found");
+        String consumed = receipt.consumedByJobId().map(value -> ",\"consumedByJob\":\"" + quote(value.value()) + "\"").orElse("");
+        return base("hive_transfer", id, checkpoint) + ",\"status\":\"ok\",\"phase\":\"COMPLETED\",\"receiptStatus\":\""
+                + receipt.status().name() + "\",\"sourceStore\":\"" + quote(receipt.sourceSlot().containerId().value()) + "\",\"targetStore\":\""
+                + quote(receipt.targetSlot().containerId().value()) + "\",\"cargo\":\"" + quote(receipt.cargoId().value()) + "\",\"item\":\"" + quote(receipt.itemId().value()) + "\"" + consumed + "}";
     }
 
     private static String lane(FrontierSettlementWorkDiagnostic.Lane lane) {

@@ -194,6 +194,23 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * One physical inter-nest transfer. Both durable STORE surfaces are prepared but absent from
+     * Minecraft until the pilot visits them; the exact biomass must never jump between nests.
+     */
+    static HiveNutrientTransferFixture hiveNutrientTransferFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        SubjectId hive = state.bootstrap().hive().id(); SubjectId eastStore = new SubjectId("container:hive-east-store"); SubjectId westStore = new SubjectId("container:hive-west-store");
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hive-nutrient-transfer"), hive,
+                StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-hive-nutrient-transfer"), objective.id(), hive,
+                StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(state.inventory()
+                .withSurfaceStatus(eastStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED));
+        return new HiveNutrientTransferFixture(state, SimInstant.ZERO, List.of(HiveGrowthProcess.start(task, 1L)),
+                new SubjectId("transfer:hive-nutrient-task-development-hive-nutrient-transfer"));
+    }
+
+    /**
      * Read-only starting condition for one real settlement assessment.  The fixture does not
      * pre-write a disease result: the ordinary objective review must still emit the exact
      * exposure and quarantine transition after the server starts.
@@ -288,6 +305,12 @@ final class FrontierDevelopmentScenarios {
 
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record HiveNutrientTransferFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId transferId) {
+        HiveNutrientTransferFixture {
             schedules = List.copyOf(schedules);
         }
     }

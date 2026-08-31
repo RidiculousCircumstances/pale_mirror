@@ -54,6 +54,15 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsOneReadOnlyExactHiveNutrientTransferDiagnostic() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"hive_transfer",
+                "id":"transfer:hive-nutrient-task-development-hive-nutrient-transfer",
+                "expect":{"phase":"IN_TRANSIT","cursor":0},"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+    }
+
+    @Test
     void acceptsOneReadOnlyExactResidentTransitDiagnostic() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"transit","id":"resident:1-1",

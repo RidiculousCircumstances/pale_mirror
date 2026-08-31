@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import org.junit.jupiter.api.Test;
@@ -44,7 +46,7 @@ class HiveNutrientTransferProcessTest {
     }
 
     @Test
-    void materializedEndpointBlocksTheSameCargoInsteadOfWritingItToTheOtherNest() {
+    void materializedEndpointRetainsTheSameCargoUntilPhysicalArrivalIsObserved() {
         FrontierWorldState baseline = growthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
@@ -52,14 +54,48 @@ class HiveNutrientTransferProcessTest {
         FrontierWorldState started = HiveNutrientTransferProcess.reduceStarted(baseline, transfer.hiveId(), transfer);
         FrontierWorldState endpointMaterialized = started.withInventory(started.inventory().withSurfaceStatus(transfer.targetStoreId(), ContainerSurfaceStatus.PREPARED));
 
+        FrontierWorldState beforeArrival = endpointMaterialized;
+        for (int cursor = 1; cursor < transfer.corridor().size() - 1; cursor++) {
+            beforeArrival = HiveNutrientTransferProcess.reduceAdvanced(beforeArrival, transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), cursor));
+        }
         ScheduledAction action = HiveNutrientTransferProcess.advance(transfer, 20L);
-        HiveNutrientTransferBlocked blocked = (HiveNutrientTransferBlocked) HiveNutrientTransferProcess.plan(endpointMaterialized, action).getFirst().payload();
-        FrontierWorldState terminal = HiveNutrientTransferProcess.reduceBlocked(endpointMaterialized, transfer.hiveId(), blocked);
-        assertEquals(HiveNutrientTransferBlockReason.ENDPOINT_MATERIALIZED, terminal.hiveColony().nutrientTransfers().get(transfer.id()).blockReason().orElseThrow());
-        assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), terminal.inventory().items().get(biomass.id()).custody());
-        assertTrue(terminal.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isEmpty());
-        assertThrows(IllegalArgumentException.class, () -> HiveNutrientTransferProcess.reduceCompleted(terminal, transfer.hiveId(),
-                new HiveNutrientTransferCompleted(new HiveNutrientReceipt(transfer.id(), transfer.hiveId(), transfer.cargoId(), transfer.itemId(), transfer.sourceSlot(), transfer.targetSlot()))));
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = HiveNutrientTransferProcess.plan(beforeArrival, action);
+        assertTrue(planned.get(1).payload() instanceof HiveNutrientTransferEndpointPrepared);
+        HiveNutrientTransferAdvanced advanced = (HiveNutrientTransferAdvanced) planned.getFirst().payload();
+        FrontierWorldState atTarget = HiveNutrientTransferProcess.reduceAdvanced(beforeArrival, transfer.hiveId(), advanced);
+        HiveNutrientTransfer waiting = ((HiveNutrientTransferEndpointPrepared) planned.get(1).payload()).transfer();
+        FrontierWorldState pending = HiveNutrientTransferProcess.reduceEndpointPrepared(atTarget, transfer.hiveId(), new HiveNutrientTransferEndpointPrepared(waiting));
+        assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), pending.inventory().items().get(biomass.id()).custody());
+        assertTrue(pending.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isEmpty());
+        var arrival = HiveNutrientTransferStateSupport.arrivalIntent(pending, waiting);
+        FrontierWorldState prepared = pending.preparePhysicalIntent(arrival);
+        FrontierWorldState running = prepared.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        HiveNutrientArrivalObservation observed = new HiveNutrientArrivalObservation(new PhysicalObservationId("observation:hive-nutrient-arrival"), arrival.id(),
+                transfer.id(), transfer.cargoId(), transfer.itemId(), biomass.count());
+        FrontierWorldState terminal = running.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        assertEquals(transfer.targetSlot(), terminal.inventory().items().get(biomass.id()).custody());
+        assertEquals(HiveNutrientReceiptStatus.STORED, terminal.hiveColony().nutrientReceipts().get(transfer.id()).status());
+    }
+
+    @Test
+    void activeSourceRequiresOneObservedDepartureBeforeTheSameItemBecomesColdCargo() {
+        FrontierWorldState baseline = growthTaskState();
+        StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+        ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
+        FrontierWorldState sourcePrepared = baseline.withInventory(baseline.inventory().withSurfaceStatus(new SubjectId("container:hive-east-store"), ContainerSurfaceStatus.PREPARED));
+        HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(sourcePrepared, task, biomass, new SubjectId("container:hive-west-store"), 0);
+        assertEquals(HiveNutrientTransferPhase.DEPARTURE_PENDING, transfer.phase());
+        FrontierWorldState pending = HiveNutrientTransferProcess.reduceStarted(sourcePrepared, transfer.hiveId(), transfer);
+        assertEquals(transfer.sourceSlot(), pending.inventory().items().get(transfer.itemId()).custody());
+        assertTrue(!pending.inventory().cargo().containsKey(transfer.cargoId()));
+        var departure = HiveNutrientTransferStateSupport.departureIntent(pending, transfer);
+        FrontierWorldState running = pending.preparePhysicalIntent(departure).transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        HiveNutrientDepartureObservation observed = new HiveNutrientDepartureObservation(new PhysicalObservationId("observation:hive-nutrient-departure"), departure.id(),
+                transfer.id(), transfer.cargoId(), transfer.itemId(), biomass.count());
+        FrontierWorldState departed = running.transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        assertEquals(HiveNutrientTransferPhase.IN_TRANSIT, departed.hiveColony().nutrientTransfers().get(transfer.id()).phase());
+        assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), departed.inventory().items().get(transfer.itemId()).custody());
+        assertEquals(departed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed)));
     }
 
     @Test

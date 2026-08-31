@@ -207,6 +207,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("hive-growth") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("hive-nutrient-transfer") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentHiveNutrientTransferConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         if (profile.equals("settlement-provision") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentSettlementProvisionConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
@@ -275,6 +278,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3CargoCarrierObservationExecutor.tick(physicalWorld, runtime);
                 FrontierV3CargoLoadingExecutor.tick(physicalWorld, runtime);
                 FrontierV3ContainerSurfaceExecutor.tick(physicalWorld, runtime);
+                FrontierV3HiveNutrientEndpointExecutor.tick(physicalWorld, runtime);
                 FrontierV3ProductionTransformationExecutor.tick(physicalWorld, runtime);
                 FrontierV3ExactItemConsumptionExecutor.tick(physicalWorld, runtime);
                 FrontierV3CargoHandoffExecutor.tick(physicalWorld, runtime);

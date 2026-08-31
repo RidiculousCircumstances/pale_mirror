@@ -83,6 +83,16 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("route construction material loading must bind route, project, cargo, cargo item and source stack without an area radius");
                 }
             }
+            case HIVE_NUTRIENT_DEPARTURE -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_DEPARTED_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("hive nutrient departure must bind transfer, cargo and exact source stack without an area radius");
+                }
+            }
+            case HIVE_NUTRIENT_ARRIVAL -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("hive nutrient arrival must bind transfer, cargo and exact target stack without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

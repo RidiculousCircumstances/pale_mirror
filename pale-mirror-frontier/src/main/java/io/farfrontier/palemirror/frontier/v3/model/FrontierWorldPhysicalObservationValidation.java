@@ -49,6 +49,16 @@ final class FrontierWorldPhysicalObservationValidation {
                 ProductionTransformationStateSupport.validateReceipt(intent, production);
             } else if (observation instanceof CargoLoadObservation loading) {
                 CargoLoadingStateSupport.validateReceipt(intent, loading);
+            } else if (observation instanceof HiveNutrientDepartureObservation departure) {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
+                        || !intent.subjectIds().equals(java.util.List.of(departure.transferId(), departure.cargoId(), departure.itemId()))) {
+                    throw new IllegalArgumentException("hive nutrient departure receipt has foreign exact subjects");
+                }
+            } else if (observation instanceof HiveNutrientArrivalObservation arrival) {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL
+                        || !intent.subjectIds().equals(java.util.List.of(arrival.transferId(), arrival.cargoId(), arrival.itemId()))) {
+                    throw new IllegalArgumentException("hive nutrient arrival receipt has foreign exact subjects");
+                }
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
     }

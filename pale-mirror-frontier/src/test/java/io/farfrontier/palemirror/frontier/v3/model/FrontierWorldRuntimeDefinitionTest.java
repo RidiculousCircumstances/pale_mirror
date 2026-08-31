@@ -238,6 +238,26 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void developmentHiveNutrientProfileKeepsOneExactBiomassAtItsPreparedSourceUntilObservedDeparture() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHiveNutrientTransferConfiguration(
+                new WorldId("frontier:hive-nutrient-profile"), 91L));
+        FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId transferId = new SubjectId("transfer:hive-nutrient-task-development-hive-nutrient-transfer");
+
+        assertEquals(ContainerSurfaceStatus.PREPARED, initial.inventory().surfaces().get(new SubjectId("container:hive-east-store")).status());
+        assertEquals(ContainerSurfaceStatus.PREPARED, initial.inventory().surfaces().get(new SubjectId("container:hive-west-store")).status());
+        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0),
+                initial.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass")).custody());
+        engine.advanceTo(new SimInstant(1L), new WorkBudget(32, 256));
+        FrontierWorldState pending = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        HiveNutrientTransfer transfer = pending.hiveColony().nutrientTransfers().get(transferId);
+        assertEquals(HiveNutrientTransferPhase.DEPARTURE_PENDING, transfer.phase());
+        assertEquals(PhysicalIntentStatus.PREPARED, pending.physicalIntents().get(transfer.endpointIntentId().orElseThrow()).status());
+        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0),
+                pending.inventory().items().get(transfer.itemId()).custody(), "fixture must not fabricate COLD cargo before a loaded exact departure");
+    }
+
+    @Test
     void developmentRouteReturnProfileRetainsOneExactColdNorthwatchShipment() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(new WorldId("frontier:route-return-profile"), 91L));
 

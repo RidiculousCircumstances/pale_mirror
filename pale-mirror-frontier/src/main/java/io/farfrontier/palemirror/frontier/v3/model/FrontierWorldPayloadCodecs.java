@@ -29,6 +29,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
                 new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(), new HiveNutrientTransferBlockedCodec(),
+                new HiveNutrientTransferEndpointPreparedCodec(),
                 ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(),
                 ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvested(), ResourceSitePayloadCodecs.conflictObserved(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
@@ -507,6 +508,10 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> { SubjectId transfer = readSubject(input).value(); int reason = input.readUnsignedByte();
             if (reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("unknown hive nutrient transfer block reason");
             return new HiveNutrientTransferBlocked(transfer, HiveNutrientTransferBlockReason.values()[reason]); }); }
+    } private static final class HiveNutrientTransferEndpointPreparedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_nutrient_transfer_endpoint_prepared"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientTransfer(output, ((HiveNutrientTransferEndpointPrepared) payload).transfer())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveNutrientTransferEndpointPrepared(readHiveNutrientTransfer(input))); }
     } @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; } @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
     record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { } static byte[] encodeProduction(ProductionEncoder encoder) {
         try {
@@ -566,6 +571,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (BlockPosition node : transfer.corridor()) writePosition(output, node);
         output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().ordinal()); output.writeBoolean(transfer.blockReason().isPresent());
         if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().ordinal());
+        output.writeBoolean(transfer.endpointIntentId().isPresent()); if (transfer.endpointIntentId().isPresent()) writeString(output, transfer.endpointIntentId().orElseThrow().value());
     }
     private static HiveNutrientTransfer readHiveNutrientTransfer(DataInputStream input) throws IOException {
         SubjectId id = readSubject(input).value(), hive = readSubject(input).value(), task = readSubject(input).value();
@@ -573,10 +579,12 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(readPosition(input));
         int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> endpoint = input.available() == 0 ? java.util.Optional.empty()
+                : input.readBoolean() ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input))) : java.util.Optional.empty();
         if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.ordinal())
                 || blocked && reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("invalid hive nutrient transfer payload");
         return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot),
-                cargo, item, corridor, cursor, HiveNutrientTransferPhase.values()[phase], blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty());
+                cargo, item, corridor, cursor, HiveNutrientTransferPhase.values()[phase], endpoint, blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty());
     }
     private static void writeHiveNutrientReceipt(DataOutputStream output, HiveNutrientReceipt receipt) throws IOException {
         writeSubject(output, receipt.transferId()); writeSubject(output, receipt.hiveId()); writeSubject(output, receipt.cargoId()); writeSubject(output, receipt.itemId());

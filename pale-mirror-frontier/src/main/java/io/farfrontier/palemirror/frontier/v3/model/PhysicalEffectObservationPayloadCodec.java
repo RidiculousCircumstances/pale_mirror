@@ -47,6 +47,14 @@ final class PhysicalEffectObservationPayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.sourceItemId());
             FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoItemId()); output.writeByte(loading.sourceRemainingCount());
         }
+        else if (observation instanceof HiveNutrientDepartureObservation departure) {
+            output.writeByte(13); ids(output, departure); FrontierWorldPayloadCodecs.writeSubject(output, departure.transferId());
+            FrontierWorldPayloadCodecs.writeSubject(output, departure.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, departure.itemId()); output.writeByte(departure.itemCount());
+        }
+        else if (observation instanceof HiveNutrientArrivalObservation arrival) {
+            output.writeByte(14); ids(output, arrival); FrontierWorldPayloadCodecs.writeSubject(output, arrival.transferId());
+            FrontierWorldPayloadCodecs.writeSubject(output, arrival.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, arrival.itemId()); output.writeByte(arrival.itemCount());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -69,6 +77,10 @@ final class PhysicalEffectObservationPayloadCodec {
             case 12 -> new RouteConstructionMaterialLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            case 13 -> new HiveNutrientDepartureObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            case 14 -> new HiveNutrientArrivalObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

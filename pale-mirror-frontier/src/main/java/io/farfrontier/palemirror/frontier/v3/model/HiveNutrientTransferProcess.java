@@ -4,6 +4,9 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
@@ -21,9 +24,9 @@ final class HiveNutrientTransferProcess {
     }
 
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireActive(state, action.subject());
+        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, action.subject());
         try {
-            HiveNutrientTransferStateSupport.validateColdEndpoints(state, transfer);
+            HiveNutrientTransferStateSupport.validateTransit(state, transfer);
         } catch (IllegalArgumentException blocked) {
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), blockReason(state, transfer))));
         }
@@ -31,6 +34,16 @@ final class HiveNutrientTransferProcess {
         if (nextCursor < transfer.corridor().size() - 1) {
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
                     schedule(advance(transfer, action.dueAt().ticks() + STEP_TICKS)));
+        }
+        ContainerSurfaceStatus targetSurface = state.inventory().surfaces().get(transfer.targetStoreId()).status();
+        if (targetSurface == ContainerSurfaceStatus.CONFLICT) {
+            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST)));
+        }
+        if (targetSurface != ContainerSurfaceStatus.UNMATERIALIZED) {
+            HiveNutrientTransfer waiting = transfer.advanceTo(nextCursor).awaitArrival(arrivalIntentId(transfer));
+            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
+                    new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferEndpointPrepared(waiting)),
+                    new ProposedEvent(transfer.hiveId(), new PhysicalIntentPrepared(HiveNutrientTransferStateSupport.arrivalIntent(state, waiting))));
         }
         HiveNutrientReceipt receipt = new HiveNutrientReceipt(transfer.id(), transfer.hiveId(), transfer.cargoId(), transfer.itemId(), transfer.sourceSlot(), transfer.targetSlot());
         return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
@@ -44,19 +57,19 @@ final class HiveNutrientTransferProcess {
     }
 
     static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, HiveNutrientTransferAdvanced advanced) {
-        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireActive(state, advanced.transferId());
+        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, advanced.transferId());
         if (!subject.equals(transfer.hiveId())) throw new IllegalArgumentException("hive nutrient cursor lacks hive ownership");
         return HiveNutrientTransferStateSupport.advance(state, advanced.transferId(), advanced.cursor());
     }
 
     static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, HiveNutrientTransferCompleted completed) {
-        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireActive(state, completed.receipt().transferId());
+        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, completed.receipt().transferId());
         if (!subject.equals(transfer.hiveId())) throw new IllegalArgumentException("hive nutrient receipt lacks hive ownership");
         return HiveNutrientTransferStateSupport.complete(state, completed.receipt());
     }
 
     static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, HiveNutrientTransferBlocked blocked) {
-        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireActive(state, blocked.transferId());
+        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireUnblocked(state, blocked.transferId());
         if (!subject.equals(transfer.hiveId())) throw new IllegalArgumentException("hive nutrient block lacks hive ownership");
         return HiveNutrientTransferStateSupport.block(state, blocked.transferId(), blocked.reason());
     }
@@ -66,9 +79,45 @@ final class HiveNutrientTransferProcess {
         if (!(item.custody() instanceof InventoryCustody.ContainerSlot sourceSlot)) throw new IllegalArgumentException("hive nutrient source must be one store slot");
         List<BlockPosition> corridor = corridor(state.inventory().surfaces().get(sourceSlot.containerId()).position(), state.inventory().surfaces().get(targetStore).position());
         String idSuffix = task.id().value().replace(':', '-');
-        return new HiveNutrientTransfer(new SubjectId("transfer:hive-nutrient-" + idSuffix), state.bootstrap().hive().id(), task.id(),
+        SubjectId transferId = new SubjectId("transfer:hive-nutrient-" + idSuffix);
+        boolean physicalDeparture = state.inventory().surfaces().get(sourceSlot.containerId()).status() != ContainerSurfaceStatus.UNMATERIALIZED;
+        return new HiveNutrientTransfer(transferId, state.bootstrap().hive().id(), task.id(),
                 sourceSlot.containerId(), sourceSlot, targetStore, new InventoryCustody.ContainerSlot(targetStore, targetSlot),
-                new SubjectId("cargo:hive-nutrient-" + idSuffix), item.id(), corridor, 0, HiveNutrientTransferPhase.IN_TRANSIT, java.util.Optional.empty());
+                new SubjectId("cargo:hive-nutrient-" + idSuffix), item.id(), corridor, 0,
+                physicalDeparture ? HiveNutrientTransferPhase.DEPARTURE_PENDING : HiveNutrientTransferPhase.IN_TRANSIT,
+                physicalDeparture ? java.util.Optional.of(departureIntentId(transferId)) : java.util.Optional.empty(), java.util.Optional.empty());
+    }
+
+    static List<ProposedEvent> startEvents(FrontierWorldState state, HiveNutrientTransfer transfer, long dueAt) {
+        List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferStarted(transfer)));
+        if (transfer.phase() == HiveNutrientTransferPhase.DEPARTURE_PENDING) {
+            events.add(new ProposedEvent(transfer.hiveId(), new PhysicalIntentPrepared(HiveNutrientTransferStateSupport.departureIntent(state, transfer))));
+        } else events.add(schedule(advance(transfer, dueAt + STEP_TICKS)));
+        return List.copyOf(events);
+    }
+
+    static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
+                .filter(value -> value.endpointIntentId().equals(java.util.Optional.of(intent.id()))).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("hive endpoint intent has no retained transfer"));
+        if (!intent.causeSubjectId().equals(transfer.hiveId()) || !intent.subjectIds().equals(List.of(transfer.id(), transfer.cargoId(), transfer.itemId())))
+            throw new IllegalArgumentException("hive endpoint intent has foreign exact subjects");
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
+            List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(transfer.hiveId(), transition));
+            if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) events.add(schedule(advance(transfer, now + STEP_TICKS)));
+            else events.add(schedule(HiveGrowthProcess.start(task(state, transfer), now + 1L)));
+            return List.copyOf(events);
+        }
+        return List.of(new ProposedEvent(transfer.hiveId(), transition));
+    }
+
+    static FrontierWorldState reduceEndpointPrepared(FrontierWorldState state, SubjectId subject, HiveNutrientTransferEndpointPrepared prepared) {
+        HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, prepared.transfer().id());
+        if (!subject.equals(transfer.hiveId()) || !transfer.id().equals(prepared.transfer().id()) || prepared.transfer().phase() != HiveNutrientTransferPhase.ARRIVAL_PENDING)
+            throw new IllegalArgumentException("hive nutrient arrival preparation has foreign ownership");
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().advanceNutrientTransferState(transfer.id(), prepared.transfer()),
+                state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
     private static StrategicTask task(FrontierWorldState state, HiveNutrientTransfer transfer) {
@@ -81,10 +130,7 @@ final class HiveNutrientTransferProcess {
     }
 
     private static HiveNutrientTransferBlockReason blockReason(FrontierWorldState state, HiveNutrientTransfer transfer) {
-        if (state.inventory().surfaces().get(transfer.sourceStoreId()).status() != ContainerSurfaceStatus.UNMATERIALIZED
-                || state.inventory().surfaces().get(transfer.targetStoreId()).status() != ContainerSurfaceStatus.UNMATERIALIZED) {
-            return HiveNutrientTransferBlockReason.ENDPOINT_MATERIALIZED;
-        }
+        if (state.inventory().surfaces().get(transfer.targetStoreId()).status() == ContainerSurfaceStatus.CONFLICT) return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
         if (state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) return HiveNutrientTransferBlockReason.TARGET_SLOT_UNAVAILABLE;
         return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
     }
@@ -99,5 +145,7 @@ final class HiveNutrientTransferProcess {
     }
 
     private static String suffix(SubjectId id) { return id.value().substring("transfer:hive-nutrient-".length()); }
+    private static PhysicalIntentId departureIntentId(SubjectId transferId) { return new PhysicalIntentId("intent:hive-nutrient-departure-" + suffix(transferId)); }
+    private static PhysicalIntentId arrivalIntentId(HiveNutrientTransfer transfer) { return new PhysicalIntentId("intent:hive-nutrient-arrival-" + suffix(transfer.id())); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
 }

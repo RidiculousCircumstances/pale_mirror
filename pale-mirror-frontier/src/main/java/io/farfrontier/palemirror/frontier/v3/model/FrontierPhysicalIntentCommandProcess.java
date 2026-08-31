@@ -37,6 +37,8 @@ final class FrontierPhysicalIntentCommandProcess {
                 case PRODUCTION_TRANSFORMATION -> productionTransition(state, intent, transition);
                 case CARGO_LOADING -> new CommandPlan.Accepted(SupplyOperationProcess.planCargoLoadingTransition(
                         state, intent, transition, command.submittedAt().ticks()));
+                case HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
+                        state, intent, transition, command.submittedAt().ticks()));
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);
@@ -86,6 +88,12 @@ final class FrontierPhysicalIntentCommandProcess {
             }
             if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
                 ExplosionStateSupport.validateIntent(state, intent);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
+            }
+            if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
+                boolean owns = state.bootstrap().hive().id().equals(intent.causeSubjectId())
+                        && state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> intent.subjectIds().contains(transfer.id()));
+                if (!owns) return rejected("hive nutrient endpoint has no retained transfer");
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
             }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");

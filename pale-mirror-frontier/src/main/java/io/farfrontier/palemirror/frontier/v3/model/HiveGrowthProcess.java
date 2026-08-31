@@ -50,13 +50,11 @@ final class HiveGrowthProcess {
             if (remote.isEmpty() || state.inventory().firstFreeSlot(targetStore).isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
             HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task, remote.orElseThrow(), targetStore,
                     state.inventory().firstFreeSlot(targetStore).getAsInt());
-            try {
-                HiveNutrientTransferStateSupport.validateColdEndpoints(state, transfer);
-            } catch (IllegalArgumentException unavailablePhysicalBoundary) {
+            if (state.inventory().surfaces().get(transfer.sourceStoreId()).status() == ContainerSurfaceStatus.CONFLICT
+                    || state.inventory().surfaces().get(transfer.targetStoreId()).status() == ContainerSurfaceStatus.CONFLICT) {
                 return List.of(transition(task, StrategicTaskStatus.BLOCKED));
             }
-            return List.of(new ProposedEvent(hive, new HiveNutrientTransferStarted(transfer)),
-                    schedule(HiveNutrientTransferProcess.advance(transfer, action.dueAt().ticks() + 20L)));
+            return HiveNutrientTransferProcess.startEvents(state, transfer, action.dueAt().ticks());
         }
         SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);

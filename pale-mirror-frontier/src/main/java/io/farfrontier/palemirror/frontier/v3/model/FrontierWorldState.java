@@ -268,6 +268,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
+                    && !bootstrap.hive().id().equals(intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
                     && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
@@ -275,11 +276,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             for (SubjectId subject : intent.subjectIds()) {
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
+                boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
                 boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING
                         && routeConstruction != null && routeConstruction.cargoId().isEmpty()
                         && (subject.equals(RouteConstructionProcess.cargoId(routeConstruction))
                         || subject.equals(RouteConstructionProcess.cargoItemId(routeConstruction)));
-                if (!expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
+                if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
                         && !humanPopulation.provisions().containsKey(subject)
@@ -410,7 +412,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous) {
         return onlyPlannerAndHealthChangedFrom(previous, true);
     }
-
     private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous, boolean requirePlannerOrHealthChange) {
         if (bootstrap != previous.bootstrap || actorLocations != previous.actorLocations || structureConditions != previous.structureConditions
                 || (requirePlannerOrHealthChange && infection != previous.infection) || inventory != previous.inventory || productionJobs != previous.productionJobs
@@ -425,7 +426,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 && humanPopulation.birthJobs() == previous.humanPopulation.birthJobs()
                 && humanPopulation.migrations() == previous.humanPopulation.migrations();
     }
-
     private void validateInfectionTransition(FrontierWorldState previous) {
         FrontierInfectionFrontier.InfectionChange change = FrontierWorldStateSupport.infectionChange(infection, bootstrap.bounds()).orElse(null);
         PersistentInfectionMap before = FrontierWorldStateSupport.persistentInfection(previous.infection);
@@ -441,7 +441,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             throw new IllegalArgumentException("infection transition does not match its retained sparse-field delta");
         }
     }
-
     private boolean onlyInfectionChangedFrom(FrontierWorldState previous) {
         return bootstrap == previous.bootstrap && actorLocations == previous.actorLocations && structureConditions == previous.structureConditions
                 && inventory == previous.inventory && productionJobs == previous.productionJobs && contracts == previous.contracts
@@ -451,7 +450,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation && companies == previous.companies
                 && resourceSites == previous.resourceSites && infection != previous.infection;
     }
-
     private void validatePlannerAndHealthTransition() {
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -462,7 +460,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         validatePlannerActorClaims();
         FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
     }
-
     /** Exact COLD authority remains exclusive even when only a route patrol plan has changed. */
     private void validatePlannerActorClaims() {
         Set<SubjectId> operationParticipants = new HashSet<>();
@@ -485,9 +482,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (patrolClaim) throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
         }
     }
-
     private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); }
-
     private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
     FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures, Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory, Map<SubjectId, ProductionJob> jobs,
                                     Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations, Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
@@ -810,6 +805,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                     || current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
+            if (HiveNutrientTransferStateSupport.isEndpointIntent(current) && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return HiveNutrientTransferStateSupport.unknownEndpoint(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
@@ -887,6 +883,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             return ProductionTransformationStateSupport.complete(this, current, production, next);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.complete(this, current, evidence, next);
+        if (HiveNutrientTransferStateSupport.isEndpointIntent(current)) return HiveNutrientTransferStateSupport.completeEndpoint(this, current, evidence, next);
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
         }
