@@ -20,10 +20,8 @@ public final class RouteEngagementCombatRules {
         };
         ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
-        return switch (resident.role()) {
-            case GUARD -> combat.residentGuardDamage();
-            case HAULER, BUILDER, FARMER, CRAFTER, MEDIC -> combat.residentWorkerDamage();
-        };
+        return resident.profession() == ResidentProfession.SECURITY_WORKER || carriesWeapon(state, resident.id())
+                ? combat.residentGuardDamage() : combat.residentWorkerDamage();
     }
 
     public static List<SubjectId> livingAttackers(FrontierWorldState state, RouteEngagement engagement) {
@@ -59,5 +57,8 @@ public final class RouteEngagementCombatRules {
     }
     private static ResidentProfile resident(FrontierWorldState state, SubjectId actor) {
         return state.humanPopulation().resident(actor);
+    }
+    private static boolean carriesWeapon(FrontierWorldState state, SubjectId actor) {
+        return state.inventory().actorItems(actor).stream().anyMatch(item -> item.itemKind().equals("minecraft:iron_sword"));
     }
 }

@@ -209,6 +209,52 @@ class ProductionProcessTest {
     }
 
     @Test
+    void settlementDefenceInterruptsOnlyColdWorkAndReleasesItsExactCivilianCommitment() {
+        ColdMarketJob prepared = coldMarketJob(); FrontierWorldState state = prepared.state();
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), prepared.settlementId());
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        state = state.withActorLocation(scout.id(), settlement.anchor());
+        HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:defence-interrupt"), hive,
+                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), 7, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask assault = new StrategicTask(new SubjectId("task:defence-interrupt"), objective.id(), hive,
+                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
+        StrategicPlanState plans = state.strategicPlans().withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L))
+                .withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting))).addObjective(objective).addTask(assault);
+        state = StrategicObjectiveProcess.reduceTaskTransition(state.withStrategicPlans(plans), hive,
+                new StrategicTaskTransition(assault.id(), StrategicTaskStatus.ACTIVE));
+        ProductionInterrupted interrupted = new ProductionInterrupted(prepared.job().id(), prepared.job().workerId(), assault.id(), sighting);
+
+        assertEquals(interrupted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(interrupted.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(interrupted)));
+        assertEquals(prepared.job(), ProductionProcess.interruptibleForSettlementDefence(state, prepared.job().workerId()).orElseThrow());
+        FrontierWorldState released = ProductionProcess.reduceInterrupted(state, prepared.settlementId(), 100L, interrupted);
+
+        assertFalse(released.productionJobs().containsKey(prepared.job().id()));
+        assertEquals(prepared.input(), released.inventory().items().get(prepared.input().id()));
+        assertTrue(released.inventory().economics().reservations().isEmpty());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, released.companies().market().workOrders().get(prepared.order().id()).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, released.strategicPlans().tasks().get(prepared.order().taskId()).status());
+        assertEquals(HumanAssignmentKind.IDLE, HumanAssignmentProjection.compile(released).assignment(prepared.job().workerId()).kind());
+        assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceInterrupted(released, prepared.settlementId(), 100L, interrupted));
+    }
+
+    @Test
+    void settlementDefenceCannotInterruptMaterializedOrPreparedProduction() {
+        PreparedProduction prepared = activePhysicalProduction();
+        ProductionInterrupted interruption = new ProductionInterrupted(prepared.job().id(), prepared.job().workerId(),
+                new SubjectId("task:foreign-assault"), new HiveSettlementKnowledge.Sighting(prepared.settlementId(),
+                prepared.state().bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow().id(),
+                FrontierWorldStateSupport.settlement(prepared.state().bootstrap(), prepared.settlementId()).anchor(), 1L));
+
+        assertTrue(ProductionProcess.interruptibleForSettlementDefence(prepared.state(), prepared.job().workerId()).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceInterrupted(prepared.state(), prepared.settlementId(), 1L, interruption));
+    }
+
+    @Test
     void marketOrderWithAPreparedPhysicalTransformationCannotBeCancelledToFreeFunds() {
         PreparedProduction prepared = activePhysicalProduction();
         FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);

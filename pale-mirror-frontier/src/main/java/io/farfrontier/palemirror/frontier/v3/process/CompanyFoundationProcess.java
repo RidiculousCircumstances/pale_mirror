@@ -28,7 +28,7 @@ public final class CompanyFoundationProcess {
                 && candidate.purpose() == CompanyPurpose.WORKS).sorted(java.util.Comparator.comparing(Company::id)).findFirst().orElse(null);
         if (company == null) {
             ResidentProfile founder = state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.role() == ResidentRole.CRAFTER)
+                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.INDUSTRIAL_WORKER)
                     .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("settlement has no canonical works founder"));
             company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
@@ -52,7 +52,7 @@ public final class CompanyFoundationProcess {
             throw new IllegalArgumentException("company foundation must register the one active deterministic works company");
         }
         ResidentProfile founder = state.humanPopulation().resident(company.founderId());
-        if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.role() != ResidentRole.CRAFTER) {
+        if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.profession() != ResidentProfession.INDUSTRIAL_WORKER) {
             throw new IllegalArgumentException("company founder must be a current settlement crafter");
         }
         return state.registerCompany(company);

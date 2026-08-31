@@ -24,7 +24,7 @@ public final class RoutePatrolProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        ResidentProfile guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElse(null);
+        ResidentProfile guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElse(null);
         if (guard == null || FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }

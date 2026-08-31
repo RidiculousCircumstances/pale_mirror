@@ -10,6 +10,9 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.ExactInventory;
+import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -91,6 +95,24 @@ class FrontierV3DiagnosticJsonTest {
                 "one diagnostic must expose only the exact occupied slot projection of one named container");
         assertTrue(missing.contains("\"status\":\"not_found\""));
         assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192);
+    }
+
+    @Test
+    void rendersExactActorCustodyWithoutInventingASecondEquipmentLedger(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-actor-custody"), 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(); FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId itemId = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId actorId = state.humanPopulation().residentIds().stream().sorted().findFirst().orElseThrow();
+        ExactItemStack item = state.inventory().items().get(itemId); var items = new LinkedHashMap<>(state.inventory().items());
+        items.put(itemId, new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(), new InventoryCustody.Actor(actorId)));
+        ExactInventory inventory = new ExactInventory(state.inventory().containers(), items, state.inventory().cargo(), state.inventory().playerItems(),
+                state.inventory().worldCarrierItems(), state.inventory().conflicts(), state.inventory().surfaces(), state.inventory().economics());
+
+        String json = FrontierV3DiagnosticJson.render("item", itemId.value(), checkpoint, state.withInventory(inventory), Optional.empty());
+
+        assertTrue(json.contains("\"custody\":{\"kind\":\"ACTOR\",\"actor\":\"" + actorId.value() + "\"}"));
     }
 
     @Test

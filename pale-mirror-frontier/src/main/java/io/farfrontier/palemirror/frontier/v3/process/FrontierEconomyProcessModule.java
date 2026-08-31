@@ -20,6 +20,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> ProductionProcess.reduceBlocked(state, event.subject(), blocked);
+            case ProductionInterrupted interrupted -> ProductionProcess.reduceInterrupted(state, event.subject(), event.instant().ticks(), interrupted);
             default -> throw new IllegalArgumentException("economy process does not own event: " + event.payload().type());
         };
     }

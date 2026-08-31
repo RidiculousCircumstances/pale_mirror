@@ -153,6 +153,22 @@ class ExactInventoryTest {
     }
 
     @Test
+    void observedActorTransferRetainsTheSameExactStackWithoutASecondEquipmentLedger() {
+        SubjectId container = new SubjectId("container:armory");
+        SubjectId actor = new SubjectId("resident:armory-guard");
+        SubjectId item = new SubjectId("item:guard-sword");
+        InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 0);
+        ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, new SubjectId("settlement:one"), 2)),
+                Map.of(item, new ExactItemStack(item, new SubjectId("settlement:one"), "minecraft:iron_sword", 1, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+
+        ExactInventory equipped = stored.moveObservedItem(item, slot, new InventoryCustody.Actor(actor));
+
+        assertEquals(new InventoryCustody.Actor(actor), equipped.items().get(item).custody());
+        assertEquals(List.of(item), equipped.actorItems(actor).stream().map(ExactItemStack::id).toList());
+        assertThrows(IllegalArgumentException.class, () -> new InventoryCustody.Actor(new SubjectId("structure:armory")));
+    }
+
+    @Test
     void cargoRetainsTheSenderClaimUntilObservedReceiptTransfersItToTheReceiver() {
         SubjectId senderContainer = new SubjectId("container:sender");
         SubjectId receiverContainer = new SubjectId("container:receiver");

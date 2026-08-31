@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumMap;
@@ -18,6 +19,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Proves role consumers use the mutable exact-person register, never bootstrap residents. */
 class HumanRoleAssignmentTest {
@@ -31,6 +33,37 @@ class HumanRoleAssignmentTest {
         state = HumanPopulationTestFixtures.withResident(state, higher, settlement.anchor());
 
         assertEquals(higher, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow());
+    }
+
+    @Test
+    void professionAndCapabilitiesDriveWorkSelectionWithoutReplacingThePerson() {
+        FrontierWorldState state = initial("frontier:human-profession");
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        ResidentProfile original = state.humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(settlement.id()) && value.role() == ResidentRole.FARMER).findFirst().orElseThrow();
+        Map<HumanCapability, Integer> capabilities = new EnumMap<>(original.capabilities());
+        capabilities.put(HumanCapability.SECURITY, 100);
+        ResidentProfile retrained = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), original.role(),
+                ResidentProfession.SECURITY_WORKER, original.birthTick(), original.skills(), capabilities);
+        state = state.withHumanPopulation(state.humanPopulation().withProfile(retrained));
+
+        assertEquals(original.id(), state.humanPopulation().resident(original.id()).id());
+        assertEquals(retrained, FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElseThrow());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test
+    void legacyBootstrapProfileDeterministicallyMigratesAndCannotMoveAResidentThroughProfileReplacement() {
+        FrontierWorldState state = initial("frontier:human-profile-migration");
+        ResidentProfile original = state.humanPopulation().resident(new SubjectId("resident:1-1"));
+        ResidentProfile legacy = new ResidentProfile(original.id(), original.householdId(), original.settlementId(), ResidentRole.CRAFTER,
+                original.birthTick(), original.skills());
+
+        assertEquals(ResidentProfession.INDUSTRIAL_WORKER, legacy.profession());
+        assertEquals(legacy.skill(ResidentSkill.CRAFTING), legacy.capability(HumanCapability.INDUSTRY));
+        assertThrows(IllegalArgumentException.class, () -> state.humanPopulation().withProfile(new ResidentProfile(original.id(),
+                new SubjectId("household:foreign"), original.settlementId(), original.role(), original.profession(), original.birthTick(),
+                original.skills(), original.capabilities())));
     }
 
     @Test
@@ -77,6 +110,21 @@ class HumanRoleAssignmentTest {
         OperationCreated created = planned.stream().map(ProposedEvent::payload).filter(OperationCreated.class::isInstance)
                 .map(OperationCreated.class::cast).findFirst().orElseThrow();
         assertEquals(List.of(hauler.id(), guard.id()), created.operation().participantIds());
+    }
+
+    @Test
+    void exactActorHeldWeaponChangesTheSameCivilianCombatCapability() {
+        FrontierWorldState state = initial("frontier:human-equipped-worker");
+        ResidentProfile worker = state.humanPopulation().residents().values().stream()
+                .filter(value -> value.profession() != ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
+        assertEquals(FixedScalar.whole(1), RouteEngagementCombatRules.damage(state, worker.id()));
+        SubjectId depot = FrontierWorldState.depotId(worker.settlementId());
+        int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
+        SubjectId sword = new SubjectId("item:human-equipped-worker-sword");
+        ExactInventory stored = state.inventory().store(new ExactItemStack(sword, worker.settlementId(), "minecraft:iron_sword", 1,
+                new InventoryCustody.ContainerSlot(depot, slot)));
+        state = state.withInventory(stored.moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(worker.id())));
+        assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, worker.id()));
     }
 
     private static FrontierWorldState initial(String world) {

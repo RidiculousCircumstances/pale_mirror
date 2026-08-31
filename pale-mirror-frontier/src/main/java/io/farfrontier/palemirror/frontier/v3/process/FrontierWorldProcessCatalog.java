@@ -59,7 +59,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
             "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
-            "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
+            "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
             "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started",
             "frontier.resource_site_prepared", "frontier.resource_site_harvest_started", "frontier.resource_site_harvested",
@@ -329,7 +329,7 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
-                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked",
+                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
@@ -351,6 +351,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
                     "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+                    "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",

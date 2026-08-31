@@ -350,7 +350,16 @@ remains present because breadth, balance and product comprehension are not done.
 
 ### Deliverables
 
-- Residents, households, age/health/skills/roles, birth/death and migration.
+- Implement `frontier-v3-human-capabilities.md`: residents, households,
+  age/condition, trainable skills, profession/employment, exclusive current
+  assignment, exact equipment and work/tactical organization remain separate
+  canonical components.
+- Replace the provisional six-value `ResidentRole` bootstrap model through an
+  explicit stable-tag snapshot/WAL migration. Preserve exact people,
+  households, health, nutrition, contracts and custody; do not infer a current
+  task or military membership from the old role.
+- Birth/death and exact-person migration, including assignment, equipment and
+  organization conflicts.
 - Facilities, resource sites, recipes, work allocation, maintenance,
   construction, repair, storage capacity and shortages.
 - Companies/institutions, accounts, ownership, wages, prices, market clearing,
@@ -362,8 +371,20 @@ remains present because breadth, balance and product comprehension are not done.
   operations.
 - Field posts, modules, hospitals, fortifications, supply lines, engagements and
   aftermath/recovery.
-- Utility/HTN/local-goal AI for all human roles with bounded reconsideration and
-  only perceived knowledge.
+- Utility/HTN/local-goal AI for all human assignments and derived tactical
+  functions with bounded reconsideration and only perceived knowledge.
+- Exact crew/unit assembly, leadership degradation, mobilization and return.
+  Mobilized civilians stop contributing their conflicting work capacity, while
+  already committed physical effects settle or interrupt through their typed
+  recovery path.
+- Foundation completed: a `SettlementAssault` owns one exact defender unit with
+  deterministic stable member ordering and leader identity. Its active members
+  derive `SETTLEMENT_DEFENCE`, admission excludes every existing assignment,
+  except the implemented exact COLD production interruption: it returns the
+  held input and releases the matched market/invoice commitment before the same
+  resident becomes a defender. Restart retains the same people. It deliberately
+  does not yet interrupt
+  committed civilian work or model equipment/readiness/leader replacement.
 
 ### Verification matrix
 
@@ -372,6 +393,11 @@ duplicate input, subject removal during a plan, long-run retention and
 snapshot/WAL recovery. Cross-domain scenarios must include prosperity, ordinary
 shortage, trade interruption, company failure, epidemic/quarantine, migration,
 evacuation, lost expedition and settlement destruction/recovery.
+
+Human capability coverage must additionally prove job/assignment change without
+identity replacement, double-assignment rejection, equipment-loss capability
+loss, civilian opportunity cost during mobilization, leader-loss degradation,
+death during committed work and the same exact unit across HOT/COLD restart.
 
 ### Exit gate
 
@@ -444,6 +470,11 @@ resource creation and stable deterministic replay.
   transport, construction, repair, retreat, defence and combat.
 - Scene leases for overlapping operations and deterministic conflict policy:
   one actor/cargo/object action belongs to at most one active physical scene.
+- Provider-neutral facility ports and rail contracts retain semantic
+  input/output, energy, maintenance, station, segment/junction, train, wagon,
+  exact cargo and route-cursor ownership. Graybox block/entity kinds never
+  become domain capability, preserving the accepted future Create boundary in
+  `frontier-v3-create-direction.md`.
 - Real projectile, TNT-like blast, fire, collapse, construction,
   decontamination and infection-terrain executors with durable effect leases.
 - Incremental baseline/delta materialization that never force-loads or restores
@@ -513,6 +544,27 @@ motion, combat, damage, infection and causal feedback as one Minecraft world.
 Rollback before step 4 is deployment rollback to the last verified artifact,
 not runtime fallback inside v3. After step 4, Git history is the only v2
 recovery path.
+
+## Post-graybox Create phase — accepted direction, outside this goal
+
+After Wave 7 validates and cuts over the complete graybox simulation, a
+separate goal may implement `frontier-v3-create-direction.md`. Its transport
+scope is rail only: long inter-settlement lines, exact freight trains,
+stations/yards, switches/signals, bridges/tunnels, loading and repair. Road
+freight and aeronautical transport are explicitly excluded from this phase.
+
+The accepted industrial scope combines the already stated factories, farms,
+weapons and turrets with extraction, energy, metallurgy/materials,
+warehousing/rail logistics and construction/engineering. Create remains a
+registered NeoForge physical provider. It never owns canonical recipes,
+inventory, cargo, route selection, settlement decisions, damage or COLD
+progress.
+
+Implementation begins only from a verified graybox provider contract and must
+add same-identity train, exact cargo, mechanism capability, obstruction,
+damage, player theft and restart evidence before replacing any graybox path in
+the product profile. Provider replacement is incremental; there is no
+Create-backed second economy or decorative capability shortcut.
 
 ## Progress reporting
 

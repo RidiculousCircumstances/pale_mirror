@@ -79,32 +79,46 @@ public final class FrontierWorldStateSupport {
         return resident;
     }
 
+    public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
+                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> assignments.idle(resident.id()))
+                .sorted(byProfessionCapability(profession)).findFirst();
+    }
+
+    public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
+                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> assignments.idle(resident.id()))
+                .sorted(byProfessionCapability(profession)).findFirst();
+    }
+
+    public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
+                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> assignments.idle(resident.id()))
+                .sorted(byProfessionCapability(profession)).findFirst();
+    }
+
+    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
     public static Optional<ResidentProfile> availableWorkResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> workCapable(state, resident))
-                .sorted(byRoleSkill(role)).findFirst();
+        return availableWorkResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
     }
 
+    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
     public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> workCapable(state, resident))
-                .filter(resident -> !activeOperationClaim(state, resident.id()))
-                .filter(resident -> !activePatrolClaim(state, resident.id()))
-                .filter(resident -> !state.humanPopulation().migrations().containsKey(resident.id()))
-                .sorted(byRoleSkill(role)).findFirst();
+        return availableRouteResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
     }
 
+    /** Compatibility selection for callers still holding only the legacy bootstrap affinity. */
     public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentRole role) {
-        return state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId) && resident.role() == role)
-                .filter(resident -> workCapable(state, resident))
-                .filter(resident -> state.operations().values().stream().noneMatch(operation -> retainsParticipantClaim(state, operation)
-                        && operation.participantIds().contains(resident.id())))
-                .filter(resident -> state.sceneLeases().values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                        && lease.members().stream().anyMatch(member -> member.actorId().equals(resident.id()))))
-                .sorted(byRoleSkill(role)).findFirst();
+        return availableFieldResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
     }
 
     /**
@@ -112,7 +126,7 @@ public final class FrontierWorldStateSupport {
      * worker until that job resolves or reaches its own explicit failure boundary.  This avoids
      * silently cancelling a physical effect halfway through its acknowledged lifecycle.
      */
-    static boolean workCapable(FrontierWorldState state, ResidentProfile resident) {
+    public static boolean workCapable(FrontierWorldState state, ResidentProfile resident) {
         return state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
                 && state.humanPopulation().nutrition(resident.id()).status() != ResidentNutritionStatus.STARVING;
     }
@@ -146,20 +160,9 @@ public final class FrontierWorldStateSupport {
                 && patrol.guardId().equals(residentId));
     }
 
-    private static Comparator<ResidentProfile> byRoleSkill(ResidentRole role) {
-        return Comparator.comparingInt((ResidentProfile resident) -> resident.skill(specialistSkill(role))).reversed()
+    private static Comparator<ResidentProfile> byProfessionCapability(ResidentProfession profession) {
+        return Comparator.comparingInt((ResidentProfile resident) -> resident.capability(profession.primaryCapability())).reversed()
                 .thenComparing(ResidentProfile::id);
-    }
-
-    private static ResidentSkill specialistSkill(ResidentRole role) {
-        return switch (role) {
-            case FARMER -> ResidentSkill.AGRICULTURE;
-            case BUILDER -> ResidentSkill.BUILDING;
-            case CRAFTER -> ResidentSkill.CRAFTING;
-            case GUARD -> ResidentSkill.SECURITY;
-            case MEDIC -> ResidentSkill.MEDICINE;
-            case HAULER -> ResidentSkill.LOGISTICS;
-        };
     }
 
     public static void requirePosition(WorldBounds bounds, BlockPosition position) {
@@ -176,6 +179,11 @@ public final class FrontierWorldStateSupport {
         ExactItemStack item = state.inventory().items().get(destroyed.itemId());
         if (item == null || !item.custody().equals(destroyed.source())) throw new IllegalArgumentException("destroyed item has no matching exact item");
         return item.economicOwnerId();
+    }
+
+    static void validateActorItemCustody(Set<SubjectId> actors, ExactInventory inventory) {
+        if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
+                && !actors.contains(actor.actorId()))) throw new IllegalArgumentException("actor-held item must retain one canonical actor");
     }
 
     static void validateEconomicClaims(FrontierBootstrap bootstrap, ExactInventory inventory) {

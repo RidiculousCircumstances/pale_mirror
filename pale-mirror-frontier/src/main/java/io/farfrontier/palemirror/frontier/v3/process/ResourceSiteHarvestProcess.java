@@ -41,7 +41,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest task has a foreign field owner");
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return blocked(task);
-        ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
+        ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).orElse(null);
         if (farmer == null) return blocked(task);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
@@ -130,8 +130,18 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest job has a foreign strategic task");
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) throw new IllegalArgumentException("resource-site harvest farm is unavailable");
-        ResidentProfile worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
-        if (worker == null || !worker.id().equals(job.workerId())) throw new IllegalArgumentException("resource-site harvest worker is unavailable");
+        ResidentProfile worker = lifecycle.phase() == ResourceSitePhase.READY
+                ? FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).orElse(null)
+                : state.humanPopulation().resident(job.workerId());
+        if (worker == null || !worker.id().equals(job.workerId()) || worker.profession() != ResidentProfession.AGRICULTURAL_WORKER) {
+            throw new IllegalArgumentException("resource-site harvest worker is unavailable");
+        }
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
+            HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
+            if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(java.util.Optional.of(job.id()))) {
+                throw new IllegalArgumentException("resource-site harvest worker lacks the exact active assignment");
+            }
+        }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         if (!job.outputSlot().containerId().equals(depot) || !state.containerSlotAvailable(job.outputSlot())) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");

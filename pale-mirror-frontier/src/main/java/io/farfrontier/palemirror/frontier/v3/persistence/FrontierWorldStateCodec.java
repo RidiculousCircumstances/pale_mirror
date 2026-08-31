@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 80, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 81, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -59,7 +59,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -77,7 +77,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78),
-                    HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58),
+                    HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81),
                     companies,
                     ResourceSiteStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
@@ -776,14 +776,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Cargo cargo) { output.writeByte(1); writeString(output, cargo.cargoId().value()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(2); writeString(output, player.playerId().toString()); }
-        else { output.writeByte(3); writeString(output, ((InventoryCustody.WorldCarrier) custody).carrierId().toString()); }
-    }
-    static InventoryCustody readCustody(DataInputStream input) throws IOException {
+        else if (custody instanceof InventoryCustody.WorldCarrier carrier) { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
+        else { output.writeByte(4); writeString(output, ((InventoryCustody.Actor) custody).actorId().value()); }
+    } static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(new SubjectId(readString(input)), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Cargo(new SubjectId(readString(input)));
             case 2 -> new InventoryCustody.Player(UUID.fromString(readString(input)));
-            case 3 -> new InventoryCustody.WorldCarrier(UUID.fromString(readString(input)));
+            case 3 -> new InventoryCustody.WorldCarrier(UUID.fromString(readString(input))); case 4 -> new InventoryCustody.Actor(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown inventory custody");
         };
     }

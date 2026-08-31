@@ -334,15 +334,15 @@ public final class SupplyOperationProcess {
         return SettlementProvisionProcess.exportableBread(state, settlement.id());
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
-        return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).isPresent()
-                && FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).isPresent();
+        return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).isPresent()
+                && FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).isPresent();
     }
     private static boolean dependenciesCompleted(FrontierWorldState state, StrategicTask task) {
         return task.dependencies().stream().map(state.strategicPlans().tasks()::get).allMatch(value -> value.status() == StrategicTaskStatus.COMPLETED);
     }
     private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract, Settlement settlement) {
-        SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.HAULER).orElseThrow().id();
-        SubjectId guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
+        SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).orElseThrow().id();
+        SubjectId guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElseThrow().id();
         int ordinal = FrontierWorldScheduleSupport.ordinal(contract.id().value());
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("supply settlement lacks a Hall")));

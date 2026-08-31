@@ -11,12 +11,11 @@ public final class FrontierSceneLabels {
     private FrontierSceneLabels() { }
 
     public static String actor(FrontierWorldState state, SubjectId actorId, boolean bioform) {
-        Resident resident = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
-                .filter(value -> value.id().equals(actorId)).findFirst().orElse(null);
+        ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
             Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId()))
                     .findFirst().orElseThrow(() -> new IllegalStateException("resident settlement is missing: " + actorId.value()));
-            return settlement.displayName() + " " + words(resident.role().name());
+            return settlement.displayName() + " " + words(resident.profession().name());
         }
         return Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actorId)).findFirst()

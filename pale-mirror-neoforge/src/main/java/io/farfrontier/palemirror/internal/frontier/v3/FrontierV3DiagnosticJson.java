@@ -487,6 +487,7 @@ final class FrontierV3DiagnosticJson {
             case InventoryCustody.Cargo cargo -> "{\"kind\":\"CARGO\",\"cargo\":\"" + quote(cargo.cargoId().value()) + "\"}";
             case InventoryCustody.Player player -> "{\"kind\":\"PLAYER\",\"player\":\"" + player.playerId() + "\"}";
             case InventoryCustody.WorldCarrier carrier -> "{\"kind\":\"WORLD_CARRIER\",\"carrier\":\"" + carrier.carrierId() + "\"}";
+            case InventoryCustody.Actor actor -> "{\"kind\":\"ACTOR\",\"actor\":\"" + quote(actor.actorId().value()) + "\"}";
         };
     }
     private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }

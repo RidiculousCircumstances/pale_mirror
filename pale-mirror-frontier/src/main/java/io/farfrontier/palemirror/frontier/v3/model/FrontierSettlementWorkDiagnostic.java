@@ -45,12 +45,12 @@ public record FrontierSettlementWorkDiagnostic(
                 .sorted(Comparator.comparing(action -> action.dueAt()))
                 .map(action -> action.id().value() + "@" + action.dueAt().ticks()).toList();
         int livingFarmers = (int) state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlementId) && value.role() == ResidentRole.FARMER)
+                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE).count();
         boolean workCapableFarmer = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlementId) && value.role() == ResidentRole.FARMER)
+                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
                 .anyMatch(value -> FrontierWorldStateSupport.workCapable(state, value));
-        String availableFarmer = FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentRole.FARMER)
+        String availableFarmer = FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER)
                 .map(value -> value.id().value()).orElse("");
         String farmStatus = sites.stream().map(site -> state.structureConditions().get(site.facilityId()).name()).distinct().sorted()
                 .reduce((left, right) -> left.equals(right) ? left : "MIXED").orElse("MISSING");

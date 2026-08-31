@@ -67,7 +67,8 @@ final class HumanPopulationStateCodec {
         }
     }
 
-    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition) throws IOException {
+    static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition,
+                                boolean hasCapabilityProfile) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -75,7 +76,7 @@ final class HumanPopulationStateCodec {
         }
         Map<SubjectId, ResidentProfile> residents = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
-            ResidentProfile resident = readProfile(input);
+            ResidentProfile resident = readProfile(input, hasCapabilityProfile);
             if (residents.put(resident.id(), resident) != null) throw new IllegalArgumentException("duplicate resident id");
         }
         Map<SubjectId, ResidentBirthJob> birthJobs = new LinkedHashMap<>();
@@ -83,7 +84,7 @@ final class HumanPopulationStateCodec {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId food = new SubjectId(FrontierWorldStateCodec.readString(input));
             ResidentBirthJob job = new ResidentBirthJob(id, settlement, household, food, new PhysicalIntentId(FrontierWorldStateCodec.readString(input)),
-                    readProfile(input), FrontierWorldStateCodec.readPosition(input));
+                    readProfile(input, hasCapabilityProfile), FrontierWorldStateCodec.readPosition(input));
             if (birthJobs.put(id, job) != null) throw new IllegalArgumentException("duplicate resident birth job");
         }
         if (!hasHealth) return new HumanPopulation(households, residents, birthJobs);
@@ -181,16 +182,27 @@ final class HumanPopulationStateCodec {
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldStateCodec.writeString(output, resident.id().value()); FrontierWorldStateCodec.writeString(output, resident.householdId().value());
-        FrontierWorldStateCodec.writeString(output, resident.settlementId().value()); output.writeByte(resident.role().wireTag()); output.writeLong(resident.birthTick());
+        FrontierWorldStateCodec.writeString(output, resident.settlementId().value()); output.writeByte(resident.role().wireTag());
+        output.writeByte(resident.profession().wireTag()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
+        for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
     }
 
-    private static ResidentProfile readProfile(DataInputStream input) throws IOException {
+    private static ResidentProfile readProfile(DataInputStream input, boolean hasCapabilityProfile) throws IOException {
         SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); int role = input.readUnsignedByte();
         if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
+        ResidentProfession profession = null;
+        if (hasCapabilityProfile) {
+            int professionTag = input.readUnsignedByte();
+            if (professionTag >= ResidentProfession.values().length) throw new IllegalArgumentException("unknown resident profession");
+            profession = FrontierWireTags.require(ResidentProfession.class, professionTag);
+        }
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
-        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
+        if (!hasCapabilityProfile) return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
+        var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
+        for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
+        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), profession, birthTick, skills, capabilities);
     }
 }

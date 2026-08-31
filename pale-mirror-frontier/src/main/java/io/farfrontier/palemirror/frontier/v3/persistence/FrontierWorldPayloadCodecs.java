@@ -30,7 +30,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
             HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition())); }
     static PayloadCodecs economyCodecs() { return new PayloadCodecs(List.of(new ProductionStartedCodec(), new ProductionCompletedCodec(),
-            new ProductionBlockedCodec(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
+            new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
             MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled())); }
     static PayloadCodecs resourceSiteCodecs() { return new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
@@ -810,17 +810,17 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) values.add(new SceneMemberPosition(readSubject(input).value(),
                 new BlockPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
         return values;
-    }
-    static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+    } static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
         else if (custody instanceof InventoryCustody.WorldCarrier carrier) { output.writeByte(2); writeString(output, carrier.carrierId().toString()); }
+        else if (custody instanceof InventoryCustody.Actor actor) { output.writeByte(3); writeSubject(output, actor.actorId()); }
         else throw new IllegalArgumentException("observed item custody payload cannot encode cargo custody");
     } static InventoryCustody readCustody(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
-            case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
+            case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input))); case 3 -> new InventoryCustody.Actor(readSubject(input).value());
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
         };
     } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }

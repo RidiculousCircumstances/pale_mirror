@@ -33,14 +33,51 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(fixture.sighting(), started.assault().sighting());
         assertTrue(started.assault().attackerIds().stream().allMatch(id -> id.value().startsWith("bioform:")));
         assertTrue(started.assault().defenderIds().stream().allMatch(id -> id.value().startsWith("resident:")));
+        assertEquals(started.assault().defenderIds().getFirst(), started.assault().defenderUnit().leaderId());
+        assertEquals(HumanAssignmentKind.IDLE, HumanAssignmentProjection.compile(fixture.state()).assignment(started.assault().defenderUnit().leaderId()).kind());
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), started);
 
         SettlementAssault retained = state.strategicPlans().settlementAssaults().get(started.assault().id());
         assertEquals(started.assault(), retained);
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
+        assertTrue(retained.defenderIds().stream().allMatch(id -> {
+            HumanAssignment assignment = assignments.assignment(id);
+            return assignment.kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE && assignment.ownerId().equals(java.util.Optional.of(retained.id()));
+        }));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         ScheduledAction scheduled = assertInstanceOf(ScheduleEffect.Created.class, events.get(2).payload()).action();
         assertEquals(retained.id(), scheduled.subject());
+    }
+
+    @Test void admissionDoesNotStealAnExactResidentFromAnExistingCivilianClaimAndRetainsOneStableLeader() {
+        Fixture fixture = fixture(true);
+        ResidentProfile resident = fixture.state().humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(fixture.sighting().settlementId()))
+                .filter(value -> value.profession() == ResidentProfession.INDUSTRIAL_WORKER).findFirst().orElseThrow();
+        ExactItemStack input = fixture.state().inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                && slot.containerId().equals(FrontierWorldState.depotId(resident.settlementId())) && "minecraft:wheat".equals(item.itemKind())).findFirst().orElseThrow();
+        ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), resident.settlementId(),
+                FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), resident.settlementId()).structures().stream()
+                        .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), resident.id(),
+                input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:occupied-output"), "minecraft:bread", input.count());
+        FrontierWorldState occupied = fixture.state().startProductionJob(job, input.id());
+        List<ProposedEvent> events = HiveSettlementAssaultProcess.planStart(occupied,
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        SettlementAssaultStarted started = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload());
+        assertTrue(!started.assault().defenderIds().contains(resident.id()));
+
+        List<ProposedEvent> unoccupiedStart = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, unoccupiedStart.getFirst().payload()));
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(),
+                assertInstanceOf(SettlementAssaultStarted.class, unoccupiedStart.get(1).payload()));
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        SubjectId leader = assault.defenderUnit().leaderId();
+        assertEquals(leader, assault.defenderIds().getFirst());
+        assertEquals(assault.defenderIds(), assault.defenderUnit().memberIds());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     @Test void missingFreshLocalTerritoryBlocksTheSameSightedAssaultInsteadOfRetargeting() {

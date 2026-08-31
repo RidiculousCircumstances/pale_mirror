@@ -149,9 +149,9 @@ public final class AmbientActorProcess {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
             Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
-            if (resident.role() == ResidentRole.GUARD) return new AmbientGoal(AmbientGoalKind.GUARD, settlement.anchor());
-            StructureKind kind = resident.role() == ResidentRole.FARMER ? StructureKind.FARM
-                    : resident.role() == ResidentRole.MEDIC ? StructureKind.INFIRMARY : StructureKind.WORKSHOP;
+            if (resident.profession() == ResidentProfession.SECURITY_WORKER) return new AmbientGoal(AmbientGoalKind.GUARD, settlement.anchor());
+            StructureKind kind = resident.profession() == ResidentProfession.AGRICULTURAL_WORKER ? StructureKind.FARM
+                    : resident.profession() == ResidentProfession.MEDICAL_WORKER ? StructureKind.INFIRMARY : StructureKind.WORKSHOP;
             BlockPosition position = settlement.structures().stream().filter(structure -> structure.kind() == kind).findFirst()
                     .orElseThrow().anchor();
             return new AmbientGoal(AmbientGoalKind.WORK, position);

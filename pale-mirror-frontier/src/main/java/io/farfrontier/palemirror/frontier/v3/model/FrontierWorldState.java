@@ -45,7 +45,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
-        if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor");
+        if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) {
             throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
@@ -162,7 +162,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
-            if (!worker.settlementId().equals(settlement.id()) || worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a settlement crafter");
+            if (!worker.settlementId().equals(settlement.id()) || worker.profession() != ResidentProfession.INDUSTRIAL_WORKER) throw new IllegalArgumentException("production job worker must be a settlement industrial worker");
             if (inventory.items().containsKey(job.outputItemId())) {
                 throw new IllegalArgumentException("active production job must not retain its output stack");
             }
@@ -236,8 +236,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (operation.participantIds().size() != 2) throw new IllegalArgumentException("supply route operation must retain one hauler and one guard");
             ResidentProfile hauler = humanPopulation.resident(operation.participantIds().getFirst());
             ResidentProfile guard = humanPopulation.resident(operation.participantIds().get(1));
-            if (hauler == null || guard == null || hauler.role() != ResidentRole.HAULER || guard.role() != ResidentRole.GUARD) {
-                throw new IllegalArgumentException("supply route operation participants must retain hauler then guard roles");
+            if (hauler == null || guard == null || hauler.profession() != ResidentProfession.LOGISTICIAN
+                    || guard.profession() != ResidentProfession.SECURITY_WORKER) {
+                throw new IllegalArgumentException("supply route operation participants must retain logistician then security worker professions");
             }
             for (SubjectId participant : operation.participantIds()) {
                 if (!settlementResidents.contains(participant)) throw new IllegalArgumentException("route operation participant must belong to its settlement");

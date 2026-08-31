@@ -145,6 +145,17 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 withNourished(nutrition, resident.id()));
     }
 
+    /** Replaces mutable social capability data without changing one person's identity or home membership. */
+    public HumanPopulation withProfile(ResidentProfile resident) {
+        Objects.requireNonNull(resident, "resident profile");
+        ResidentProfile current = residents.get(resident.id());
+        if (current == null || !current.householdId().equals(resident.householdId()) || !current.settlementId().equals(resident.settlementId())) {
+            throw new IllegalArgumentException("resident profile replacement must preserve exact household and settlement membership");
+        }
+        Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
+        return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition);
+    }
+
     public HumanPopulation migrate(SubjectId residentId, SubjectId householdId, SubjectId settlementId) {
         ResidentProfile resident = residents.get(Objects.requireNonNull(residentId, "resident id"));
         if (resident == null) throw new IllegalArgumentException("unknown resident");

@@ -336,6 +336,28 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void durableObservedEquipmentTransferRetainsOneCanonicalResidentAndSurvivesSnapshotRecovery() {
+        WorldId worldId = new WorldId("frontier:actor-custody");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
+        SubjectId resident = before.humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow().id();
+        ExactItemCustodyChanged changed = new ExactItemCustodyChanged(itemId, source, new InventoryCustody.Actor(resident));
+        var checkpoint = engine.checkpoint();
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:exact-item-equip");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
+                new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1, commandId, worldId, checkpoint.revision(), checkpoint.instant(),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), changed)));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(new InventoryCustody.Actor(resident), after.inventory().items().get(itemId).custody());
+        assertEquals(List.of(itemId), after.inventory().actorItems(resident).stream().map(ExactItemStack::id).toList());
+        assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        assertEquals(changed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(changed.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(changed)));
+    }
+
+    @Test
     void durableInventoryConflictRetainsPhysicalDriftWithoutAdoptingOrRepairingIt() {
         WorldId worldId = new WorldId("frontier:inventory-conflict");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));

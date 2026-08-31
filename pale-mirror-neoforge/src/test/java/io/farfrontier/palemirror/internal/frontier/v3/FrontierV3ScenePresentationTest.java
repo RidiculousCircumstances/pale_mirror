@@ -24,6 +24,7 @@ class FrontierV3ScenePresentationTest {
         var operation = state.operations().values().iterator().next();
         var resident = state.bootstrap().settlements().stream().flatMap(value -> value.residents().stream())
                 .filter(value -> value.id().equals(operation.participantIds().getFirst())).findFirst().orElseThrow();
+        var profile = state.humanPopulation().resident(resident.id());
         var settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId())).findFirst().orElseThrow();
         var cargo = state.inventory().cargo().get(operation.cargoId());
         var stack = state.inventory().items().get(cargo.itemIds().getFirst());
@@ -32,7 +33,7 @@ class FrontierV3ScenePresentationTest {
         String bioformName = FrontierSceneLabels.actor(state, state.bootstrap().hive().bioforms().getFirst().id(), true);
         String cargoName = FrontierSceneLabels.cargo(state, cargo);
 
-        assertEquals(settlement.displayName() + " " + resident.role().name(), residentName);
+        assertEquals(settlement.displayName() + " " + profile.profession().name().replace('_', ' '), residentName);
         assertEquals("HIVE " + state.bootstrap().hive().bioforms().getFirst().role().name(), bioformName);
         assertEquals(settlement.displayName().toUpperCase(java.util.Locale.ROOT) + " CARAVAN\n"
                 + stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(java.util.Locale.ROOT)

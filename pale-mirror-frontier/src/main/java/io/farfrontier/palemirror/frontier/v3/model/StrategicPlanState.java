@@ -244,7 +244,7 @@ public final class StrategicPlanState {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
             ResidentProfile guard = humanPopulation.resident(patrol.guardId());
             if (guard == null || !guard.settlementId().equals(settlement.id())) throw new IllegalArgumentException("route patrol guard is foreign");
-            if (guard.role() != ResidentRole.GUARD || !patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
+            if (guard.profession() != ResidentProfession.SECURITY_WORKER || !patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
                 throw new IllegalArgumentException("route patrol does not retain its guard or canonical route");
             }
         });

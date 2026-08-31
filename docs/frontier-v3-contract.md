@@ -42,6 +42,16 @@ the Python parity port or an adapter over `ReferenceGrayboxSimulation`.
 - General techniques learned from v2 may become new requirements or tests, but
   production v3 code may not import or delegate to v2 implementations.
 
+The accepted post-graybox industrial direction is defined by
+`frontier-v3-create-direction.md`. Create remains a future physical provider,
+not a dependency or second simulation inside the current pure domain. Its
+accepted transport scope is rail only; road freight and aeronautical transport
+are excluded until a later explicit decision. Current v3 facilities, exact
+cargo, routes, construction and physical leases must preserve the
+provider-neutral seams required for future extraction, energy, metallurgy,
+warehousing/rail logistics and construction/engineering mechanisms. Actual
+Create implementation is not an exit condition for the current graybox goal.
+
 ## Authority and mutation
 
 Frontier v3 has one canonical world state and one ordered mutation lane per
@@ -173,11 +183,34 @@ v2.
 
 ## Autonomous humans and hive
 
-Settlements own residents, households, roles, exact disease state, quarantine policy, facilities, inventories,
+Settlements own residents, households, capabilities, professions, assignments,
+organizations, exact disease state, quarantine policy, facilities, inventories,
 production processes, needs, governance, security, companies, contracts,
 credit, investment, prices, trade, migration, diplomacy and operations. A
 company or institution owns real accounts and custody; resources do not exist
 as an unowned global pool.
+
+The normative human capability and unit model is defined by
+`frontier-v3-human-capabilities.md`. A resident's profile/condition, learned
+skills, profession/employment, current assignment, equipment and organization
+are separate canonical concerns. Tactical functions such as scout, sapper,
+rifle fighter or fixed-weapon crew are derived from those facts, never permanent
+human classes. Mobilizing an exact worker therefore suspends or terminates
+their conflicting civilian work explicitly and removes that labour from its
+settlement capacity; it cannot produce civilian output and military action at
+once. The existing six-value `ResidentRole` is provisional bootstrap affinity,
+not the final assignment model.
+
+The first concrete tactical organization is an assault-owned exact settlement
+defender unit: it retains one ordered member list and leader identity, derives
+the sole `SETTLEMENT_DEFENCE` assignment from the active assault, and admits
+living, nourished residents with no conflicting claim, plus a deliberately
+released COLD production worker when the same fresh sighting requires defence.
+That interruption atomically returns the exact input, releases its invoice
+reservation and cancels its market order before the unit claims the person. It
+is not a global second roster. Other committed work, materialized/running
+effects, exact equipment and return/recovery remain separate mobilization work;
+they block admission rather than being silently reassigned.
 
 Migration is an exact-person Transit journey, never a population-counter
 adjustment. A displaced resident retains their origin household and settlement

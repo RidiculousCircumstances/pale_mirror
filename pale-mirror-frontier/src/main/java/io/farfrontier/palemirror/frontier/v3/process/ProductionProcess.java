@@ -37,7 +37,7 @@ public final class ProductionProcess {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.FACILITY_UNAVAILABLE);
-        if (FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isEmpty()) {
+        if (FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.INDUSTRIAL_WORKER).isEmpty()) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.WORKER_UNAVAILABLE);
         }
         Optional<ExactItemStack> input = wheat(state, settlement);
@@ -101,6 +101,28 @@ public final class ProductionProcess {
                 }).toList();
     }
 
+    /**
+     * Only COLD market-backed work is safely releasable for immediate settlement defence.
+     * A materialized input or even a prepared physical transform remains its own recovery
+     * problem and therefore keeps the worker unavailable.
+     */
+    public static Optional<ProductionJob> interruptibleForSettlementDefence(FrontierWorldState state, SubjectId workerId) {
+        return state.productionJobs().values().stream().filter(job -> job.workerId().equals(workerId))
+                .filter(job -> job.inputHold() instanceof ProductionInputHold.Cold)
+                .filter(job -> state.physicalIntents().values().stream().noneMatch(intent -> intent.causeSubjectId().equals(job.id())))
+                .filter(job -> state.companies().market().acceptedForJob(job.id()).isPresent())
+                .filter(job -> CompanyWorkPaymentProcess.contractFor(state, job).isPresent())
+                .filter(job -> state.strategicPlans().tasks().values().stream().anyMatch(task -> task.ownerId().equals(job.settlementId())
+                        && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.ACTIVE))
+                .reduce((left, right) -> { throw new IllegalArgumentException("one worker cannot retain two interruptible production jobs"); });
+    }
+
+    /** Emits only the explicit worker records that the admitted defender unit must release. */
+    public static List<ProposedEvent> planSettlementDefenceInterruptions(FrontierWorldState state, SettlementAssault assault) {
+        return assault.defenderIds().stream().sorted().flatMap(worker -> interruptibleForSettlementDefence(state, worker).stream()
+                .map(job -> new ProposedEvent(job.settlementId(), new ProductionInterrupted(job.id(), worker, assault.taskId(), assault.sighting())))).toList();
+    }
+
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
         ProductionJob job = started.job(); requireOwner(subject, job.settlementId()); Settlement settlement = settlement(state, job.settlementId());
         SettlementStructure workshop = workshop(settlement);
@@ -141,6 +163,43 @@ public final class ProductionProcess {
         return paid.completeProductionJob(completed.jobId(), completed.output());
     }
 
+    /**
+     * Releases one COLD job only when the current active hive assault names the same observed
+     * settlement. This is one atomic canonical transition: the original input is restored,
+     * its invoice reservation is released and both market order and production task become
+     * terminal before the defender unit can claim the resident.
+     */
+    public static FrontierWorldState reduceInterrupted(FrontierWorldState state, SubjectId subject, long now, ProductionInterrupted interrupted) {
+        ProductionJob job = state.productionJobs().get(interrupted.jobId());
+        if (job == null || !subject.equals(job.settlementId()) || !job.workerId().equals(interrupted.workerId())
+                || !job.settlementId().equals(interrupted.sighting().settlementId()) || !(job.inputHold() instanceof ProductionInputHold.Cold)
+                || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))) {
+            throw new IllegalArgumentException("production interruption must retain one untouched COLD job at its defended settlement");
+        }
+        StrategicTask defence = state.strategicPlans().tasks().get(interrupted.assaultTaskId());
+        if (defence == null || defence.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || defence.status() != StrategicTaskStatus.ACTIVE
+                || !defence.ownerId().equals(state.bootstrap().hive().id()) || interrupted.sighting().observedAt() < Math.subtractExact(now,
+                state.bootstrap().ruleset().cadence().hiveSettlementKnowledgeMaxAge()) || !interrupted.sighting().equals(
+                state.strategicPlans().hiveSettlementKnowledge().entries().get(interrupted.sighting().settlementId()))) {
+            throw new IllegalArgumentException("production interruption must retain one current active settlement assault cause");
+        }
+        StrategicTask production = activeTask(state, job.settlementId());
+        MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
+                new IllegalArgumentException("interrupted production must retain one accepted market work order"));
+        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow(() ->
+                new IllegalArgumentException("interrupted production must retain its active worker contract"));
+        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+        if (!order.reservationId().equals(reservation.id()) || !order.sellerId().equals(contract.companyId())
+                || !state.inventory().economics().reservations().containsKey(reservation.id())) {
+            throw new IllegalArgumentException("production interruption has no matching exact financial reservation");
+        }
+        FrontierWorldState released = state.cancelProductionJob(job.id());
+        ExactInventory inventory = released.inventory().withEconomics(released.inventory().economics().release(reservation.id()));
+        StrategicPlanState plans = released.strategicPlans().transitionTask(production.id(), StrategicTaskStatus.BLOCKED);
+        return released.withInventory(inventory).withCompanies(released.companies().withMarket(
+                released.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED))).withStrategicPlans(plans);
+    }
+
     public static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, ProductionBlocked blocked) {
         requireOwner(subject, blocked.settlementId()); Settlement settlement = settlement(state, blocked.settlementId()); SettlementStructure workshop = workshop(settlement);
         if (!workshop.id().equals(blocked.facilityId())) throw new IllegalArgumentException("production block refers to a foreign facility");
@@ -174,7 +233,7 @@ public final class ProductionProcess {
                     break;
                 }
                 if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
-                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isPresent()) {
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.INDUSTRIAL_WORKER).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");
                 }
             }
@@ -197,7 +256,7 @@ public final class ProductionProcess {
                         }).orElseThrow(() -> new IllegalArgumentException("production finance block has no pending task")), StrategicTaskStatus.PENDING);
                 Optional<ExactItemStack> prospectiveInput = wheat(state, settlement);
                 if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty()
-                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isEmpty()) {
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.INDUSTRIAL_WORKER).isEmpty()) {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
                 int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
@@ -266,7 +325,7 @@ public final class ProductionProcess {
     private static Settlement settlement(FrontierWorldState state, SubjectId id) { return FrontierWorldStateSupport.settlement(state.bootstrap(), id); }
     private static SettlementStructure workshop(Settlement settlement) { return settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst()
             .orElseThrow(() -> new IllegalStateException("settlement lacks workshop")); }
-    private static ResidentProfile crafter(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER)
+    private static ResidentProfile crafter(FrontierWorldState state, Settlement settlement) { return FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.INDUSTRIAL_WORKER)
             .orElseThrow(() -> new IllegalStateException("settlement lacks crafter")); }
     private static ProductionJob job(FrontierWorldState state, Settlement settlement, SettlementStructure workshop, ExactItemStack input, int ordinal, boolean cold) {
         ResidentProfile worker = crafter(state, settlement); String number = settlement.id().value().substring("settlement:".length());

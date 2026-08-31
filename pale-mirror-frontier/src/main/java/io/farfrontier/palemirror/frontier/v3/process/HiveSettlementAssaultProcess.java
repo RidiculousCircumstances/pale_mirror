@@ -53,8 +53,12 @@ public final class HiveSettlementAssaultProcess {
         }
         SettlementAssault assault = assault(state, task, sighting.orElseThrow());
         if (assault == null) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)),
-                schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
+        List<ProposedEvent> events = new ArrayList<>();
+        events.add(transition(task, StrategicTaskStatus.ACTIVE));
+        events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
+        events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
+        events.add(schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
+        return List.copyOf(events);
     }
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
@@ -184,8 +188,14 @@ public final class HiveSettlementAssaultProcess {
         eligible.stream().filter(value -> value.role() == BioformRole.BOMBER).limit(1).forEach(selected::add);
         eligible.stream().filter(value -> value.role() == BioformRole.GUARD).limit(2).forEach(selected::add);
         if (selected.stream().noneMatch(value -> value.role() == BioformRole.BOMBER) || selected.stream().noneMatch(value -> value.role() == BioformRole.GUARD)) return null;
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
-                .filter(value -> alive(state, value.id())).sorted(Comparator.comparing((ResidentProfile value) -> value.role() != ResidentRole.GUARD).thenComparing(ResidentProfile::id))
+                .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())
+                .filter(value -> FrontierWorldStateSupport.workCapable(state, value))
+                .sorted(Comparator.comparing((ResidentProfile value) -> value.profession() != ResidentProfession.SECURITY_WORKER)
+                        .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.SECURITY)).reversed())
+                        .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.CIVIC)).reversed())
+                        .thenComparing(ResidentProfile::id))
                 .limit(SettlementAssault.MAX_DEFENDERS).map(ResidentProfile::id).toList();
         if (defenders.isEmpty()) return null;
         List<BlockPosition> floors = FrontierSettlementAssaultBattlefield.attackerFloors(state, sighting, defenders, selected.size()).orElse(null);
@@ -213,12 +223,12 @@ public final class HiveSettlementAssaultProcess {
     private static boolean coldAvailable(FrontierWorldState state, SettlementAssault assault) {
         List<SubjectId> combatants = new ArrayList<>(assault.attackerIds());
         combatants.addAll(assault.defenderIds());
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return FrontierSceneAdmission.available(state, combatants)
                 && assault.attackerIds().stream().allMatch(id -> availableBioform(state, id, assault))
-                && assault.defenderIds().stream().noneMatch(id -> state.humanPopulation().migrations().containsKey(id)
-                || state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.guardId().equals(id))
-                || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE && operation.participantIds().contains(id))
-                || FrontierSceneAdmission.reservedByOtherThanSettlementAssault(state, id, assault.id()));
+                && assault.defenderIds().stream().allMatch(id -> assignments.assignment(id).kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE
+                && assignments.assignment(id).ownerId().filter(assault.id()::equals).isPresent()
+                && !FrontierSceneAdmission.reservedByOtherThanSettlementAssault(state, id, assault.id()));
     }
 
     private static List<SubjectId> livingAttackers(FrontierWorldState state, SettlementAssault assault) { return assault.attackerIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
