@@ -26,6 +26,8 @@ final class HiveSettlementPerceptionProcess {
                     && prior.observedAt() > now - HivePerceptionProcess.REFRESH_INTERVAL) continue;
             next = next.observe(sighting);
             events.add(new ProposedEvent(state.bootstrap().hive().id(), new HiveSettlementObserved(sighting)));
+            events.add(new ProposedEvent(state.bootstrap().hive().id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                    StrategicObjectiveProcess.assaultOpportunity(state.bootstrap().hive().id(), sighting, now + 1L))));
             if (events.size() >= MAX_OBSERVATIONS_PER_REFRESH) break;
         }
         return new Refresh(next, List.copyOf(events));

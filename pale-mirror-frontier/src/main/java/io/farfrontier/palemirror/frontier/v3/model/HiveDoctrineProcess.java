@@ -11,7 +11,8 @@ final class HiveDoctrineProcess {
     static HiveDoctrineState select(FrontierWorldState state, long now, boolean interceptionAllowed) {
         Optional<HiveOperationKnowledge.Sighting> sighting = interceptionAllowed
                 ? state.strategicPlans().hiveOperationKnowledge().freshest(now, HivePerceptionProcess.REFRESH_INTERVAL) : Optional.empty();
-        if (sighting.isPresent()) return new HiveDoctrineState(HiveDoctrine.INTERDICT, now);
+        Optional<HiveSettlementKnowledge.Sighting> settlement = state.strategicPlans().hiveSettlementKnowledge().freshest(now);
+        if (sighting.isPresent() || settlement.isPresent()) return new HiveDoctrineState(HiveDoctrine.INTERDICT, now);
         if (hasStoredBiomass(state) || state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now).isEmpty()) {
             return new HiveDoctrineState(HiveDoctrine.CONSOLIDATE, now);
         }

@@ -16,10 +16,12 @@ final class StrategicPlanState {
     static final int MAX_TASKS = 512;
     static final int MAX_ROUTE_PATROLS = 128;
     static final int MAX_ROUTE_ENGAGEMENTS = 128;
+    static final int MAX_SETTLEMENT_ASSAULTS = 32;
     private final Map<SubjectId, StrategicObjective> objectives;
     private final Map<SubjectId, StrategicTask> tasks;
     private final Map<SubjectId, RoutePatrol> routePatrols;
     private final Map<SubjectId, RouteEngagement> routeEngagements;
+    private final Map<SubjectId, SettlementAssault> settlementAssaults;
     private final SettlementInfectionKnowledge infectionKnowledge;
     private final HiveOperationKnowledge hiveOperationKnowledge;
     private final HiveTerritoryKnowledge hiveTerritoryKnowledge;
@@ -45,27 +47,36 @@ final class StrategicPlanState {
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
-                HiveSettlementKnowledge.empty(), HiveDoctrineState.initial());
+                HiveSettlementKnowledge.empty(), HiveDoctrineState.initial(), Map.of());
     }
     StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveDoctrineState hiveDoctrine) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
-                HiveSettlementKnowledge.empty(), hiveDoctrine);
+                HiveSettlementKnowledge.empty(), hiveDoctrine, Map.of());
     }
     StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveSettlementKnowledge hiveSettlementKnowledge, HiveDoctrineState hiveDoctrine) {
+        this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
+                hiveSettlementKnowledge, hiveDoctrine, Map.of());
+    }
+    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+                       Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
+                       HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveSettlementKnowledge hiveSettlementKnowledge, HiveDoctrineState hiveDoctrine,
+                       Map<SubjectId, SettlementAssault> settlementAssaults) {
         this.objectives = immutable(objectives, "strategic objectives"); this.tasks = immutable(tasks, "strategic tasks");
         this.routePatrols = immutable(routePatrols, "route patrols");
         this.routeEngagements = immutable(routeEngagements, "route engagements");
+        this.settlementAssaults = immutable(settlementAssaults, "settlement assaults");
         this.infectionKnowledge = Objects.requireNonNull(infectionKnowledge, "settlement infection knowledge");
         this.hiveOperationKnowledge = Objects.requireNonNull(hiveOperationKnowledge, "hive operation knowledge");
         this.hiveTerritoryKnowledge = Objects.requireNonNull(hiveTerritoryKnowledge, "hive territory knowledge");
         this.hiveSettlementKnowledge = Objects.requireNonNull(hiveSettlementKnowledge, "hive settlement knowledge");
         this.hiveDoctrine = Objects.requireNonNull(hiveDoctrine, "hive doctrine");
         if (this.objectives.size() > MAX_OBJECTIVES || this.tasks.size() > MAX_TASKS
-                || this.routePatrols.size() > MAX_ROUTE_PATROLS || this.routeEngagements.size() > MAX_ROUTE_ENGAGEMENTS) {
+                || this.routePatrols.size() > MAX_ROUTE_PATROLS || this.routeEngagements.size() > MAX_ROUTE_ENGAGEMENTS
+                || this.settlementAssaults.size() > MAX_SETTLEMENT_ASSAULTS) {
             throw new IllegalArgumentException("strategic plan retention limit exceeded");
         }
         this.objectives.forEach((id, objective) -> {
@@ -96,6 +107,12 @@ final class StrategicPlanState {
             if (objective.kind() == StrategicObjectiveKind.HIVE_GROW_ORGANISM
                     && (task.kind() != StrategicTaskKind.GROW_HIVE_ORGANISM || !task.requirements().equals(List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS)))) {
                 throw new IllegalArgumentException("hive growth task has an invalid decomposition");
+            }
+            if (objective.kind() == StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT
+                    && (task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
+                    || !task.requirements().equals(List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                    StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER)))) {
+                throw new IllegalArgumentException("hive settlement assault task has an invalid decomposition");
             }
             if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD
                     && (task.kind() != StrategicTaskKind.PRODUCE_BREAD || !task.requirements().equals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
@@ -159,6 +176,18 @@ final class StrategicPlanState {
         this.routeEngagements.forEach((id, engagement) -> {
             if (!id.equals(engagement.id()) || !tasks.containsKey(engagement.taskId())) throw new IllegalArgumentException("route engagement must retain its task");
         });
+        Set<SubjectId> activeAssaultTargets = new HashSet<>(), activeAssaultAttackers = new HashSet<>();
+        this.settlementAssaults.forEach((id, assault) -> {
+            StrategicTask task = tasks.get(assault.taskId());
+            if (!id.equals(assault.id()) || task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
+                    || !task.ownerId().equals(assault.hiveId())) {
+                throw new IllegalArgumentException("settlement assault must retain one hive assault task");
+            }
+            if (assault.status() != SettlementAssaultStatus.RESOLVED
+                    && (!activeAssaultTargets.add(assault.settlementId()) || !activeAssaultAttackers.addAll(assault.attackerIds()))) {
+                throw new IllegalArgumentException("active settlement assaults cannot share a target or attacker");
+            }
+        });
         tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
@@ -168,6 +197,7 @@ final class StrategicPlanState {
     Map<SubjectId, StrategicTask> tasks() { return tasks; }
     Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
     Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
+    Map<SubjectId, SettlementAssault> settlementAssaults() { return settlementAssaults; }
     SettlementInfectionKnowledge infectionKnowledge() { return infectionKnowledge; }
     HiveOperationKnowledge hiveOperationKnowledge() { return hiveOperationKnowledge; }
     HiveTerritoryKnowledge hiveTerritoryKnowledge() { return hiveTerritoryKnowledge; }
@@ -175,22 +205,22 @@ final class StrategicPlanState {
     HiveDoctrineState hiveDoctrine() { return hiveDoctrine; }
 
     StrategicPlanState withInfectionKnowledge(SettlementInfectionKnowledge next) {
-        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
     StrategicPlanState withHiveOperationKnowledge(HiveOperationKnowledge next) {
-        return hiveOperationKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, next, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+        return hiveOperationKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, next, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
     StrategicPlanState withHiveTerritoryKnowledge(HiveTerritoryKnowledge next) {
         return hiveTerritoryKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements,
-                infectionKnowledge, hiveOperationKnowledge, next, hiveSettlementKnowledge, hiveDoctrine);
+                infectionKnowledge, hiveOperationKnowledge, next, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
     StrategicPlanState withHiveSettlementKnowledge(HiveSettlementKnowledge next) {
         return hiveSettlementKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements,
-                infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge, next, hiveDoctrine);
+                infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge, next, hiveDoctrine, settlementAssaults);
     }
     StrategicPlanState withHiveDoctrine(HiveDoctrineState next) {
         return hiveDoctrine.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements,
-                infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, next);
+                infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, next, settlementAssaults);
     }
 
     void validate(FrontierBootstrap bootstrap, HumanPopulation humanPopulation) {
@@ -233,7 +263,7 @@ final class StrategicPlanState {
         }
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
         return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge, retained.hiveOperationKnowledge,
-                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine);
+                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine, retained.settlementAssaults);
     }
 
     StrategicPlanState addTask(StrategicTask task) {
@@ -245,7 +275,7 @@ final class StrategicPlanState {
         }
         Map<SubjectId, StrategicTask> next = new LinkedHashMap<>(retained.tasks); next.put(task.id(), task);
         return new StrategicPlanState(retained.objectives, next, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge, retained.hiveOperationKnowledge,
-                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine);
+                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine, retained.settlementAssaults);
     }
 
     StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
@@ -264,7 +294,7 @@ final class StrategicPlanState {
             }
         }
         return new StrategicPlanState(nextObjectives, nextTasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState startPatrol(RoutePatrol patrol) {
@@ -272,7 +302,7 @@ final class StrategicPlanState {
         if (routePatrols.containsKey(patrol.taskId())) throw new IllegalArgumentException("route patrol is already retained for its task");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(patrol.taskId(), patrol);
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState advancePatrol(SubjectId taskId, int routeIndex) {
@@ -280,7 +310,7 @@ final class StrategicPlanState {
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(routeIndex));
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState confirmPatrolObstruction(SubjectId taskId, BlockPosition position) {
@@ -288,7 +318,7 @@ final class StrategicPlanState {
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.confirm(position));
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState failPatrol(SubjectId taskId) {
@@ -296,7 +326,7 @@ final class StrategicPlanState {
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.fail());
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState startEngagement(RouteEngagement engagement) {
@@ -307,7 +337,7 @@ final class StrategicPlanState {
         }
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
         return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState transitionEngagement(SubjectId engagementId, RouteEngagementStatus nextStatus) {
@@ -315,7 +345,7 @@ final class StrategicPlanState {
         if (current == null || !allowed(current.status(), nextStatus)) throw new IllegalArgumentException("route engagement transition is not allowed");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.withStatus(nextStatus));
         return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     StrategicPlanState replaceEngagement(RouteEngagement engagement) {
@@ -323,17 +353,60 @@ final class StrategicPlanState {
         if (!routeEngagements.containsKey(engagement.id())) throw new IllegalArgumentException("unknown route engagement");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagement.id(), engagement);
         return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
+    }
+
+    StrategicPlanState startSettlementAssault(SettlementAssault assault) {
+        Objects.requireNonNull(assault, "settlement assault");
+        Map<SubjectId, SettlementAssault> retained = new LinkedHashMap<>(settlementAssaults);
+        while (retained.size() >= MAX_SETTLEMENT_ASSAULTS) {
+            SubjectId discard = retained.values().stream().filter(value -> value.status() == SettlementAssaultStatus.RESOLVED)
+                    .map(SettlementAssault::id).sorted().findFirst()
+                    .orElseThrow(() -> new IllegalStateException("settlement assault retention capacity exhausted by active work"));
+            retained.remove(discard);
+        }
+        if (retained.containsKey(assault.id()) || retained.values().stream()
+                .anyMatch(value -> value.settlementId().equals(assault.settlementId())
+                        && value.status() != SettlementAssaultStatus.RESOLVED)) {
+            throw new IllegalArgumentException("settlement assault identity or active target is already retained");
+        }
+        retained.put(assault.id(), assault);
+        return new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, retained);
+    }
+
+    StrategicPlanState replaceSettlementAssault(SettlementAssault assault) {
+        Objects.requireNonNull(assault, "settlement assault");
+        if (!settlementAssaults.containsKey(assault.id())) throw new IllegalArgumentException("unknown settlement assault");
+        Map<SubjectId, SettlementAssault> next = new LinkedHashMap<>(settlementAssaults);
+        next.put(assault.id(), assault);
+        return new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, next);
+    }
+
+    StrategicPlanState transitionSettlementAssault(SubjectId assaultId, SettlementAssaultStatus nextStatus) {
+        SettlementAssault current = settlementAssaults.get(Objects.requireNonNull(assaultId, "settlement assault id"));
+        if (current == null || !allowed(current.status(), nextStatus)) {
+            throw new IllegalArgumentException("settlement assault transition is not allowed");
+        }
+        return replaceSettlementAssault(current.withStatus(nextStatus));
+    }
+
+    StrategicPlanState resolveSettlementAssault(SubjectId assaultId, SettlementAssaultOutcome outcome) {
+        SettlementAssault current = settlementAssaults.get(Objects.requireNonNull(assaultId, "settlement assault id"));
+        if (current == null) throw new IllegalArgumentException("unknown settlement assault");
+        return replaceSettlementAssault(current.resolve(outcome));
     }
 
     @Override public boolean equals(Object other) {
         return other instanceof StrategicPlanState value && objectives.equals(value.objectives) && tasks.equals(value.tasks)
                 && routePatrols.equals(value.routePatrols) && routeEngagements.equals(value.routeEngagements)
+                && settlementAssaults.equals(value.settlementAssaults)
                 && infectionKnowledge.equals(value.infectionKnowledge) && hiveOperationKnowledge.equals(value.hiveOperationKnowledge)
                 && hiveTerritoryKnowledge.equals(value.hiveTerritoryKnowledge) && hiveSettlementKnowledge.equals(value.hiveSettlementKnowledge)
                 && hiveDoctrine.equals(value.hiveDoctrine);
     }
-    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
+    @Override public int hashCode() { return Objects.hash(objectives, tasks, routePatrols, routeEngagements, settlementAssaults, infectionKnowledge, hiveOperationKnowledge,
             hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine); }
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks) { return compactFor(newObjectives, newTasks, List.of()); }
@@ -355,10 +428,12 @@ final class StrategicPlanState {
         retainedPatrols.keySet().removeIf(taskId -> !retainedTasks.containsKey(taskId));
         Map<SubjectId, RouteEngagement> retainedEngagements = new LinkedHashMap<>(routeEngagements);
         retainedEngagements.values().removeIf(engagement -> !retainedTasks.containsKey(engagement.taskId()));
+        Map<SubjectId, SettlementAssault> retainedAssaults = new LinkedHashMap<>(settlementAssaults);
+        retainedAssaults.values().removeIf(assault -> !retainedTasks.containsKey(assault.taskId()));
         return retainedObjectives.equals(objectives) && retainedTasks.equals(tasks) && retainedPatrols.equals(routePatrols)
-                && retainedEngagements.equals(routeEngagements) ? this
+                && retainedEngagements.equals(routeEngagements) && retainedAssaults.equals(settlementAssaults) ? this
                 : new StrategicPlanState(retainedObjectives, retainedTasks, retainedPatrols, retainedEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, retainedAssaults);
     }
 
     private static boolean allowed(StrategicTaskStatus current, StrategicTaskStatus next) {
@@ -380,12 +455,27 @@ final class StrategicPlanState {
                 || current == RouteEngagementStatus.CONFLICT && next == RouteEngagementStatus.HOT;
     }
 
+    private static boolean allowed(SettlementAssaultStatus current, SettlementAssaultStatus next) {
+        return current == SettlementAssaultStatus.APPROACHING && (next == SettlementAssaultStatus.WAITING_FOR_BATTLE
+                || next == SettlementAssaultStatus.COLD_COMBAT || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART
+                || next == SettlementAssaultStatus.CONFLICT)
+                || current == SettlementAssaultStatus.WAITING_FOR_BATTLE && (next == SettlementAssaultStatus.COLD_COMBAT
+                || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
+                || current == SettlementAssaultStatus.COLD_COMBAT && (next == SettlementAssaultStatus.HOT
+                || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
+                || current == SettlementAssaultStatus.HOT && (next == SettlementAssaultStatus.COLD_COMBAT
+                || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
+                || current == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART && (next == SettlementAssaultStatus.HOT
+                || next == SettlementAssaultStatus.COLD_COMBAT)
+                || current == SettlementAssaultStatus.CONFLICT && next == SettlementAssaultStatus.HOT;
+    }
+
     StrategicPlanState resolveEngagement(SubjectId engagementId, RouteEngagementOutcome outcome) {
         RouteEngagement current = routeEngagements.get(Objects.requireNonNull(engagementId, "route engagement id"));
         if (current == null) throw new IllegalArgumentException("unknown route engagement");
         Map<SubjectId, RouteEngagement> next = new LinkedHashMap<>(routeEngagements); next.put(engagementId, current.resolve(outcome));
         return new StrategicPlanState(objectives, tasks, routePatrols, next, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     /** Blocks the affected delivery and aborts any active hive interception after a player takes its cargo. */
@@ -404,7 +494,7 @@ final class StrategicPlanState {
                 .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
                 .forEach(engagement -> nextEngagements.put(engagement.id(), engagement.abort()));
         return new StrategicPlanState(objectives, nextTasks, routePatrols, nextEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
     /**

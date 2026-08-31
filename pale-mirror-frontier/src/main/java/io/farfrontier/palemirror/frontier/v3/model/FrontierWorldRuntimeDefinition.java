@@ -426,6 +426,10 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action, autonomousInterception);
             case "frontier.objective.reconsider" -> StrategicObjectiveProcess.planReconsideration(state, action);
             case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
+            case "frontier.objective.assault" -> StrategicObjectiveProcess.planAssaultOpportunity(state, action);
+            case "frontier.settlement_assault.start" -> HiveSettlementAssaultProcess.planStart(state, action);
+            case "frontier.settlement_assault.progress" -> HiveSettlementAssaultProcess.planProgress(state, action);
+            case "frontier.settlement_assault.combat" -> HiveSettlementAssaultProcess.planCombat(state, action);
             default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
         };
         // A known planner can deliberately find that a durable physical observation has already
@@ -581,6 +585,11 @@ public final class FrontierWorldRuntimeDefinition {
             case RouteEngagementTransition transition -> HiveRouteEngagementProcess.reduceTransition(state, event.subject(), transition);
             case RouteEngagementStrike strike -> HiveRouteEngagementProcess.reduceStrike(state, event.subject(), strike);
             case RouteEngagementResolved resolved -> HiveRouteEngagementProcess.reduceResolved(state, event.subject(), resolved);
+            case SettlementAssaultStarted started -> HiveSettlementAssaultProcess.reduceStarted(state, event.subject(), started);
+            case SettlementAssaultAttackerAdvanced advanced -> HiveSettlementAssaultProcess.reduceAdvanced(state, event.subject(), advanced);
+            case SettlementAssaultTransition transition -> HiveSettlementAssaultProcess.reduceTransition(state, event.subject(), transition);
+            case SettlementAssaultStrike strike -> HiveSettlementAssaultProcess.reduceStrike(state, event.subject(), strike);
+            case SettlementAssaultResolved resolved -> HiveSettlementAssaultProcess.reduceResolved(state, event.subject(), resolved);
             case StrategicObjectiveSelected selected -> StrategicObjectiveProcess.reduceObjective(state, event.subject(), selected);
             case StrategicTaskPlanned planned -> StrategicObjectiveProcess.reduceTask(state, event.subject(), planned);
             case StrategicTaskTransition transition -> StrategicObjectiveProcess.reduceTaskTransition(state, event.subject(), transition);

@@ -19,12 +19,14 @@ record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, Str
         Objects.requireNonNull(operationObservationPosition, "task operation observation position");
         requirements = List.copyOf(requirements); dependencies = List.copyOf(dependencies);
         if (kind != StrategicTaskKind.GROW_HIVE_ORGANISM && kind != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
+                && kind != StrategicTaskKind.ASSAULT_SETTLEMENT
                 && kind != StrategicTaskKind.PRODUCE_BREAD && kind != StrategicTaskKind.PREPARE_BREAD_CARGO
                 && kind != StrategicTaskKind.DELIVER_BREAD_TO_HIVE && kind != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE
                 && kind != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS && kind != StrategicTaskKind.HARVEST_RESOURCE_SITE && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic task requires an infection target");
         }
         if ((kind == StrategicTaskKind.GROW_HIVE_ORGANISM || kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
+                || kind == StrategicTaskKind.ASSAULT_SETTLEMENT
                 || kind == StrategicTaskKind.PRODUCE_BREAD || kind == StrategicTaskKind.PREPARE_BREAD_CARGO
                 || kind == StrategicTaskKind.DELIVER_BREAD_TO_HIVE || kind == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE
                 || kind == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS || kind == StrategicTaskKind.HARVEST_RESOURCE_SITE) && infectionTarget.isPresent()) {

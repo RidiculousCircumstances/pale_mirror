@@ -69,6 +69,40 @@ final class StrategicObjectiveProcess {
         return plan(state, action, false, true, action.id().value(), sighting);
     }
 
+    /** One exact Scout settlement sighting wakes a one-shot assault admission check. */
+    static ScheduledAction assaultOpportunity(SubjectId hive, HiveSettlementKnowledge.Sighting sighting, long dueAt) {
+        return new ScheduledAction(assaultOpportunityId(sighting), new SimInstant(dueAt), 0, hive, "frontier.objective.assault", 1);
+    }
+
+    static List<ProposedEvent> planAssaultOpportunity(FrontierWorldState state, ScheduledAction action) {
+        SubjectId hive = state.bootstrap().hive().id();
+        if (!hive.equals(action.subject()) || !action.kind().equals("frontier.objective.assault")) {
+            throw new IllegalArgumentException("settlement assault opportunity has a foreign owner or invalid kind");
+        }
+        Optional<HiveSettlementKnowledge.Sighting> sighting = state.strategicPlans().hiveSettlementKnowledge().entries().values().stream()
+                .filter(value -> assaultOpportunityId(value).equals(action.id()))
+                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(), HiveSettlementKnowledge.MAX_AGE)).findFirst();
+        if (sighting.isEmpty() || state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.INTERDICT
+                || !HiveSettlementAssaultProcess.hasFreshLocalTerritory(state, sighting.orElseThrow(), action.dueAt().ticks())
+                || HiveSettlementAssaultProcess.hasPendingOrActiveAssault(state, sighting.orElseThrow().settlementId())) {
+            return List.of(new ProposedEvent(hive, new ScheduleEffect.Cancelled(action.id())));
+        }
+        List<ProposedEvent> preempted = state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(hive))
+                .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
+                .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(hive, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
+        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:" + action.id().value().substring("schedule:".length())), hive,
+                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), ordinal, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), hive,
+                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
+        List<ProposedEvent> events = new java.util.ArrayList<>(preempted);
+        events.add(new ProposedEvent(hive, new StrategicObjectiveSelected(objective)));
+        events.add(new ProposedEvent(hive, new StrategicTaskPlanned(task)));
+        events.add(new ProposedEvent(task.id(), new ScheduleEffect.Created(HiveSettlementAssaultProcess.start(task, sighting.orElseThrow(), action.dueAt().ticks() + 1L))));
+        return List.copyOf(events);
+    }
+
     /** Development profiles may retain the same economy without admitting a competing hive strike. */
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean allowHiveInterception) {
         return plan(state, action, true, allowHiveInterception);
@@ -300,6 +334,12 @@ final class StrategicObjectiveProcess {
                 + "-" + sighting.observedAt();
         return new ScheduleId("schedule:objective-intercept-opportunity-" + suffix);
     }
+    private static ScheduleId assaultOpportunityId(HiveSettlementKnowledge.Sighting sighting) {
+        String suffix = sighting.settlementId().value().replace(':', '-') + "-" + sighting.scoutId().value().replace(':', '-')
+                + "-" + sighting.settlementAnchor().x() + "-" + sighting.settlementAnchor().y() + "-" + sighting.settlementAnchor().z()
+                + "-" + sighting.observedAt();
+        return new ScheduleId("schedule:objective-assault-opportunity-" + suffix);
+    }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
         String stem = eventIdentity == null ? owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal
                 : eventIdentity.substring("schedule:".length());
@@ -317,6 +357,7 @@ final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
             case HIVE_INTERCEPT_ROUTE_OPERATION -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
+            case HIVE_ASSAULT_SETTLEMENT -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
             // Wheat-to-bread is an exact one-for-one replacement in the same owned
             // slot. Requiring a second vacant depot slot would incorrectly block a
             // full warehouse despite a completely safe transformation path.
@@ -332,6 +373,7 @@ final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case HIVE_INTERCEPT_ROUTE_OPERATION -> StrategicTaskKind.INTERCEPT_ROUTE_OPERATION;
+            case HIVE_ASSAULT_SETTLEMENT -> StrategicTaskKind.ASSAULT_SETTLEMENT;
             case SETTLEMENT_PRODUCE_BREAD -> StrategicTaskKind.PRODUCE_BREAD;
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;

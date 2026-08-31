@@ -51,6 +51,22 @@ final class StrategicPlanStateCodec {
             writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal()); output.writeInt(engagement.nextStrikeEpoch());
             output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().ordinal());
         }
+        writeCount(output, plans.settlementAssaults().size());
+        for (SettlementAssault assault : plans.settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id)).toList()) {
+            writeSubject(output, assault.id()); writeSubject(output, assault.taskId()); writeSubject(output, assault.hiveId());
+            writeSubject(output, assault.sighting().settlementId()); writeSubject(output, assault.sighting().scoutId());
+            writePosition(output, assault.sighting().settlementAnchor()); output.writeLong(assault.sighting().observedAt());
+            writeCount(output, assault.attackers().size());
+            for (SettlementAssaultAttacker attacker : assault.attackers()) {
+                writeSubject(output, attacker.actorId()); writeCount(output, attacker.route().size());
+                for (BlockPosition position : attacker.route()) writePosition(output, position);
+                output.writeByte(attacker.routeIndex());
+            }
+            writeCount(output, assault.defenderIds().size());
+            for (SubjectId defender : assault.defenderIds()) writeSubject(output, defender);
+            output.writeByte(assault.status().ordinal()); output.writeInt(assault.nextStrikeEpoch());
+            output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().ordinal());
+        }
         writeCount(output, plans.infectionKnowledge().entries().size());
         for (Map.Entry<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> settlement : plans.infectionKnowledge().entries().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList()) {
@@ -79,21 +95,21 @@ final class StrategicPlanStateCodec {
         output.writeByte(plans.hiveDoctrine().doctrine().ordinal()); output.writeLong(plans.hiveDoctrine().selectedAt());
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true, true, true); }
+    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true, true, true, true); }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, true, true, true, true, true, true);
+        return read(input, migrateLegacyProductionSlotRequirement, true, true, true, true, true, true, true);
     }
 
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition, true, true, true);
+        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition, true, true, true, true);
     }
 
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition, boolean hasHiveTerritoryKnowledge,
-                                   boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge) throws IOException {
+                                   boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge, boolean hasSettlementAssaults) throws IOException {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
@@ -146,6 +162,25 @@ final class StrategicPlanStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
             }
         }
+        Map<SubjectId, SettlementAssault> assaults = new LinkedHashMap<>();
+        if (hasSettlementAssaults) for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = readSubject(input), task = readSubject(input), hive = readSubject(input);
+            HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(readSubject(input), readSubject(input), readPosition(input), input.readLong());
+            List<SettlementAssaultAttacker> attackers = new ArrayList<>();
+            for (int attacker = 0, attackerCount = readCount(input); attacker < attackerCount; attacker++) {
+                SubjectId attackerId = readSubject(input); List<BlockPosition> route = new ArrayList<>();
+                for (int point = 0, routeSize = readCount(input); point < routeSize; point++) route.add(readPosition(input));
+                attackers.add(new SettlementAssaultAttacker(attackerId, route, input.readUnsignedByte()));
+            }
+            List<SubjectId> defenders = new ArrayList<>();
+            for (int defender = 0, defenderCount = readCount(input); defender < defenderCount; defender++) defenders.add(readSubject(input));
+            int status = input.readUnsignedByte(), epoch = input.readInt();
+            Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
+            if (status >= SettlementAssaultStatus.values().length || assaults.put(id, new SettlementAssault(id, task, hive, sighting, attackers, defenders,
+                    SettlementAssaultStatus.values()[status], epoch, outcome)) != null) {
+                throw new IllegalArgumentException("invalid or duplicate settlement assault");
+            }
+        }
         Map<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> knowledge = new LinkedHashMap<>();
         if (hasInfectionKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId settlement = readSubject(input); Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection> cells = new LinkedHashMap<>();
@@ -179,7 +214,7 @@ final class StrategicPlanStateCodec {
         if (hasHiveDoctrine) { int kind = input.readUnsignedByte(); if (kind >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
             doctrine = new HiveDoctrineState(HiveDoctrine.values()[kind], input.readLong()); }
         return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
-                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine);
+                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults);
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {
@@ -214,6 +249,10 @@ final class StrategicPlanStateCodec {
     private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
         return RouteEngagementOutcome.values()[value];
+    }
+    private static SettlementAssaultOutcome readAssaultOutcome(DataInputStream input) throws IOException {
+        int value = input.readUnsignedByte(); if (value >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
+        return SettlementAssaultOutcome.values()[value];
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

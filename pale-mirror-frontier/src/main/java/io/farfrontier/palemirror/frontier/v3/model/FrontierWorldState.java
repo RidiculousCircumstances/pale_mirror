@@ -259,6 +259,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             operation.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
         }
         FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
+        FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
@@ -460,6 +461,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         strategicPlans.validate(bootstrap, humanPopulation);
         validatePlannerActorClaims();
         FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
+        FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
     }
     /** Exact COLD authority remains exclusive even when only a route patrol plan has changed. */
     private void validatePlannerActorClaims() {
