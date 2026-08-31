@@ -18,12 +18,9 @@ import io.farfrontier.palemirror.frontier.v3.model.EquipmentReturnObservation;
 import io.farfrontier.palemirror.frontier.v3.model.EquipmentReturnStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -66,19 +63,18 @@ final class FrontierV3EquipmentReturnExecutor {
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.subjectIds().size() != 3) return null;
-        SubjectId assaultId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(assaultId);
+        SubjectId ownerId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
         ExactItemStack item = state.inventory().items().get(itemId);
         final InventoryCustody.ContainerSlot target;
         try { target = EquipmentReturnStateSupport.targetSlot(state, intent); }
         catch (IllegalArgumentException invalid) { return null; }
-        if (assault == null || assault.status() != SettlementAssaultStatus.RESOLVED || !intent.causeSubjectId().equals(assault.settlementId())
-                || !assault.defenderIds().contains(residentId) || item == null || !(item.custody() instanceof InventoryCustody.Actor actor)
-                || !actor.actorId().equals(residentId) || !item.economicOwnerId().equals(assault.settlementId())
-                || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()) || state.inventory().itemAt(target.containerId(), target.slot()).isPresent()) return null;
+        try { EquipmentReturnStateSupport.validateIntent(state, intent); }
+        catch (IllegalArgumentException invalid) { return null; }
+        if (item == null || !(item.custody() instanceof InventoryCustody.Actor actor)
+                || !actor.actorId().equals(residentId) || state.inventory().itemAt(target.containerId(), target.slot()).isPresent()) return null;
         ContainerSurface surface = state.inventory().surfaces().get(target.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
-        return new Target(assaultId, residentId, item, target, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
+        return new Target(ownerId, residentId, item, target, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
     }
 
     private static Villager resident(ServerLevel level, FrontierWorldState state, SubjectId residentId) {
@@ -109,11 +105,11 @@ final class FrontierV3EquipmentReturnExecutor {
 
     private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         EquipmentReturnObservation observation = new EquipmentReturnObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                intent.id(), target.assaultId(), target.residentId(), target.item().id(), target.targetSlot());
+                intent.id(), target.ownerId(), target.residentId(), target.item().id(), target.targetSlot());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("equipment return confirmation was rejected");
-        FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.defenderEquipmentCorrelation(target.item().id()),
-                "defender_equipment_returned", target.assaultId(), result);
+        FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.humanEquipmentCorrelation(target.ownerId(), target.item().id()),
+                "human_equipment_returned", target.ownerId(), result);
     }
 
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
@@ -139,6 +135,6 @@ final class FrontierV3EquipmentReturnExecutor {
         return new CommandId("executor:equipment-return-" + phase + "-r" + revision.value());
     }
 
-    record Target(SubjectId assaultId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot targetSlot,
+    record Target(SubjectId ownerId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot targetSlot,
                   BlockPos chestPosition) { }
 }

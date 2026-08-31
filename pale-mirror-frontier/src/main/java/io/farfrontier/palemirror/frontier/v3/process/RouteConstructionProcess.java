@@ -59,12 +59,24 @@ public final class RouteConstructionProcess {
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
         if (ready.isPresent()) {
             RouteConstruction value = ready.orElseThrow(); StrategicTask task = constructionTask(state, value.settlementId(), StrategicTaskStatus.ACTIVE);
+            if (value.team().isPresent() && !EngineeringEquipmentProcess.returnedOrLost(state, value)) {
+                return EngineeringEquipmentProcess.returnOne(state, value).map(intent -> List.of(new ProposedEvent(value.settlementId(),
+                        new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
+            }
             return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(value.id())), transition(task, StrategicTaskStatus.COMPLETED), next);
         }
         Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
         if (project.isEmpty()) return List.of(next);
         RouteConstruction current = project.orElseThrow();
+        if (current.team().isPresent() && !EngineeringToolCustody.ready(state, current.team().orElseThrow())) {
+            return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> List.of(new ProposedEvent(current.settlementId(),
+                    new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
+        }
+        // A retained crew with tools is not yet a physical work scene.  Never let the former
+        // autonomous route executor place a block on its behalf: the next owner must assemble
+        // these exact bodies in a naturally loaded HOT scene before it may request material.
+        if (current.team().isPresent()) return List.of(next);
         if (current.cargoId().isEmpty()) {
             Optional<ExactItemStack> material = maintenanceMaterial(state);
             ContainerSurface surface = state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER);

@@ -2,11 +2,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteConstructionTaskProcessTest {
     @Test
-    void confirmedPatrolStartsOneConstructionTaskAndUnknownEffectBlocksIt() {
+    void confirmedPatrolStartsOneExactCrewProjectAndGatesLegacyPlacer() {
         FrontierWorldState state = stateWithConfirmedPatrol();
         StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> started = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
@@ -27,17 +29,54 @@ class RouteConstructionTaskProcessTest {
         assertTrue(project.team().isPresent(), "new construction must retain an exact engineering crew instead of an autonomous builder");
         state = state.withStrategicPlans(state.strategicPlans().transitionTask(construction.id(), StrategicTaskStatus.ACTIVE));
         state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
-        state = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
+        SubjectId depot = FrontierWorldState.depotId(project.settlementId());
+        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:route-construction"), FrontierRouteNetwork.OWNER,
                         "minecraft:gray_concrete", 1, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
-        PhysicalIntentPrepared prepared = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
-                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, prepared.intent().kind());
-        state = state.preparePhysicalIntent(prepared.intent());
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> unknown = RouteConstructionProcess.planMaterialLoadingTransition(state, prepared.intent(),
-                new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
-        assertTrue(unknown.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
-                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.BLOCKED));
+        PhysicalIntentPrepared toolIssue = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE, toolIssue.intent().kind());
+        assertEquals(project.id(), toolIssue.intent().subjectIds().getFirst());
+        state = state.preparePhysicalIntent(toolIssue.intent());
+        SubjectId issuedItem = toolIssue.intent().subjectIds().get(2), issuedResident = toolIssue.intent().subjectIds().get(1);
+        ExactItemStack exactTool = state.inventory().items().get(issuedItem);
+        state = EquipmentIssueStateSupport.complete(state, toolIssue.intent(), new EquipmentIssueObservation(
+                new PhysicalObservationId("observation:engineering-tool-issue"), toolIssue.intent().id(), project.id(), issuedResident, issuedItem,
+                (InventoryCustody.ContainerSlot) exactTool.custody()), new LinkedHashMap<>(state.physicalIntents()));
+        assertEquals(new InventoryCustody.Actor(issuedResident), state.inventory().items().get(issuedItem).custody());
+        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
+        for (SubjectId member : project.team().orElseThrow().memberIds()) {
+            if (member.equals(issuedResident)) continue;
+            ExactItemStack tool = state.inventory().items().values().stream().filter(item -> item.economicOwnerId().equals(project.settlementId())
+                    && EngineeringToolCustody.isTool(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot).findFirst().orElseThrow();
+            state = state.withInventory(state.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(member)));
+        }
+        assertTrue(RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
+                .noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared),
+                "a tool-ready exact crew cannot borrow the legacy autonomous block placer before HOT assembly exists");
+
+        int requiredCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints()).size();
+        RouteConstruction ready = project.withConfirmedCells(requiredCells, RouteConstructionStatus.READY);
+        LinkedHashMap<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
+        projects.put(project.id(), ready);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects));
+        PhysicalIntentPrepared toolReturn = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 300L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN, toolReturn.intent().kind());
+        state = state.preparePhysicalIntent(toolReturn.intent());
+        SubjectId returnedItem = toolReturn.intent().subjectIds().get(2), returnedResident = toolReturn.intent().subjectIds().get(1);
+        InventoryCustody.ContainerSlot returnSlot = new InventoryCustody.ContainerSlot(toolReturn.intent().targetSlot().orElseThrow().containerId(),
+                toolReturn.intent().targetSlot().orElseThrow().slot());
+        state = EquipmentReturnStateSupport.complete(state, toolReturn.intent(), new EquipmentReturnObservation(
+                new PhysicalObservationId("observation:engineering-tool-return"), toolReturn.intent().id(), project.id(), returnedResident, returnedItem, returnSlot),
+                new LinkedHashMap<>(state.physicalIntents()));
+        assertEquals(returnSlot, state.inventory().items().get(returnedItem).custody());
+        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
     }
 
     private static FrontierWorldState stateWithConfirmedPatrol() {

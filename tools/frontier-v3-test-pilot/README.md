@@ -14,7 +14,7 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
-`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `hive-growth`, `hive-nutrient-transfer`,
+`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-nutrient-transfer`,
 `scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `health-quarantine`
 or `resident-transit`. These fail-closed development fixtures are available
 only to the named disposable pilot runner. `hot-scene-strike` selects a

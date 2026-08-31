@@ -23,6 +23,14 @@ final class FrontierWorldInitialState {
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         SubjectId wheat = new SubjectId("item:bootstrap-1-wheat"); items.put(wheat, new ExactItemStack(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
+        bootstrap.settlements().forEach(settlement -> {
+            SubjectId depot = FrontierWorldState.depotId(settlement.id());
+            for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {
+                SubjectId tool = new SubjectId("item:bootstrap-" + settlement.id().value().substring("settlement:".length()) + "-engineering-tool-" + (index + 1));
+                items.put(tool, new ExactItemStack(tool, settlement.id(), EngineeringToolCustody.FIRST_GRAYBOX_TOOL, 1,
+                        new InventoryCustody.ContainerSlot(depot, 20 + index)));
+            }
+        });
         SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
         items.put(biomass, new ExactItemStack(biomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0)));

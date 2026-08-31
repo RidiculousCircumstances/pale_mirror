@@ -17,12 +17,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.EquipmentIssueObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
+import io.farfrontier.palemirror.frontier.v3.model.EquipmentIssueStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -71,16 +69,14 @@ final class FrontierV3EquipmentIssueExecutor {
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.subjectIds().size() != 3) return null;
-        SubjectId assaultId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(assaultId);
+        SubjectId ownerId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
         ExactItemStack item = state.inventory().items().get(itemId);
-        if (assault == null || assault.status() == SettlementAssaultStatus.RESOLVED || !intent.causeSubjectId().equals(assault.settlementId())
-                || !assault.defenderIds().contains(residentId) || item == null || !(item.custody() instanceof InventoryCustody.ContainerSlot source)
-                || !source.containerId().equals(FrontierWorldState.depotId(assault.settlementId())) || !item.economicOwnerId().equals(assault.settlementId())
-                || !HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())) return null;
+        try { EquipmentIssueStateSupport.validateIntent(state, intent); }
+        catch (IllegalArgumentException invalid) { return null; }
+        if (item == null || !(item.custody() instanceof InventoryCustody.ContainerSlot source)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(source.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
-        return new Target(assaultId, residentId, item, source, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
+        return new Target(ownerId, residentId, item, source, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
     }
 
     private static Villager resident(ServerLevel level, FrontierWorldState state, SubjectId residentId) {
@@ -111,13 +107,13 @@ final class FrontierV3EquipmentIssueExecutor {
 
     private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         EquipmentIssueObservation observation = new EquipmentIssueObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                intent.id(), target.assaultId(), target.residentId(), target.item().id(), target.sourceSlot());
+                intent.id(), target.ownerId(), target.residentId(), target.item().id(), target.sourceSlot());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
         if (!(result instanceof CommandResult.Accepted)) {
             throw new IllegalStateException("equipment issue confirmation was rejected");
         }
-        FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.defenderEquipmentCorrelation(target.item().id()),
-                "defender_equipment_issued", target.assaultId(), result);
+        FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.humanEquipmentCorrelation(target.ownerId(), target.item().id()),
+                "human_equipment_issued", target.ownerId(), result);
     }
 
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
@@ -143,6 +139,6 @@ final class FrontierV3EquipmentIssueExecutor {
         return new CommandId("executor:equipment-issue-" + phase + "-r" + revision.value());
     }
 
-    record Target(SubjectId assaultId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot,
+    record Target(SubjectId ownerId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot,
                   BlockPos chestPosition) { }
 }

@@ -420,9 +420,12 @@ remains present because breadth, balance and product comprehension are not done.
   `EngineeringRecoveryTeam`, and those same exact people derive exclusive
   `ENGINEERING_RECOVERY` assignment across snapshot/WAL recovery. Schema-83
   autonomous construction is preserved as explicit legacy work, never hydrated
-  with invented people. This deliberately stops before a sapper label, tool
-  issue or physical crew actor lease; those must be owned by their own exact
-  equipment/assembly processes.
+  with invented people. It now issues/returns each exact retained member's
+  real tagged iron pickaxe through the common durable equipment receipt and
+  naturally loaded executor; it deliberately does not yet let that fact invoke
+  the former autonomous route placer. A tool-ready project waits for its next
+  exact HOT crew-assembly/work-site owner, rather than pretending that a label
+  or a COLD cursor placed the block.
 
 ### Verification matrix
 

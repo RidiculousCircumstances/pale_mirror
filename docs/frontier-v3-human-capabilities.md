@@ -266,11 +266,15 @@ Historical schema-83 construction records deliberately retain an empty team.
 They are explicit autonomous legacy work and may finish only through their
 existing owner; recovery must never manufacture residents to modernize them.
 New construction instead chooses idle, living local people by engineering
-capability, then profession and stable ID. This is an organization/assignment
-foundation, not an implicit tool grant or a `SAPPER` label: exact tool issue,
-physical crew assembly and tool loss remain the next owner boundary.
+capability, then profession and stable ID. The common exact-equipment owner now
+issues one real `minecraft:iron_pickaxe` from that settlement's active depot to
+each retained living member, and returns the same tagged stack to one named
+free depot slot only after construction reaches `READY`. A route builder with
+such a team is deliberately blocked from the legacy autonomous block placer:
+physical crew assembly, work-site presence and tool loss remain the next owner
+boundary rather than being faked by a tool-ready label.
 
-The next boundary reuses the common exact human-equipment protocol rather than
+This boundary reuses the common exact human-equipment protocol rather than
 creating an engineering-only inventory: an issue or return request binds one
 owning operation, one named resident, one existing exact depot stack and (for
 return) one named free depot slot. The loaded executor may move that same

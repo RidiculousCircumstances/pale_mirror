@@ -131,6 +131,43 @@ final class FrontierDevelopmentScenarios {
         return new SettlementAssaultFixture(state, started.instant(), started.schedules(), started.assaultId());
     }
 
+    /**
+     * Read-only engineering issue boundary. A confirmed patrol owns one route-bypass project
+     * and its exact local crew, while four real depot pickaxes remain untouched. A native visit
+     * must materialize the depot and issue one existing tagged pickaxe; this fixture neither
+     * starts work nor moves an actor or item.
+     */
+    static RouteConstructionFixture engineeringEquipmentFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        BlockPosition obstruction = route.get(1);
+        state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:engineering"));
+        Resident guard = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.GUARD).findFirst()
+                .orElseThrow(() -> new IllegalStateException("engineering fixture needs one guard"));
+        StrategicObjective patrolObjective = new StrategicObjective(new SubjectId("objective:fixture-engineering-patrol"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask patrolTask = new StrategicTask(new SubjectId("task:fixture-engineering-patrol"), patrolObjective.id(), settlement.id(),
+                StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.PENDING);
+        StrategicPlanState plans = StrategicPlanState.empty().addObjective(patrolObjective).addTask(patrolTask).transitionTask(patrolTask.id(), StrategicTaskStatus.ACTIVE);
+        RoutePatrol patrol = new RoutePatrol(patrolTask.id(), settlement.id(), guard.id(), route, 1, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(obstruction));
+        plans = plans.startPatrol(patrol).transitionTask(patrolTask.id(), StrategicTaskStatus.COMPLETED);
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:fixture-engineering-construction"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:fixture-engineering-construction"), objective.id(), settlement.id(),
+                StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS, Optional.empty(), List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION,
+                StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL), List.of(patrolTask.id()), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(plans.addObjective(objective).addTask(task));
+        List<ProposedEvent> start = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(task, 100L));
+        RouteConstruction project = start.stream().map(ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
+                .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst()
+                .orElseThrow(() -> new IllegalStateException("engineering fixture did not retain a route project"));
+        state = state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
+        return new RouteConstructionFixture(state, new SimInstant(200L), List.of(RouteConstructionProcess.scan(1, 200L)), project.id());
+    }
+
     private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
@@ -431,6 +468,12 @@ final class FrontierDevelopmentScenarios {
 
     record SettlementAssaultFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId assaultId) {
         SettlementAssaultFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record RouteConstructionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId projectId) {
+        RouteConstructionFixture {
             schedules = List.copyOf(schedules);
         }
     }

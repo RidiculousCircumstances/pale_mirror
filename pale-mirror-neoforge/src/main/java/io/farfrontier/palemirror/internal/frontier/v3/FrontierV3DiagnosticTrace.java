@@ -49,6 +49,12 @@ final class FrontierV3DiagnosticTrace {
         return "defender-equipment:" + itemId.value();
     }
 
+    /** One exact owner-scoped human-equipment custody hand-off. */
+    static String humanEquipmentCorrelation(SubjectId ownerId, SubjectId itemId) {
+        Objects.requireNonNull(ownerId, "human equipment owner"); Objects.requireNonNull(itemId, "human equipment item");
+        return "human-equipment:" + ownerId.value() + ":" + itemId.value();
+    }
+
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
         record(server, correlation, kind, subject, result, Context.empty());
     }

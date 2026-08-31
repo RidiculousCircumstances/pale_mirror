@@ -46,7 +46,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(12, projection.settlementCount());
         assertEquals(48, projection.bioformCount());
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
-        assertEquals(2, projection.itemStackCount());
+        assertEquals(2 + projection.settlementCount() * EngineeringRecoveryTeam.MAX_MEMBERS, projection.itemStackCount());
         assertEquals(0, projection.activeProductionJobCount());
         assertEquals(18, projection.infectedCellCount());
     }

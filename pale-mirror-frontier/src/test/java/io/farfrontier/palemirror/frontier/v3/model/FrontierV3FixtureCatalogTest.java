@@ -15,7 +15,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(18, profiles.size());
+        assertEquals(19, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -60,5 +60,19 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(SettlementAssaultStatus.RESOLVED, state.strategicPlans().settlementAssaults().values().iterator().next().status());
         assertTrue(state.physicalIntents().isEmpty(), "the fixture may declare canonical custody but may not pre-return the physical stack");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.population.defender_equipment_return.review")));
+    }
+
+    @Test
+    void engineeringEquipmentFixtureRetainsOnlyCanonicalCrewAndDepotToolsBeforeAVisit() {
+        var configuration = FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(new WorldId("frontier:engineering-equipment-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        SubjectId projectId = new SubjectId("construction:route-reroute-settlement-1--366-64--304");
+        RouteConstruction project = state.routeConstructions().get(projectId);
+        ExactItemStack tool = state.inventory().items().get(new SubjectId("item:bootstrap-1-engineering-tool-1"));
+        assertTrue(project != null && project.team().isPresent());
+        assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(new SubjectId("container:1-depot")).status());
+        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 20), tool.custody());
+        assertTrue(state.physicalIntents().isEmpty(), "the fixture must not pre-issue or materialize an engineering tool");
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.route_construction.scan")));
     }
 }
