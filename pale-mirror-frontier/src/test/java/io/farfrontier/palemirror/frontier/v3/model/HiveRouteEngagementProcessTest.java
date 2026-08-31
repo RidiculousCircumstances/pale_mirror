@@ -379,7 +379,7 @@ class HiveRouteEngagementProcessTest {
     }
 
     @Test void autonomousSupplyProfileInterceptsOnlyAfterAnExactScoutSighting() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentAutonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.autonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
         FrontierWorldState latest = null;
         boolean sighted = false;
         boolean interceptedFromBoundPosition = false;
@@ -401,7 +401,7 @@ class HiveRouteEngagementProcessTest {
     }
 
     private static FrontierWorldState enRouteState() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:intercept"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE));

@@ -12,8 +12,8 @@ hotspot_line_ceiling:
 
 max_manual_executor_ticks: 22
 max_runtime_scheduled_string_cases: 41
-max_production_development_configurations: 15
-max_lifecycle_fixture_profile_branches: 13
+max_production_development_configurations: 0
+max_lifecycle_fixture_profile_branches: 0
 max_process_classes_in_model: 33
 max_codec_classes_in_model: 23
 

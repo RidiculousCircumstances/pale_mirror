@@ -21,133 +21,12 @@ public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
     private FrontierWorldRuntimeDefinition() { }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) { return configuration(worldId, seed, true); }
-    /** Development-only uncontested logistics fixture; production always uses {@link #configuration(WorldId, long)}. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentUncontestedSupplyConfiguration(WorldId worldId, long seed) {
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, false);
-        FrontierWorldState initial = developmentSupplyReserve(base.initialState());
-        return new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator());
-    }
-
-    /** Fixture-only autonomous interception profile with the same exact food reserve as supply tests. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentAutonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, true);
-        FrontierWorldState initial = developmentSupplyReserve(base.initialState());
-        return new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator());
-    }
-
-    /** Fixture-only exact reserve keeps logistics tests independent from the human food reserve policy. */
-    private static FrontierWorldState developmentSupplyReserve(FrontierWorldState state) {
-        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        int remaining = SettlementProvisionProcess.reserveRequirement(state, settlement.id()); ExactInventory inventory = state.inventory(); int ordinal = 0;
-        while (remaining > 0) {
-            // Keep every fixture-reserve stack below one export shipment: the production output is
-            // then the only 64-item candidate, without granting the fixture fictitious food.
-            int count = Math.min(63, remaining);
-            inventory = inventory.store(new ExactItemStack(new SubjectId("item:development-supply-reserve-" + ordinal), settlement.id(), "minecraft:bread", count,
-                    new InventoryCustody.ContainerSlot(depot, ordinal + 1)));
-            remaining -= count; ordinal++;
-        }
-        return state.withInventory(inventory);
-    }
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
+    /** Shared internal composition used by the test-fixture catalog without creating a second runtime. */
+    static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Development-only deterministic scene fixture; production always uses {@link #configuration(WorldId, long)}. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotSceneStrikeConfiguration(WorldId worldId, long seed) {
-        FrontierWorldState initial = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, initial, new SimInstant(2_600L), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(initial.bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), List.of(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Disposable-only settled assault fixture; ordinary loaded demand must create its typed cargo-free HOT battle. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentSettlementAssaultConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Development-only real-economy fixture; the named runner must physically consume biomass before outputs exist. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHiveGrowthConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.HiveGrowthFixture fixture = FrontierDevelopmentScenarios.hiveGrowthFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Disposable-only physical inter-nest nutrient fixture; normal production never selects it. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHiveNutrientTransferConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.HiveNutrientTransferFixture fixture = FrontierDevelopmentScenarios.hiveNutrientTransferFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Development-only exact ration fixture; an ordinary loaded depot must consume the named bread before residents become secure. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentSettlementProvisionConfiguration(WorldId worldId, long seed) {
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = configuration(worldId, seed, false);
-        FrontierWorldState state = base.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        SubjectId bread = new SubjectId("item:provision-fixture-bread"); int rations = settlement.residents().size();
-        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
-        List<SubjectId> recipients = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                .map(ResidentProfile::id).sorted().toList();
-        HumanPopulation population = state.humanPopulation();
-        for (SubjectId recipient : recipients) population = population.resolveNutrition(recipient, 1, false);
-        SettlementProvision provision = SettlementProvision.started(settlement.id(), 2, 0L, rations, recipients,
-                List.of(new SettlementRationAllocation(bread, recipients)));
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-1-2-0"), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, settlement.id(), List.of(settlement.id(), bread), new FixedPosition(FixedScalar.whole(settlement.anchor().x()),
-                FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())), 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
-        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(population.withProvision(provision.beginPhysical(intent.id())))
-                .preparePhysicalIntent(intent);
-        return new FrontierEngineConfiguration<>(base.worldId(), state, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator());
-    }
-    /** Development-only HOT/COLD continuity fixture; production always begins at the normal world bootstrap. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentRouteSceneReturnConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.routeSceneReturnFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Disposable-only physical Scout-perception fixture; production never relocates a Scout for a carrier. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotScoutSightingConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutSightingFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> frozenScoutSightingProgress(state, action), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Disposable-only end-to-end Scout perception/intercept fixture; the planner remains the sole engagement authority. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHotScoutInterceptConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutInterceptFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> frozenScoutSightingProgress(state, action), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-
-    /**
-     * The disposable recovery proof observes one physical carrier fact, not a whole caravan
-     * lifecycle.  Once its HOT scene drains, consume only that operation's newly scheduled COLD
-     * progress action so elapsed native-client restart time cannot replace the asserted fact.
-     */
-    private static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action) {
-        if (action.subject().equals(new SubjectId("operation:supply-1-2")) && action.kind().equals("frontier.operation.progress")) {
-            return List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
-        }
-        return planScheduled(state, action, false);
-    }
-    /** Development-only exact HOT assembly fixture; the pilot supplies every movement observation. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentOperationAssemblyConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.OperationAssemblyFixture fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Development-only exposure fixture; the first ordinary settlement review produces the health result. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHealthQuarantineConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.HealthQuarantineFixture fixture = FrontierDevelopmentScenarios.healthQuarantineFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
-    /** Development-only exact-person Transit fixture; it owns no materialized body or shortcut. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentResidentTransitConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.ResidentTransitFixture fixture = FrontierDevelopmentScenarios.residentTransitFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     private static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
                 RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
@@ -164,20 +43,6 @@ public final class FrontierWorldRuntimeDefinition {
         bootstrap.hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).sorted(java.util.Comparator.comparing(Bioform::id))
                 .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1, 1_600L + actions.size() * 20L)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
-    }
-    /** Disposable-only exact player-withdrawal fixture; production never selects this bootstrap. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentMaterializedProductionInputTheftConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()),
-                FrontierWorldProjectionCompiler::compile, new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
-    }
-    /** Disposable-only ordinary-combat fixture; the one nearby Villager is the exact reserved worker. */
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentMaterializedProductionWorkerDeathConfiguration(WorldId worldId, long seed) {
-        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
-        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()),
-                FrontierWorldProjectionCompiler::compile, new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
@@ -412,7 +277,7 @@ public final class FrontierWorldRuntimeDefinition {
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action) {
         return planScheduled(state, action, true);
     }
-    private static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
+    static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                boolean autonomousInterception) {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = switch (action.kind()) {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
@@ -507,7 +372,7 @@ public final class FrontierWorldRuntimeDefinition {
             throw new IllegalArgumentException("HOT assembly deferral lacks its exact active actor lease");
         }
     }
-    private static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+    static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         return FrontierWorldState.duringReducerTransition(() -> reduceUnchecked(state, event));
     }
     private static FrontierWorldState reduceUnchecked(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {

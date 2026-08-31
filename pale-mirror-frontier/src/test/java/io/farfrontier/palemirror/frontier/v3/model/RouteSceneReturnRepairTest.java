@@ -24,7 +24,7 @@ class RouteSceneReturnRepairTest {
     @Test
     void releasedFailedHotShipmentStillTriggersPatrolAndRouteConstruction() {
         WorldId world = new WorldId("frontier:route-scene-return-repair");
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 41L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         FrontierWorldState initial = state(engine);
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = lease(initial, engine.checkpoint(), operation);

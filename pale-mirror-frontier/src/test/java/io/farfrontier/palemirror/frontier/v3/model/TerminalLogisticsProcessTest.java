@@ -61,7 +61,7 @@ class TerminalLogisticsProcessTest {
     void scheduledCompactionSurvivesSnapshotRecoveryWithoutRestoringTheActiveGraph() {
         WorldId world = new WorldId("frontier:terminal-logistics-recovery");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
-                FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L);
+                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L);
         FrontierWorldState settled = completedDelivery(world);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =
                 new FrontierEngineConfiguration<>(world, settled, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(),
@@ -107,5 +107,5 @@ class TerminalLogisticsProcessTest {
     }
 
     private static FrontierWorldState initial() { return initial(new WorldId("frontier:terminal-logistics")); }
-    private static FrontierWorldState initial(WorldId world) { return FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L).initialState(); }
+    private static FrontierWorldState initial(WorldId world) { return FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L).initialState(); }
 }

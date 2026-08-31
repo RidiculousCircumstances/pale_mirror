@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
@@ -91,7 +92,7 @@ class FrontierV3DiagnosticJsonTest {
     @Test
     void exposesOneBoundedPhysicalAssemblyProbeWithoutChangingItsCursor(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(new WorldId("frontier:diagnostic-assembly-test"), 41L),
+                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:diagnostic-assembly-test"), 41L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
@@ -115,7 +116,7 @@ class FrontierV3DiagnosticJsonTest {
     @Test
     void exposesOneExactTransitCursorWithoutAdvancingTheJourney(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),
+                FrontierV3FixtureCatalog.residentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
@@ -195,7 +196,7 @@ class FrontierV3DiagnosticJsonTest {
     @Test
     void exposesOneReadOnlyEngagementSceneWithoutCreatingOrAdvancingIt(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:diagnostic-scene-test"), 41L),
+                FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:diagnostic-scene-test"), 41L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
@@ -210,7 +211,7 @@ class FrontierV3DiagnosticJsonTest {
     @Test
     void exposesOneTypedCargoFreeAssaultSceneWithoutCallingItsLegacyLogisticsView(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentSettlementAssaultConfiguration(new WorldId("frontier:diagnostic-assault-scene-test"), 41L),
+                FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:diagnostic-assault-scene-test"), 41L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState before = runtime.decodedState().orElseThrow();

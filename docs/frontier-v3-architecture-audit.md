@@ -36,6 +36,27 @@ JFR, restart or player-visible gates in the implementation plan.
 | V3-AUD-011 | P1 | Structural debt | The stable interface defines separate `model`, `process` and `persistence` ownership, but 33 `*Process` and 23 `*Codec(s)` source files currently reside in `frontier.v3.model`. |
 | V3-AUD-012 | P1 | Confirmed defect | `FrontierPayload` is open and `FrontierWorldPayloadCodecs.create()` manually enumerates codecs; no gate proves every process input/output payload has a wire codec. This mechanism already omitted `ResourceSiteHarvestObservation` once. |
 
+## Remediation status
+
+The evidence table above remains the immutable record of revision `5ca5291`.
+This table records only completed corrections and the next owned work; a
+finding is not silently removed merely because its ceiling no longer grows.
+
+| ID | Status | Evidence / next owner |
+|---|---|---|
+| V3-AUD-001 | CLOSED | `e9bc0d0`: closed pure and NeoForge `SceneBehavior` registries own every generic lifecycle decision; duplicate/missing registration is rejected. The focused scene slice passes 30/30 and the complete critical gate passes 250/250. |
+| V3-AUD-002 | CLOSED | Fixture builders/catalog are test-fixtures only; a pilot-only bootstrap selects the already-built configuration before the normal lifecycle. Production bootstrap is property-independent, and JAR verification rejects every former fixture entry point, catalog and bootstrap. The catalog/lifecycle negative tests, pilot smoke and complete critical gate pass. |
+| V3-AUD-008 | CLOSED | One test-only declarative properties catalog is parsed and validated by Java, Gradle and the Node pilot. Unknown/duplicate profiles fail before a scenario starts; Gradle no longer owns a copied profile list. |
+| V3-AUD-003 | OPEN — H0.3 | Closed deterministic process descriptors replace the monolithic command/scheduled/event dispatcher. |
+| V3-AUD-004 | OPEN — H0.3 | Closed staged physical-executor registry replaces source-order ticking. |
+| V3-AUD-011 | OPEN — H0.3/H0.4 | Move process ownership first, then codecs/persistence without reverse dependencies. |
+| V3-AUD-012 | OPEN — H0.3 | Make payload/codec completeness a composition invariant. |
+| V3-AUD-005 | OPEN — H0.4 | Replace positional aggregate construction with named state updates. |
+| V3-AUD-006 | OPEN — H0.4 | Replace ordinal persistence with stable tags and old-byte recovery tests. |
+| V3-AUD-007 | OPEN — H0.5 | Add a persisted, hashed, explicitly selected `FrontierRuleset`. |
+| V3-AUD-009 | OPEN — H0.6 | Instrument then measure complete-domain allocation/validation pressure. |
+| V3-AUD-010 | OPEN — H0.6 | Prove deterministic fairness and bounded physical-stage pressure at multi-front scale. |
+
 ## Findings and required corrections
 
 ### V3-AUD-001 — scene behavior is not owned by one registry

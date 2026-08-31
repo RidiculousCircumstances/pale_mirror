@@ -47,7 +47,7 @@ class SupplyOperationProcessTest {
 
     @Test
     void unknownHotLeaseDefersColdRouteProgressWithoutPretendingTheSceneIsActive() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
                 new WorldId("frontier:supply-unknown-scene"), 91L));
         for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -67,7 +67,7 @@ class SupplyOperationProcessTest {
 
     @Test
     void observedMissingRestartSceneBlocksOnlyItsExactDeliveryRatherThanReschedulingForever() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
                 new WorldId("frontier:supply-unresolved-scene"), 91L));
         for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -92,7 +92,7 @@ class SupplyOperationProcessTest {
 
     @Test
     void obsoleteProgressActionIsDurablyCancelledAfterItsOperationHasAlreadyFailed() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
                 new WorldId("frontier:supply-terminal-progress"), 91L));
         for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

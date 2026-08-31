@@ -166,7 +166,7 @@ class ProductionProcessTest {
 
     @Test
     void workerDeathDisposableFixtureKeepsTheExactCrafterAsTheOnlyNearbyAmbientActor() {
-        FrontierWorldState state = FrontierWorldRuntimeDefinition.developmentMaterializedProductionWorkerDeathConfiguration(
+        FrontierWorldState state = FrontierV3FixtureCatalog.productionWorkerDeathConfiguration(
                 new WorldId("frontier:production-worker-death-fixture"), 41L).initialState();
         SubjectId worker = state.productionJobs().get(new SubjectId("job:development-production-input-theft")).workerId();
         BlockPosition target = new BlockPosition(-480, 64, -480);

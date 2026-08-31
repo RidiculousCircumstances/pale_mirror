@@ -52,7 +52,7 @@ class FrontierWorldRuntimeDefinitionTest {
     void hotAssemblyRequiresExactLeasesThenAtomicallyStartsTheFirstTravelSegment() {
         WorldId world = new WorldId("frontier:hot-assembly");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(world, 91L));
+                FrontierV3FixtureCatalog.operationAssemblyConfiguration(world, 91L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
@@ -98,7 +98,7 @@ class FrontierWorldRuntimeDefinitionTest {
     void hotAssemblyDeferralIsExactDurableAndPreventsColdFromSkippingTheLoadedObstacle() {
         WorldId world = new WorldId("frontier:hot-assembly-deferral");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(world, 91L));
+                FrontierV3FixtureCatalog.operationAssemblyConfiguration(world, 91L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
@@ -196,7 +196,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void hiveGrowthConsumesNestLocalEastStoreBiomassThenPublishesEastOrganAndBioform() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:hive-growth"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:hive-growth"), 91L));
         FrontierWorldState completed = advanceUntil(engine, 12_000L,
                 state -> state.hiveColony().growthJobs().containsKey(new SubjectId("job:hive-growth-1")));
         SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
@@ -220,7 +220,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void developmentHiveGrowthProfileStopsAtTheRealExactBiomassBoundary() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(new WorldId("frontier:hive-growth-profile"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.hiveGrowthConfiguration(new WorldId("frontier:hive-growth-profile"), 91L));
 
         var checkpoint = engine.checkpoint();
         FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
@@ -239,7 +239,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void developmentHiveNutrientProfileKeepsOneExactBiomassAtItsPreparedSourceUntilObservedDeparture() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHiveNutrientTransferConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.hiveNutrientTransferConfiguration(
                 new WorldId("frontier:hive-nutrient-profile"), 91L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId transferId = new SubjectId("transfer:hive-nutrient-task-development-hive-nutrient-transfer");
@@ -259,7 +259,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void developmentRouteReturnProfileRetainsOneExactColdNorthwatchShipment() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(new WorldId("frontier:route-return-profile"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(new WorldId("frontier:route-return-profile"), 91L));
 
         var checkpoint = engine.checkpoint();
         FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
@@ -277,7 +277,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void developmentHealthQuarantineProfileRequiresAnOrdinarySettlementReview() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentHealthQuarantineConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.healthQuarantineConfiguration(
                 new WorldId("frontier:health-quarantine-profile"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         Settlement settlement = before.bootstrap().settlements().getFirst();
@@ -299,7 +299,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void developmentResidentTransitProfileRetainsOneRealColdJourneyWithoutAHiddenHotBody() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.residentTransitConfiguration(
                 new WorldId("frontier:resident-transit-profile"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
@@ -387,7 +387,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void hiveGrowthTaskIsPersistedDeterministicScheduledWorldWork() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:pulse"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:pulse"), 91L));
         FrontierWorldState state = advanceUntil(engine, 12_000L, candidate -> candidate.strategicPlans().tasks().values().stream()
                 .anyMatch(task -> task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM && task.status() == StrategicTaskStatus.ACTIVE));
 
@@ -399,7 +399,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void longLivedPulsesKeepTheirBoundedWorkCostInsteadOfGrowingIntoTheSchedulerBudget() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:long-pulse"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:long-pulse"), 91L));
         for (long tick = 100L; tick <= 60_000L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse("no failure detail"));
@@ -458,7 +458,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void supplyContractLoadsTheSameProducedBreadIntoIdentifiedCargo() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:cargo"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:cargo"), 91L));
         for (long tick = 100L; tick <= 4_000L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -474,7 +474,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void loadedCargoMovesThroughAPersistedColdRouteWithExactParticipants() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:route"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:route"), 91L));
         FrontierWorldState state = advanceUntil(engine, 12_000L, candidate -> {
             RouteOperation operation = candidate.operations().get(new SubjectId("operation:supply-1-2"));
             return operation != null && operation.stage() == OperationStage.ARRIVED;
@@ -502,7 +502,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     @Test
     void routeReducerRejectsASkippedRoutePoint() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:route-negative"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:route-negative"), 91L));
         for (long tick = 100L; tick <= 2_700L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
@@ -595,7 +595,7 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void sceneLeaseDurablySuspendsColdRouteProgressAndPinsExactFutureBodies() {
         WorldId world = new WorldId("frontier:scene-lease");
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         var projection = engine.projection(ProjectionQuery.summary());
@@ -763,7 +763,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     materializedSupplyConfiguration(WorldId world, long seed) {
-        var base = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, seed);
+        var base = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(world, seed);
         SubjectId westStore = new SubjectId("container:hive-west-store");
         FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory()
                 .withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.ACTIVE));

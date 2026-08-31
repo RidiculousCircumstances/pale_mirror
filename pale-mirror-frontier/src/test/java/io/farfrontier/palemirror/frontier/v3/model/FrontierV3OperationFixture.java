@@ -11,8 +11,8 @@ final class FrontierV3OperationFixture {
     private FrontierV3OperationFixture() { }
 
     static RouteOperation routeSceneReturnOperation() {
-        FrontierWorldState state = FrontierWorldRuntimeDefinition
-                .developmentRouteSceneReturnConfiguration(new WorldId("frontier:operation-fixture"), 91L).initialState();
+        FrontierWorldState state = FrontierV3FixtureCatalog
+                .routeSceneReturnConfiguration(new WorldId("frontier:operation-fixture"), 91L).initialState();
         return state.operations().get(new SubjectId("operation:supply-1-2"));
     }
 

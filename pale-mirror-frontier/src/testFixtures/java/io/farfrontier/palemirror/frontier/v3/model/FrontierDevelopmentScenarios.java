@@ -19,7 +19,7 @@ final class FrontierDevelopmentScenarios {
     private FrontierDevelopmentScenarios() { }
 
     static FrontierWorldState hotSceneStrikeState(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
@@ -126,7 +126,7 @@ final class FrontierDevelopmentScenarios {
      * route rule.
      */
     static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
         io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
@@ -209,7 +209,7 @@ final class FrontierDevelopmentScenarios {
      * HOT movement; it cannot use the fixture to start travel or move a resident.
      */
     static OperationAssemblyFixture operationAssemblyFixture(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             var checkpoint = engine.checkpoint();
@@ -230,7 +230,7 @@ final class FrontierDevelopmentScenarios {
      * east store and let its ordinary executor consume the real tagged stack.
      */
     static HiveGrowthFixture hiveGrowthFixture(WorldId worldId, long seed) {
-        var base = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed);
+        var base = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
         SubjectId store = new SubjectId("container:hive-east-store");
         // This is the durable boundary after a socket has been claimed but before its physical
         // chest write.  The native pilot must load the chunk and let the ordinary container

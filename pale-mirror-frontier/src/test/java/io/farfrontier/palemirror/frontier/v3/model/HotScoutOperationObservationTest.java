@@ -26,7 +26,7 @@ class HotScoutOperationObservationTest {
     @Test
     void hotScoutKnowledgeRequiresBothLiveLeasesAndRetainsExactCarrierPosition() {
         WorldId world = new WorldId("frontier:hot-scout-observation");
-        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 41L));
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         SubjectId scout = new SubjectId("bioform:west-1");
         RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation"), operation.id(), operation.cargoId(),
@@ -79,7 +79,7 @@ class HotScoutOperationObservationTest {
                 .filter(action -> action.kind().equals("frontier.objective.interrupt")).count());
 
         var beforeRestart = fixture.engine().checkpoint();
-        var recovered = FrontierEngines.recover(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(fixture.world(), 41L),
+        var recovered = FrontierEngines.recover(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(fixture.world(), 41L),
                 new RecoveryImage(fixture.world(), Optional.of(new SnapshotRecord(beforeRestart, beforeRestart.revision().value())), java.util.List.of()));
         assertEquals(beforeRestart.schedules(), recovered.checkpoint().schedules(), "the one-shot planner wake-up must be durable before execution");
 
@@ -96,7 +96,7 @@ class HotScoutOperationObservationTest {
     @Test
     void interceptFixtureKeepsOnlyTheThreeRequiredAttackersAtDistinctApproachPositions() {
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierWorldRuntimeDefinition.developmentHotScoutInterceptConfiguration(new WorldId("frontier:hot-scout-intercept-fixture"), 41L));
+                FrontierV3FixtureCatalog.hotScoutInterceptConfiguration(new WorldId("frontier:hot-scout-intercept-fixture"), 41L));
         FrontierWorldState state = state(engine);
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
         var selected = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
@@ -117,7 +117,7 @@ class HotScoutOperationObservationTest {
 
     private static Fixture fixture() {
         WorldId world = new WorldId("frontier:hot-scout-observation-negative");
-        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 41L));
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         SubjectId scout = new SubjectId("bioform:west-1");
         RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation-negative"), operation.id(), operation.cargoId(),

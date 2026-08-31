@@ -33,7 +33,6 @@ import java.util.Objects;
 public final class FrontierV3ServerLifecycle {
     private static final String ENABLED_PROPERTY = "pale_mirror.frontier_v3.enabled";
     private static final String PILOT_RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
-    private static final String PILOT_PROFILE_PROPERTY = "pale_mirror.frontier_v3.pilot.profile";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
     /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
@@ -158,8 +157,32 @@ public final class FrontierV3ServerLifecycle {
         STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server);
         if (!enabled() || RUNTIMES.containsKey(server)) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
+        startConfigured(server, initialConfiguration(physicalWorld));
+    }
+
+    /**
+     * Starts an explicit already-built configuration for a moddev-only source set.
+     *
+     * <p>The method intentionally accepts no profile/property and has package visibility: the
+     * test-only bootstrap must select its catalog entry before this lifecycle begins.  The
+     * packaged production mod has no caller in this package, while {@link #start(MinecraftServer)}
+     * always uses the normal world bootstrap.</p>
+     */
+    static void startModDevFixture(MinecraftServer server,
+                                   io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
+        Objects.requireNonNull(server, "server"); Objects.requireNonNull(configuration, "configuration");
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server);
+        if (!enabled()) throw new IllegalStateException("Frontier v3 fixture bootstrap requires an enabled v3 launch");
+        if (RUNTIMES.containsKey(server)) throw new IllegalStateException("Frontier v3 fixture bootstrap must run before the normal lifecycle");
+        FrontierV3PhysicalWorld.require(server);
+        startConfigured(server, configuration);
+    }
+
+    private static void startConfigured(MinecraftServer server,
+                                        io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
+        ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                initialConfiguration(physicalWorld),
+                configuration,
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
@@ -182,7 +205,7 @@ public final class FrontierV3ServerLifecycle {
             }
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            PaleMirrorMod.LOGGER.info("Frontier v3 development runtime started for {}", server.getWorldPath(LevelResource.ROOT));
+            PaleMirrorMod.LOGGER.info("Frontier v3 runtime started for {}", server.getWorldPath(LevelResource.ROOT));
             String pilotRunId = System.getProperty(PILOT_RUN_ID_PROPERTY, "");
             if (!pilotRunId.isBlank()) {
                 PaleMirrorMod.LOGGER.info("PMV3_PILOT_SERVER runId={} pid={}", pilotRunId, ProcessHandle.current().pid());
@@ -192,55 +215,15 @@ public final class FrontierV3ServerLifecycle {
         }
     }
 
-    /**
-     * The only non-world bootstrap is a named disposable-pilot fixture.  It is intentionally
-     * unavailable to normal starts: the pilot has a per-JVM nonce and its scenario runner owns
-     * a fresh world directory, so this never becomes a production simulation switch.
-     */
+    /** Production bootstrap: profile properties never participate in this decision. */
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(ServerLevel physicalWorld) {
-        String profile = System.getProperty(PILOT_PROFILE_PROPERTY, "world");
-        if (profile.equals("world")) return FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        if (profile.equals("hot-scene-strike") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("settlement-assault") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentSettlementAssaultConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("hive-growth") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("hive-nutrient-transfer") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHiveNutrientTransferConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("settlement-provision") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentSettlementProvisionConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("scene-return") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("hot-scout-sighting") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHotScoutSightingConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("hot-scout-intercept") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHotScoutInterceptConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("operation-assembly") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("health-quarantine") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentHealthQuarantineConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("resident-transit") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentResidentTransitConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("production-input-theft") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentMaterializedProductionInputTheftConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        if (profile.equals("production-worker-death") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
-            return FrontierWorldRuntimeDefinition.developmentMaterializedProductionWorkerDeathConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
-        }
-        throw new IllegalStateException("Frontier v3 pilot profile is unavailable outside an identified disposable runner: " + profile);
+        return initialConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+    }
+
+    static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
+    initialConfiguration(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, long seed) {
+        return FrontierWorldRuntimeDefinition.configuration(worldId, seed);
     }
 
     /**

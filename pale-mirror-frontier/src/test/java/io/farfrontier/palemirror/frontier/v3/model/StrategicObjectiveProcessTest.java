@@ -233,7 +233,7 @@ class StrategicObjectiveProcessTest {
 
     @Test
     void anInterceptWakeWithoutDurableScoutKnowledgeCannotCreateAnOmniscientAttack() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:strategic-interrupt"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
@@ -249,7 +249,7 @@ class StrategicObjectiveProcessTest {
 
     @Test
     void anOlderInterceptWakeCannotRetargetToANewerSightingOfTheSameCaravan() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:strategic-interrupt-retarget"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();

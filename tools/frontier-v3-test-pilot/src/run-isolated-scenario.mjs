@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
+import { defaultPilotProfile, loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -80,7 +80,7 @@ async function startServer(reset) {
     `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
     `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
     `-PfrontierV3PilotReset=${reset}`, `-PfrontierV3PilotRunId=${serverRunId}`,
-    `-PfrontierV3PilotProfile=${scenario.server.profile ?? 'world'}`,
+    `-PfrontierV3PilotProfile=${scenario.server.profile ?? defaultPilotProfile()}`,
     `-PfrontierV3PilotViewDistance=${scenario.server.viewDistance ?? 10}`];
   const child = spawn(gradle, serverArgs, {
     cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe']

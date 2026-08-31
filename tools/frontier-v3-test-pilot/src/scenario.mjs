@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 const SCHEMA = 1;
+const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
+const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
 const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
@@ -11,6 +14,8 @@ export function selectMutterXauthority(entries) {
   const candidates = entries.filter((entry) => /^\.mutter-Xwaylandauth\.[A-Za-z0-9]+$/.test(entry));
   return candidates.length === 1 ? candidates[0] : undefined;
 }
+
+export function defaultPilotProfile() { return PILOT_DEFAULT_PROFILE; }
 
 /** Resolves the JVM identity announced by the exact nonce passed to a disposable server. */
 export function pilotServerPid(output, runId) {
@@ -32,8 +37,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'settlement-assault', 'hive-growth', 'hive-nutrient-transfer', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'hot-scout-intercept', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, settlement-assault, hive-growth, hive-nutrient-transfer, settlement-provision, scene-return, hot-scout-sighting, hot-scout-intercept, operation-assembly, health-quarantine, resident-transit, production-input-theft or production-worker-death');
+  if (scenario.server.profile !== undefined && !PILOT_PROFILES.includes(scenario.server.profile)) {
+    throw new Error(`scenario server profile must be one of the test-only catalog entries: ${PILOT_PROFILES.join(', ')}`);
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -186,6 +191,27 @@ export function validateScenario(scenario) {
       validateScenario({ ...scenario, restart: undefined, setup: [action] });
     }
   }
+}
+
+function loadPilotProfiles(path) {
+  const entries = new Map();
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const separator = trimmed.indexOf('=');
+    if (separator < 1) throw new Error(`invalid Frontier v3 pilot catalog line: ${trimmed}`);
+    entries.set(trimmed.slice(0, separator).trim(), trimmed.slice(separator + 1).trim());
+  }
+  const profiles = (entries.get('profiles') ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (profiles.length === 0 || new Set(profiles).size !== profiles.length) throw new Error('Frontier v3 pilot catalog must contain unique profile ids');
+  for (const profile of profiles) {
+    for (const field of ['provider', 'source', 'runner', 'assertion']) {
+      if (!entries.get(`${profile}.${field}`)) throw new Error(`Frontier v3 pilot catalog lacks ${profile}.${field}`);
+    }
+  }
+  const defaultProfile = entries.get('default');
+  if (!defaultProfile || !profiles.includes(defaultProfile)) throw new Error('Frontier v3 pilot catalog default must be one declared profile');
+  return Object.freeze({ profiles: Object.freeze(profiles), defaultProfile });
 }
 
 /** Splits one declared scenario around its durable recovery boundary. */

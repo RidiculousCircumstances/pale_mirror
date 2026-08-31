@@ -24,7 +24,7 @@ class FrontierWorldSceneDeathTest {
     void laterExactDeathsRemainDurableWhileTheSameSceneIsDraining() {
         WorldId world = new WorldId("frontier:scene-multiple-deaths");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L));
+                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L));
         FrontierWorldState initial = state(engine);
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:multiple-deaths");

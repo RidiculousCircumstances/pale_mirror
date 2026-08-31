@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -157,7 +158,7 @@ public final class FrontierV3AmbientActorGameTests {
     public static void hotScoutSeesOnlyTheLoadedExactCargoCarrier(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:hot-scout-physical-sighting");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 41L), new EphemeralStore(), 10_000);
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L), new EphemeralStore(), 10_000);
         FrontierWorldState initial = state(runtime); SubjectId scout = new SubjectId("bioform:west-1");
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = sceneLease(initial, runtime, operation, "lease:hot-scout-physical-sighting");

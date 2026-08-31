@@ -175,7 +175,7 @@ class SettlementProvisionProcessTest {
 
     @Test
     void nativeProvisionFixtureStartsWithOneNamedPendingPhysicalRation() {
-        var configuration = FrontierWorldRuntimeDefinition.developmentSettlementProvisionConfiguration(new WorldId("frontier:provision-fixture"), 41L);
+        var configuration = FrontierV3FixtureCatalog.settlementProvisionConfiguration(new WorldId("frontier:provision-fixture"), 41L);
         FrontierWorldState state = configuration.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst();
         SettlementProvision provision = state.humanPopulation().provision(settlement.id());
         PhysicalIntent intent = state.physicalIntents().get(provision.activeIntentId().orElseThrow());

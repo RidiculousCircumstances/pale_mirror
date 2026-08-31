@@ -30,6 +30,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
@@ -93,7 +94,7 @@ class FrontierV3ServerRuntimeTest {
     @Test
     void sceneAdmissionDefersWhenAnExactParticipantAlreadyHasAnAmbientLease(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-ambient-handoff");
-        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L),
+        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState before = worldState(runtime);
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
@@ -111,7 +112,7 @@ class FrontierV3ServerRuntimeTest {
     @Test
     void sceneHandoffAtomicallyCapturesAndClosesTheExactAmbientLease(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-ambient-transfer");
-        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L),
+        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState before = worldState(runtime);
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
@@ -145,7 +146,7 @@ class FrontierV3ServerRuntimeTest {
     @Test
     void loadedMissingRestartSceneBlocksItsDeliveryWithoutReplacingActorsOrCargo(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-recovery-unresolved");
-        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L),
+        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState state = worldState(runtime);
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
@@ -273,7 +274,7 @@ class FrontierV3ServerRuntimeTest {
     void restartRetainsAnUnloadedColdCargoDeliveryWithoutAStalledMaterializationIntent(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:restart-safety");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(world, 91L);
+        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
@@ -294,7 +295,7 @@ class FrontierV3ServerRuntimeTest {
     @Test
     void restartRetainsManagedExplosionForItsPersistedPostconditionInspector(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:managed-explosion-restart"); FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L);
+        var configuration = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState initial = worldState(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:managed-explosion-restart");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
@@ -337,7 +338,7 @@ class FrontierV3ServerRuntimeTest {
     void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-lease-recovery");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 91L);
+        var configuration = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());

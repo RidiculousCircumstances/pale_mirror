@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -50,7 +51,7 @@ public final class FrontierV3SceneDeathGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
         WorldId world = new WorldId("frontier:scene-death-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-death-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow();
@@ -94,7 +95,7 @@ public final class FrontierV3SceneDeathGameTests {
         ServerLevel level = helper.getLevel();
         WorldId world = new WorldId("frontier:scene-death-release-refresh-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L), new EphemeralStore(), 20_000);
         SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-death-release-refresh-game-test");
         var checkpoint = runtime.checkpointImage().orElseThrow();

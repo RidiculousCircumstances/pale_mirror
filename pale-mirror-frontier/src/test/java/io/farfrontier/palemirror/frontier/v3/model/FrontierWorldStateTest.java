@@ -117,7 +117,7 @@ class FrontierWorldStateTest {
 
     @Test
     void durableAssemblyPreservesExactPeopleWithoutCreationTeleportAndSurvivesSnapshotRecovery() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:operation-travel"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:operation-travel"), 91L));
         for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
@@ -134,7 +134,7 @@ class FrontierWorldStateTest {
 
     @Test
     void hotAssemblyMovesOnlyTheObservedMemberAndRetargetsItsSameLease() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
         for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));

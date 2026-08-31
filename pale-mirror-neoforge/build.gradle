@@ -62,16 +62,47 @@ def frontierV3PilotPort = providers.gradleProperty('frontierV3PilotPort').orElse
 def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
 def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
-def frontierV3PilotProfile = providers.gradleProperty('frontierV3PilotProfile').orElse('world').get()
+def frontierV3PilotCatalog = new Properties()
+def frontierV3PilotCatalogFile = file('../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties')
+frontierV3PilotCatalogFile.withInputStream { frontierV3PilotCatalog.load(it) }
+def frontierV3PilotProfiles = frontierV3PilotCatalog.getProperty('profiles', '').split(',').collect { it.trim() }.findAll { !it.isEmpty() }
+def frontierV3PilotDefaultProfile = frontierV3PilotCatalog.getProperty('default', '').trim()
+if (!frontierV3PilotProfiles.contains(frontierV3PilotDefaultProfile)) {
+    throw new GradleException('Frontier v3 pilot catalog default must be one declared profile')
+}
+def frontierV3PilotProfile = providers.gradleProperty('frontierV3PilotProfile').orElse(frontierV3PilotDefaultProfile).get()
+if (!frontierV3PilotProfiles.contains(frontierV3PilotProfile)) {
+    throw new GradleException("unknown Frontier v3 pilot profile: ${frontierV3PilotProfile}")
+}
+if (frontierV3PilotCatalog.getProperty("${frontierV3PilotProfile}.runner") != 'disposable_lite') {
+    throw new GradleException("Frontier v3 pilot profile is not allowed for the disposable runner: ${frontierV3PilotProfile}")
+}
 def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
 def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
+sourceSets {
+    pilot {
+        java.srcDir 'src/pilot/java'
+        resources.srcDir 'src/pilot/resources'
+        // Compile the pure fixture sources into the pilot mod source set instead of placing a
+        // second jar with Frontier packages on NeoForge's module layer (which is a split package).
+        java.srcDir project(':pale-mirror-frontier').file('src/testFixtures/java')
+        resources.srcDir project(':pale-mirror-frontier').file('src/testFixtures/resources')
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
 dependencies {
     implementation project(':pale-mirror-api')
     implementation project(':pale-mirror-domain')
     implementation project(':pale-mirror-frontier')
+    pilotImplementation project(':pale-mirror-frontier')
+    testImplementation testFixtures(project(':pale-mirror-frontier'))
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
     compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'
@@ -82,6 +113,12 @@ dependencies {
     // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.
     testImplementation 'com.google.code.gson:gson:2.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations {
+    pilotImplementation.extendsFrom implementation
+    pilotCompileOnly.extendsFrom compileOnly
+    pilotRuntimeOnly.extendsFrom runtimeOnly
 }
 
 tasks.withType(Test).configureEach {
@@ -95,6 +132,7 @@ neoForge {
         configureEach {
             systemProperty 'pale_mirror.profile', 'core-only'
             systemProperty 'pale_mirror.frontier_v3.enabled', providers.systemProperty('pale_mirror.frontier_v3.enabled').orElse('false').get()
+            // Pilot sources compile into this run's mod source set and never enter the production jar.
         }
         server {
             server()
@@ -252,7 +290,7 @@ neoForge {
             // A disposable runner receives the actual Minecraft JVM identity
             // from its own nonce; Gradle's forked launcher is not that owner.
             systemProperty 'pale_mirror.frontier_v3.pilot.run_id', frontierV3PilotRunId
-            // Test-pilot initial-world fixture only; normal V3 starts always use the world profile.
+            // Consumed only by the non-packaged pilot bootstrap. Production startup ignores it.
             systemProperty 'pale_mirror.frontier_v3.pilot.profile', frontierV3PilotProfile
         }
         ftbClient {
@@ -271,6 +309,7 @@ neoForge {
             sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
             sourceSet project(':pale-mirror-frontier').sourceSets.main
+            sourceSet sourceSets.pilot
         }
     }
 }
@@ -340,6 +379,43 @@ tasks.register('verifyPackagedJar') {
             }
             if (jar.entries().any { entry -> entry.name.startsWith('journeymap/') }) {
                 throw new GradleException("${jarFile} must not package JourneyMap API classes")
+            }
+            def fixtureEntries = [
+                    'io/farfrontier/palemirror/frontier/v3/model/FrontierDevelopmentScenarios.class',
+                    'io/farfrontier/palemirror/frontier/v3/model/FrontierV3FixtureCatalog.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotFixtureBootstrap.class',
+                    'io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties'
+            ]
+            fixtureEntries.each { entry ->
+                if (jar.getEntry(entry) != null) throw new GradleException("${jarFile} must not package Frontier v3 test fixture entry ${entry}")
+            }
+            // Every former production fixture entry point is forbidden, not merely a representative
+            // sample.  The pilot may link these names only from its non-packaged source set.
+            def fixtureSymbols = [
+                    'pale_mirror.frontier_v3.pilot.profile',
+                    'developmentUncontestedSupplyConfiguration',
+                    'developmentAutonomousSupplyInterceptionConfiguration',
+                    'developmentHotSceneStrikeConfiguration',
+                    'developmentSettlementAssaultConfiguration',
+                    'developmentHiveGrowthConfiguration',
+                    'developmentHiveNutrientTransferConfiguration',
+                    'developmentSettlementProvisionConfiguration',
+                    'developmentRouteSceneReturnConfiguration',
+                    'developmentHotScoutSightingConfiguration',
+                    'developmentHotScoutInterceptConfiguration',
+                    'developmentOperationAssemblyConfiguration',
+                    'developmentHealthQuarantineConfiguration',
+                    'developmentResidentTransitConfiguration',
+                    'developmentMaterializedProductionInputTheftConfiguration',
+                    'developmentMaterializedProductionWorkerDeathConfiguration'
+            ]
+            jar.entries().each { entry ->
+                if (entry.name.endsWith('.class')) {
+                    String bytecode = new String(jar.getInputStream(entry).readAllBytes(), java.nio.charset.StandardCharsets.ISO_8859_1)
+                    fixtureSymbols.each { symbol ->
+                        if (bytecode.contains(symbol)) throw new GradleException("${jarFile} exposes Frontier v3 test fixture symbol ${symbol} from ${entry.name}")
+                    }
+                }
             }
         } finally {
             jar.close()
@@ -783,7 +859,7 @@ tasks.named('runFrontierV3PilotServer') {
         def username = frontierV3PilotOperator
         if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
                 || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
-                || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'settlement-assault', 'hive-growth', 'hive-nutrient-transfer', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'hot-scout-intercept', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'])
+                || !(frontierV3PilotProfile in frontierV3PilotProfiles)
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
             throw new GradleException('Frontier v3 pilot world, username, port, view distance, profile or run id is invalid')
         }

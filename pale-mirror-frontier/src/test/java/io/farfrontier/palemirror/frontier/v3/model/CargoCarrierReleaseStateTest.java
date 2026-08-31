@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CargoCarrierReleaseStateTest {
     @Test
     void releaseAtomicallyInterruptsRouteAndKeepsExactStacksPhysical() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:cargo-release"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
@@ -97,7 +97,7 @@ class CargoCarrierReleaseStateTest {
     void physicalCargoLossClosesHotSceneWithoutInventingColdCombat() {
         WorldId world = new WorldId("frontier:cargo-release-live-path");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(world, 91L));
+                FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L));
         FrontierWorldState before = state(engine);
         SceneEngagementCandidate candidate = before.coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release-live-path");

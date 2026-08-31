@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -316,7 +317,7 @@ public final class FrontierV3CargoCarrierGameTests {
     }
 
     private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime(String world) {
-        return FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId(world), 91L), new EphemeralStore(), 20_000);
+        return FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId(world), 91L), new EphemeralStore(), 20_000);
     }
     private static SceneLease lease(FrontierWorldState state, BlockPos origin, String id) {
         SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();

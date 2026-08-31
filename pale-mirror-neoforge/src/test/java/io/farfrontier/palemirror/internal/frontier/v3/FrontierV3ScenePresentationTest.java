@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -17,7 +18,7 @@ class FrontierV3ScenePresentationTest {
     @Test
     void derivesRoleAndExactCargoNamesWithoutLeakingCanonicalIds(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(new WorldId("frontier:scene-presentation"), 71L),
+                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:scene-presentation"), 71L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         var operation = state.operations().values().iterator().next();
@@ -43,7 +44,7 @@ class FrontierV3ScenePresentationTest {
     @Test
     void rendersAnUnknownTestActorAsASafeGenericRoleRatherThanItsTechnicalId(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(new WorldId("frontier:scene-presentation-negative"), 72L),
+                FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:scene-presentation-negative"), 72L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
 
         assertEquals("FRONTIER RESIDENT", FrontierSceneLabels.actor(runtime.decodedState().orElseThrow(),
