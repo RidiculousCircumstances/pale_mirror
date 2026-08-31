@@ -150,16 +150,16 @@ public final class FrontierWorldProcessCatalog {
 
     public static List<DeterministicProcessDescriptor> descriptors() {
         return List.of(
-                descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), KERNEL, KERNEL),
-                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emits(PHYSICAL, POPULATION, ECONOMY, STRATEGY), PHYSICAL),
-                descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emits(AMBIENT, ECONOMY), AMBIENT),
-                descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emits(LOGISTICS, PHYSICAL, STRATEGY, ECONOMY, HIVE), LOGISTICS),
-                descriptor("population", populationCommands(), populationSchedules(), POPULATION, emits(POPULATION, PHYSICAL), POPULATION),
-                descriptor("economy", Set.of(), economySchedules(), ECONOMY, emits(ECONOMY, PHYSICAL, STRATEGY), ECONOMY),
-                descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emits(RESOURCE_SITES, PHYSICAL, STRATEGY), RESOURCE_SITES),
-                descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emits(HIVE, PHYSICAL, STRATEGY), HIVE),
-                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, emits(INFRASTRUCTURE, PHYSICAL, POPULATION, STRATEGY), INFRASTRUCTURE),
-                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emits(POPULATION, STRATEGY, HIVE, ECONOMY), STRATEGY));
+                descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), emissions("kernel-schedule"), KERNEL),
+                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emissions("physical-observation"), PHYSICAL),
+                descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
+                descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emissions("logistics-scenes"), LOGISTICS),
+                descriptor("population", populationCommands(), populationSchedules(), POPULATION, emissions("population"), POPULATION),
+                descriptor("economy", Set.of(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
+                descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
+                descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),
+                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
+                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY));
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
@@ -262,17 +262,130 @@ public final class FrontierWorldProcessCatalog {
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
     private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
+
+    /**
+     * Explicit durable output contract for each owner. These are intentionally individual wire
+     * type IDs, not domain-set unions: adding a payload to another reducer cannot silently make
+     * it legal for an existing planner to emit it.
+     */
+    private static Set<String> emissions(String processId) {
+        return switch (processId) {
+            case "kernel-schedule" -> KERNEL;
+            case "physical-observation" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.resident_born", "frontier.resident_migrated",
+                    "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
+                    "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
+                    "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
+                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.company_registered", "frontier.employment_contract_opened",
+                    "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
+                    "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started",
+                    "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "ambient-actors" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
+                    "frontier.ambient_lease_transition", "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
+                    "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled",
+                    "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
+            case "logistics-scenes" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.supply_contract_created", "frontier.supply_contract_abandoned", "frontier.cargo_loaded", "frontier.cargo_delivered", "frontier.operation_created",
+                    "frontier.operation_advanced", "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred", "frontier.operation_travel_started",
+                    "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_cold_suspended", "frontier.operation_failed",
+                    "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
+                    "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
+                    "frontier.settlement_assault_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
+                    "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
+                    "frontier.inventory_conflict_observed", "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed",
+                    "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.company_registered",
+                    "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published",
+                    "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
+                    "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.infection_changed", "frontier.hive_growth_started",
+                    "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed", "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started",
+                    "frontier.hive_nutrient_transfer_advanced", "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked",
+                    "frontier.hive_nutrient_transfer_endpoint_prepared", "frontier.hive_operation_observed", "frontier.hive_territory_observed",
+                    "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced",
+                    "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced", "frontier.route_engagement_transition", "frontier.route_engagement_strike",
+                    "frontier.route_engagement_resolved", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
+                    "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
+            case "population" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
+                    "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
+                    "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
+                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.physical_delta_observed",
+                    "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
+                    "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
+                    "frontier.cargo_carrier_released");
+            case "economy" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
+                    "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
+                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "resource-sites" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
+                    "frontier.resource_site_harvest_started", "frontier.resource_site_harvested", "frontier.resource_site_conflict_observed",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "hive" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed",
+                    "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",
+                    "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
+                    "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
+                    "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
+                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
+                    "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+                    "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "infrastructure" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.route_construction_started", "frontier.route_construction_material_loaded", "frontier.route_topology_cutover",
+                    "frontier.route_patrol_started", "frontier.route_patrol_advanced", "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+                    "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.resident_born", "frontier.resident_migrated",
+                    "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
+                    "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
+                    "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
+                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.settlement_infection_observed",
+                    "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "strategy" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
+                    "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
+                    "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
+                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
+                    "frontier.settlement_infection_observed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition",
+                    "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed",
+                    "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",
+                    "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
+                    "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
+                    "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
+                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
+                    "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+                    "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
+                    "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
+                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
+            default -> throw new IllegalArgumentException("unknown process emission contract: " + processId);
+        };
+    }
     private static FrontierWorldProcessModule module(String processId) {
         FrontierWorldProcessModule module = MODULES.get(processId);
         if (module == null) throw new IllegalArgumentException("no Frontier world process module for: " + processId);
         return module;
-    }
-    @SafeVarargs private static Set<String> emits(Set<String>... groups) { return union(withKernel(groups)); }
-    @SafeVarargs private static Set<String>[] withKernel(Set<String>... groups) {
-        @SuppressWarnings("unchecked") Set<String>[] result = new Set[groups.length + 1];
-        result[0] = KERNEL;
-        System.arraycopy(groups, 0, result, 1, groups.length);
-        return result;
     }
     @SafeVarargs private static Set<String> union(Set<String>... values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();

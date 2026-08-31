@@ -23,8 +23,18 @@ public final class DeterministicProcessRegistry {
     private final Map<String, DeterministicProcessDescriptor> descriptors;
 
     public DeterministicProcessRegistry(List<DeterministicProcessDescriptor> descriptors, PayloadCodecs codecs) {
+        this(descriptors, codecs, Map.of());
+    }
+
+    /**
+     * Builds the closed process registry and, when supplied, proves the persistence-side codec
+     * wiring is owned by exactly the descriptor that declares it.
+     */
+    public DeterministicProcessRegistry(List<DeterministicProcessDescriptor> descriptors, PayloadCodecs codecs,
+                                        Map<String, Set<String>> codecTypesByProcess) {
         Objects.requireNonNull(descriptors, "descriptors");
         Objects.requireNonNull(codecs, "codecs");
+        Objects.requireNonNull(codecTypesByProcess, "codecTypesByProcess");
         Map<String, DeterministicProcessDescriptor> byId = new LinkedHashMap<>();
         Map<String, DeterministicProcessDescriptor> commands = new LinkedHashMap<>();
         Map<String, DeterministicProcessDescriptor> schedules = new LinkedHashMap<>();
@@ -44,6 +54,7 @@ public final class DeterministicProcessRegistry {
             java.util.Set<String> undeclared = new java.util.TreeSet<>(codecOwners.keySet()); undeclared.removeAll(actualCodecTypes);
             throw new IllegalArgumentException("process codec ownership differs from payload registry; missing=" + missing + " undeclared=" + undeclared);
         }
+        requirePersistenceOwnership(byId, codecTypesByProcess, actualCodecTypes);
         for (DeterministicProcessDescriptor descriptor : byId.values()) {
             requireDeclaredCodecs(codecOwners, descriptor, descriptor.commandPayloadTypes(), "command payload");
             requireDeclaredCodecs(codecOwners, descriptor, descriptor.reducedEventTypes(), "reduced event payload");
@@ -97,6 +108,35 @@ public final class DeterministicProcessRegistry {
                 throw new IllegalArgumentException("process " + descriptor.id() + " declares " + role
                         + " without a stable codec: " + type);
             }
+        }
+    }
+
+    private static void requirePersistenceOwnership(Map<String, DeterministicProcessDescriptor> descriptors,
+                                                    Map<String, Set<String>> codecTypesByProcess,
+                                                    Set<String> actualCodecTypes) {
+        if (codecTypesByProcess.isEmpty()) return;
+        if (!descriptors.keySet().equals(codecTypesByProcess.keySet())) {
+            Set<String> missing = new java.util.TreeSet<>(descriptors.keySet());
+            missing.removeAll(codecTypesByProcess.keySet());
+            Set<String> undeclared = new java.util.TreeSet<>(codecTypesByProcess.keySet());
+            undeclared.removeAll(descriptors.keySet());
+            throw new IllegalArgumentException("persistence codec owners differ from process descriptors; missing="
+                    + missing + " undeclared=" + undeclared);
+        }
+        Set<String> seen = new java.util.LinkedHashSet<>();
+        for (Map.Entry<String, Set<String>> entry : codecTypesByProcess.entrySet()) {
+            Set<String> installed = Set.copyOf(entry.getValue());
+            DeterministicProcessDescriptor descriptor = descriptors.get(entry.getKey());
+            if (!descriptor.codecTypes().equals(installed)) {
+                throw new IllegalArgumentException("persistence codec ownership differs for process " + entry.getKey()
+                        + "; descriptor=" + descriptor.codecTypes() + " persistence=" + installed);
+            }
+            for (String type : installed) {
+                if (!seen.add(type)) throw new IllegalArgumentException("duplicate persistence codec owner for " + type);
+            }
+        }
+        if (!seen.equals(actualCodecTypes)) {
+            throw new IllegalArgumentException("persistence codec ownership does not cover installed payload codecs");
         }
     }
 

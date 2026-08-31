@@ -85,6 +85,12 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "event reducer dispatcher grew"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_domain_emission_fallback(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["domain_emission_fallbacks"] += 1
+        with self.assertRaisesRegex(DebtError, "emission contracts use a domain fallback"):
+            validate(ROOT, self.policy, broken)
+
     def test_rejects_a_model_reverse_dependency(self) -> None:
         broken = copy.deepcopy(self.actual)
         broken["model_forbidden_package_dependencies"]["model/LeakedRuntimeImport.java"] = 1

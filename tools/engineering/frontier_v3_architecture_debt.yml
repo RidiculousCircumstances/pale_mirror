@@ -18,6 +18,7 @@ max_runtime_command_payload_type_tests: 0
 max_command_planner_payload_type_tests: 0
 max_runtime_reducer_cases: 0
 max_event_reducer_cases: 0
+max_domain_emission_fallbacks: 0
 max_production_development_configurations: 0
 max_lifecycle_fixture_profile_branches: 0
 max_process_classes_in_model: 0

@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldEventReducer;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldProcessCodecs;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjectionCompiler;
@@ -44,7 +45,8 @@ public final class FrontierWorldRuntimeDefinition {
                 new EngineLimits(4_096, 1_200L, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static DeterministicProcessRegistry processRegistry() {
-        return new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), PAYLOAD_CODECS);
+        return new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), PAYLOAD_CODECS,
+                FrontierWorldProcessCodecs.typesByProcess());
     }
     public static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         return FrontierWorldCommandPlanner.plan(state, command, PROCESS_REGISTRY, PHYSICAL_EXECUTOR);

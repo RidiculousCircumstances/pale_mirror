@@ -44,6 +44,14 @@ class DeterministicProcessRegistryTest {
                 codecs("test.first", "test.emitted")));
     }
 
+    @Test
+    void persistenceCodecOwnerDisagreementFailsBeforeRuntimeConstruction() {
+        DeterministicProcessDescriptor owner = descriptor("owner", Set.of(), Set.of(), Set.of("test.first"),
+                Set.of("test.first"), Set.of("test.first"));
+        assertThrows(IllegalArgumentException.class, () -> new DeterministicProcessRegistry(List.of(owner),
+                codecs("test.first"), java.util.Map.of("owner", Set.of("test.other"))));
+    }
+
     private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,
                                                               Set<String> events, Set<String> emissions, Set<String> codecs) {
         return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);

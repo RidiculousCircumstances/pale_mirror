@@ -56,7 +56,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-003 | CLOSED | `FrontierWorldRuntimeDefinition` remains a 62-line `runtime` composition root. Exact command/event ownership is resolved by the deterministic registry and dispatched only to one of nine closed executable domain modules; missing executable module ownership fails during catalog initialization. The former 34 trusted-command branches and 104 reducer cases now live with their physical, ambient, logistics, population, economy, resource-site, hive, infrastructure and strategy owners; the facades are 33 and 16 lines respectively. The debt ratchet sets their branch ceilings to zero. Focused pure coverage and the full critical gate pass (248/248 GameTests, build and packaged-JAR verification). |
 | V3-AUD-004 | CLOSED | The server lifecycle now invokes one closed staged registry. Every executor has a stable ID, explicit non-ordinal stage, dependencies, exclusive writes and a one-invocation bound; pure cycle/duplicate/reversed-causality tests and the NeoForge scene slice prove admission. Read-only `execution` diagnostics expose the final order. The manual-call ceiling is 0. |
 | V3-AUD-011 | CLOSED | The composition root is in `runtime`; all 33 behavioural processes, the command planner, reducer and process catalog reside in `process`; all 23 snapshot/WAL codecs reside in `persistence`. `model` has zero `*Process`/`*Codec(s)` source files and a zero-tolerance source guard against imports from `runtime`, `process` or `persistence`. Processes consume public immutable model state and named state transitions; the move uncovered a Scout-observation regression, covered by retaining the observation's durable sensor position rather than validating against a subsequently moved Scout. Focused pure recovery tests and the full critical gate pass (248/248 GameTests, build and packaged-JAR verification). |
-| V3-AUD-012 | OPEN — H0.3 | Descriptor/catalog startup now rejects duplicate ownership, missing stable codecs and unregistered command/schedule/event input. Emission admission is now bounded to each process's declared domain collaborations (no global world-payload fallback); full pure-v3 coverage exposed and recorded the required `physical → population/economy/strategy`, `hive → physical`, `infrastructure → population`, `strategy → population`, `economy → strategy` and `logistics → hive` paths. Finish exact type-ID contracts and representative codec/WAL round trips before closing. |
+| V3-AUD-012 | CLOSED | Every process now declares individual emitted wire type IDs rather than inheriting a domain union; the new ratchet rejects the former domain-emission fallback. Persistence separately maps each of the ten process owners to its codecs, while runtime composition rejects a missing/duplicate owner, descriptor/persistence disagreement, missing codec, missing reducer or undeclared emission before an engine starts. Negative composition coverage includes omitted codec, missing reducer, duplicate scheduled owner and persistence-owner disagreement. One representative payload from every owner round-trips directly and together through one WAL transaction envelope. The complete critical gate passes: `guardrails`, `check`, NeoForge build/package verification and 248/248 GameTests. |
 | V3-AUD-005 | CLOSED | `FrontierWorldStateUpdate` is the sole typed named replacement set for process/support transitions: duplicate declarations fail before aggregate construction, and every undeclared component retains the identical previous object. A declared no-op remains legal for revalidation. The source ratchet now permits full construction only in the aggregate, fresh bootstrap and versioned hydration (38 sites → 14); property coverage proves each unrelated component retains identity. |
 | V3-AUD-006 | CLOSED | Every snapshot/WAL codec now uses explicit `tag → enum value` pairs in `FrontierWireTags`, never enum declaration order; unknown tags fail closed. The historic company-registration byte fixture plus stable-tag tests cover retained tags, and debt ratchets reject codec `ordinal()`/`values()[tag]` use and positional registry derivation. |
 | V3-AUD-007 | OPEN — H0.5 | Add a persisted, hashed, explicitly selected `FrontierRuleset`. |
@@ -262,6 +262,17 @@ module.
 Exit evidence: a negative composition test omits one codec and fails before
 engine start; every process descriptor round-trips one representative payload;
 the full registered payload set round-trips through snapshot/WAL recovery.
+
+Closure evidence: the installed process catalog now keeps a literal wire-type
+contract per owner; the persistence-side catalog has the same finite owner
+keys, and runtime rejects any mismatch with the actual codec registry before
+engine construction. The representative corpus contains one payload for each
+of the kernel, physical, ambient, logistics, population, economy, resource-site,
+hive, infrastructure and strategy owners; it round-trips both its exact codec
+and a combined versioned WAL transaction envelope. Existing snapshot/WAL
+recovery remains covered by the deterministic engine/recovery suite. Focused
+negative composition tests and the complete critical gate pass (248/248
+GameTests, build and packaged-JAR verification).
 
 ### V3-AUD-013 — GameTest must not impersonate an off-template canonical world
 

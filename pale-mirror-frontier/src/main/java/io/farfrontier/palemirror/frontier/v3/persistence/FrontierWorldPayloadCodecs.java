@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
@@ -8,37 +8,44 @@ import java.io.DataOutputStream; import java.io.IOException; import java.util.Li
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() {
-        return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(), new PayloadCodecs(List.of(
-                new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
-                MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled(),
-                new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
-                new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
-                new OperationTravelSegmentCompletedCodec(),
-                new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(),
-                new SettlementAssaultSceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
-                new SceneRecoveryPayloadCodec(),
-                new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(), new CargoCarrierReleasedPayloadCodec(),
-                new TerminalLogisticsCompactedCodec(),
-                HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
-                HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(),
-                HumanPopulationPayloadCodecs.transitAdvanced(), HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(),
-                SettlementProvisionPayloadCodecs.legacyStarted(), SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
-                HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
-                AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
-                new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
-                new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
-                new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(), new HiveNutrientTransferBlockedCodec(),
-                new HiveNutrientTransferEndpointPreparedCodec(),
-                ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(),
-                ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvested(), ResourceSitePayloadCodecs.conflictObserved(),
-                RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
-                RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
-                StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved(),
-                StrategicPlanPayloadCodecs.hiveOperationObserved(), StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
-                StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(),
-                StrategicPlanPayloadCodecs.scoutPatrolAdvanced()))); }
+        return FrontierWorldProcessCodecs.create();
+    }
+
+    static PayloadCodecs physicalCodecs() { return new PayloadCodecs(List.of(
+            new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
+            new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+    static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
+            new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released())); }
+    static PayloadCodecs logisticsCodecs() { return new PayloadCodecs(List.of(
+            new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(),
+            new OperationAdvancedCodec(), new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(),
+            new OperationTravelAdvancedCodec(), new OperationTravelSegmentCompletedCodec(), new OperationColdSuspendedCodec(), new SceneLeasePreparedCodec(),
+            new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
+            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())); }
+    static PayloadCodecs populationCodecs() { return new PayloadCodecs(List.of(
+            HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
+            HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(), HumanPopulationPayloadCodecs.transitAdvanced(),
+            HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(), SettlementProvisionPayloadCodecs.legacyStarted(),
+            SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
+            HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition())); }
+    static PayloadCodecs economyCodecs() { return new PayloadCodecs(List.of(new ProductionStartedCodec(), new ProductionCompletedCodec(),
+            new ProductionBlockedCodec(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
+            MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled())); }
+    static PayloadCodecs resourceSiteCodecs() { return new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
+            ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
+            ResourceSitePayloadCodecs.harvested(), ResourceSitePayloadCodecs.conflictObserved())); }
+    static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(), new PayloadCodecs(List.of(new InfectionCodec(),
+            new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
+            new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(),
+            new HiveNutrientTransferBlockedCodec(), new HiveNutrientTransferEndpointPreparedCodec(), StrategicPlanPayloadCodecs.hiveOperationObserved(),
+            StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
+            StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(), StrategicPlanPayloadCodecs.scoutPatrolAdvanced()))); }
+    static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
+            RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(),
+            RoutePatrolPayloadCodecs.advanced(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed())); }
+    static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
+            StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }
     private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; } @Override public byte[] encode(FrontierPayload payload) {
             InfectionChanged changed = (InfectionChanged) payload;
@@ -49,8 +56,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ByteBuffer input = ByteBuffer.wrap(bytes);
             return new InfectionChanged(new InfectionCell(input.getInt(), input.getInt()), new FixedRatio(new FixedScalar(input.getLong())));
         }
-    }
-    private static final class CompanyRegisteredCodec implements PayloadCodec {
+    } private static final class CompanyRegisteredCodec implements PayloadCodec {
         @Override public String type() { return "frontier.company_registered"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             Company company = ((CompanyRegistered) payload).company(); writeSubject(output, company.id()); writeSubject(output, company.settlementId());
@@ -62,8 +68,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length) throw new IllegalArgumentException("invalid company registration payload");
             return new CompanyRegistered(new Company(id, settlement, founder, FrontierWireTags.require(CompanyPurpose.class, purpose), FrontierWireTags.require(CompanyStatus.class, status), registeredAt));
         }); }
-    }
-    private static final class EmploymentContractOpenedCodec implements PayloadCodec {
+    } private static final class EmploymentContractOpenedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.employment_contract_opened"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             EmploymentContract contract = ((EmploymentContractOpened) payload).contract(); writeSubject(output, contract.id()); writeSubject(output, contract.companyId());
@@ -78,8 +83,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             return new EmploymentContractOpened(new EmploymentContract(id, company, resident, new FixedScalar(invoice), new FixedScalar(wage),
                     FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed, new FixedScalar(totalWages)));
         }); }
-    }
-    private static final class EmploymentContractTerminatedCodec implements PayloadCodec {
+    } private static final class EmploymentContractTerminatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.employment_contract_terminated"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             EmploymentContractTerminated terminated = (EmploymentContractTerminated) payload;
@@ -90,8 +94,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (reason >= EmploymentTerminationReason.values().length) throw new IllegalArgumentException("invalid employment termination reason");
             return new EmploymentContractTerminated(contract, resident, FrontierWireTags.require(EmploymentTerminationReason.class, reason));
         }); }
-    }
-    private static final class ResourceDepositedCodec implements PayloadCodec {
+    } private static final class ResourceDepositedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_deposited"; } @Override public byte[] encode(FrontierPayload payload) {
             ResourceDeposited deposited = (ResourceDeposited) payload;
             return encodeProduction(output -> {
@@ -111,8 +114,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                         new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
-    }
-    private static final class ProductionStartedCodec implements PayloadCodec {
+    } private static final class ProductionStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_started"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionStarted started = (ProductionStarted) payload;
             return encodeProduction(output -> { writeJob(output, started.job()); writeSubject(output, started.inputItemId()); writeProductionInputHold(output, started.job().inputHold()); });
@@ -124,8 +126,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionStarted(job, item.value());
             });
         }
-    }
-    private static final class ProductionCompletedCodec implements PayloadCodec {
+    } private static final class ProductionCompletedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_completed"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionCompleted completed = (ProductionCompleted) payload;
             return encodeProduction(output -> {
@@ -142,8 +143,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), owner.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
-    }
-    private static final class ProductionBlockedCodec implements PayloadCodec {
+    } private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
             return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); });

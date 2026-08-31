@@ -43,12 +43,14 @@ NEOFORGE_PILOT = Path(
 RUNTIME_DEFINITION = FRONTIER_MAIN / "runtime/FrontierWorldRuntimeDefinition.java"
 COMMAND_PLANNER = FRONTIER_MAIN / "process/FrontierWorldCommandPlanner.java"
 EVENT_REDUCER = FRONTIER_MAIN / "process/FrontierWorldEventReducer.java"
+PROCESS_CATALOG = FRONTIER_MAIN / "process/FrontierWorldProcessCatalog.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 MODEL_FORBIDDEN_IMPORT = re.compile(
     r"^\s*import\s+io\.farfrontier\.palemirror\.frontier\.v3\.(?:process|persistence|runtime)\.",
     re.MULTILINE,
 )
+DOMAIN_EMISSION_FALLBACK = re.compile(r"\b(?:emits|withKernel)\s*\(")
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -119,6 +121,7 @@ def collect(root: Path) -> dict[str, Any]:
     runtime = _text(root, RUNTIME_DEFINITION)
     command_planner = _text(root, COMMAND_PLANNER)
     event_reducer = _text(root, EVENT_REDUCER)
+    process_catalog = _text(root, PROCESS_CATALOG)
     lifecycle = _text(root, SERVER_LIFECYCLE)
     model_root = root / FRONTIER_MAIN / "model"
     model_forbidden_dependencies: dict[str, int] = {}
@@ -148,6 +151,7 @@ def collect(root: Path) -> dict[str, Any]:
         ),
         "runtime_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(runtime)),
         "event_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(event_reducer)),
+        "domain_emission_fallbacks": len(DOMAIN_EMISSION_FALLBACK.findall(process_catalog)),
         "production_development_configurations": len(
             DEVELOPMENT_CONFIGURATION.findall(runtime)
         ),
@@ -258,6 +262,15 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         raise DebtError(
             "event reducer dispatcher grew: "
             f"{metrics['event_reducer_cases']}>{event_reducer_case_limit}"
+        )
+
+    emission_fallback_limit = _positive_int(
+        policy.get("max_domain_emission_fallbacks"), "max_domain_emission_fallbacks"
+    )
+    if metrics["domain_emission_fallbacks"] > emission_fallback_limit:
+        raise DebtError(
+            "process emission contracts use a domain fallback: "
+            f"{metrics['domain_emission_fallbacks']}>{emission_fallback_limit}"
         )
 
     fixture_configuration_limit = _positive_int(
