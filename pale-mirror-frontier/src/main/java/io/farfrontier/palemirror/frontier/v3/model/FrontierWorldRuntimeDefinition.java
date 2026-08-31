@@ -393,6 +393,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.terminal_logistics.retention" -> TerminalLogisticsProcess.plan(state, action);
             case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
             case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
+            case "frontier.hive.nutrient.transfer.progress" -> HiveNutrientTransferProcess.plan(state, action);
             case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
             case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
             case "frontier.population.migration.review" -> PopulationMigrationProcess.planReview(state, action);
@@ -550,6 +551,10 @@ public final class FrontierWorldRuntimeDefinition {
             case HiveGrowthBiomassConsumed consumed -> HiveGrowthProcess.reduceConsumed(state, event.subject(), consumed);
             case HiveGrowthCompleted completed -> HiveGrowthProcess.reduceCompleted(state, event.subject(), completed);
             case HiveGrowthBlocked blocked -> HiveGrowthProcess.reduceBlocked(state, event.subject(), blocked);
+            case HiveNutrientTransferStarted started -> HiveNutrientTransferProcess.reduceStarted(state, event.subject(), started.transfer());
+            case HiveNutrientTransferAdvanced advanced -> HiveNutrientTransferProcess.reduceAdvanced(state, event.subject(), advanced);
+            case HiveNutrientTransferCompleted completed -> HiveNutrientTransferProcess.reduceCompleted(state, event.subject(), completed);
+            case HiveNutrientTransferBlocked blocked -> HiveNutrientTransferProcess.reduceBlocked(state, event.subject(), blocked);
             case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
             case RouteConstructionMaterialLoaded loaded -> RouteConstructionStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);

@@ -28,6 +28,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
                 new PhysicalDeltaObservedCodec(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(), new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(),
                 new ResourceDepositedCodec(), new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
+                new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(), new HiveNutrientTransferBlockedCodec(),
                 ResourceSitePayloadCodecs.growthAdvanced(), ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(),
                 ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvested(), ResourceSitePayloadCodecs.conflictObserved(),
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
@@ -486,6 +487,26 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (reason >= HiveGrowthBlockReason.values().length) throw new IllegalArgumentException("unknown hive growth block reason");
             return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), HiveGrowthBlockReason.values()[reason]);
         }); }
+    } private static final class HiveNutrientTransferStartedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_nutrient_transfer_started"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientTransfer(output, ((HiveNutrientTransferStarted) payload).transfer())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveNutrientTransferStarted(readHiveNutrientTransfer(input))); }
+    } private static final class HiveNutrientTransferAdvancedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_nutrient_transfer_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveNutrientTransferAdvanced advanced = (HiveNutrientTransferAdvanced) payload;
+            writeSubject(output, advanced.transferId()); output.writeShort(advanced.cursor()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveNutrientTransferAdvanced(readSubject(input).value(), input.readUnsignedShort())); }
+    } private static final class HiveNutrientTransferCompletedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_nutrient_transfer_completed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientReceipt(output, ((HiveNutrientTransferCompleted) payload).receipt())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveNutrientTransferCompleted(readHiveNutrientReceipt(input))); }
+    } private static final class HiveNutrientTransferBlockedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_nutrient_transfer_blocked"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveNutrientTransferBlocked blocked = (HiveNutrientTransferBlocked) payload;
+            writeSubject(output, blocked.transferId()); output.writeByte(blocked.reason().ordinal()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> { SubjectId transfer = readSubject(input).value(); int reason = input.readUnsignedByte();
+            if (reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("unknown hive nutrient transfer block reason");
+            return new HiveNutrientTransferBlocked(transfer, HiveNutrientTransferBlockReason.values()[reason]); }); }
     } @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; } @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
     record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { } static byte[] encodeProduction(ProductionEncoder encoder) {
         try {
@@ -537,6 +558,34 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length) throw new IllegalArgumentException("unknown hive growth output enum");
         return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), consumption, new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
                 new Bioform(bioformId.value(), hive.value(), nest.value(), BioformRole.values()[role], position));
+    }
+    private static void writeHiveNutrientTransfer(DataOutputStream output, HiveNutrientTransfer transfer) throws IOException {
+        writeSubject(output, transfer.id()); writeSubject(output, transfer.hiveId()); writeSubject(output, transfer.requesterTaskId());
+        writeSubject(output, transfer.sourceStoreId()); output.writeByte(transfer.sourceSlot().slot()); writeSubject(output, transfer.targetStoreId()); output.writeByte(transfer.targetSlot().slot());
+        writeSubject(output, transfer.cargoId()); writeSubject(output, transfer.itemId()); output.writeShort(transfer.corridor().size());
+        for (BlockPosition node : transfer.corridor()) writePosition(output, node);
+        output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().ordinal()); output.writeBoolean(transfer.blockReason().isPresent());
+        if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().ordinal());
+    }
+    private static HiveNutrientTransfer readHiveNutrientTransfer(DataInputStream input) throws IOException {
+        SubjectId id = readSubject(input).value(), hive = readSubject(input).value(), task = readSubject(input).value();
+        SubjectId source = readSubject(input).value(); int sourceSlot = input.readUnsignedByte(); SubjectId target = readSubject(input).value(); int targetSlot = input.readUnsignedByte();
+        SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(readPosition(input));
+        int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
+        if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.ordinal())
+                || blocked && reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("invalid hive nutrient transfer payload");
+        return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot),
+                cargo, item, corridor, cursor, HiveNutrientTransferPhase.values()[phase], blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty());
+    }
+    private static void writeHiveNutrientReceipt(DataOutputStream output, HiveNutrientReceipt receipt) throws IOException {
+        writeSubject(output, receipt.transferId()); writeSubject(output, receipt.hiveId()); writeSubject(output, receipt.cargoId()); writeSubject(output, receipt.itemId());
+        writeSubject(output, receipt.sourceSlot().containerId()); output.writeByte(receipt.sourceSlot().slot()); writeSubject(output, receipt.targetSlot().containerId()); output.writeByte(receipt.targetSlot().slot());
+    }
+    private static HiveNutrientReceipt readHiveNutrientReceipt(DataInputStream input) throws IOException {
+        SubjectId transfer = readSubject(input).value(), hive = readSubject(input).value(), cargo = readSubject(input).value(), item = readSubject(input).value();
+        SubjectId source = readSubject(input).value(); int sourceSlot = input.readUnsignedByte(); SubjectId target = readSubject(input).value(); int targetSlot = input.readUnsignedByte();
+        return new HiveNutrientReceipt(transfer, hive, cargo, item, new InventoryCustody.ContainerSlot(source, sourceSlot), new InventoryCustody.ContainerSlot(target, targetSlot));
     }
     static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());

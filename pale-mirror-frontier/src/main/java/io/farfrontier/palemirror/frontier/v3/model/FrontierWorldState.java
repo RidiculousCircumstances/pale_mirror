@@ -40,7 +40,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony"); hiveColony.validateAgainst(bootstrap);
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions); Objects.requireNonNull(hiveColony, "hive colony");
+        hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor");
@@ -366,7 +367,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             else DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
         }
     }
-
     /** Runs the same complete invariant audit as strict construction, without altering this snapshot. */
     void validateComplete() {
         int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
@@ -399,7 +399,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!onlyInfectionChangedFrom(previous)) { validateComplete(); return; }
         validateInfectionTransition(previous);
     }
-
     /**
      * A hive infection task commonly changes its one sparse cell and its task/plan state in the
      * same atomic transaction. Both mutable domains have complete local validators; enumerating
@@ -408,7 +407,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     private boolean onlyInfectionPlannerAndHealthChangedFrom(FrontierWorldState previous) {
         return infection != previous.infection && onlyPlannerAndHealthChangedFrom(previous, false);
     }
-
     private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous) {
         return onlyPlannerAndHealthChangedFrom(previous, true);
     }
@@ -873,8 +871,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
+            HiveColony consumedColony = hiveColony.growthJobs().containsKey(current.causeSubjectId())
+                    ? hiveColony.consumeTransferredNutrient(current.causeSubjectId(), itemId) : hiveColony;
             FrontierWorldState consumedState = next(actorLocations, structureConditions, infection, inventory.consume(itemId, consumed.consumedCount()), productionJobs, contracts, operations,
-                    next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+                    next, observations, sceneLeases, consumedColony, structureDamage, physicalDeltas, ambientLeases);
             if (humanPopulation.provisions().values().stream().anyMatch(provision -> provision.activeIntentId().filter(current.id()::equals).isPresent())) {
                 return SettlementProvisionProcess.reducePhysicalConsumptionAfterInventory(consumedState, current, consumed);
             }

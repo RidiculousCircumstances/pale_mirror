@@ -35,12 +35,30 @@ final class HiveGrowthProcess {
         if (!hive.equals(task.ownerId())) throw new IllegalStateException("hive growth task has a foreign owner");
         boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS
                 && state.hiveColony().spawnedBioforms().size() < HiveColony.MAX_SPAWNED_BIOFORMS;
-        Optional<ExactItemStack> biomass = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
-                .filter(item -> BIOMASS.equals(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId())).findFirst();
-        if (!capacity || biomass.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
-        HiveNest nest = HiveStorageSupport.operationalNestForStore(state, sourceStore);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
+        HiveNest nest = targetNest(state, ordinal);
+        SubjectId targetStore = storeForNest(state, nest);
+        Optional<ExactItemStack> biomass = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
+                .filter(item -> BIOMASS.equals(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                        && slot.containerId().equals(targetStore)).findFirst();
+        if (!capacity) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        if (biomass.isEmpty()) {
+            if (state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> transfer.requesterTaskId().equals(task.id()))) return List.of();
+            Optional<ExactItemStack> remote = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
+                    .filter(item -> BIOMASS.equals(item.itemKind()) && item.count() == 64 && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                            && state.isHiveStore(slot.containerId()) && !slot.containerId().equals(targetStore)).findFirst();
+            if (remote.isEmpty() || state.inventory().firstFreeSlot(targetStore).isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+            HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task, remote.orElseThrow(), targetStore,
+                    state.inventory().firstFreeSlot(targetStore).getAsInt());
+            try {
+                HiveNutrientTransferStateSupport.validateColdEndpoints(state, transfer);
+            } catch (IllegalArgumentException unavailablePhysicalBoundary) {
+                return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+            }
+            return List.of(new ProposedEvent(hive, new HiveNutrientTransferStarted(transfer)),
+                    schedule(HiveNutrientTransferProcess.advance(transfer, action.dueAt().ticks() + 20L)));
+        }
+        SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);
         // A prepared surface is a durable, owned pending physical socket.  Growth may bind its
         // exact intent to it, but the NeoForge executor will refuse to consume until that socket
@@ -158,6 +176,16 @@ final class HiveGrowthProcess {
     }
 
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
+    private static HiveNest targetNest(FrontierWorldState state, int ordinal) {
+        List<HiveNest> nests = state.bootstrap().hive().seedNests();
+        if (ordinal < 1 || nests.isEmpty()) throw new IllegalStateException("hive growth ordinal has no seed nest");
+        return nests.get(Math.floorMod(ordinal, nests.size()));
+    }
+    private static SubjectId storeForNest(FrontierWorldState state, HiveNest nest) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.STORE && state.isHiveOrganOperational(organ.id()))
+                .findFirst().flatMap(HiveOrgan::containerId).orElseThrow(() -> new IllegalArgumentException("growth target nest has no operational exact store"));
+    }
     private static ScheduledAction complete(HiveGrowthJob job, long due) {
         return new ScheduledAction(new ScheduleId("schedule:hive-growth-task-complete-" + job.id().value().substring("job:".length())), new SimInstant(due), 0,
                 job.id(), "frontier.hive.growth.task.complete", 1);

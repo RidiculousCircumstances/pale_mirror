@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 72, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 74, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -73,14 +73,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
-            Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
+            Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input, version >= 73, version >= 74);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
             CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64, version >= 65) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input, version >= 66),
@@ -234,8 +234,23 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().ordinal()); writePosition(output, organ.anchor());
             Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); output.writeByte(bioform.role().ordinal()); writePosition(output, bioform.position());
         }
+        writeCount(output, colony.nutrientTransfers().size());
+        for (HiveNutrientTransfer transfer : colony.nutrientTransfers().values().stream().sorted(Comparator.comparing(HiveNutrientTransfer::id)).toList()) {
+            writeString(output, transfer.id().value()); writeString(output, transfer.hiveId().value()); writeString(output, transfer.requesterTaskId().value());
+            writeString(output, transfer.sourceStoreId().value()); output.writeByte(transfer.sourceSlot().slot()); writeString(output, transfer.targetStoreId().value()); output.writeByte(transfer.targetSlot().slot());
+            writeString(output, transfer.cargoId().value()); writeString(output, transfer.itemId().value()); writeCount(output, transfer.corridor().size());
+            for (BlockPosition node : transfer.corridor()) writePosition(output, node);
+            output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().ordinal()); output.writeBoolean(transfer.blockReason().isPresent());
+            if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().ordinal());
+        }
+        writeCount(output, colony.nutrientReceipts().size());
+        for (HiveNutrientReceipt receipt : colony.nutrientReceipts().values().stream().sorted(Comparator.comparing(HiveNutrientReceipt::transferId)).toList()) {
+            writeString(output, receipt.transferId().value()); writeString(output, receipt.hiveId().value()); writeString(output, receipt.cargoId().value()); writeString(output, receipt.itemId().value());
+            writeString(output, receipt.sourceSlot().containerId().value()); output.writeByte(receipt.sourceSlot().slot()); writeString(output, receipt.targetSlot().containerId().value()); output.writeByte(receipt.targetSlot().slot());
+            output.writeByte(receipt.status().ordinal()); output.writeBoolean(receipt.consumedByJobId().isPresent()); if (receipt.consumedByJobId().isPresent()) writeString(output, receipt.consumedByJobId().orElseThrow().value());
+        }
     }
-    private static HiveColony readHiveColony(DataInputStream input) throws IOException {
+    private static HiveColony readHiveColony(DataInputStream input, boolean hasNutrientTransfers, boolean hasReceiptConsumption) throws IOException {
         Map<SubjectId, HiveOrgan> organs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
@@ -263,7 +278,33 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     new HiveOrgan(organId, hive, nest, HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
                     new Bioform(bioformId, hive, nest, BioformRole.values()[role], position))) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }
-        return new HiveColony(organs, bioforms, jobs);
+        if (!hasNutrientTransfers) return new HiveColony(organs, bioforms, jobs);
+        Map<SubjectId, HiveNutrientTransfer> transfers = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input));
+            SubjectId source = new SubjectId(readString(input)); int sourceSlot = input.readUnsignedByte(); SubjectId target = new SubjectId(readString(input)); int targetSlot = input.readUnsignedByte();
+            SubjectId cargo = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
+            for (int node = 0, nodes = readCount(input); node < nodes; node++) corridor.add(readPosition(input));
+            int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
+            if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.ordinal())
+                    || blocked && reason >= HiveNutrientTransferBlockReason.values().length || transfers.put(id, new HiveNutrientTransfer(id, hive, task,
+                    source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, corridor, cursor,
+                    HiveNutrientTransferPhase.values()[phase], blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty())) != null) {
+                throw new IllegalArgumentException("invalid or duplicate hive nutrient transfer");
+            }
+        }
+        Map<SubjectId, HiveNutrientReceipt> receipts = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId transfer = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
+            SubjectId source = new SubjectId(readString(input)); int sourceSlot = input.readUnsignedByte(); SubjectId target = new SubjectId(readString(input)); int targetSlot = input.readUnsignedByte();
+            HiveNutrientReceiptStatus status = HiveNutrientReceiptStatus.STORED; java.util.Optional<SubjectId> consumedBy = java.util.Optional.empty();
+            if (hasReceiptConsumption) { int code = input.readUnsignedByte(); boolean present = input.readBoolean(); if (code >= HiveNutrientReceiptStatus.values().length) throw new IllegalArgumentException("invalid hive nutrient receipt status");
+                status = HiveNutrientReceiptStatus.values()[code]; consumedBy = present ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty(); }
+            if (receipts.put(transfer, new HiveNutrientReceipt(transfer, hive, cargo, item, new InventoryCustody.ContainerSlot(source, sourceSlot), new InventoryCustody.ContainerSlot(target, targetSlot), status, consumedBy)) != null) {
+                throw new IllegalArgumentException("duplicate hive nutrient receipt");
+            }
+        }
+        return new HiveColony(organs, bioforms, jobs, transfers, receipts);
     }
     private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
         writeCount(output, ledger.accounts().size());
