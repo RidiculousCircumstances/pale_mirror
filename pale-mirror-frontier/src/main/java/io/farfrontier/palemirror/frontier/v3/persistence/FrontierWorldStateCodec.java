@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 82; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 83; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -59,7 +59,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75
+                    && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81
+                    && version != 82 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -72,7 +74,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
             CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64, version >= 65) : CompanyRegistry.empty();
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input, version >= 66),
-                    readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
+                    readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55, version >= 83),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     PhysicalIntentStateCodec.read(input, version >= 82), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
@@ -553,8 +555,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, operations.size());
         for (RouteOperation operation : operations.values().stream().sorted(Comparator.comparing(RouteOperation::id)).toList()) {
             writeString(output, operation.id().value()); writeString(output, operation.settlementId().value()); writeString(output, operation.cargoId().value());
-            writeString(output, operation.destinationId().value()); writeCount(output, operation.participantIds().size());
-            for (SubjectId participant : operation.participantIds()) writeString(output, participant.value());
+            writeString(output, operation.destinationId().value()); RouteUnitManifestCodec.write(output, operation.unit());
             writeCount(output, operation.route().size());
             for (BlockPosition point : operation.route()) writePosition(output, point);
             output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
@@ -565,18 +566,25 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
     }
     private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel, boolean hasAssembly, boolean hasAssemblyDeferral,
-                                                                   boolean hasDeferralObstruction) throws IOException {
+                                                                   boolean hasDeferralObstruction, boolean hasRouteUnit) throws IOException {
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
-            SubjectId destination = new SubjectId(readString(input)); java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
-            for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
+            SubjectId destination = new SubjectId(readString(input));
+            RouteUnitManifest unit;
+            if (hasRouteUnit) unit = RouteUnitManifestCodec.read(input);
+            else {
+                java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
+                for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
+                if (participants.size() != 2) throw new IllegalArgumentException("legacy route operation has invalid participant count");
+                unit = RouteUnitManifest.legacyCargoEscort(id, participants.getFirst(), participants.get(1));
+            }
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
             for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
             java.util.Optional<OperationAssembly> assembly = hasAssembly && input.readBoolean() ? java.util.Optional.of(readAssembly(input, hasAssemblyDeferral, hasDeferralObstruction)) : java.util.Optional.empty();
             java.util.Optional<OperationTravel> travel = hasTravel && input.readBoolean() ? java.util.Optional.of(readTravel(input)) : java.util.Optional.empty();
-            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, participants, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel)) != null) {
+            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }

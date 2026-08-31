@@ -24,11 +24,13 @@ public final class RoutePatrolProcess {
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        ResidentProfile guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElse(null);
-        if (guard == null || FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
+        List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        if (candidates.size() < 2 || FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
-        RoutePatrol patrol = new RoutePatrol(task.id(), settlement.id(), guard.id(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()),
+        ResidentProfile leader = candidates.getFirst();
+        RouteUnitManifest unit = RouteUnitManifest.patrol(task.id(), leader.id(), List.of(candidates.get(1).id()));
+        RoutePatrol patrol = new RoutePatrol(task.id(), settlement.id(), unit, state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()),
                 0, RoutePatrolStatus.EN_ROUTE, java.util.Optional.empty());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new RoutePatrolStarted(patrol)),
                 schedule(progress(patrol, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().routePatrolStepInterval())));
@@ -38,7 +40,7 @@ public final class RoutePatrolProcess {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(action.subject());
         if (patrol == null || patrol.status() != RoutePatrolStatus.EN_ROUTE) return List.of();
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
-        if (state.actorLocations().get(patrol.guardId()).condition().status() != ActorLifeStatus.ALIVE) {
+        if (patrol.memberIds().stream().noneMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
             return List.of(new ProposedEvent(patrol.settlementId(), new RoutePatrolFailed(patrol.taskId())), transition(task, StrategicTaskStatus.BLOCKED));
         }
         int next = patrol.routeIndex() + 1;
@@ -61,15 +63,18 @@ public final class RoutePatrolProcess {
         if (!subject.equals(patrol.settlementId()) || !task.ownerId().equals(subject) || state.strategicPlans().routePatrols().containsKey(patrol.taskId())) {
             throw new IllegalArgumentException("route patrol start has a foreign owner or duplicate task");
         }
-        return state.withStrategicPlans(state.strategicPlans().startPatrol(patrol)).withActorLocation(patrol.guardId(), patrol.route().getFirst());
+        FrontierWorldState next = state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
+        for (SubjectId member : patrol.memberIds()) next = next.withActorLocation(member, patrol.route().getFirst());
+        return next;
     }
 
     static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolAdvanced advanced) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(advanced.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route patrol advancement has a foreign owner");
         RoutePatrol next = patrol.advance(advanced.routeIndex());
-        return state.withStrategicPlans(state.strategicPlans().advancePatrol(advanced.taskId(), advanced.routeIndex()))
-                .withActorLocation(patrol.guardId(), next.route().get(next.routeIndex()));
+        FrontierWorldState updated = state.withStrategicPlans(state.strategicPlans().advancePatrol(advanced.taskId(), advanced.routeIndex()));
+        for (SubjectId member : patrol.memberIds()) updated = updated.withActorLocation(member, next.route().get(next.routeIndex()));
+        return updated;
     }
 
     static FrontierWorldState reduceObstruction(FrontierWorldState state, SubjectId subject, RoutePatrolObstructionConfirmed confirmed) {
@@ -82,7 +87,8 @@ public final class RoutePatrolProcess {
 
     static FrontierWorldState reduceFailed(FrontierWorldState state, SubjectId subject, RoutePatrolFailed failed) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(failed.taskId());
-        if (patrol == null || !subject.equals(patrol.settlementId()) || state.actorLocations().get(patrol.guardId()).condition().status() != ActorLifeStatus.DEAD) {
+        if (patrol == null || !subject.equals(patrol.settlementId()) || patrol.memberIds().stream()
+                .anyMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("route patrol failure lacks a dead guard");
         }
         return state.withStrategicPlans(state.strategicPlans().failPatrol(failed.taskId()));

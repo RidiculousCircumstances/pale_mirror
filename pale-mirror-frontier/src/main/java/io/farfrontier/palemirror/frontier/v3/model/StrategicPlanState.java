@@ -242,10 +242,12 @@ public final class StrategicPlanState {
         });
         routePatrols.values().forEach(patrol -> {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
-            ResidentProfile guard = humanPopulation.resident(patrol.guardId());
-            if (guard == null || !guard.settlementId().equals(settlement.id())) throw new IllegalArgumentException("route patrol guard is foreign");
-            if (guard.profession() != ResidentProfession.SECURITY_WORKER || !patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
-                throw new IllegalArgumentException("route patrol does not retain its guard or canonical route");
+            if (patrol.memberIds().stream().map(humanPopulation::resident).anyMatch(resident -> resident == null || !resident.settlementId().equals(settlement.id())
+                    || resident.profession() != ResidentProfession.SECURITY_WORKER)) {
+                throw new IllegalArgumentException("route patrol has a foreign or non-security member");
+            }
+            if (!patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
+                throw new IllegalArgumentException("route patrol does not retain its canonical route");
             }
         });
     }

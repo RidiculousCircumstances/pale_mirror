@@ -36,7 +36,7 @@ public final class StrategicPlanStateCodec {
         }
         writeCount(output, plans.routePatrols().size());
         for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
-            writeSubject(output, patrol.taskId()); writeSubject(output, patrol.settlementId()); writeSubject(output, patrol.guardId());
+            writeSubject(output, patrol.taskId()); writeSubject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
             writeCount(output, patrol.route().size()); for (BlockPosition position : patrol.route()) writePosition(output, position);
             output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
             if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
@@ -154,10 +154,11 @@ public final class StrategicPlanStateCodec {
         }
         Map<SubjectId, RoutePatrol> patrols = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId task = readSubject(input), settlement = readSubject(input), guard = readSubject(input);
+            SubjectId task = readSubject(input), settlement = readSubject(input);
+            RouteUnitManifest unit = snapshotVersion >= 83 ? RouteUnitManifestCodec.read(input) : RouteUnitManifest.legacyPatrol(task, readSubject(input));
             List<BlockPosition> route = new ArrayList<>(); for (int point = 0, routeCount = readCount(input); point < routeCount; point++) route.add(readPosition(input));
             int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
-            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, guard, route, cursor, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
+            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, unit, route, cursor, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route patrol");
             }
         }

@@ -94,7 +94,7 @@ class TerminalLogisticsProcessTest {
                 new InventoryCustody.ContainerSlot(receiver, state.inventory().firstFreeSlot(receiver).orElseThrow()))));
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
         RouteOperation completed = new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
-                operation.participantIds(), operation.route(), 0, OperationStage.COMPLETED);
+                operation.unit(), operation.route(), 0, OperationStage.COMPLETED, java.util.Optional.empty(), java.util.Optional.empty());
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations()); operations.put(completed.id(), completed);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory,
                 state.productionJobs(), contracts, operations, state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),

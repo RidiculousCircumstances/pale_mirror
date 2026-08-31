@@ -119,14 +119,20 @@ public final class SupplyOperationProcess {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
-        java.util.Map<SubjectId, OperationAssembly.Member> advanced = new java.util.LinkedHashMap<>();
-        assembly.members().forEach((actor, member) -> {
+        // A formation may have more than the historical hauler/guard pair.  Advance exactly
+        // one COLD member one adjacent cell per turn, retaining the same deterministic order;
+        // this prevents two independently compiled approaches from passing through the same
+        // canonical floor in one transaction. HOT members keep their durable observed cursor.
+        OperationAssembly next = assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry -> {
+            SubjectId actor = entry.getKey(); OperationAssembly.Member member = entry.getValue();
             AmbientActorLease lease = state.ambientLeases().get(actor);
-            int cursor = lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? member.nextColdCursor() : member.cursor();
-            advanced.put(actor, new OperationAssembly.Member(member.corridor(), cursor));
-        });
-        OperationAssembly next = new OperationAssembly(advanced, assembly.cargoCarrierId());
-        if (next.equals(assembly)) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
+            if (member.arrived() || lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return null;
+            java.util.Map<SubjectId, OperationAssembly.Member> advanced = new java.util.LinkedHashMap<>(assembly.members());
+            advanced.put(actor, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+            try { return new OperationAssembly(advanced, assembly.cargoCarrierId()); }
+            catch (IllegalArgumentException collision) { return null; }
+        }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        if (next == null) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
                     new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, next.positions(), next.cargoAnchor()))),
@@ -335,22 +341,33 @@ public final class SupplyOperationProcess {
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
         return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).isPresent()
-                && FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).isPresent();
+                && FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER).size() >= 2;
     }
     private static boolean dependenciesCompleted(FrontierWorldState state, StrategicTask task) {
         return task.dependencies().stream().map(state.strategicPlans().tasks()::get).allMatch(value -> value.status() == StrategicTaskStatus.COMPLETED);
     }
     private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract, Settlement settlement) {
         SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).orElseThrow().id();
-        SubjectId guard = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.SECURITY_WORKER).orElseThrow().id();
+        List<SubjectId> escorts = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER).stream()
+                .limit(2).map(ResidentProfile::id).toList();
         int ordinal = FrontierWorldScheduleSupport.ordinal(contract.id().value());
+        SubjectId operationId = new SubjectId("operation:supply-" + settlement.id().value().substring("settlement:".length()) + "-" + ordinal);
+        RouteUnitManifest unit = RouteUnitManifest.cargoEscort(operationId, hauler, escorts.getFirst(), escorts);
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("supply settlement lacks a Hall")));
-        OperationAssembly assembly = new OperationAssembly(java.util.Map.of(
-                hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, hauler, access.assemblyFloor()), 0),
-                guard, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, guard, access.routeFloor()), 0)), hauler);
-        return new RouteOperation(new SubjectId("operation:supply-" + settlement.id().value().substring("settlement:".length()) + "-" + ordinal), settlement.id(), contract.cargoId(), contract.recipientId(),
-                List.of(hauler, guard), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
+        java.util.Map<SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
+        members.put(hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, hauler, access.assemblyFloor()), 0));
+        // The lead escort holds the outward port beside the cargo crew. Further escorts use
+        // lateral assembly slots rather than queuing through that same one-cell throat.
+        List<BlockPosition> escortSlots = List.of(access.routeFloor(), access.assemblyFloor().offset(0, 0, 1), access.assemblyFloor().offset(0, 0, -1),
+                access.interiorFloor().offset(0, 0, 1));
+        for (int index = 0; index < escorts.size(); index++) {
+            SubjectId escort = escorts.get(index);
+            members.put(escort, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, escort, escortSlots.get(index)), 0));
+        }
+        OperationAssembly assembly = new OperationAssembly(members, hauler);
+        return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,
+                state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
     }
     private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, ExactItemStack bread) {
         SupplyContract contract = contract(state, task);

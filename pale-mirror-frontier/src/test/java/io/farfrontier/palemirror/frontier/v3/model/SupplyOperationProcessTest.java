@@ -50,9 +50,8 @@ class SupplyOperationProcessTest {
 
     @Test
     void unknownHotLeaseDefersColdRouteProgressWithoutPretendingTheSceneIsActive() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-unknown-scene"), 91L));
-        for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unknown-scene");
@@ -61,18 +60,18 @@ class SupplyOperationProcessTest {
                 Optional.empty(), operation.participantIds());
         FrontierWorldState unknown = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
 
-        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unknown, SupplyOperationProcess.operationProgress(operation, 2_650L));
+        long due = engine.checkpoint().instant().ticks() + 1L;
+        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unknown, SupplyOperationProcess.operationProgress(operation, due));
 
         ScheduleEffect.Created deferred = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
         assertEquals(1, planned.size());
-        assertEquals(SupplyOperationProcess.operationProgress(operation, 2_750L), deferred.action());
+        assertEquals(SupplyOperationProcess.operationProgress(operation, due + 100L), deferred.action());
     }
 
     @Test
     void observedMissingRestartSceneBlocksOnlyItsExactDeliveryRatherThanReschedulingForever() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-unresolved-scene"), 91L));
-        for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unresolved-scene");
@@ -83,7 +82,8 @@ class SupplyOperationProcessTest {
                 before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART),
                 new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
 
-        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unresolved, SupplyOperationProcess.operationProgress(operation, 2_650L));
+        List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unresolved,
+                SupplyOperationProcess.operationProgress(operation, engine.checkpoint().instant().ticks() + 1L));
 
         assertEquals(List.of(new OperationFailed(operation.id(), "scene-recovery-unresolved"),
                 new StrategicTaskTransition(new SubjectId("task:settlement-1-settlement_deliver_bread_to_hive-2-deliver"), StrategicTaskStatus.BLOCKED)),
@@ -95,9 +95,8 @@ class SupplyOperationProcessTest {
 
     @Test
     void obsoleteProgressActionIsDurablyCancelledAfterItsOperationHasAlreadyFailed() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-terminal-progress"), 91L));
-        for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-terminal-progress");
@@ -108,7 +107,7 @@ class SupplyOperationProcessTest {
                 before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART),
                 new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false));
         failed = failed.failOperation(operation.id());
-        ScheduledAction action = SupplyOperationProcess.operationProgress(operation, 2_650L);
+        ScheduledAction action = SupplyOperationProcess.operationProgress(operation, engine.checkpoint().instant().ticks() + 1L);
 
         List<ProposedEvent> planned = SupplyOperationProcess.planProgress(failed, action);
 

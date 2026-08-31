@@ -78,12 +78,16 @@ class FrontierWorldRuntimeDefinitionTest {
             RouteOperation current = state.operations().get(operation.id());
             if (current.stage() == OperationStage.EN_ROUTE) break;
             OperationAssembly active = current.activeAssembly().orElseThrow();
-            SubjectId actor = active.members().entrySet().stream().filter(entry -> !entry.getValue().arrived()).map(Map.Entry::getKey).findFirst().orElseThrow();
-            Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(active.members());
-            OperationAssembly.Member member = members.get(actor);
-            members.put(actor, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+            OperationAssembly advanced = active.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).filter(entry -> !entry.getValue().arrived())
+                    .map(entry -> {
+                        Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(active.members());
+                        OperationAssembly.Member member = members.get(entry.getKey());
+                        members.put(entry.getKey(), new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+                        try { return new OperationAssembly(members, active.cargoCarrierId()); }
+                        catch (IllegalArgumentException collision) { return null; }
+                    }).filter(java.util.Objects::nonNull).findFirst().orElseThrow();
             assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world,
-                    "assembly-arrival-" + sequence++, new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(members, active.cargoCarrierId()))));
+                    "assembly-arrival-" + sequence++, new OperationAssemblyAdvanced(operation.id(), advanced)));
         }
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteOperation departed = after.operations().get(operation.id());
@@ -272,7 +276,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(0, operation.routeIndex());
         assertEquals(new BlockPosition(-366, 64, -340), operation.route().getFirst());
         assertEquals(new BlockPosition(-366, 64, -304), operation.route().get(1));
-        assertEquals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")), operation.participantIds());
+        assertEquals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"), new SubjectId("resident:1-28")), operation.participantIds());
         assertTrue(checkpoint.schedules().stream().noneMatch(action -> action.subject().equals(operation.id())
                         && action.kind().equals("frontier.operation.progress")),
                 "the native profile must wait for ordinary HOT admission before arming its next COLD route step");

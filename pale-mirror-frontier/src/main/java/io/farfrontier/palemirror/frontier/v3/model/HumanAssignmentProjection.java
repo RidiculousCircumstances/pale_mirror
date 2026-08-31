@@ -32,13 +32,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));
         state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id))
                 .filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(state, operation)).forEach(operation -> {
-                    for (int index = 0; index < operation.participantIds().size(); index++) {
-                        claim(values, operation.participantIds().get(index), index == 0 ? HumanAssignmentKind.CARGO_TRANSPORT : HumanAssignmentKind.ESCORT, operation.id());
-                    }
+                    operation.unit().members().forEach(member -> claim(values, member.residentId(),
+                            member.duty() == RouteUnitDuty.CARGO_CREW ? HumanAssignmentKind.CARGO_TRANSPORT : HumanAssignmentKind.ESCORT, operation.id()));
                 });
         state.strategicPlans().routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId))
                 .filter(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE)
-                .forEach(patrol -> claim(values, patrol.guardId(), HumanAssignmentKind.ROUTE_PATROL, patrol.taskId()));
+                .forEach(patrol -> patrol.memberIds().forEach(member -> claim(values, member, HumanAssignmentKind.ROUTE_PATROL, patrol.taskId())));
         state.strategicPlans().settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id))
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> assault.defenderIds().forEach(id -> claim(values, id, HumanAssignmentKind.SETTLEMENT_DEFENCE, assault.id())));

@@ -16,6 +16,7 @@
   ],
   "actions": [
     { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT" }, "timeoutMs": 60000 },
+    { "type": "visit_operation", "operationId": "operation:supply-1-2", "dimension": "pale_mirror:frontier_graybox", "anchor": "travelCargo", "offset": { "x": 2, "y": 1, "z": 0 }, "settleMs": 500, "timeoutMs": 30000 },
     { "type": "interact_nearest_entity", "entityType": "minecraft:chest_minecart", "maxDistance": 16, "timeoutMs": 30000 },
     { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 64, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "PLAYER" } }, "timeoutMs": 30000 },
@@ -23,10 +24,10 @@
     { "type": "inspect", "view": "operation", "id": "operation:supply-1-2" }
   ],
   "assertions": [
-    { "after": 4, "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "PLAYER" } } },
-    { "after": 6, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "INTERRUPTED" } }
+    { "after": 5, "view": "item", "id": "item:production-1-1-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "PLAYER" } } },
+    { "after": 7, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "INTERRUPTED" } }
   ],
   "frames": [
-    { "after": 3, "name": "stolen-hot-cargo", "presentation": "player" }
+    { "after": 4, "name": "stolen-hot-cargo", "presentation": "player" }
   ]
 }

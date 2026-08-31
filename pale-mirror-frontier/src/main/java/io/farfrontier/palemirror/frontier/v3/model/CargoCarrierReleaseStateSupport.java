@@ -30,7 +30,7 @@ final class CargoCarrierReleaseStateSupport {
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.INTERRUPTED));
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations());
         operations.put(operation.id(), new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
-                operation.participantIds(), operation.route(), operation.routeIndex(), OperationStage.INTERRUPTED));
+                operation.unit(), operation.route(), operation.routeIndex(), OperationStage.INTERRUPTED, java.util.Optional.empty(), java.util.Optional.empty()));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
         StrategicPlanState plans = state.strategicPlans().interruptRouteOperation(operation.id(), operation.settlementId());
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)

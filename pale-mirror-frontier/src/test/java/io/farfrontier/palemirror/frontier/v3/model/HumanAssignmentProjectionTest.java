@@ -24,11 +24,16 @@ class HumanAssignmentProjectionTest {
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
 
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
-        assertEquals(HumanAssignmentKind.CARGO_TRANSPORT, assignments.assignment(operation.participantIds().getFirst()).kind());
-        assertEquals(operation.id(), assignments.assignment(operation.participantIds().getFirst()).ownerId().orElseThrow());
-        assertEquals(HumanAssignmentKind.ESCORT, assignments.assignment(operation.participantIds().get(1)).kind());
+        assertFalse(operation.unit().legacyUnderstrength());
+        assertEquals(3, operation.participantIds().size());
+        assertEquals(HumanAssignmentKind.CARGO_TRANSPORT, assignments.assignment(operation.unit().cargoCrewId()).kind());
+        assertEquals(operation.id(), assignments.assignment(operation.unit().cargoCrewId()).ownerId().orElseThrow());
+        var escorts = operation.unit().members().stream().filter(member -> member.duty() == RouteUnitDuty.ESCORT).toList();
+        assertEquals(2, escorts.size());
+        escorts.forEach(member -> assertEquals(HumanAssignmentKind.ESCORT, assignments.assignment(member.residentId()).kind()));
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(assignments, HumanAssignmentProjection.compile(restored));
+        assertEquals(operation.unit(), restored.operations().get(operation.id()).unit());
     }
 
     @Test

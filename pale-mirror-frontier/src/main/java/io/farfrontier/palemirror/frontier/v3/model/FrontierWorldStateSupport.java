@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -89,12 +90,17 @@ public final class FrontierWorldStateSupport {
     }
 
     public static Optional<ResidentProfile> availableRouteResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
+        return availableRouteResidents(state, settlementId, profession).stream().findFirst();
+    }
+
+    /** Deterministic exact candidates for one route owner; callers choose a bounded named formation. */
+    public static List<ResidentProfile> availableRouteResidents(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
                 .filter(resident -> workCapable(state, resident))
                 .filter(resident -> assignments.idle(resident.id()))
-                .sorted(byProfessionCapability(profession)).findFirst();
+                .sorted(byProfessionCapability(profession)).toList();
     }
 
     public static Optional<ResidentProfile> availableFieldResident(FrontierWorldState state, SubjectId settlementId, ResidentProfession profession) {
@@ -157,7 +163,7 @@ public final class FrontierWorldStateSupport {
 
     public static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
         return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
-                && patrol.guardId().equals(residentId));
+                && patrol.memberIds().contains(residentId));
     }
 
     private static Comparator<ResidentProfile> byProfessionCapability(ResidentProfession profession) {

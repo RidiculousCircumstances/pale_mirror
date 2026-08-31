@@ -39,6 +39,17 @@
 ## State
 
 ### Done
+- V3-AUD-017 is closed at schema 83: each route owner embeds its sole immutable
+  exact `RouteUnitManifest`, without a global roster or a second assignment
+  authority. New patrols retain one leader plus one to three scouts; cargo
+  operations retain one logistic crew member plus two to four separately named
+  escorts. Schema-82 snapshots and historical patrol WAL bytes recover only
+  their same explicit understrength legacy members. Assignment, COLD formation,
+  death/loss and byte-recovery tests pass; the ordinary native cargo theft and
+  route-return scenarios retain the same three named caravan members across
+  HOT unload/reload. The full critical gate passes: `guardrails`, `check`,
+  packaged-JAR verification and 251/251 required GameTests; Node pilot schema
+  tests pass 28/28.
 - The first human tactical read model is explicit and deliberately noncanonical:
   exact assignment, retained defender-unit leadership, profession and
   actor-held exact weapon derive `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
@@ -276,12 +287,11 @@
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, the v3 docs/plan, archived ledger; test-pilot now has a minimal current-source NeoForge profile, unique seeded disposable worlds, terminal domain waits, settlement-work reasons, read-only fixture preconditions, ordinary chunk visits, camera-semantic frames, graceful/abrupt recovery splitting, bounded PMV3 JSONL/client-log diagnostics, ordinary exact player/container ingress and withdrawal, a quiet pilot-only system-message policy, bounded contextual-card presentation, and scope-based physical V3 board grammar.
 - The exact issue/return, first managed-death loss/drop/pickup and first
   defender-readiness boundaries are closed at schema 82. The accepted human
-  composition exposed one new confirmed architecture defect: current
-  `RoutePatrol` is a one-guard record and `RouteOperation` hard-codes one
-  logistician plus one guard, contrary to a patrol/scout group and separate
-  cargo escort. Next is an embedded shared immutable unit manifest owned only
-  by those route records, with explicit schema-82 understrength-legacy
-  hydration that never invents a replacement person, weapon or inventory.
-  It must then extend through engineering/recovery and medical/evacuation
-  operation/equipment owners while preserving one canonical item claim and
-  accounting for physical results.
+  composition's route-unit defect is closed at schema 83: `RoutePatrol` and
+  `RouteOperation` each embed the sole immutable exact unit manifest; new
+  patrols retain a leader plus scout, while cargo operations retain one crew
+  member plus two escorts. Schema-82 snapshots and historical patrol WAL
+  preserve only their same understrength legacy people and never fabricate a
+  replacement. The next human work extends through engineering/recovery and
+  medical/evacuation operation/equipment owners while preserving one canonical
+  item claim and accounting for physical results.

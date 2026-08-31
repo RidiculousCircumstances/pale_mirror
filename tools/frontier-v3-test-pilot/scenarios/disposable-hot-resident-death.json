@@ -10,7 +10,7 @@
     { "type": "command", "command": "/item replace entity PMTestPilot weapon.mainhand with minecraft:diamond_sword" },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
-      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 0, "participants": ["resident:1-16", "resident:1-30"] } },
+      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 0, "participants": ["resident:1-16", "resident:1-28", "resident:1-30"] } },
       { "view": "actor", "id": "resident:1-16", "expect": { "status": "ok", "life": "ALIVE" } }
     ] },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }

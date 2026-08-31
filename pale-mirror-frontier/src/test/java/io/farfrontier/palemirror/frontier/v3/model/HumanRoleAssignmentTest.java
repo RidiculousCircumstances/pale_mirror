@@ -84,7 +84,7 @@ class HumanRoleAssignmentTest {
     }
 
     @Test
-    void bornHaulerAndGuardReplaceDeadBootstrapRolesForAnExactCargoOperation() {
+    void bornHaulerAndTwoGuardsReplaceDeadBootstrapRolesForAnExactCargoOperation() {
         FrontierWorldState state = initial("frontier:human-route");
         Settlement settlement = state.bootstrap().settlements().getFirst();
         state = killRole(state, ResidentRole.GUARD);
@@ -93,6 +93,8 @@ class HumanRoleAssignmentTest {
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow());
         state = HumanPopulationTestFixtures.withResident(state, guard, access.routeFloor());
+        ResidentProfile secondGuard = born(state, "resident:1-guard-second-born", ResidentRole.GUARD);
+        state = HumanPopulationTestFixtures.withResident(state, secondGuard, access.assemblyFloor().offset(0, 0, 1));
         ResidentProfile hauler = born(state, "resident:1-hauler-born", ResidentRole.HAULER);
         state = HumanPopulationTestFixtures.withResident(state, hauler, access.interiorFloor());
         assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, guard.id()));
@@ -109,7 +111,7 @@ class HumanRoleAssignmentTest {
 
         OperationCreated created = planned.stream().map(ProposedEvent::payload).filter(OperationCreated.class::isInstance)
                 .map(OperationCreated.class::cast).findFirst().orElseThrow();
-        assertEquals(List.of(hauler.id(), guard.id()), created.operation().participantIds());
+        assertEquals(List.of(hauler.id(), guard.id(), secondGuard.id()), created.operation().participantIds());
     }
 
     @Test

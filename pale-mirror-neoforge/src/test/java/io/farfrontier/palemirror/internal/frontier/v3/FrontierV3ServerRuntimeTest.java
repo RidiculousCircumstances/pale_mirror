@@ -304,17 +304,22 @@ class FrontierV3ServerRuntimeTest {
         var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        for (int tick = 0; tick < 4_000; tick++) runtime.tick(new WorkBudget(64, 512));
+        SubjectId contractId = new SubjectId("contract:supply-1-2");
+        for (int tick = 0; tick < 12_000; tick++) {
+            var contract = runtime.decodedState().orElseThrow().contracts().get(contractId);
+            if (contract != null && contract.status() == ContractStatus.DELIVERED) break;
+            runtime.tick(new WorkBudget(64, 512));
+        }
 
         FrontierWorldState delivered = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(ContractStatus.DELIVERED, delivered.contracts().get(new SubjectId("contract:supply-1-2")).status());
+        assertEquals(ContractStatus.DELIVERED, delivered.contracts().get(contractId).status());
         assertFalse(delivered.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")),
                 "unloaded COLD delivery may not create an intent that requires a materializer to finish");
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
-        assertEquals(ContractStatus.DELIVERED, state.contracts().get(new SubjectId("contract:supply-1-2")).status());
+        assertEquals(ContractStatus.DELIVERED, state.contracts().get(contractId).status());
         assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
         assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
     }

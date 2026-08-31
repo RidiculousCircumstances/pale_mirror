@@ -627,8 +627,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeOperation(DataOutputStream output, RouteOperation operation) throws IOException {
         writeSubject(output, operation.id()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
-        output.writeByte(operation.participantIds().size());
-        for (var participant : operation.participantIds()) writeSubject(output, participant);
+        // 0xFF cannot be a historical participant count (the old route owner capped at eight).
+        output.writeByte(0xFF); RouteUnitManifestCodec.write(output, operation.unit());
         output.writeByte(operation.route().size());
         for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
         output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
@@ -640,8 +640,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static RouteOperation readOperation(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
-        java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> participants = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) participants.add(readSubject(input).value());
+        int participantEnvelope = input.readUnsignedByte();
+        RouteUnitManifest unit;
+        if (participantEnvelope == 0xFF) unit = RouteUnitManifestCodec.read(input);
+        else {
+            java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> participants = new java.util.ArrayList<>();
+            for (int index = 0; index < participantEnvelope; index++) participants.add(readSubject(input).value());
+            if (participants.size() != 2) throw new IllegalArgumentException("legacy route operation payload has invalid participant count");
+            unit = RouteUnitManifest.legacyCargoEscort(id.value(), participants.getFirst(), participants.get(1));
+        }
         java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
@@ -654,7 +661,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         } else if (marker == 0 || marker == 1) {
             travel = marker == 1 ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
         } else throw new IllegalArgumentException("unknown route operation payload envelope");
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), participants, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         output.writeShort(travel.corridor().size()); for (BlockPosition point : travel.corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }

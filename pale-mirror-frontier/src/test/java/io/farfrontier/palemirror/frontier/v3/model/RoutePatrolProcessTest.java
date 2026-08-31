@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,7 +26,8 @@ class RoutePatrolProcessTest {
     void activePatrolGuardCannotBeReassignedToAConcurrentSupplyOperation() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-claim"), 713L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        SubjectId guard = FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
+        java.util.List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        SubjectId guard = guards.getFirst().id(), scout = guards.get(1).id();
         SubjectId objectiveId = new SubjectId("objective:patrol-claim"), taskId = new SubjectId("task:patrol-claim");
         StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
@@ -33,8 +35,8 @@ class RoutePatrolProcessTest {
                 Optional.empty(), java.util.List.of(StrategicTaskRequirement.AVAILABLE_GUARD), java.util.List.of(), StrategicTaskStatus.ACTIVE);
         java.util.List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)
-                .startPatrol(new RoutePatrol(taskId, settlement.id(), guard, route, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty())))
-                .withActorLocation(guard, route.getFirst());
+                .startPatrol(new RoutePatrol(taskId, settlement.id(), RouteUnitManifest.patrol(taskId, guard, java.util.List.of(scout)), route, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty())))
+                .withActorLocation(guard, route.getFirst()).withActorLocation(scout, route.getFirst());
 
         SubjectId selected = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
 
@@ -67,5 +69,8 @@ class RoutePatrolProcessTest {
         assertEquals(StrategicTaskStatus.ACTIVE, construction.status());
         assertEquals(java.util.List.of(patrol.taskId()), construction.dependencies());
         assertEquals(patrol.route().get(patrol.routeIndex()), after.actorLocations().get(patrol.guardId()).position());
+        assertEquals(2, patrol.memberIds().size());
+        assertFalse(patrol.unit().legacyUnderstrength());
+        assertTrue(patrol.memberIds().stream().allMatch(member -> after.actorLocations().get(member).position().equals(patrol.route().get(patrol.routeIndex()))));
     }
 }

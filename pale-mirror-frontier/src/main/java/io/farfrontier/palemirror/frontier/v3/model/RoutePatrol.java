@@ -6,13 +6,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** One exact guard traversal. It observes a physical route; it never edits it. */
-public record RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId guardId, List<BlockPosition> route,
+/** One exact patrol traversal. It observes a physical route; it never edits it. */
+public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitManifest unit, List<BlockPosition> route,
                    int routeIndex, RoutePatrolStatus status, Optional<BlockPosition> obstruction) {
     public RoutePatrol {
         Objects.requireNonNull(taskId, "patrol task"); Objects.requireNonNull(settlementId, "patrol settlement");
-        Objects.requireNonNull(guardId, "patrol guard"); route = List.copyOf(route); Objects.requireNonNull(status, "patrol status");
+        Objects.requireNonNull(unit, "patrol unit"); route = List.copyOf(route); Objects.requireNonNull(status, "patrol status");
         Objects.requireNonNull(obstruction, "patrol obstruction");
+        if (unit.kind() != RouteUnitKind.PATROL || !unit.ownerId().equals(taskId) || !unit.id().equals(RouteUnitManifest.idFor(RouteUnitKind.PATROL, taskId))) {
+            throw new IllegalArgumentException("patrol must own its exact patrol unit");
+        }
         if (route.size() < 2 || routeIndex < 0 || routeIndex >= route.size()) throw new IllegalArgumentException("patrol route cursor is invalid");
         if (status == RoutePatrolStatus.OBSTRUCTION_CONFIRMED != obstruction.isPresent()) {
             throw new IllegalArgumentException("patrol evidence does not match its status");
@@ -22,19 +25,28 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId gu
         }
         if (status == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && obstruction.isEmpty()) throw new IllegalArgumentException("obstructed patrol needs exact evidence");
     }
+
+    /** Historical constructor retained only for schema/WAL hydration callers. */
+    RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId guardId, List<BlockPosition> route,
+                int routeIndex, RoutePatrolStatus status, Optional<BlockPosition> obstruction) {
+        this(taskId, settlementId, RouteUnitManifest.legacyPatrol(taskId, guardId), route, routeIndex, status, obstruction);
+    }
+
+    public SubjectId guardId() { return unit.leaderId(); }
+    public List<SubjectId> memberIds() { return unit.memberIds(); }
     public RoutePatrol advance(int nextIndex) {
         if (status != RoutePatrolStatus.EN_ROUTE || nextIndex != routeIndex + 1) throw new IllegalArgumentException("patrol advancement is not sequential");
-        return new RoutePatrol(taskId, settlementId, guardId, route, nextIndex,
+        return new RoutePatrol(taskId, settlementId, unit, route, nextIndex,
                 nextIndex == route.size() - 1 ? RoutePatrolStatus.ROUTE_CLEAR : RoutePatrolStatus.EN_ROUTE, Optional.empty());
     }
     public RoutePatrol confirm(BlockPosition position) {
         if (status != RoutePatrolStatus.EN_ROUTE || !FrontierRouteNetwork.containsOperationSurfaceCell(route, position)) {
             throw new IllegalArgumentException("patrol cannot confirm a foreign obstruction");
         }
-        return new RoutePatrol(taskId, settlementId, guardId, route, routeIndex, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(position));
+        return new RoutePatrol(taskId, settlementId, unit, route, routeIndex, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(position));
     }
     public RoutePatrol fail() {
         if (status != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("only an active patrol may fail");
-        return new RoutePatrol(taskId, settlementId, guardId, route, routeIndex, RoutePatrolStatus.FAILED, Optional.empty());
+        return new RoutePatrol(taskId, settlementId, unit, route, routeIndex, RoutePatrolStatus.FAILED, Optional.empty());
     }
 }

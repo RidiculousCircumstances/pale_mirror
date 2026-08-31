@@ -190,7 +190,7 @@ final class FrontierDevelopmentScenarios {
         BlockPosition start = new BlockPosition(-366, 64, -340);
         BlockPosition next = new BlockPosition(-366, 64, -304);
         if (checkpoint == null || state == null || operation == null || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
-                || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")))) {
+                || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"), new SubjectId("resident:1-28")))) {
             throw new IllegalStateException("development route-return fixture did not retain its exact assembled Northwatch shipment");
         }
         RouteOperation activeOperation = operation;

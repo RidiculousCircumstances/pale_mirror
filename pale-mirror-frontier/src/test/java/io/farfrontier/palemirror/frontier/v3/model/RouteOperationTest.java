@@ -10,20 +10,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RouteOperationTest {
     @Test void operationKeepsExactCargoPeopleAndFiniteRoute() {
-        assertDoesNotThrow(() -> operation(List.of(new SubjectId("resident:1-1"), new SubjectId("resident:1-6")), 0, OperationStage.ASSEMBLING));
-        assertThrows(IllegalArgumentException.class, () -> operation(List.of(new SubjectId("resident:1-1"), new SubjectId("resident:1-1")), 0, OperationStage.ASSEMBLING));
+        assertDoesNotThrow(() -> operation(people(), 0, OperationStage.ASSEMBLING));
+        assertThrows(IllegalArgumentException.class, () -> operation(List.of(new SubjectId("resident:1-1"), new SubjectId("resident:1-6")), 0, OperationStage.ASSEMBLING));
     }
 
     @Test void operationCannotClaimArrivalBeforeItsFinalRoutePoint() {
-        assertThrows(IllegalArgumentException.class, () -> operation(List.of(new SubjectId("resident:1-1")), 0, OperationStage.ARRIVED));
-        assertThrows(IllegalArgumentException.class, () -> operation(List.of(new SubjectId("resident:1-1")), 1, OperationStage.EN_ROUTE));
+        assertThrows(IllegalArgumentException.class, () -> operation(people(), 0, OperationStage.ARRIVED));
+        assertThrows(IllegalArgumentException.class, () -> operation(people(), 1, OperationStage.EN_ROUTE));
     }
 
     @Test void operationMayOwnOnlyTheNextExactTravelSegment() {
-        SubjectId hauler = new SubjectId("resident:1-1");
-        RouteOperation operation = operation(List.of(hauler), 0, OperationStage.EN_ROUTE);
+        List<SubjectId> people = people(); SubjectId hauler = people.getFirst();
+        RouteOperation operation = operation(people, 0, OperationStage.EN_ROUTE);
         OperationTravel travel = new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
-                Map.of(hauler, new BlockPosition(0, 64, 1)), new BlockPosition(0, 64, 0));
+                Map.of(hauler, new BlockPosition(0, 64, 1), people.get(1), new BlockPosition(0, 64, 2), people.get(2), new BlockPosition(1, 64, 1)), new BlockPosition(0, 64, 0));
         assertDoesNotThrow(() -> operation.withTravel(travel));
     }
 
@@ -37,9 +37,13 @@ class RouteOperationTest {
 
     private static RouteOperation operation(List<SubjectId> participants, int routeIndex, OperationStage stage) {
         java.util.Optional<OperationAssembly> assembly = stage == OperationStage.ASSEMBLING ? java.util.Optional.of(assembly(participants)) : java.util.Optional.empty();
-        return new RouteOperation(new SubjectId("operation:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1-1"),
-                new SubjectId("hive:frontier"), participants, List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), routeIndex, stage, assembly, java.util.Optional.empty());
+        SubjectId operationId = new SubjectId("operation:supply-1");
+        return new RouteOperation(operationId, new SubjectId("settlement:1"), new SubjectId("cargo:supply-1-1"),
+                new SubjectId("hive:frontier"), RouteUnitManifest.cargoEscort(operationId, participants.getFirst(), participants.get(1), participants.subList(1, participants.size())),
+                List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), routeIndex, stage, assembly, java.util.Optional.empty());
     }
+
+    private static List<SubjectId> people() { return List.of(new SubjectId("resident:1-1"), new SubjectId("resident:1-6"), new SubjectId("resident:1-7")); }
 
     private static OperationAssembly assembly(List<SubjectId> participants) {
         java.util.Map<SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();

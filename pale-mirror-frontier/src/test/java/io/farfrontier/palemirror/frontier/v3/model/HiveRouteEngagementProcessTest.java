@@ -217,7 +217,7 @@ class HiveRouteEngagementProcessTest {
                 "a carrier sighting must not overwrite the adjacent participant hand-off");
         assertEquals(intercept, candidate.cargoPosition(),
                 "the engagement must retain the exact cargo anchor the Scout observed");
-        assertEquals(5, candidate.actorIds().size());
+        assertEquals(6, candidate.actorIds().size());
         SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
         var world = state.bootstrap().worldId();
         List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();

@@ -395,7 +395,8 @@ public final class FrontierV3TestPilotClient {
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
         boolean visible = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maxDistance), entity -> {
             if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
-                    || !entity.isCustomNameVisible() || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
+                    || !(entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
+                    || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
                     || !minecraft.player.hasLineOfSight(entity)) return false;
             Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
