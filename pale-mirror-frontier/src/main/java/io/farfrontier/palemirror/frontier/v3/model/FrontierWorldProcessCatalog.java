@@ -80,7 +80,6 @@ final class FrontierWorldProcessCatalog {
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, STRATEGY);
-    private static final Set<String> ALL_EMISSIONS = union(ALL_WORLD, KERNEL);
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
             Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
@@ -129,15 +128,15 @@ final class FrontierWorldProcessCatalog {
     static List<DeterministicProcessDescriptor> descriptors() {
         return List.of(
                 descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), KERNEL, KERNEL),
-                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, ALL_EMISSIONS, PHYSICAL),
-                descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, ALL_EMISSIONS, AMBIENT),
-                descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, ALL_EMISSIONS, LOGISTICS),
-                descriptor("population", populationCommands(), populationSchedules(), POPULATION, ALL_EMISSIONS, POPULATION),
-                descriptor("economy", Set.of(), economySchedules(), ECONOMY, ALL_EMISSIONS, ECONOMY),
-                descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, ALL_EMISSIONS, RESOURCE_SITES),
-                descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, ALL_EMISSIONS, HIVE),
-                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, ALL_EMISSIONS, INFRASTRUCTURE),
-                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, ALL_EMISSIONS, STRATEGY));
+                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emits(PHYSICAL, POPULATION, ECONOMY, STRATEGY), PHYSICAL),
+                descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emits(AMBIENT, ECONOMY), AMBIENT),
+                descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emits(LOGISTICS, PHYSICAL, STRATEGY, ECONOMY, HIVE), LOGISTICS),
+                descriptor("population", populationCommands(), populationSchedules(), POPULATION, emits(POPULATION, PHYSICAL), POPULATION),
+                descriptor("economy", Set.of(), economySchedules(), ECONOMY, emits(ECONOMY, PHYSICAL, STRATEGY), ECONOMY),
+                descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emits(RESOURCE_SITES, PHYSICAL, STRATEGY), RESOURCE_SITES),
+                descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emits(HIVE, PHYSICAL, STRATEGY), HIVE),
+                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, emits(INFRASTRUCTURE, PHYSICAL, POPULATION, STRATEGY), INFRASTRUCTURE),
+                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emits(POPULATION, STRATEGY, HIVE, ECONOMY), STRATEGY));
     }
 
     static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
@@ -206,6 +205,13 @@ final class FrontierWorldProcessCatalog {
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
     private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
+    @SafeVarargs private static Set<String> emits(Set<String>... groups) { return union(withKernel(groups)); }
+    @SafeVarargs private static Set<String>[] withKernel(Set<String>... groups) {
+        @SuppressWarnings("unchecked") Set<String>[] result = new Set[groups.length + 1];
+        result[0] = KERNEL;
+        System.arraycopy(groups, 0, result, 1, groups.length);
+        return result;
+    }
     @SafeVarargs private static Set<String> union(Set<String>... values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         for (Set<String> value : values) result.addAll(value);
