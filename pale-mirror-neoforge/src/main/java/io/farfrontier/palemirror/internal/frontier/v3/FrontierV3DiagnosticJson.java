@@ -98,15 +98,20 @@ final class FrontierV3DiagnosticJson {
             case "transit" -> transit(id, checkpoint, state);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
         };
-        if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
-            value = unavailable(kind, id, checkpoint, "response_limit");
-        }
-        return PREFIX + value;
+        return bounded(kind, id, checkpoint, value);
     }
 
     static String unavailableRuntime(String kind, String id) {
         return PREFIX + "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id)
                 + "\",\"status\":\"runtime_unavailable\"}";
+    }
+
+    /** Applies the one operator-response limit to every read-only v3 diagnostic view. */
+    static String bounded(String kind, String id, CheckpointImage checkpoint, String value) {
+        if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
+            value = unavailable(kind, id, checkpoint, "response_limit");
+        }
+        return PREFIX + value;
     }
 
     private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {

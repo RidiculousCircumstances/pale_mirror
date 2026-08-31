@@ -74,11 +74,11 @@ public final class FrontierV3FixtureCatalog {
     public static List<Profile> profiles() { return List.copyOf(PROFILES.values()); }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> uncontestedSupplyConfiguration(WorldId worldId, long seed) {
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false));
+        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, true));
+        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, true), true);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(WorldId worldId, long seed) {
@@ -200,7 +200,8 @@ public final class FrontierV3FixtureCatalog {
         return value;
     }
 
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
+                                                                                                           boolean autonomousInterception) {
         Settlement settlement = base.initialState().bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         int remaining = SettlementProvisionProcess.reserveRequirement(base.initialState(), settlement.id()); ExactInventory inventory = base.initialState().inventory(); int ordinal = 0;
         while (remaining > 0) {
@@ -209,7 +210,7 @@ public final class FrontierV3FixtureCatalog {
                     new InventoryCustody.ContainerSlot(depot, ordinal + 1)));
             remaining -= count; ordinal++;
         }
-        return configured(base.worldId(), base.initialState().withInventory(inventory), base.initialInstant(), base.initialSchedules(), false);
+        return configured(base.worldId(), base.initialState().withInventory(inventory), base.initialInstant(), base.initialSchedules(), autonomousInterception);
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,

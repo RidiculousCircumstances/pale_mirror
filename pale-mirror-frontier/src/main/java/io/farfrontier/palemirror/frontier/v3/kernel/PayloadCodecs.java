@@ -46,6 +46,9 @@ public final class PayloadCodecs {
         return Objects.requireNonNull(require(type).decode(encoded.clone()), "decoded payload");
     }
 
+    /** Stable type inventory used by the closed process-composition gate. */
+    public java.util.Set<String> types() { return byType.keySet(); }
+
     private PayloadCodec require(String type) {
         PayloadCodec codec = byType.get(Objects.requireNonNull(type, "payload type"));
         if (codec == null) {

@@ -94,6 +94,7 @@ public final class FrontierV3ServerLifecycle {
             return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
         if ("actor".equals(view)) {
@@ -248,29 +249,7 @@ public final class FrontierV3ServerLifecycle {
         try {
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
-                FrontierV3PhysicalObservationExecutor.tick(physicalWorld, runtime);
-                FrontierV3ResourceSiteExplosionExecutor.tick(physicalWorld, runtime);
-                FrontierV3ExplosionExecutor.tick(physicalWorld, runtime);
-                FrontierV3CargoCarrierImpactExecutor.tick(physicalWorld, runtime);
-                FrontierV3GrayboxExecutor.tick(physicalWorld, runtime);
-                FrontierV3ResourceSiteExecutor.tick(physicalWorld, runtime);
-                FrontierV3ResourceSiteHarvestExecutor.tick(physicalWorld, runtime);
-                FrontierV3DecontaminationExecutor.tick(physicalWorld, runtime);
-                FrontierV3InfectionOverlayExecutor.tick(physicalWorld, runtime);
-                FrontierV3ObjectBoardExecutor.tick(physicalWorld, runtime);
-                FrontierV3AmbientActorExecutor.tick(physicalWorld, runtime);
-                // Observe player custody before passive surface drift inspection can classify it.
-                FrontierV3InventoryObservationExecutor.tick(physicalWorld, runtime);
-                FrontierV3CargoCarrierObservationExecutor.tick(physicalWorld, runtime);
-                FrontierV3CargoLoadingExecutor.tick(physicalWorld, runtime);
-                FrontierV3ContainerSurfaceExecutor.tick(physicalWorld, runtime);
-                FrontierV3HiveNutrientEndpointExecutor.tick(physicalWorld, runtime);
-                FrontierV3ProductionTransformationExecutor.tick(physicalWorld, runtime);
-                FrontierV3ExactItemConsumptionExecutor.tick(physicalWorld, runtime);
-                FrontierV3CargoHandoffExecutor.tick(physicalWorld, runtime);
-                FrontierV3StructuralRepairExecutor.tick(physicalWorld, runtime);
-                FrontierV3RouteConstructionExecutor.tick(physicalWorld, runtime);
-                FrontierV3SceneExecutor.tick(physicalWorld, runtime);
+                FrontierV3PhysicalExecutors.registry().tick(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
                 advanceQueuedCanonicalTime(server, runtime);
             }

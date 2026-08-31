@@ -1,0 +1,47 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import java.util.List;
+import java.util.Set;
+
+/** The one explicit v3 physical execution composition. */
+final class FrontierV3PhysicalExecutors {
+    private static final FrontierV3PhysicalExecutorRegistry REGISTRY = new FrontierV3PhysicalExecutorRegistry(List.of(
+            executor("physical-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "physical-delta", FrontierV3PhysicalObservationExecutor::tick),
+            executor("resource-site-explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("physical-observation"), "resource-site-explosion", FrontierV3ResourceSiteExplosionExecutor::tick),
+            executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("resource-site-explosion-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
+            executor("cargo-carrier-impact-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("explosion-observation"), "cargo-carrier-impact", FrontierV3CargoCarrierImpactExecutor::tick),
+
+            executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3GrayboxExecutor::tick),
+            executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
+            executor("resource-site-harvest-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "resource-site-harvest-projection", FrontierV3ResourceSiteHarvestExecutor::tick),
+            executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-harvest-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
+            executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
+            executor("object-boards", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("infection-overlay-projection"), "object-board-projection", FrontierV3ObjectBoardExecutor::tick),
+
+            executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("graybox-projection"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
+
+            executor("inventory-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("ambient-actors"), "inventory-custody-observation", FrontierV3InventoryObservationExecutor::tick),
+            executor("cargo-carrier-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("inventory-observation"), "cargo-carrier-custody-observation", FrontierV3CargoCarrierObservationExecutor::tick),
+
+            executor("cargo-loading", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-carrier-observation"), "cargo-loading-effect", FrontierV3CargoLoadingExecutor::tick),
+            executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
+            executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
+            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
+            executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
+            executor("cargo-handoff", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "cargo-handoff-effect", FrontierV3CargoHandoffExecutor::tick),
+            executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-handoff"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
+            executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
+
+            executor("scenes", FrontierV3PhysicalExecutorRegistry.Stage.SCENE, Set.of("route-construction", "object-boards"), "scene-leases", FrontierV3SceneExecutor::tick)
+    ));
+
+    private FrontierV3PhysicalExecutors() { }
+
+    static FrontierV3PhysicalExecutorRegistry registry() { return REGISTRY; }
+
+    private static FrontierV3PhysicalExecutorRegistry.Definition executor(String id, FrontierV3PhysicalExecutorRegistry.Stage stage,
+                                                                            Set<String> dependencies, String writeKind,
+                                                                            FrontierV3PhysicalExecutorRegistry.Tick tick) {
+        return new FrontierV3PhysicalExecutorRegistry.Definition(id, stage, dependencies, Set.of(writeKind), 1, tick);
+    }
+}

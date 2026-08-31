@@ -1,0 +1,148 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Closed ownership catalog for the installed Frontier world processes.
+ *
+ * <p>This is intentionally an explicit finite composition rather than classpath discovery.
+ * The next extraction steps move the corresponding planners/reducers out of the runtime root;
+ * until then this catalog already makes a missing or duplicate durable payload fail before an
+ * engine can be created.</p>
+ */
+final class FrontierWorldProcessCatalog {
+    private static final Set<String> KERNEL = types(
+            "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
+    private static final Set<String> PHYSICAL = types(
+            "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
+            "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed",
+            "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
+            "frontier.cargo_carrier_released");
+    private static final Set<String> AMBIENT = types(
+            "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
+            "frontier.ambient_lease_released", "frontier.ambient_lease_transition");
+    private static final Set<String> LOGISTICS = types(
+            "frontier.supply_contract_created", "frontier.supply_contract_abandoned", "frontier.cargo_loaded",
+            "frontier.cargo_delivered", "frontier.operation_created", "frontier.operation_advanced",
+            "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred", "frontier.operation_travel_started",
+            "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_cold_suspended",
+            "frontier.operation_failed", "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared",
+            "frontier.scene_lease_handoff", "frontier.scene_lease_transition", "frontier.scene_lease_released_v2",
+            "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
+            "frontier.settlement_assault_scene_lease_handoff");
+    private static final Set<String> POPULATION = types(
+            "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started",
+            "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
+            "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled",
+            "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2",
+            "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
+            "frontier.resident_health_transition", "frontier.settlement_quarantine_transition");
+    private static final Set<String> ECONOMY = types(
+            "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
+            "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
+            "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
+            "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
+    private static final Set<String> RESOURCE_SITES = types(
+            "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started",
+            "frontier.resource_site_prepared", "frontier.resource_site_harvest_started", "frontier.resource_site_harvested",
+            "frontier.resource_site_conflict_observed");
+    private static final Set<String> HIVE = types(
+            "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed",
+            "frontier.hive_growth_completed", "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started",
+            "frontier.hive_nutrient_transfer_advanced", "frontier.hive_nutrient_transfer_completed",
+            "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
+            "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed",
+            "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced",
+            "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
+            "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved",
+            "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
+            "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
+    private static final Set<String> INFRASTRUCTURE = types(
+            "frontier.route_construction_started", "frontier.route_construction_material_loaded",
+            "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
+            "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed");
+    private static final Set<String> STRATEGY = types(
+            "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
+            "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+    private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
+            HIVE, INFRASTRUCTURE, STRATEGY);
+    private static final Set<String> ALL_EMISSIONS = union(ALL_WORLD, KERNEL);
+
+    private FrontierWorldProcessCatalog() { }
+
+    static List<DeterministicProcessDescriptor> descriptors() {
+        return List.of(
+                descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), KERNEL, KERNEL),
+                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, ALL_EMISSIONS, PHYSICAL),
+                descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, ALL_EMISSIONS, AMBIENT),
+                descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, ALL_EMISSIONS, LOGISTICS),
+                descriptor("population", populationCommands(), populationSchedules(), POPULATION, ALL_EMISSIONS, POPULATION),
+                descriptor("economy", Set.of(), economySchedules(), ECONOMY, ALL_EMISSIONS, ECONOMY),
+                descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, ALL_EMISSIONS, RESOURCE_SITES),
+                descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, ALL_EMISSIONS, HIVE),
+                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, ALL_EMISSIONS, INFRASTRUCTURE),
+                descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, ALL_EMISSIONS, STRATEGY));
+    }
+
+    static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
+
+    private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,
+                                                              Set<String> events, Set<String> emissions, Set<String> codecs) {
+        return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);
+    }
+
+    private static Set<String> physicalCommands() { return types(
+            "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
+            "frontier.physical_delta_observed", "frontier.resource_deposited", "frontier.exact_item_custody_changed",
+            "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
+            "frontier.cargo_carrier_released"); }
+    private static Set<String> ambientCommands() { return types(
+            "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
+            "frontier.ambient_lease_released", "frontier.ambient_lease_transition"); }
+    private static Set<String> logisticsCommands() { return types(
+            "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred",
+            "frontier.operation_travel_segment_completed", "frontier.operation_travel_advanced", "frontier.operation_travel_started",
+            "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
+            "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died",
+            "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_scene_lease_handoff"); }
+    private static Set<String> populationCommands() { return types(
+            "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced"); }
+    private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
+    private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced"); }
+    private static Set<String> strategyCommands() { return Set.of(); }
+
+    private static Set<String> logisticsSchedules() { return types(
+            "frontier.supply.task.start", "frontier.supply.cargo.load", "frontier.operation.assembly",
+            "frontier.operation.progress", "frontier.terminal_logistics.retention", "frontier.hive_route_engagement.start",
+            "frontier.hive_route_engagement.progress", "frontier.hive_route_engagement.readiness",
+            "frontier.hive_route_engagement.combat", "frontier.settlement_assault.start",
+            "frontier.settlement_assault.progress", "frontier.settlement_assault.combat"); }
+    private static Set<String> populationSchedules() { return types(
+            "frontier.population.birth.review", "frontier.population.birth.complete", "frontier.population.migration.review",
+            "frontier.population.migration.progress", "frontier.settlement.provision.review", "frontier.settlement.provision.progress"); }
+    private static Set<String> economySchedules() { return types(
+            "frontier.settlement.production.task.start", "frontier.settlement.production.task.complete",
+            "frontier.company.foundation.review", "frontier.market.clear"); }
+    private static Set<String> resourceSchedules() { return types(
+            "frontier.resource_site.growth", "frontier.resource_site.prepare", "frontier.resource_site.harvest",
+            "frontier.objective.resource_harvest"); }
+    private static Set<String> hiveSchedules() { return types(
+            "frontier.hive.infection.task", "frontier.hive.growth.task.start", "frontier.hive.growth.task.complete",
+            "frontier.hive.nutrient.transfer.progress", "frontier.hive.scout.patrol"); }
+    private static Set<String> infrastructureSchedules() { return types(
+            "frontier.structural_repair.scan", "frontier.route_construction.scan", "frontier.route_construction.start",
+            "frontier.route_patrol.start", "frontier.route_patrol.progress", "frontier.decontamination.scan"); }
+    private static Set<String> strategySchedules() { return types(
+            "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
+
+    private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
+    @SafeVarargs private static Set<String> union(Set<String>... values) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        for (Set<String> value : values) result.addAll(value);
+        return Set.copyOf(result);
+    }
+}

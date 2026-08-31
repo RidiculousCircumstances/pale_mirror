@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
 import io.farfrontier.palemirror.frontier.v3.kernel.EngineLimits;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
@@ -19,6 +20,8 @@ import java.util.List;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = new SubjectId("system:physical_executor");
+    private static final PayloadCodecs PAYLOAD_CODECS = FrontierWorldPayloadCodecs.create();
+    private static final DeterministicProcessRegistry PROCESS_REGISTRY = processRegistry();
     private FrontierWorldRuntimeDefinition() { }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) { return configuration(worldId, seed, true); }
     /** Shared internal composition used by the test-fixture catalog without creating a second runtime. */
@@ -44,11 +47,25 @@ public final class FrontierWorldRuntimeDefinition {
                 .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1, 1_600L + actions.size() * 20L)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
-    public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+    public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
+    static DeterministicProcessRegistry processRegistry() {
+        return new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), PAYLOAD_CODECS);
+    }
+    static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }
+        final String processId;
+        try { processId = PROCESS_REGISTRY.requireCommandOwner(command.payload().type()); }
+        catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        CommandPlan plan = planCommandUnchecked(state, command);
+        if (plan instanceof CommandPlan.Accepted accepted) {
+            return new CommandPlan.Accepted(PROCESS_REGISTRY.validateEmissions(processId, accepted.events()));
+        }
+        return plan;
+    }
+    private static CommandPlan planCommandUnchecked(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (command.payload() instanceof ResidentBorn birth) {
             return rejected("resident birth is emitted only by a confirmed population permit");
         }
@@ -279,6 +296,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                boolean autonomousInterception) {
+        String processId = PROCESS_REGISTRY.requireScheduledOwner(action.kind());
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = switch (action.kind()) {
             case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
             case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
@@ -326,7 +344,10 @@ public final class FrontierWorldRuntimeDefinition {
         // A known planner can deliberately find that a durable physical observation has already
         // invalidated its work. That no-op must still become a persisted schedule transition:
         // otherwise a later tick/restart would rediscover the same head and quarantine the world.
-        return planned.isEmpty() ? List.of(new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(action.id()))) : planned;
+        List<ProposedEvent> result = planned.isEmpty()
+                ? List.of(new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(action.id())))
+                : planned;
+        return PROCESS_REGISTRY.validateEmissions(processId, result);
     }
     /** A HOT observer may acknowledge exactly one visible next-cursor arrival, never a COLD batch. */
     private static void validateHotAssemblyObservation(FrontierWorldState state, RouteOperation operation, OperationAssembly next) {
@@ -373,6 +394,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
     }
     static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+        PROCESS_REGISTRY.requireReducedEventOwner(event.payload().type());
         return FrontierWorldState.duringReducerTransition(() -> reduceUnchecked(state, event));
     }
     private static FrontierWorldState reduceUnchecked(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {

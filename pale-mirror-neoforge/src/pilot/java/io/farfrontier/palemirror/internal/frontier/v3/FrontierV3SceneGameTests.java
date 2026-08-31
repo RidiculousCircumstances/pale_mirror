@@ -71,6 +71,27 @@ public final class FrontierV3SceneGameTests {
     private FrontierV3SceneGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void declaredPhysicalExecutionOrderIsBoundedAndReadOnly(GameTestHelper helper) {
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:physical-execution-plan"), 91L),
+                        new EphemeralStore(), 20_000);
+        try {
+            String execution = FrontierV3PhysicalExecutionDiagnostic.render(runtime.checkpointImage().orElseThrow());
+            helper.assertTrue(execution.contains("\"kind\":\"execution\"")
+                            && execution.contains("\"id\":\"physical-observation\"")
+                            && execution.contains("\"id\":\"scenes\""),
+                    "the physical execution diagnostic must expose the closed registered plan");
+            helper.assertTrue(execution.indexOf("\"id\":\"physical-observation\"") < execution.indexOf("\"id\":\"scenes\""),
+                    "the read-only plan must preserve observation before scene execution");
+            helper.assertTrue(execution.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 8_192,
+                    "the execution plan diagnostic must remain bounded");
+        } finally {
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotSceneWaitsForStableAbsenceAndSafeDistanceBeforeColdHandoff(GameTestHelper helper) {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-hysteresis-game-test"), 91L), new EphemeralStore(), 20_000);
