@@ -80,6 +80,12 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "event reducer dispatcher grew"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_model_reverse_dependency(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["model_forbidden_package_dependencies"]["model/LeakedRuntimeImport.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
 
 if __name__ == "__main__":
     unittest.main()

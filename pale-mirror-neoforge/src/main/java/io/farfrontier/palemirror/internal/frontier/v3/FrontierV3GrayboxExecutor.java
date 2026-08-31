@@ -16,7 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;

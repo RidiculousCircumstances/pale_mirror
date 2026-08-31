@@ -24,10 +24,10 @@ import java.util.List;
  * finite reducer explicit and separately bounded until each domain branch becomes
  * a registered process module.</p>
  */
-final class FrontierWorldEventReducer {
+public final class FrontierWorldEventReducer {
     private FrontierWorldEventReducer() { }
-    static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
-                                     DeterministicProcessRegistry processRegistry) {
+    public static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
+                                            DeterministicProcessRegistry processRegistry) {
         processRegistry.requireReducedEventOwner(event.payload().type());
         return FrontierWorldState.duringReducerTransition(() -> reduceUnchecked(state, event));
     }

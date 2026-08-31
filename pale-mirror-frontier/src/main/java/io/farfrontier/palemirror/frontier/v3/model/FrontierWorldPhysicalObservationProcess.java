@@ -19,7 +19,7 @@ final class FrontierWorldPhysicalObservationProcess {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }
         List<ProposedEvent> events = new ArrayList<>();
-        events.add(new ProposedEvent(FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, observed));
+        events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         if (isKnownRouteSurfaceLoss(observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!FrontierRouteNetwork.isPassable(after.bootstrap(), after.routeTopology().supplyWaypoints(after.bootstrap(), settlement.id()), after.physicalDeltas())) {
@@ -33,7 +33,7 @@ final class FrontierWorldPhysicalObservationProcess {
 
     static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                      PhysicalDeltaObserved observed) {
-        if (!subject.equals(FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR)) throw new IllegalArgumentException("physical delta lacks trusted executor subject");
+        if (!subject.equals(FrontierExecutionSubjects.PHYSICAL_EXECUTOR)) throw new IllegalArgumentException("physical delta lacks trusted executor subject");
         return state.recordPhysicalDelta(observed.delta());
     }
 

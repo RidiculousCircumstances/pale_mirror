@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;

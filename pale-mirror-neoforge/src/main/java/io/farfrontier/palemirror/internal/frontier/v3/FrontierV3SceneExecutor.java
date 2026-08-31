@@ -21,7 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;

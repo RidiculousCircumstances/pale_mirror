@@ -14,7 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumptionStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumedObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;

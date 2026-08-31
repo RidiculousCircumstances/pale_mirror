@@ -16,7 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExplosionObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExplosionItemImpact;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemDestroyed;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;

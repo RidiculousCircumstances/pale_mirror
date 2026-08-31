@@ -9,7 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;

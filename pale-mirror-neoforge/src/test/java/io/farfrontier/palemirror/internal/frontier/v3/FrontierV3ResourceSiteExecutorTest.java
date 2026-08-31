@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;

@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 /** Canonical command admission shared by physical executors and restart recovery. */
 final class FrontierV3CommandSubmission {

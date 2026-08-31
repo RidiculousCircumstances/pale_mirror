@@ -28,7 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;

@@ -6,7 +6,7 @@ audit: docs/frontier-v3-architecture-audit.md
 # amendment with a new finding and exit gate.
 hotspot_line_ceiling:
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 960
-  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldRuntimeDefinition.java: 80
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/runtime/FrontierWorldRuntimeDefinition.java: 80
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldCommandPlanner.java: 320
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldEventReducer.java: 480
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 833
@@ -60,5 +60,9 @@ scene_cause_type_branches:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 3
 
 v3_gametest_forced_chunk_loads:
+  max_total: 0
+  allowed_files: {}
+
+model_forbidden_package_dependencies:
   max_total: 0
   allowed_files: {}

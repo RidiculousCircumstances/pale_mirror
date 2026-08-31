@@ -3,8 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateValidator;
 
 /** Kernel-bound canonical validator: complete at ingress, dependency-aware before each WAL append. */
-final class FrontierWorldStateTransitionValidator implements StateValidator<FrontierWorldState> {
-    static final FrontierWorldStateTransitionValidator INSTANCE = new FrontierWorldStateTransitionValidator();
+public final class FrontierWorldStateTransitionValidator implements StateValidator<FrontierWorldState> {
+    public static final FrontierWorldStateTransitionValidator INSTANCE = new FrontierWorldStateTransitionValidator();
 
     private FrontierWorldStateTransitionValidator() { }
 

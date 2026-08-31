@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;

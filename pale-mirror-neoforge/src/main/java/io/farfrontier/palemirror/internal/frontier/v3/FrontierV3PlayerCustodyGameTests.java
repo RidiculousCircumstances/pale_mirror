@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;

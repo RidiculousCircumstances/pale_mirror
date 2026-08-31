@@ -28,7 +28,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
      * Runtime-local codec that reuses the immutable genesis profile after proving the snapshot belongs to it.
      * This never weakens the serialized world/seed boundary: a foreign header fails before its mutable state is read.
      */
-    FrontierWorldStateCodec(FrontierBootstrap pinnedBootstrap) { this.pinnedBootstrap = java.util.Objects.requireNonNull(pinnedBootstrap, "pinnedBootstrap"); }
+    public FrontierWorldStateCodec(FrontierBootstrap pinnedBootstrap) { this.pinnedBootstrap = java.util.Objects.requireNonNull(pinnedBootstrap, "pinnedBootstrap"); }
 
     @Override public byte[] encode(FrontierWorldState state) {
         try {

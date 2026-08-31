@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import net.minecraft.core.BlockPos;

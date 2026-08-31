@@ -39,11 +39,15 @@ NEOFORGE_MAIN = Path(
 NEOFORGE_PILOT = Path(
     "pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3"
 )
-RUNTIME_DEFINITION = FRONTIER_MAIN / "model/FrontierWorldRuntimeDefinition.java"
+RUNTIME_DEFINITION = FRONTIER_MAIN / "runtime/FrontierWorldRuntimeDefinition.java"
 COMMAND_PLANNER = FRONTIER_MAIN / "model/FrontierWorldCommandPlanner.java"
 EVENT_REDUCER = FRONTIER_MAIN / "model/FrontierWorldEventReducer.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
+MODEL_FORBIDDEN_IMPORT = re.compile(
+    r"^\s*import\s+io\.farfrontier\.palemirror\.frontier\.v3\.(?:process|persistence|runtime)\.",
+    re.MULTILINE,
+)
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -108,6 +112,11 @@ def collect(root: Path) -> dict[str, Any]:
     event_reducer = _text(root, EVENT_REDUCER)
     lifecycle = _text(root, SERVER_LIFECYCLE)
     model_root = root / FRONTIER_MAIN / "model"
+    model_forbidden_dependencies: dict[str, int] = {}
+    for path in _java_files(root, FRONTIER_MAIN / "model"):
+        count = len(MODEL_FORBIDDEN_IMPORT.findall(path.read_text(encoding="utf-8")))
+        if count:
+            model_forbidden_dependencies[path.relative_to(root).as_posix()] = count
     forced_chunk_loads: dict[str, int] = {}
     for source_root in (NEOFORGE_MAIN, NEOFORGE_PILOT):
         for path in _java_files(root, source_root):
@@ -143,6 +152,7 @@ def collect(root: Path) -> dict[str, Any]:
         "persisted_enum_position_tags": enum_tags,
         "scene_cause_type_branches": scene_branches,
         "v3_gametest_forced_chunk_loads": forced_chunk_loads,
+        "model_forbidden_package_dependencies": model_forbidden_dependencies,
     }
 
 
@@ -281,6 +291,7 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         "persisted_enum_position_tags",
         "scene_cause_type_branches",
         "v3_gametest_forced_chunk_loads",
+        "model_forbidden_package_dependencies",
     ):
         _validate_counted_files(metrics[label], policy.get(label), label)
 

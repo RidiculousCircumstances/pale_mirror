@@ -24,11 +24,11 @@ import java.util.List;
  * explicit and deterministic while later H0.3 work splits these domain branches into
  * registered process modules.</p>
  */
-final class FrontierWorldCommandPlanner {
+public final class FrontierWorldCommandPlanner {
     private FrontierWorldCommandPlanner() { }
-    static CommandPlan plan(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command,
-                            DeterministicProcessRegistry processRegistry) {
-        if (!FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR.equals(command.actor())) {
+    public static CommandPlan plan(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command,
+                                   DeterministicProcessRegistry processRegistry, SubjectId trustedPhysicalExecutor) {
+        if (!trustedPhysicalExecutor.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "command is not from the trusted physical executor"));
         }

@@ -7,11 +7,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 
 /** Pure bounded audit projection compiler for the frontier runtime. */
-final class FrontierWorldProjectionCompiler {
+public final class FrontierWorldProjectionCompiler {
     private FrontierWorldProjectionCompiler() { }
 
-    static FrontierWorldProjection compile(FrontierWorldState state, WorldId worldId, Revision revision,
-                                           SimInstant instant, ProjectionQuery query) {
+    public static FrontierWorldProjection compile(FrontierWorldState state, WorldId worldId, Revision revision,
+                                                  SimInstant instant, ProjectionQuery query) {
         FrontierBootstrap bootstrap = state.bootstrap();
         int residents = (int) state.humanPopulation().residentIds().stream()
                 .filter(id -> state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE).count();

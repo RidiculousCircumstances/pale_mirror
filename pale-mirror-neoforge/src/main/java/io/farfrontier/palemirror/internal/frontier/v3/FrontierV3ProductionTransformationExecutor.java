@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;

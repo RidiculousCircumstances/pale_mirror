@@ -19,7 +19,7 @@ import java.util.Set;
  * until then this catalog already makes a missing or duplicate durable payload fail before an
  * engine can be created.</p>
  */
-final class FrontierWorldProcessCatalog {
+public final class FrontierWorldProcessCatalog {
     @FunctionalInterface
     private interface ScheduledPlanner {
         List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomousInterception);
@@ -125,7 +125,7 @@ final class FrontierWorldProcessCatalog {
 
     private FrontierWorldProcessCatalog() { }
 
-    static List<DeterministicProcessDescriptor> descriptors() {
+    public static List<DeterministicProcessDescriptor> descriptors() {
         return List.of(
                 descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), KERNEL, KERNEL),
                 descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emits(PHYSICAL, POPULATION, ECONOMY, STRATEGY), PHYSICAL),
@@ -139,12 +139,33 @@ final class FrontierWorldProcessCatalog {
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emits(POPULATION, STRATEGY, HIVE, ECONOMY), STRATEGY));
     }
 
-    static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
+    public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
 
-    static Set<String> scheduledKinds() { return SCHEDULED_PLANNERS.keySet(); }
+    public static Set<String> scheduledKinds() { return SCHEDULED_PLANNERS.keySet(); }
 
-    static List<ProposedEvent> planScheduled(DeterministicProcessRegistry registry, FrontierWorldState state,
-                                              ScheduledAction action, boolean autonomousInterception) {
+    /** Bootstrap is data-only; this catalog owns the finite initial process schedule. */
+    public static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
+        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
+                RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
+        for (int index = 0; index < bootstrap.settlements().size(); index++) {
+            actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
+            actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
+            actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
+                    SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
+            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1, 1_000L + index * 100L));
+        }
+        actions.add(PopulationMigrationProcess.review(1, 8_000L));
+        actions.add(TerminalLogisticsProcess.review(1, 8_100L));
+        FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted()
+                .forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
+        bootstrap.hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).sorted(java.util.Comparator.comparing(Bioform::id))
+                .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1, 1_600L + actions.size() * 20L)));
+        actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L));
+        return List.copyOf(actions);
+    }
+
+    public static List<ProposedEvent> planScheduled(DeterministicProcessRegistry registry, FrontierWorldState state,
+                                                     ScheduledAction action, boolean autonomousInterception) {
         String processId = registry.requireScheduledOwner(action.kind());
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());

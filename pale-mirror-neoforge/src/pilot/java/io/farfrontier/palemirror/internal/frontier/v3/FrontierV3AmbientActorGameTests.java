@@ -13,7 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
