@@ -146,6 +146,35 @@ never add an ad-hoc HUD toggle to a scenario.
   reproducible same-seed JFR capture and a causal proof of operation → lease →
   actor/cargo ownership. TPS alone is not acceptance evidence.
 
+## Frontier v3 extension discipline
+
+- `docs/frontier-v3-architecture-audit.md` is the active defect register and
+  `tools/engineering/frontier_v3_architecture_debt.yml` is its machine-checked
+  debt ceiling. Ordinary changes may only keep or lower every ceiling. Raising
+  one requires an accepted architecture amendment with a new finding and exit
+  gate; never update the baseline merely to make a build pass.
+- Do not add a bomber, siege or other scene family until the closed
+  `SceneBehavior` registry owns admission, HOT effects, drain, recovery and
+  diagnostics. Type-specific branches outside registered behavior are limited
+  to explicit sealed-codec compatibility and read-only formatting.
+- Do not add a command, scheduled kind, event family or physical executor to a
+  composition-root switch/manual tick list. Register exactly one owner in the
+  relevant closed deterministic process or staged executor registry, including
+  exactly one stable codec for every process payload; duplicate, missing,
+  undeclared and cyclic ownership must fail a focused negative test.
+- Never persist an enum with `ordinal()` or decode it with `values()[tag]`.
+  Use explicit stable, non-reused wire tags and retain old-byte recovery tests.
+- Process/support code must not directly reconstruct the complete
+  `FrontierWorldState`. Use its named owned update boundary; full construction
+  belongs only to fresh bootstrap and versioned hydration.
+- Fixture builders, profile catalogs and fixture bootstrap selection are
+  test/moddev classpath code and must be absent from the production JAR. A run
+  ID is correlation evidence, never authority to select a fixture.
+- Put tunable cadence, gains, radii and costs in the persisted hashed
+  `FrontierRuleset`; keep only safety maxima and algorithmic invariants as code
+  constants. Do not silently change recovered-world rules through a binary
+  update.
+
 ## Architecture rules
 
 - `pale-mirror-domain` is pure Java: it must not import Minecraft, NeoForge,

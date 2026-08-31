@@ -21,7 +21,8 @@ not added speculatively.
   world to satisfy a test.
 - A disposable development fixture may establish a deterministic canonical
   precondition, but normal starts must always use the ordinary world profile;
-  fixtures may never be an AI, planner, production or live-server fallback.
+  fixtures may never be an AI, planner, production or live-server fallback and
+  must be absent from the production packaged JAR.
 - Scene kinds use one persisted lifecycle and a closed NeoForge behavior
   registry. Add a new `SceneCause` with one behavior and its normal,
   negative/recovery tests; do not spread `if cause` branches through generic
@@ -33,6 +34,54 @@ not added speculatively.
 - Preserve both Git histories. Frontier source/docs belong only to the nested
   `pale-mirror/` repository; packaging/deployment changes belong to the outer
   repository and land only after a verified v3 artifact exists.
+
+## Mandatory architecture hardening gate
+
+The evidence-backed register in
+[`frontier-v3-architecture-audit.md`](frontier-v3-architecture-audit.md) is part
+of this plan. Its checked-in debt policy is a ceiling, not permission to add
+similar code. Current Wave 5 breadth pauses before bomber, siege or another
+scene/domain family until the following ordered corrections land:
+
+1. **H0.1 — scene ownership.** Implement the closed pure/NeoForge
+   `SceneBehavior` registries, remove logistics-only access from generic lease
+   code and pass logistics plus assault normal/negative/restart evidence.
+2. **H0.2 — fixture isolation.** Move fixture builders, profile selection and
+   the one profile catalog to a moddev/test classpath; prove the production JAR
+   and production lifecycle cannot select them.
+3. **H0.3 — deterministic extension points.** Split command/scheduled/event
+   ownership and payload codecs into closed process descriptors, move behavior
+   out of `model`, and replace the 22-call physical loop with a
+   dependency-checked staged executor registry.
+4. **H0.4 — state and persistence safety.** Replace process-side positional
+   `FrontierWorldState` reconstruction with named owned updates. Migrate every
+   persisted codec out of `model` ownership and every enum family from source
+   ordinals to explicit stable wire tags, retaining golden old-byte recovery
+   tests.
+5. **H0.5 — reproducible world rules.** Introduce the immutable persisted
+   `FrontierRuleset`; distinguish tunable balance/cadence data from code-level
+   safety bounds and pin test overrides in the test-only catalog.
+6. **H0.6 — complete-load proof.** Instrument process planning, reduction,
+   validation, allocation, queue lag and each physical stage. Run the same-seed
+   12-settlement simultaneous-front pressure route before changing queue shape,
+   concurrency or physical body limits.
+
+Each H0 item must lower the corresponding metric in
+`tools/engineering/frontier_v3_architecture_debt.yml`. Raising a ceiling needs
+an accepted architecture change, a new finding and a bounded removal gate.
+After H0.1 and H0.2, already implemented scene behavior may continue to receive
+bug fixes; no new breadth is authorized until H0.3. Wave 5 resumes after H0.5;
+H0.6 is the entry gate for high-body-count Wave 6 scenes.
+
+Hardening completion requires:
+
+- all new architecture invariants pass the machine-readable contract tests;
+- debt metrics reach their stated exit shape rather than merely staying below
+  the current ceiling;
+- old snapshot/WAL golden bytes and abrupt/graceful recovery pass;
+- no fixture class/profile entry point is present in the production JAR;
+- focused negative tests reject duplicate/missing process or executor owners;
+- the critical-code gate passes before the hardening milestone commit.
 
 ## Target dependency graph
 

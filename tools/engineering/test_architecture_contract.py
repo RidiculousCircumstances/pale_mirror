@@ -52,6 +52,16 @@ class ArchitectureContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "must remain explicitly frozen-active"):
             validate(broken)
 
+    def test_rejects_removed_v3_hardening_invariant(self) -> None:
+        broken = copy.deepcopy(self.document)
+        broken["invariants"] = [
+            invariant
+            for invariant in broken["invariants"]
+            if invariant.get("id") != "frontier-v3-stable-wire-tags"
+        ]
+        with self.assertRaisesRegex(ContractError, "missing v3 invariants"):
+            validate(broken)
+
 
 if __name__ == "__main__":
     unittest.main()

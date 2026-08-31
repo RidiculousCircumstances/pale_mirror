@@ -93,6 +93,9 @@ def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/
 def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
 def architectureContractValidator = layout.projectDirectory.file('tools/engineering/architecture_contract.py').asFile
 def architectureContractTests = layout.projectDirectory.file('tools/engineering/test_architecture_contract.py').asFile
+def frontierV3ArchitectureDebtPolicy = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.yml').asFile
+def frontierV3ArchitectureDebtValidator = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.py').asFile
+def frontierV3ArchitectureDebtTests = layout.projectDirectory.file('tools/engineering/test_frontier_v3_architecture_debt.py').asFile
 def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
 def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
 def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/rebuild_harvester_anatomical_models.mjs').asFile
@@ -391,6 +394,24 @@ tasks.register('verifyArchitectureContract', Exec) {
     commandLine 'python3', architectureContractValidator.absolutePath, architectureFile.absolutePath
 }
 
+tasks.register('testFrontierV3ArchitectureDebt', Exec) {
+    group = 'verification'
+    description = 'Checks negative cases for the Frontier v3 architecture debt ratchet.'
+    inputs.files(frontierV3ArchitectureDebtPolicy, frontierV3ArchitectureDebtValidator,
+            frontierV3ArchitectureDebtTests)
+    commandLine 'python3', frontierV3ArchitectureDebtTests.absolutePath
+}
+
+tasks.register('verifyFrontierV3ArchitectureDebt', Exec) {
+    group = 'verification'
+    description = 'Prevents known Frontier v3 architecture debt from spreading or growing.'
+    inputs.files(frontierV3ArchitectureDebtPolicy, frontierV3ArchitectureDebtValidator,
+            fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' },
+            fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3') { include '**/*.java' })
+    commandLine 'python3', frontierV3ArchitectureDebtValidator.absolutePath,
+            frontierV3ArchitectureDebtPolicy.absolutePath, '--root', layout.projectDirectory.asFile.absolutePath
+}
+
 tasks.register('testHarvesterContourOverlay', Exec) {
     group = 'verification'
     description = 'Runs deterministic Harvester reference-contour evidence tests.'
@@ -629,6 +650,7 @@ tasks.register('guardrails') {
             tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
             tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
             tasks.named('testArchitectureContract'), tasks.named('verifyArchitectureContract'),
+            tasks.named('testFrontierV3ArchitectureDebt'), tasks.named('verifyFrontierV3ArchitectureDebt'),
             tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
             tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
             tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),

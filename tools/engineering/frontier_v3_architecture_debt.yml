@@ -1,0 +1,88 @@
+version: 1
+audit: docs/frontier-v3-architecture-audit.md
+
+# This file is a debt ceiling, not an allowance. Ordinary changes may only keep
+# or reduce these values. Raising a value requires an accepted architecture
+# amendment with a new finding and exit gate.
+hotspot_line_ceiling:
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 960
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldRuntimeDefinition.java: 947
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 833
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 808
+
+max_manual_executor_ticks: 22
+max_runtime_scheduled_string_cases: 41
+max_production_development_configurations: 15
+max_lifecycle_fixture_profile_branches: 13
+max_process_classes_in_model: 33
+max_codec_classes_in_model: 23
+
+direct_world_state_construction:
+  max_total: 38
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientActorProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientLeaseStateProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoCarrierReleaseStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ExplosionStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierRouteEngagementStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneLeaseStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldInitialState.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPhysicalDeltaSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 12
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HiveSettlementAssaultProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanPopulationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ProductionTransformationStateSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ResourceSitePhysicalIntentStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionStateSupport.java: 5
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StructuralRepairStateSupport.java: 3
+
+persisted_enum_position_tags:
+  max_total: 223
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientLeasePayloadCodecs.java: 6
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientLeaseStateCodec.java: 4
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 51
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 57
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanHealthPayloadCodecs.java: 4
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanPopulationPayloadCodecs.java: 8
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanPopulationStateCodec.java: 14
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/MarketPayloadCodecs.java: 8
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalEffectObservationPayloadCodec.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalEffectObservationStateCodec.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ResourceSiteStateCodec.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionPayloadCodecs.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionStateCodec.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteEngagementPayloadCodecs.java: 8
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RoutePatrolPayloadCodecs.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultPayloadCodecs.java: 8
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementProvisionPayloadCodecs.java: 6
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StrategicPlanPayloadCodecs.java: 14
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StrategicPlanStateCodec.java: 23
+
+scene_cause_type_branches:
+  max_total: 47
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoCarrierReleaseStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ExplosionStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierOperationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneAdmission.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneLeaseStateSupport.java: 5
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneLeaseValidationSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneOwnerSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSettlementAssaultSceneSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldRuntimeDefinition.java: 4
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HivePerceptionProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SceneLease.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SceneStrikeStateSupport.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultSceneLeaseHandoff.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultSceneLeasePrepared.java: 1
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DiagnosticJson.java: 4
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DiagnosticTrace.java: 1
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java: 7
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SettlementAssaultSceneExecutor.java: 1

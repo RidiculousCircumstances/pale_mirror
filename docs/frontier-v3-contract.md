@@ -229,7 +229,10 @@ exists only when its owning canonical process emits a current typed `SceneCause`
 from current perceived facts, exact actors and retained spatial state. A
 disposable development fixture may construct such a state solely to make one
 causal/recovery proof fast and deterministic; it is unavailable to a normal
-world start and is never an alternative AI/planning path.
+world start and is never an alternative AI/planning path. Fixture builders,
+their profile catalog and their selecting bootstrap provider exist only on a
+dedicated moddev/test classpath and are absent from the production JAR;
+production startup cannot select one through JVM properties.
 
 All scene kinds share one generic lifecycle (`candidate → admission → PREPARED
 → HOT → DRAINING → CLOSED/UNKNOWN/CONFLICT`) and one persisted `SceneLease`.
