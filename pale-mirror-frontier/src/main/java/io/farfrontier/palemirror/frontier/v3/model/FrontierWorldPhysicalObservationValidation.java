@@ -59,6 +59,8 @@ final class FrontierWorldPhysicalObservationValidation {
                         || !intent.subjectIds().equals(java.util.List.of(arrival.transferId(), arrival.cargoId(), arrival.itemId()))) {
                     throw new IllegalArgumentException("hive nutrient arrival receipt has foreign exact subjects");
                 }
+            } else if (observation instanceof EquipmentIssueObservation issue) {
+                EquipmentIssueStateSupport.validateReceiptForRecovery(inventory, intent, issue);
             } else throw new IllegalArgumentException("physical observation has an unknown effect kind");
         }
     }

@@ -57,6 +57,11 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(14); ids(output, arrival); FrontierWorldPayloadCodecs.writeSubject(output, arrival.transferId());
             FrontierWorldPayloadCodecs.writeSubject(output, arrival.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, arrival.itemId()); output.writeByte(arrival.itemCount());
         }
+        else if (observation instanceof EquipmentIssueObservation issue) {
+            output.writeByte(15); ids(output, issue); FrontierWorldPayloadCodecs.writeSubject(output, issue.assaultId());
+            FrontierWorldPayloadCodecs.writeSubject(output, issue.residentId()); FrontierWorldPayloadCodecs.writeSubject(output, issue.itemId());
+            FrontierWorldPayloadCodecs.writeSubject(output, issue.sourceSlot().containerId()); output.writeByte(issue.sourceSlot().slot());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -83,6 +88,9 @@ final class PhysicalEffectObservationPayloadCodec {
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
             case 14 -> new HiveNutrientArrivalObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            case 15 -> new EquipmentIssueObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

@@ -47,9 +47,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) {
-            throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
-        }
+        if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
         for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
             ResidentProfile profile = humanPopulation.resident(bootstrapResident.id());
             // Bootstrap defines an exact person's immutable identity, not their permanent home.
@@ -293,7 +291,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
-                        && !strategicPlans.routeEngagements().containsKey(subject)
+                        && !strategicPlans.routeEngagements().containsKey(subject) && !strategicPlans.settlementAssaults().containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))
                         && !reservedRouteConstructionCargo && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
@@ -746,6 +744,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         SceneStrikeStateSupport.validateIntent(this, intent); ResourceSitePhysicalIntentStateSupport.validateIntent(this, intent);
         ProductionTransformationStateSupport.validateIntent(this, intent); CargoLoadingStateSupport.validateIntent(this, intent);
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
@@ -849,6 +848,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.complete(this, current, evidence, next);
         if (HiveNutrientTransferStateSupport.isEndpointIntent(current)) return HiveNutrientTransferStateSupport.completeEndpoint(this, current, evidence, next);
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) return EquipmentIssueStateSupport.complete(this, current, EquipmentIssueStateSupport.requireReceipt(evidence), next);
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
         }

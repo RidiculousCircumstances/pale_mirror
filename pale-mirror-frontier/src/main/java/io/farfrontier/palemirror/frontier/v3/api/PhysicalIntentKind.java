@@ -23,7 +23,9 @@ public enum PhysicalIntentKind {
     /** One exact active hive STORE stack leaves its owned chest before entering the organ network. */
     HIVE_NUTRIENT_DEPARTURE,
     /** One exact in-transit hive nutrient enters its named active STORE slot. */
-    HIVE_NUTRIENT_ARRIVAL;
+    HIVE_NUTRIENT_ARRIVAL,
+    /** One exact settlement-owned equipment stack moves into one named active defender's hand. */
+    EQUIPMENT_ISSUE;
 
     public int wireTag() {
         return switch (this) {
@@ -41,6 +43,7 @@ public enum PhysicalIntentKind {
             case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> 11;
             case HIVE_NUTRIENT_DEPARTURE -> 12;
             case HIVE_NUTRIENT_ARRIVAL -> 13;
+            case EQUIPMENT_ISSUE -> 14;
         };
     }
 }

@@ -93,6 +93,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("hive nutrient arrival must bind transfer, cargo and exact target stack without an area radius");
                 }
             }
+            case EQUIPMENT_ISSUE -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("equipment issue must bind assault, defender and exact stack without an area radius");
+                }
+            }
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");

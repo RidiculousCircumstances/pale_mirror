@@ -2,11 +2,19 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HumanTacticalFunctionProjectionTest {
     @Test
@@ -36,12 +45,29 @@ class HumanTacticalFunctionProjectionTest {
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
         SubjectId sword = new SubjectId("item:tactical-function-sword");
-        ExactInventory stored = state.inventory().store(new ExactItemStack(sword, assault.settlementId(), "minecraft:iron_sword", 1,
+        ExactInventory stored = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(sword, assault.settlementId(), "minecraft:iron_sword", 1,
                 new InventoryCustody.ContainerSlot(depot, slot)));
-        state = state.withInventory(stored.moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(militia)));
+        state = state.withInventory(stored);
+        PhysicalIntent issue = new PhysicalIntent(new PhysicalIntentId("intent:tactical-function-issue"), PhysicalIntentKind.EQUIPMENT_ISSUE,
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), militia, sword),
+                new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
+                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED);
+        state = state.preparePhysicalIntent(issue).transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState runningState = state;
+        EquipmentIssueObservation forgedSource = new EquipmentIssueObservation(new PhysicalObservationId("observation:tactical-function-forged"), issue.id(),
+                assault.id(), militia, sword, new InventoryCustody.ContainerSlot(depot, slot + 1));
+        assertThrows(IllegalArgumentException.class, () -> runningState.transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(forgedSource)));
+        EquipmentIssueObservation receipt = new EquipmentIssueObservation(new PhysicalObservationId("observation:tactical-function-issue"), issue.id(),
+                assault.id(), militia, sword, new InventoryCustody.ContainerSlot(depot, slot));
+        state = state.transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertEquals(HumanTacticalFunction.ARMED_DEFENDER, HumanTacticalFunctionProjection.derive(state, militia));
         assertEquals("Northwatch ARMED DEFENDER", FrontierSceneLabels.actor(state, militia, false));
+        assertEquals(receipt, ((PhysicalIntentTransition) FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
+                .observation().orElseThrow());
     }
 
     @Test

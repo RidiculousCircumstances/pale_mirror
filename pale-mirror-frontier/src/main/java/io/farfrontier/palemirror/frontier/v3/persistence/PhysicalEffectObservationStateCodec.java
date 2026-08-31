@@ -75,6 +75,9 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof HiveNutrientArrivalObservation arrival) {
                 output.writeByte(14); string(output, arrival.id().value()); string(output, arrival.intentId().value()); string(output, arrival.transferId().value());
                 string(output, arrival.cargoId().value()); string(output, arrival.itemId().value()); output.writeByte(arrival.itemCount());
+            } else if (observation instanceof EquipmentIssueObservation issue) {
+                output.writeByte(15); string(output, issue.id().value()); string(output, issue.intentId().value()); string(output, issue.assaultId().value());
+                string(output, issue.residentId().value()); string(output, issue.itemId().value()); FrontierWorldStateCodec.writeCustody(output, issue.sourceSlot());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -100,6 +103,7 @@ final class PhysicalEffectObservationStateCodec {
                         new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 case 13 -> new HiveNutrientDepartureObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 case 14 -> new HiveNutrientArrivalObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
+                case 15 -> equipmentIssue(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
@@ -137,6 +141,12 @@ final class PhysicalEffectObservationStateCodec {
         SubjectId site = new SubjectId(text(input)), worker = new SubjectId(text(input)), item = new SubjectId(text(input)), owner = new SubjectId(text(input));
         String kind = text(input); int count = input.readUnsignedByte(); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
         return new ResourceSiteHarvestObservation(id, intentId, site, worker, new ExactItemStack(item, owner, kind, count, custody), input.readUnsignedByte());
+    }
+    private static EquipmentIssueObservation equipmentIssue(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        SubjectId assault = new SubjectId(text(input)), resident = new SubjectId(text(input)), item = new SubjectId(text(input));
+        InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+        if (!(custody instanceof InventoryCustody.ContainerSlot source)) throw new IllegalArgumentException("equipment issue source must be a container slot");
+        return new EquipmentIssueObservation(id, intentId, assault, resident, item, source);
     }
 
     private static void string(DataOutputStream output, String value) throws IOException { FrontierWorldStateCodec.writeString(output, value); }

@@ -27,7 +27,12 @@ public final class HumanTacticalFunctionProjection {
     public static boolean hasWeapon(FrontierWorldState state, SubjectId residentId) {
         Objects.requireNonNull(state, "weapon state");
         return state.inventory().actorItems(Objects.requireNonNull(residentId, "weapon resident")).stream()
-                .anyMatch(item -> FIRST_GRAYBOX_WEAPON.equals(item.itemKind()));
+                .anyMatch(item -> isGrayboxWeaponKind(item.itemKind()));
+    }
+
+    /** Shared first-graybox capability predicate; issue validation must not arm people with arbitrary depot stock. */
+    public static boolean isGrayboxWeaponKind(String itemKind) {
+        return FIRST_GRAYBOX_WEAPON.equals(Objects.requireNonNull(itemKind, "weapon item kind"));
     }
 
     private static HumanTacticalFunction defenceFunction(FrontierWorldState state, HumanAssignment assignment, ResidentProfile resident) {
