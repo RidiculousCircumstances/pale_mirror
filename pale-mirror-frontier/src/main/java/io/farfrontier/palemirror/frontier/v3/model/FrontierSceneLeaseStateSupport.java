@@ -23,6 +23,9 @@ final class FrontierSceneLeaseStateSupport {
         Objects.requireNonNull(lease, "scene lease");
         if (state.sceneLeases().containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
         if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
+        if (!(lease.cause() instanceof LogisticsSceneCause)) {
+            throw new IllegalArgumentException("scene cause has no owning state-machine validator yet");
+        }
         if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
         }

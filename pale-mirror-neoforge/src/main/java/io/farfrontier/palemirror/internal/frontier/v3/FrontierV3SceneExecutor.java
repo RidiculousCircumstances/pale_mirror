@@ -402,7 +402,11 @@ final class FrontierV3SceneExecutor {
         BlockPos origin = target.entity().blockPosition();
         long effectEpoch = state.physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION)
                 .filter(value -> value.subjectIds().contains(engagement)).count();
-        String key = "scene-r" + lease.revision() + "-e" + effectEpoch;
+        // A PhysicalIntent drives a deterministic Minecraft entity UUID. Include the canonical
+        // world identity so two independent v3 fixtures in one GameTest level cannot claim the
+        // same TNT body; production still has one stable ID for the same world/scene/epoch.
+        String world = state.bootstrap().worldId().value().replace(':', '-');
+        String key = world + "-scene-r" + lease.revision() + "-e" + effectEpoch;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-" + key), PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED,
                 bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
         submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));

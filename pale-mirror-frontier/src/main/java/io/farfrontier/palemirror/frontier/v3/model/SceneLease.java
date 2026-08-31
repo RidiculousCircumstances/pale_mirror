@@ -14,22 +14,19 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** Immutable durable claim preventing concurrent COLD and HOT execution of one route scene. */
-public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
-                         BlockPosition cargoPosition,
-                         SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId,
-                         List<SceneMember> members, Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
+/** Immutable durable claim preventing concurrent COLD and HOT execution of one typed scene. */
+public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, BlockPosition handoffPosition,
+                         SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members,
+                         Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
                          Optional<SceneRecoveryEvidence> recoveryEvidence) {
     public SceneLease {
         Objects.requireNonNull(id, "scene lease id");
         Objects.requireNonNull(worldId, "scene lease world");
-        Objects.requireNonNull(operationId, "scene lease operation");
-        Objects.requireNonNull(cargoId, "scene lease cargo");
         Objects.requireNonNull(handoffPosition, "scene lease handoff position");
-        Objects.requireNonNull(cargoPosition, "scene lease cargo position");
         Objects.requireNonNull(handoffInstant, "scene lease handoff instant");
         if (revision < 0) throw new IllegalArgumentException("scene lease revision must be non-negative");
-        Objects.requireNonNull(status, "scene lease status"); engagementId = Objects.requireNonNull(engagementId, "scene lease engagement");
+        Objects.requireNonNull(status, "scene lease status");
+        cause = Objects.requireNonNull(cause, "scene cause");
         members = List.copyOf(members);
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         memberPositions.forEach((actor, position) -> positions.put(Objects.requireNonNull(actor, "scene member position actor"),
@@ -51,6 +48,15 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
         if (recoveryEvidence.isPresent() && status != SceneLeaseStatus.UNKNOWN_AFTER_RESTART) {
             throw new IllegalArgumentException("only an unknown scene lease may retain recovery evidence");
         }
+    }
+
+    /** Compatibility constructor for snapshots and WAL records written before typed scene causes. */
+    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
+                      BlockPosition cargoPosition, SimInstant handoffInstant, long revision, SceneLeaseStatus status,
+                      Optional<SubjectId> engagementId, List<SceneMember> members, Map<SubjectId, BlockPosition> memberPositions,
+                      Set<SubjectId> ambientHandoffActorIds, Optional<SceneRecoveryEvidence> recoveryEvidence) {
+        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition), handoffPosition, handoffInstant,
+                revision, status, members, memberPositions, ambientHandoffActorIds, recoveryEvidence);
     }
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
@@ -76,6 +82,15 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
                 members, memberPositions, Set.of(), Optional.empty());
     }
 
+    /** New scene families must use an explicit typed cause; their owner validates it before preparation. */
+    public static SceneLease forCause(SceneLeaseId id, WorldId worldId, SceneCause cause, BlockPosition handoffPosition,
+                                      SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members,
+                                      Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
+                                      Optional<SceneRecoveryEvidence> recoveryEvidence) {
+        return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions,
+                ambientHandoffActorIds, recoveryEvidence);
+    }
+
     /** One canonical actor retains the same physical identity across ambient and scene leases. */
     public static UUID deterministicEntityId(WorldId worldId, SubjectId actorId) {
         return UUID.nameUUIDFromBytes(("frontier-v3:actor:" + worldId.value() + ":" + actorId.value()).getBytes(StandardCharsets.UTF_8));
@@ -87,17 +102,27 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
         return deterministicEntityId(worldId, actorId);
     }
 
+    /** Legacy logistics views are derived from the one typed cause; they are not stored twice. */
+    public SubjectId operationId() { return logisticsCause().operationId(); }
+    public SubjectId cargoId() { return logisticsCause().cargoId(); }
+    public Optional<SubjectId> engagementId() { return logisticsCause().engagementId(); }
+    public BlockPosition cargoPosition() { return logisticsCause().cargoPosition(); }
+    public LogisticsSceneCause logisticsCause() {
+        if (!(cause instanceof LogisticsSceneCause logistics)) {
+            throw new IllegalStateException("scene cause has no logistics operation/cargo binding: " + cause.getClass().getSimpleName());
+        }
+        return logistics;
+    }
+
     public SceneLease withStatus(SceneLeaseStatus nextStatus) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, nextStatus, engagementId, members, memberPositions, ambientHandoffActorIds,
-                nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
+        return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, nextStatus, members, memberPositions,
+                ambientHandoffActorIds, nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
     }
     public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant,
-                revision, status, engagementId, members, memberPositions, actorIds, recoveryEvidence);
+        return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions, actorIds, recoveryEvidence);
     }
     public SceneLease withMemberPositions(Map<SubjectId, BlockPosition> positions) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, positions,
-                ambientHandoffActorIds, recoveryEvidence);
+        return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, positions, ambientHandoffActorIds, recoveryEvidence);
     }
     /**
      * Advances a non-combat HOT logistics scene at the same durable grid checkpoint as its
@@ -106,16 +131,18 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId
      */
     public SceneLease rebaseHotOperationTravel(OperationTravel prior, OperationTravel next) {
         Objects.requireNonNull(prior, "prior operation travel"); Objects.requireNonNull(next, "next operation travel");
-        if (status != SceneLeaseStatus.HOT || engagementId.isPresent() || !memberPositions.equals(prior.formation())
-                || !cargoPosition.equals(prior.cargoAnchor()) || !next.isExactHotAdvanceFrom(prior)) {
+        LogisticsSceneCause logistics = logisticsCause();
+        if (status != SceneLeaseStatus.HOT || logistics.engagementId().isPresent() || !memberPositions.equals(prior.formation())
+                || !logistics.cargoPosition().equals(prior.cargoAnchor()) || !next.isExactHotAdvanceFrom(prior)) {
             throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
         }
-        return new SceneLease(id, worldId, operationId, cargoId, next.currentPosition(), next.cargoAnchor(), handoffInstant, revision,
-                status, engagementId, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
+        return new SceneLease(id, worldId,
+                new LogisticsSceneCause(logisticsCause().operationId(), logisticsCause().cargoId(), logisticsCause().engagementId(), next.cargoAnchor()),
+                next.currentPosition(), handoffInstant, revision, status, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
     }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId, members, memberPositions, ambientHandoffActorIds,
-                Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
+        return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions,
+                ambientHandoffActorIds, Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
     }
     public BlockPosition memberPosition(SubjectId actorId) { return memberPositions.get(Objects.requireNonNull(actorId, "scene actor")); }
     private static Map<SubjectId, BlockPosition> positions(List<SceneMember> members, BlockPosition handoffPosition) {

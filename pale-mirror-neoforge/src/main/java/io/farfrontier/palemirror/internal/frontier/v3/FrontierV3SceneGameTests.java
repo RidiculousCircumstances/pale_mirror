@@ -438,9 +438,13 @@ public final class FrontierV3SceneGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotBomberMaterializesOneOwnedTntAndDoesNotReplayItsDisappearance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
+        // GameTest cells run concurrently in one Minecraft level. Every physical UUID derives
+        // from canonical identity, so this fixture must derive its world/lease identity from
+        // its own stable cell instead of competing with another TNT scene for the same body.
+        String fixture = "scene-explosion-game-test-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
-        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-explosion-game-test");
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:" + fixture);
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the explosion fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));

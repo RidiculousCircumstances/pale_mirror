@@ -718,6 +718,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
+        if (!(lease.cause() instanceof LogisticsSceneCause)) {
+            throw new IllegalArgumentException("legacy scene WAL payload may encode logistics causes only");
+        }
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, lease.operationId()); writeSubject(output, lease.cargoId());
         output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeSubject(output, lease.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());

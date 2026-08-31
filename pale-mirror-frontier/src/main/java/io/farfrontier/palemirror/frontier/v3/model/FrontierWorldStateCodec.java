@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 76, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 77, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -73,7 +73,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -656,7 +656,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeSceneLeases(DataOutputStream output, Map<SceneLeaseId, SceneLease> leases) throws IOException {
         writeCount(output, leases.size());
         for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
-            writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
+            writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSceneCauseKind(output, lease.cause());
+            writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
             output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeString(output, lease.engagementId().orElseThrow().value());
             writePosition(output, lease.handoffPosition()); writePosition(output, lease.cargoPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
             writeCount(output, lease.members().size());
@@ -677,7 +678,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         int count = readCount(input);
         if (version < 53 && count > 0) throw new IllegalArgumentException("legacy scene lease lacks exact member or cargo positions");
         for (int index = 0; index < count; index++) {
-            SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input)); SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input));
+            SceneCauseKind causeKind = version >= 77 ? readSceneCauseKind(input) : SceneCauseKind.LOGISTICS;
+            SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
             java.util.Optional<SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
             BlockPosition handoff = readPosition(input); BlockPosition cargoPosition = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
@@ -694,11 +697,40 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
             }
-            SceneLease lease = new SceneLease(id, world, operation, cargo, handoff, cargoPosition, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    SceneLeaseStatus.values()[status], engagement, members, memberPositions, handoffActors, recovery);
+            SceneCause cause = causeKind.create(operation, cargo, engagement, cargoPosition);
+            SceneLease lease = SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
+                    SceneLeaseStatus.values()[status], members, memberPositions, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;
+    }
+    private static void writeSceneCauseKind(DataOutputStream output, SceneCause cause) throws IOException {
+        if (cause instanceof LogisticsSceneCause) { output.writeByte(0); return; }
+        if (cause instanceof SettlementAssaultSceneCause assault) {
+            output.writeByte(1); writeString(output, assault.assaultId().value()); writeString(output, assault.settlementId().value()); return;
+        }
+        throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
+    }
+    private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> SceneCauseKind.LOGISTICS;
+            case 1 -> new SceneCauseKind.Assault(new SubjectId(readString(input)), new SubjectId(readString(input)));
+            default -> throw new IllegalArgumentException("unknown scene cause kind");
+        };
+    }
+    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault {
+        SceneCauseKind LOGISTICS = new Logistics();
+        SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
+        final class Logistics implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
+                return new LogisticsSceneCause(operation, cargo, engagement, cargoPosition);
+            }
+        }
+        record Assault(SubjectId assaultId, SubjectId settlementId) implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
+                return new SettlementAssaultSceneCause(assaultId, settlementId);
+            }
+        }
     }
     private static void writePhysicalIntents(DataOutputStream output, Map<PhysicalIntentId, PhysicalIntent> intents) throws IOException {
         writeCount(output, intents.size());
