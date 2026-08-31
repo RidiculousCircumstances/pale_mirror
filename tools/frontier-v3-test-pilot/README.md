@@ -13,12 +13,12 @@ server receives an explicit seed, a per-run level name and a generated
 offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
-An isolated scenario may additionally declare `"server": { "profile":
-"hot-scene-strike" }`, `"hive-growth" }`, `"hive-nutrient-transfer" }`, `"scene-return" }`,
-`"hot-scout-sighting" }`, `"hot-scout-intercept" }`, `"health-quarantine" }`
-or `"resident-transit" }`. These fail-closed development
-fixtures are available only to the named disposable pilot runner. The first
-selects a deterministic canonical HOT engagement; the second stops the real
+An isolated scenario may additionally declare a `server.profile` of
+`hot-scene-strike`, `settlement-assault`, `hive-growth`, `hive-nutrient-transfer`,
+`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `health-quarantine`
+or `resident-transit`. These fail-closed development fixtures are available
+only to the named disposable pilot runner. `hot-scene-strike` selects a
+deterministic canonical HOT engagement. `hive-growth` stops the real
 twelve-settlement schedule at a durable exact-biomass receipt, so an ordinary
 visit to the owned chest must cause the named organ, bioform and infection
 advance. `scene-return` exposes one real COLD route continuation, while
@@ -28,7 +28,7 @@ facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 exact stack must leave one loaded chest, cross the retained COLD corridor, then
 enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded
 reserved-bed corridor and no HOT body; an ordinary visit must materialize and
-advance that same journey. The normal `world` profile remains the default. No profile gives the
+advance that same journey. `settlement-assault` stops at a real Scout-rooted COLD battle: a visit must admit only its exact cargo-free attackers and defenders. The normal `world` profile remains the default. No profile gives the
 pilot a canonical mutation API or force-loads chunks.
 
 Run the checked-in isolated terminal-harvest regression on the visible `:0`

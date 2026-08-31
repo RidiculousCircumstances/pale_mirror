@@ -204,6 +204,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("hot-scene-strike") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("settlement-assault") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentSettlementAssaultConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         if (profile.equals("hive-growth") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentHiveGrowthConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
@@ -289,6 +292,7 @@ public final class FrontierV3ServerLifecycle {
                 advanceQueuedCanonicalTime(server, runtime);
             }
         } catch (RuntimeException error) {
+            PaleMirrorMod.LOGGER.error("Frontier v3 server tick failed before quarantine", error);
             runtime.quarantine(error);
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
@@ -307,6 +311,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3ObjectBoardExecutor.forget(runtime);
                 FrontierV3AmbientActorExecutor.forget(runtime);
                 FrontierV3SceneExecutor.forget(runtime);
+                FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
                 runtime.shutdown();
             }
         } finally {

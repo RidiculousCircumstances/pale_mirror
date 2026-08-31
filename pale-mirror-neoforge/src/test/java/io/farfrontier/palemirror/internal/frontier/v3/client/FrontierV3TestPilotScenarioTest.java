@@ -120,6 +120,17 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyBoundedLocalNamedEntityCameraTargets() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"look_nearest_entity","entityType":"minecraft:zombie",
+                "nameContains":"HIVE","maxDistance":128,"timeoutMs":30000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"look_nearest_entity","entityType":"minecraft:zombie",
+                "nameContains":"HIVE","maxDistance":129,"timeoutMs":30000}]}"""));
+    }
+
+    @Test
     void acceptsAReadOnlyOperationRelativeCameraAndLocalEntityPresentationProof() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[

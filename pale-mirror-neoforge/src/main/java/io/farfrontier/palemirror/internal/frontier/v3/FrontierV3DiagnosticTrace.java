@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayDeque;
@@ -48,6 +49,12 @@ final class FrontierV3DiagnosticTrace {
     /** Records the bounded operation → lease → cargo/actor chain for one scene transition. */
     static void recordScene(MinecraftServer server, String kind, SceneLease lease, CommandResult result) {
         Objects.requireNonNull(lease, "scene lease");
+        if (lease.cause() instanceof SettlementAssaultSceneCause assault) {
+            record(server, "assault:" + assault.assaultId().value(), kind, assault.assaultId(), result,
+                    new Context(assault.assaultId().value(), lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+            return;
+        }
         record(server, "operation:" + lease.operationId().value(), kind, lease.operationId(), result,
                 new Context(lease.operationId().value(), lease.id().value(), lease.cargoId().value(),
                         lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
@@ -111,7 +118,7 @@ final class FrontierV3DiagnosticTrace {
             operationId = Objects.requireNonNull(operationId, "trace operation"); leaseId = Objects.requireNonNull(leaseId, "trace lease");
             cargoId = Objects.requireNonNull(cargoId, "trace cargo"); actorIds = List.copyOf(Objects.requireNonNull(actorIds, "trace actors"));
             if (actorIds.size() > 32 || actorIds.stream().anyMatch(String::isBlank)
-                    || (!operationId.isEmpty() && (leaseId.isEmpty() || cargoId.isEmpty()))) {
+                    || (!operationId.isEmpty() && leaseId.isEmpty())) {
                 throw new IllegalArgumentException("diagnostic trace context is invalid");
             }
         }

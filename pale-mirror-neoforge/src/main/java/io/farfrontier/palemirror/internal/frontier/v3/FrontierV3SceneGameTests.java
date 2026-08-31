@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -47,6 +48,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.EventPriority;
@@ -433,6 +435,94 @@ public final class FrontierV3SceneGameTests {
             if (body != null) body.discard();
         });
         runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-assault", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void scoutRootedSettlementAssaultUsesExactCargoFreeBodiesStrikeAndRecovery(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos marker = helper.absolutePos(new BlockPos(36, 8, 0));
+        String fixture = "settlement-assault-game-test-" + marker.getX() + "-" + marker.getZ();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentSettlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L),
+                        new EphemeralStore(), 20_000);
+        try {
+            FrontierWorldState initial = state(runtime);
+            SettlementAssaultSceneCandidate battle = initial.coldSettlementAssaultSceneCandidates().getFirst();
+            BlockPos anchor = new BlockPos(battle.handoffPosition().x(), battle.handoffPosition().y(), battle.handoffPosition().z());
+            // This deliberate local GameTest load is not a runtime ticket. The production
+            // executor still sees only a naturally loaded player demand surface.
+            for (BlockPosition floor : battle.memberPositions().values()) {
+                BlockPos position = new BlockPos(floor.x(), floor.y(), floor.z()); level.getChunkAt(position); prepareFloor(level, position);
+            }
+            level.getChunkAt(anchor); prepareFloor(level, anchor);
+            var player = helper.makeMockServerPlayerInLevel();
+            player.teleportTo(level, anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D, java.util.Set.of(), 0.0F, 0.0F);
+
+            FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
+            SceneLease prepared = state(runtime).sceneLeases().values().stream().findFirst()
+                    .orElseThrow(() -> new IllegalStateException("assault must prepare one typed lease"));
+            helper.assertTrue(prepared.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause,
+                    "the Scout-rooted battle must retain a typed assault cause rather than a route/cargo surrogate");
+            helper.assertValueEqual(prepared.members().size(), battle.memberPositions().size(),
+                    "the exact COLD battlefield participant set is the only HOT body set");
+            FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
+
+            helper.runAfterDelay(2L, () -> {
+                try {
+                    SceneLease hot = state(runtime).sceneLeases().get(prepared.id());
+                    helper.assertValueEqual(hot.status(), SceneLeaseStatus.HOT, "all exact attacker and defender bodies must admit before the battle becomes HOT");
+                    for (SceneMember member : hot.members()) {
+                        Entity body = level.getEntity(member.entityId());
+                        helper.assertTrue(body != null && FrontierV3SceneExecutor.recognizes(runtime, body),
+                                "every typed assault participant must retain its exact owned physical identity: "
+                                        + admissionDetail(runtime, member, body));
+                        boolean bioform = member.actorId().value().startsWith("bioform:");
+                        helper.assertTrue(bioform ? body instanceof Zombie : body instanceof Villager,
+                                "graybox assault body kind must follow canonical person/bioform identity");
+                    }
+                    helper.assertTrue(level.getEntitiesOfClass(MinecartChest.class, new net.minecraft.world.phys.AABB(anchor).inflate(16.0D)).isEmpty(),
+                            "a settlement assault is cargo-free and must never materialize a logistics carrier");
+
+                    Zombie attacker = hot.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
+                            .findFirst().orElseThrow(() -> new IllegalStateException("typed assault needs one Zombie attacker"));
+                    Villager target = hot.members().stream().map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
+                            .findFirst().orElseThrow(() -> new IllegalStateException("typed assault needs one Villager defender"));
+                    attacker.setPos(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D);
+                    target.setPos(anchor.getX() + 1.25D, anchor.getY(), anchor.getZ() + 0.5D);
+                    FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
+                    PhysicalIntent preparedStrike = onlyStrike(state(runtime));
+                    helper.assertValueEqual(preparedStrike.causeSubjectId(), battle.assaultId(),
+                            "the durable strike must be owned by the assault, never a fabricated route operation");
+                    FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
+                    float before = target.getHealth(); FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), hot);
+                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFIRMED,
+                            "the typed assault strike must complete through the normal durable physical receipt boundary");
+                    helper.assertTrue(target.getHealth() < before, "only the physical exact defender may receive the real Minecraft hit");
+
+                    helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
+                            "restart first makes the assault lease explicit UNKNOWN rather than cloning its bodies");
+                    FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
+                    helper.assertValueEqual(state(runtime).sceneLeases().get(hot.id()).status(), SceneLeaseStatus.HOT,
+                            "the complete loaded exact body set reclaims the same typed assault lease after restart");
+
+                    FrontierV3CommandSubmission.submit(runtime, "assault-game-test-drain", hot.id().value(), new SceneLeaseTransition(hot.id(), SceneLeaseStatus.DRAINING));
+                    FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime);
+                    player.teleportTo(level, anchor.getX() + 256.0D, anchor.getY(), anchor.getZ() + 256.0D, java.util.Set.of(), 0.0F, 0.0F);
+                    FrontierV3SceneExecutor.tick(level, runtime);
+                    helper.assertTrue(hot.members().stream().map(SceneMember::entityId).map(level::getEntity).allMatch(java.util.Objects::isNull),
+                            "closed cargo-free assault cleanup must remove only its exact bodies and never query a legacy carrier");
+                    helper.succeed();
+                } finally {
+                    state(runtime).sceneLeases().values().forEach(lease -> lease.members().forEach(member -> {
+                        Entity body = level.getEntity(member.entityId()); if (body != null) body.discard();
+                    }));
+                    FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
+                    runtime.shutdown();
+                }
+            });
+        } catch (RuntimeException failure) {
+            FrontierV3SettlementAssaultSceneExecutor.forget(runtime); runtime.shutdown(); throw failure;
+        }
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

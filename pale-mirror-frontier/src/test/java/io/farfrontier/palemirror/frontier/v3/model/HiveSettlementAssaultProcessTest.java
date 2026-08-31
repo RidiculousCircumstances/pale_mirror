@@ -88,7 +88,11 @@ class HiveSettlementAssaultProcessTest {
         }
         SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, assault.status());
-        SettlementAssaultStrike strike = (SettlementAssaultStrike) HiveSettlementAssaultProcess.planCombat(state, next).getFirst().payload();
+        List<ProposedEvent> combat = HiveSettlementAssaultProcess.planCombat(state, next);
+        SettlementAssaultStrike strike = (SettlementAssaultStrike) combat.getFirst().payload();
+        ScheduledAction replacement = combat.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+        assertTrue(!next.id().equals(replacement.id()), "a recurring COLD combat action must get a fresh identity before the current due action is consumed");
         assertEquals(strike, FrontierWorldRuntimeDefinition.payloadCodecs().decode(strike.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(strike)));
         state = HiveSettlementAssaultProcess.reduceStrike(state, fixture.hive(), strike);
         FrontierWorldState afterStrike = state;

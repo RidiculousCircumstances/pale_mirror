@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "disposable_settlement_assault_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "settlement-assault" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" }, "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" }, "timeoutMs": 90000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 128, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 128, "maxAngleDeg": 80, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "trace", "id": "assault:assault:development-settlement-assault" }
+  ],
+  "assertions": [
+    { "after": 2, "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" } },
+    { "after": 3, "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" } },
+    { "after": 6, "view": "trace", "id": "assault:assault:development-settlement-assault", "expect": { "status": "ok" } }
+  ],
+  "frames": [
+    { "after": 5, "name": "settlement-assault-reclaimed" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 }
+    ]
+  }
+}

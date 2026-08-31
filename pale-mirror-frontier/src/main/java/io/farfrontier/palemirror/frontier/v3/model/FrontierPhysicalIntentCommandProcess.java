@@ -41,6 +41,7 @@ final class FrontierPhysicalIntentCommandProcess {
                         state, intent, transition, command.submittedAt().ticks()));
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
+                case SCENE_STRIKE -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
                 case EXACT_ITEM_CONSUMPTION -> consumptionTransition(state, intent, transition, command);
                 default -> routeTransition(state, intent, transition, command.submittedAt().ticks());
             };
@@ -97,10 +98,8 @@ final class FrontierPhysicalIntentCommandProcess {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
             }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
-            RouteOperation operation = state.operations().get(intent.causeSubjectId());
-            if (operation == null) return rejected("scene strike has no owning operation");
             SceneStrikeStateSupport.validateIntent(state, intent);
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), prepared)));
         } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
     }
 

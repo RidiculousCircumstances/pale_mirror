@@ -208,6 +208,32 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneTypedCargoFreeAssaultSceneWithoutCallingItsLegacyLogisticsView(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.developmentSettlementAssaultConfiguration(new WorldId("frontier:diagnostic-assault-scene-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState before = runtime.decodedState().orElseThrow();
+        var candidate = before.coldSettlementAssaultSceneCandidates().getFirst();
+        var members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(actor,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-assault-r0"), checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
+                members, candidate.memberPositions(), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+
+        String scene = FrontierV3DiagnosticJson.render("scene", candidate.assaultId().value(), checkpoint, hot, Optional.empty());
+
+        assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"SETTLEMENT_ASSAULT\""));
+        assertTrue(scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"" + candidate.assaultId().value() + "\""));
+        assertTrue(scene.contains("\"strikeStatus\":\"NONE\"") && scene.contains("\"carrier\":\"NOT_APPLICABLE\"") == false,
+                "the pure formatter preserves typed scene facts without querying a cargo carrier");
+        runtime.shutdown();
+    }
+
+    @Test
     void keepsPhysicalReadinessScopedToHarvestIntents(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-readiness-test"), 94L),

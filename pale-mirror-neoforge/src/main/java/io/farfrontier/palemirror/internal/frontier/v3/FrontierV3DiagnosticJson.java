@@ -26,6 +26,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
+import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -357,30 +359,41 @@ final class FrontierV3DiagnosticJson {
                 + quote(FrontierV3DiagnosticTrace.physicalDeltaCorrelation(position)) + "\"}";
     }
 
-    /** One stable engagement- or route-level view for player-piloted physical-scene evidence. */
+    /** One stable typed-scene view for player-piloted physical-scene evidence. */
     private static String scene(String id, CheckpointImage checkpoint, FrontierWorldState state,
                                 Optional<FrontierV3SceneExecutor.Readiness> readiness) {
         SubjectId sceneSubject = subject(id).orElse(null);
         if (sceneSubject == null) return unavailable("scene", id, checkpoint, "not_found");
         var lease = currentLease(state, sceneSubject);
         if (lease == null) return unavailable("scene", id, checkpoint, "not_found");
-        SubjectId engagement = lease.engagementId().orElse(null);
+        LogisticsSceneCause logistics = lease.cause() instanceof LogisticsSceneCause value ? value : null;
+        SettlementAssaultSceneCause assault = lease.cause() instanceof SettlementAssaultSceneCause value ? value : null;
+        SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
                 .filter(value -> engagement != null && value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
                 .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
+        SubjectId strikeCause = assault == null ? logistics.operationId() : assault.assaultId();
+        PhysicalIntent strike = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
+                .filter(value -> value.causeSubjectId().equals(strikeCause)).sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
+        String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
+                + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
-                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"operation\":\"" + quote(lease.operationId().value())
+                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (assault == null ? "LOGISTICS" : "SETTLEMENT_ASSAULT")
+                + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
+                + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
                 + "\",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
-                + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
+                + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
+                + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 
     /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */
     private static io.farfrontier.palemirror.frontier.v3.model.SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {
         return state.sceneLeases().values().stream()
-                .filter(lease -> lease.operationId().equals(sceneSubject)
-                        || lease.engagementId().filter(sceneSubject::equals).isPresent())
+                .filter(lease -> (lease.cause() instanceof LogisticsSceneCause
+                        && (lease.operationId().equals(sceneSubject) || lease.engagementId().filter(sceneSubject::equals).isPresent()))
+                        || (lease.cause() instanceof SettlementAssaultSceneCause assault && assault.assaultId().equals(sceneSubject)))
                 .max(java.util.Comparator.comparingInt((io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) ->
                                 lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? 0 : 1)
                         .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::handoffInstant)

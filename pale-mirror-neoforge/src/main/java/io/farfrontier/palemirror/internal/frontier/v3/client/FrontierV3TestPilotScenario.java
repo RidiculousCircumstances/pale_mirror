@@ -10,7 +10,7 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look",
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of(
@@ -70,6 +70,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("assert_visible_entity") && !validVisibleEntity(action)) ||
+                    (type.equals("look_nearest_entity") && !validLookNearestEntity(action)) ||
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
@@ -201,6 +202,14 @@ final class FrontierV3TestPilotScenario {
                 && action.has("nameContains") && action.get("nameContains").isJsonPrimitive() && !action.get("nameContains").getAsString().isBlank()
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
                 && boundedOptionalNumber(action, "maxAngleDeg", 1.0D, 90.0D);
+    }
+
+    /** Camera-only test action: selects no server identity and cannot mutate the world. */
+    private static boolean validLookNearestEntity(JsonObject action) {
+        return action.has("entityType") && action.get("entityType").isJsonPrimitive()
+                && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && action.has("nameContains") && action.get("nameContains").isJsonPrimitive() && !action.get("nameContains").getAsString().isBlank()
+                && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D);
     }
 
     /** A bounded ordinary right-click on one already-rendered semantic board. */

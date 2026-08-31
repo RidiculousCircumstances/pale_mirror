@@ -248,7 +248,10 @@ final class HiveSettlementAssaultProcess {
     private static ScheduledAction progress(SettlementAssault assault, long dueAt) { return action("progress", assault.id(), dueAt); }
     static ScheduledAction combat(SettlementAssault assault, long dueAt) { return action("combat", assault.id(), dueAt); }
     private static ScheduledAction action(String phase, SubjectId assaultId, long dueAt) {
-        return new ScheduledAction(new ScheduleId("schedule:settlement-assault-" + phase + "-" + assaultId.value().substring("assault:".length())), new SimInstant(dueAt), 0,
+        // A due action is consumed only after its replacement is admitted. Retaining the
+        // due instant in the immutable identity makes COLD combat rescheduling atomic instead
+        // of attempting to insert a second copy of the current schedule ID.
+        return new ScheduledAction(new ScheduleId("schedule:settlement-assault-" + phase + "-" + assaultId.value().substring("assault:".length()) + "-at-" + dueAt), new SimInstant(dueAt), 0,
                 assaultId, "frontier.settlement_assault." + phase, 1);
     }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }

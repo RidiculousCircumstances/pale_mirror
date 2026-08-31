@@ -159,6 +159,7 @@ public final class FrontierV3TestPilotClient {
                     look(minecraft, position(action, action.has("at") ? "at" : "position"));
                     advance(type);
                 }
+                case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
                 case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
@@ -388,12 +389,46 @@ public final class FrontierV3TestPilotClient {
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
         boolean visible = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maxDistance), entity -> {
             if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
-                    || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)) return false;
+                    || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
+                    || !minecraft.player.hasLineOfSight(entity)) return false;
             Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
         }).stream().findFirst().isPresent();
         if (visible) { advance("assert_visible_entity"); return; }
         timeout(minecraft, action, "camera never saw local entity " + expectedType + " named " + expectedName);
+    }
+
+    /** Rotates only the local test camera towards one locally rendered named body. */
+    private static void lookNearestEntity(Minecraft minecraft, JsonObject action) {
+        ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
+        String expectedName = action.get("nameContains").getAsString();
+        double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
+        Entity target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
+                        !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                                && entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName)
+                                && minecraft.player.hasLineOfSight(entity))
+                .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
+                        .thenComparing(Entity::getUUID)).findFirst().orElse(null);
+        if (target == null) {
+            timeout(minecraft, action, "no line-of-sight local entity " + expectedType + " named " + expectedName
+                    + "; candidates=" + localEntityEvidence(minecraft, expectedType, expectedName, maximum));
+            return;
+        }
+        minecraft.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+        advance("look_nearest_entity");
+    }
+
+    /** Bounded failure evidence for a presentation assertion; it neither selects nor mutates a server entity. */
+    private static String localEntityEvidence(Minecraft minecraft, ResourceLocation expectedType, String expectedName, double maximum) {
+        Vec3 eye = minecraft.player.getEyePosition();
+        return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
+                        !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                                && entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName))
+                .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
+                        .thenComparing(Entity::getUUID)).limit(8).map(entity -> entity.getUUID() + "@"
+                        + entity.getBlockX() + "," + entity.getBlockY() + "," + entity.getBlockZ() + "/los="
+                        + minecraft.player.hasLineOfSight(entity) + "/distance=" + Math.round(eye.distanceTo(entity.getEyePosition())))
+                .collect(java.util.stream.Collectors.joining(";"));
     }
 
     /**

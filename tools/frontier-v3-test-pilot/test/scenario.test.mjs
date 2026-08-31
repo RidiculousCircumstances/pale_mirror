@@ -78,6 +78,7 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
 
 test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-assault' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hive-nutrient-transfer' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-sighting' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-intercept' } }));

@@ -67,8 +67,9 @@ public final class FrontierV3CargoCarrierGameTests {
                         "one exact local caption must ride with the real cargo carrier rather than becoming a detached HUD");
                 helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                         "recovery must reuse the exact carrier rather than duplicate cargo");
-                helper.assertValueEqual(level.getEntitiesOfClass(MinecartChest.class, carrier.getBoundingBox().inflate(8.0D)).size(), 1,
-                        "one HOT lease must retain exactly one nearby cargo carrier");
+                helper.assertValueEqual(level.getEntitiesOfClass(MinecartChest.class, carrier.getBoundingBox().inflate(8.0D),
+                                candidate -> FrontierV3CargoCarrierExecutor.owned(candidate, lease, expected)).size(), 1,
+                        "one HOT lease must retain exactly one owned cargo carrier, independently of a parallel scene's cart");
                 carrier.discard(); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
         });

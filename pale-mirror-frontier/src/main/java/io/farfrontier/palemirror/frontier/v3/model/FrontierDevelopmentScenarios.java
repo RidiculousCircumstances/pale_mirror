@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 
@@ -55,6 +56,65 @@ final class FrontierDevelopmentScenarios {
         }
         if (state.coldEngagementSceneCandidates().isEmpty()) throw new IllegalStateException("development scene did not enter COLD engagement");
         return state;
+    }
+
+    /**
+     * Disposable-only real assault boundary. The fixture advances the normal bounded Scout
+     * sighting and attacker approach process to COLD_COMBAT, but creates neither a scene lease
+     * nor a Minecraft body: a naturally visiting player must admit the typed HOT scene.
+     */
+    static SettlementAssaultFixture settlementAssaultFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst()
+                .orElseThrow(() -> new IllegalStateException("development assault fixture needs one Scout"));
+        state = state.withActorLocation(scout.id(), settlement.anchor());
+        HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
+        InfectionCell cell = InfectionCell.at(settlement.anchor());
+        FixedRatio intensity = new FixedRatio(FixedScalar.ONE);
+        StrategicPlanState plans = StrategicPlanState.empty()
+                .withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
+                .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L))
+                .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(java.util.Map.of(cell,
+                        new HiveTerritoryKnowledge.Belief(cell, intensity, scout.id(), settlement.anchor(), 100L))));
+        state = state.withInfection(cell, intensity);
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-settlement-assault"), hive,
+                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-settlement-assault"), objective.id(), hive,
+                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(plans.addObjective(objective).addTask(task));
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(task, sighting, 200L));
+        for (ProposedEvent event : start) {
+            if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
+            if (event.payload() instanceof SettlementAssaultStarted started) state = HiveSettlementAssaultProcess.reduceStarted(state, hive, started);
+        }
+        ScheduledAction next = start.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
+                .orElseThrow(() -> new IllegalStateException("development assault fixture did not schedule approach"));
+        for (int step = 0; step < 256; step++) {
+            List<ProposedEvent> progress = HiveSettlementAssaultProcess.planProgress(state, next);
+            for (ProposedEvent event : progress) {
+                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive, advanced);
+                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, hive, transition);
+            }
+            SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst()
+                    .orElseThrow(() -> new IllegalStateException("development assault fixture lost its assault"));
+            if (assault.status() == SettlementAssaultStatus.COLD_COMBAT) {
+                if (state.coldSettlementAssaultSceneCandidates().size() != 1) {
+                    throw new IllegalStateException("development assault fixture has no exact COLD battlefield");
+                }
+                // The fixture stops at the COLD/HOT boundary. It deliberately does not let a
+                // background COLD combat due action decide the battle before the native pilot
+                // has naturally loaded its scene.
+                return new SettlementAssaultFixture(state, new SimInstant(400L), List.of(), assault.id());
+            }
+            next = progress.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("development assault fixture approach stalled"));
+        }
+        throw new IllegalStateException("development assault fixture did not reach COLD combat");
     }
 
     /**
@@ -317,6 +377,12 @@ final class FrontierDevelopmentScenarios {
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         RouteSceneReturnFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record SettlementAssaultFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId assaultId) {
+        SettlementAssaultFixture {
             schedules = List.copyOf(schedules);
         }
     }

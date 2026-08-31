@@ -103,6 +103,7 @@ final class FrontierV3SceneExecutor {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
         forgetInactiveDemand(runtime, state);
+        if (FrontierV3SettlementAssaultSceneExecutor.tick(level, runtime)) return;
         // A COLD continuation can leave a HOT projection in vanilla's unloaded chunk NBT. On
         // ordinary return, remove that stale projection before any new scene claims its actor.
         cleanReleasedBodies(level, state);
@@ -136,7 +137,8 @@ final class FrontierV3SceneExecutor {
             else handoff(level, runtime, state, lease);
             return;
         }
-        state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
+        state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(lease -> lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause)
+                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .findFirst().ifPresent(lease -> execute(level, runtime, state, lease));
     }
 
@@ -313,7 +315,9 @@ final class FrontierV3SceneExecutor {
     static Optional<Readiness> readiness(ServerLevel level, FrontierWorldState state, SubjectId sceneSubject) {
         SceneLease lease = currentLease(state, sceneSubject).orElse(null);
         if (lease == null) return Optional.empty();
-        return Optional.of(new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name()));
+        String carrier = lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause
+                ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name() : "NOT_APPLICABLE";
+        return Optional.of(new Readiness(bodyReadiness(level, state, lease), carrier));
     }
 
     /**
@@ -322,8 +326,10 @@ final class FrontierV3SceneExecutor {
      */
     static Optional<SceneLease> currentLease(FrontierWorldState state, SubjectId sceneSubject) {
         return state.sceneLeases().values().stream()
-                .filter(lease -> lease.operationId().equals(sceneSubject)
-                        || lease.engagementId().filter(sceneSubject::equals).isPresent())
+                .filter(lease -> (lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause
+                        && (lease.operationId().equals(sceneSubject) || lease.engagementId().filter(sceneSubject::equals).isPresent()))
+                        || (lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause assault
+                        && assault.assaultId().equals(sceneSubject)))
                 .max(Comparator.comparingInt((SceneLease lease) -> lease.status() == SceneLeaseStatus.CLOSED ? 0 : 1)
                         .thenComparing(SceneLease::handoffInstant)
                         .thenComparingLong(SceneLease::revision)
@@ -414,14 +420,17 @@ final class FrontierV3SceneExecutor {
     }
 
     static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        if (lease.engagementId().isEmpty()) return;
+        SubjectId sceneCause = strikeCause(lease);
+        if (sceneCause == null) return;
+        boolean settlementAssault = lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
         Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
+                && intent.causeSubjectId().equals(sceneCause) && intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
         if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
         if (pending.isEmpty()) {
-            boolean hiveTurn = confirmedStrikeCount(state, lease) % 2L == 0L;
-            List<Body> attackers = bodies.stream().filter(body -> hiveTurn ? body.bioform() : residentGuard(state, body.member().actorId())).toList();
+            boolean hiveTurn = confirmedStrikeCount(state, sceneCause) % 2L == 0L;
+            List<Body> attackers = bodies.stream().filter(body -> hiveTurn ? body.bioform()
+                    : !body.bioform() && (settlementAssault || residentGuard(state, body.member().actorId()))).toList();
             List<Body> targets = bodies.stream().filter(body -> hiveTurn ? !body.bioform() : body.bioform()).toList();
             if (attackers.isEmpty() || targets.isEmpty()) return;
             Body attacker = attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
@@ -429,9 +438,10 @@ final class FrontierV3SceneExecutor {
                     .thenComparing(body -> body.member().actorId())).orElseThrow();
             if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
             forgetLastObserved(runtime, lease.id());
-            String key = "scene-r" + lease.revision() + "-s" + confirmedStrikeCount(state, lease);
+            String key = state.bootstrap().worldId().value().replace(':', '-') + "-" + sceneCause.value().replace(':', '-')
+                    + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause);
             PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-" + key), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    lease.operationId(), List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                    sceneCause, List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }
         PhysicalIntent intent = pending.orElseThrow();
@@ -483,9 +493,15 @@ final class FrontierV3SceneExecutor {
         return new Vec3(lease.handoffPosition().x() + 0.5D + Math.cos(angle) * 2.0D, actor.entity().getY(), lease.handoffPosition().z() + 0.5D + Math.sin(angle) * 2.0D);
     }
 
-    private static long confirmedStrikeCount(FrontierWorldState state, SceneLease lease) {
+    private static long confirmedStrikeCount(FrontierWorldState state, SubjectId sceneCause) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() == PhysicalIntentStatus.CONFIRMED).count();
+                && intent.causeSubjectId().equals(sceneCause) && intent.status() == PhysicalIntentStatus.CONFIRMED).count();
+    }
+
+    /** Logistics needs an engagement; a typed settlement assault is intrinsically a combat scene. */
+    private static SubjectId strikeCause(SceneLease lease) {
+        if (lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause assault) return assault.assaultId();
+        return lease.engagementId().isPresent() ? lease.operationId() : null;
     }
 
     private static BlockPosition cargoDestination(FrontierWorldState state, SceneLease lease) {
@@ -586,7 +602,11 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (owned(entity, state, lease, member)) entity.discard();
         }));
+        // Only logistics scenes have a cargo carrier.  A typed assault is deliberately
+        // cargo-free; asking its typed cause for a legacy cargo ID would turn normal cleanup
+        // into an exception after its last body is released.
         state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
+                .filter(lease -> lease.cause() instanceof io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause)
                 .forEach(lease -> FrontierV3CargoCarrierExecutor.discardClosed(level, state, lease));
     }
 

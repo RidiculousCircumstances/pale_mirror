@@ -271,6 +271,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
+                    && !strategicPlans.settlementAssaults().containsKey(intent.causeSubjectId())
                     && !bootstrap.hive().id().equals(intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
                     && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {

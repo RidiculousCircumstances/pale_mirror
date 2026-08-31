@@ -62,6 +62,12 @@ public final class FrontierWorldRuntimeDefinition {
         return new FrontierEngineConfiguration<>(worldId, initial, new SimInstant(2_600L), FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(initial.bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), List.of(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+    /** Disposable-only settled assault fixture; ordinary loaded demand must create its typed cargo-free HOT battle. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentSettlementAssaultConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, true), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()), FrontierWorldProjectionCompiler::compile,
+                new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     /** Development-only real-economy fixture; the named runner must physically consume biomass before outputs exist. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentHiveGrowthConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveGrowthFixture fixture = FrontierDevelopmentScenarios.hiveGrowthFixture(worldId, seed);
@@ -753,8 +759,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
             SceneStrikeStateSupport.validateIntent(state, intent);
-            RouteOperation operation = state.operations().get(intent.causeSubjectId());
-            if (!subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene strike must be prepared by its operation settlement");
+            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
             return state.preparePhysicalIntent(intent);
         }
         if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
@@ -788,6 +793,10 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
+            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {

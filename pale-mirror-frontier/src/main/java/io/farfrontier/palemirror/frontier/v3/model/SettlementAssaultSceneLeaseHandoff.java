@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Objects;
 
 /** Atomic ambient-to-assault scene capture; it intentionally carries no logistics cargo. */
-record SettlementAssaultSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
-    SettlementAssaultSceneLeaseHandoff {
+public record SettlementAssaultSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+    public SettlementAssaultSceneLeaseHandoff {
         Objects.requireNonNull(lease, "assault scene lease");
         ambientMembers = List.copyOf(ambientMembers);
         if (!(lease.cause() instanceof SettlementAssaultSceneCause)) {
