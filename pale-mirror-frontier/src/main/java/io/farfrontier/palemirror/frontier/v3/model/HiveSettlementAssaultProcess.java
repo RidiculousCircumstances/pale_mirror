@@ -59,13 +59,22 @@ final class HiveSettlementAssaultProcess {
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
-        if (assault == null || assault.status() != SettlementAssaultStatus.APPROACHING) return List.of();
-        if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
-        SettlementAssaultAttacker next = assault.attackers().stream().filter(value -> !value.atDestination()).findFirst().orElse(null);
-        if (next == null) {
+        if (assault == null || (assault.status() != SettlementAssaultStatus.APPROACHING
+                && assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE)) return List.of();
+        if (assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE) {
+            List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
+            if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
+            if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
+                return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
+            }
+            if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
             return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT)),
                     schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
         }
+        if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+        SettlementAssaultAttacker next = assault.attackers().stream().filter(value -> !value.atDestination()).findFirst().orElse(null);
+        if (next == null) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE)),
+                schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultAttackerAdvanced(assault.id(), next.actorId(), next.routeIndex() + 1)),
                 schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
     }
@@ -73,9 +82,12 @@ final class HiveSettlementAssaultProcess {
     static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
         if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT) return List.of();
-        if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
         List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
+        if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
+            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
+        }
+        if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
         boolean hiveTurn = (assault.nextStrikeEpoch() & 1) == 0;
         SubjectId attacker = choose(hiveTurn ? attackers : defenders, assault.nextStrikeEpoch());
         SubjectId target = choose(hiveTurn ? defenders : attackers, assault.nextStrikeEpoch());
@@ -112,8 +124,12 @@ final class HiveSettlementAssaultProcess {
 
     static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, SettlementAssaultTransition transition) {
         SettlementAssault assault = assault(state, transition.assaultId());
-        if (!subject.equals(assault.hiveId()) || (transition.status() == SettlementAssaultStatus.COLD_COMBAT
-                && (!assault.allAttackersAtSettlement() || !coldAvailable(state, assault)))) {
+        boolean waiting = transition.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE
+                && (!assault.allAttackersAtBattlefield() || !coldAvailable(state, assault));
+        boolean cold = transition.status() == SettlementAssaultStatus.COLD_COMBAT
+                && (!assault.allAttackersAtBattlefield() || !coldAvailable(state, assault)
+                || FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty());
+        if (!subject.equals(assault.hiveId()) || waiting || cold) {
             throw new IllegalArgumentException("settlement assault transition has invalid COLD authority");
         }
         return state.withStrategicPlans(state.strategicPlans().transitionSettlementAssault(assault.id(), transition.status()));
@@ -168,8 +184,11 @@ final class HiveSettlementAssaultProcess {
                 .filter(value -> alive(state, value.id())).sorted(Comparator.comparing((ResidentProfile value) -> value.role() != ResidentRole.GUARD).thenComparing(ResidentProfile::id))
                 .limit(SettlementAssault.MAX_DEFENDERS).map(ResidentProfile::id).toList();
         if (defenders.isEmpty()) return null;
+        List<BlockPosition> floors = FrontierSettlementAssaultBattlefield.attackerFloors(state, sighting, defenders, selected.size()).orElse(null);
+        if (floors == null) return null;
         return new SettlementAssault(new SubjectId("assault:" + task.id().value().substring("task:".length())), task.id(), task.ownerId(), sighting,
-                selected.stream().map(value -> new SettlementAssaultAttacker(value.id(), approach(state.actorLocations().get(value.id()).position(), sighting.settlementAnchor()), 0)).toList(),
+                java.util.stream.IntStream.range(0, selected.size()).mapToObj(index -> new SettlementAssaultAttacker(selected.get(index).id(),
+                        approach(state.actorLocations().get(selected.get(index).id()).position(), floors.get(index)), 0)).toList(),
                 defenders, SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
     }
 
@@ -195,7 +214,7 @@ final class HiveSettlementAssaultProcess {
                 && assault.defenderIds().stream().noneMatch(id -> state.humanPopulation().migrations().containsKey(id)
                 || state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.guardId().equals(id))
                 || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE && operation.participantIds().contains(id))
-                || FrontierSceneAdmission.reserved(state, id));
+                || FrontierSceneAdmission.reservedByOtherThanSettlementAssault(state, id, assault.id()));
     }
 
     private static List<SubjectId> livingAttackers(FrontierWorldState state, SettlementAssault assault) { return assault.attackerIds().stream().filter(id -> alive(state, id)).sorted().toList(); }

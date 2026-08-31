@@ -97,6 +97,38 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void battleWaitsForDistinctCompiledFloorsAndConflictsInsteadOfMovingASeparatedDefender() {
+        Fixture fixture = fixture(true); FrontierWorldState state = fixture.state();
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
+        SettlementAssault started = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        FrontierWorldState startedState = state;
+        java.util.Set<BlockPosition> defenderFloors = started.defenderIds().stream().map(id -> startedState.actorLocations().get(id).position())
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(started.attackers().size(), started.attackers().stream().map(attacker -> attacker.route().getLast()).distinct().count());
+        assertTrue(started.attackers().stream().map(attacker -> attacker.route().getLast()).noneMatch(defenderFloors::contains));
+        assertTrue(started.attackers().stream().noneMatch(attacker -> attacker.route().getLast().equals(started.settlementAnchor())));
+
+        ScheduledAction next = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        for (int step = 0; step < 256; step++) {
+            List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
+            for (ProposedEvent event : events) {
+                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
+                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, fixture.hive(), transition);
+            }
+            next = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+            if (state.strategicPlans().settlementAssaults().get(started.id()).status() == SettlementAssaultStatus.WAITING_FOR_BATTLE) break;
+        }
+        assertEquals(SettlementAssaultStatus.WAITING_FOR_BATTLE, state.strategicPlans().settlementAssaults().get(started.id()).status());
+        SubjectId defender = started.defenderIds().getFirst();
+        state = state.withActorLocation(defender, started.settlementAnchor().offset(33, 0, 0));
+        List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
+        assertEquals(List.of(new SettlementAssaultTransition(started.id(), SettlementAssaultStatus.CONFLICT)),
+                conflict.stream().map(ProposedEvent::payload).toList());
+    }
+
     @Test void typedHotSceneRetainsAnExactCargoFreeAssaultAcrossSnapshotAndRelease() {
         Fixture fixture = fixture(true); FrontierWorldState state = fixture.state();
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
@@ -114,12 +146,7 @@ class HiveSettlementAssaultProcessTest {
             if (state.strategicPlans().settlementAssaults().values().stream().anyMatch(value -> value.status() == SettlementAssaultStatus.COLD_COMBAT)) break;
         }
         SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
-        java.util.Map<SubjectId, BlockPosition> positions = new java.util.LinkedHashMap<>(); int index = 0;
-        for (SubjectId actor : java.util.stream.Stream.concat(assault.attackerIds().stream(), assault.defenderIds().stream()).toList()) {
-            BlockPosition floor = new BlockPosition(assault.settlementAnchor().x() - 8 + index % 8 * 2, assault.settlementAnchor().y(),
-                    assault.settlementAnchor().z() - 4 + index / 8 * 2);
-            state = state.withActorLocation(actor, floor); positions.put(actor, floor); index++;
-        }
+        java.util.Map<SubjectId, BlockPosition> positions = state.coldSettlementAssaultSceneCandidates().getFirst().memberPositions();
         FrontierWorldState positioned = state;
         List<SceneMember> members = positions.keySet().stream().map(actor -> new SceneMember(actor,
                 SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();

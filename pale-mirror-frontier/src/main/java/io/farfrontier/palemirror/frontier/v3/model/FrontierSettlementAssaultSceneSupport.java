@@ -29,6 +29,13 @@ final class FrontierSettlementAssaultSceneSupport {
         return require(state, cause).hiveId();
     }
 
+    static java.util.List<SettlementAssaultSceneCandidate> candidates(FrontierWorldState state) {
+        return state.strategicPlans().settlementAssaults().values().stream()
+                .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
+                .sorted(java.util.Comparator.comparing(SettlementAssault::id))
+                .map(assault -> FrontierSettlementAssaultBattlefield.candidate(state, assault)).flatMap(java.util.Optional::stream).toList();
+    }
+
     static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
             throw new IllegalArgumentException("assault scene requires its typed cause");
@@ -38,14 +45,16 @@ final class FrontierSettlementAssaultSceneSupport {
                 || !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault)) {
             throw new IllegalArgumentException("assault scene must prepare one intact COLD battle at its retained anchor");
         }
-        Set<SubjectId> expected = new HashSet<>(assault.attackerIds());
-        expected.addAll(assault.defenderIds());
+        SettlementAssaultSceneCandidate candidate = FrontierSettlementAssaultBattlefield.candidate(state, assault)
+                .orElseThrow(() -> new IllegalArgumentException("assault scene has no exact compiled battlefield"));
+        Set<SubjectId> expected = new HashSet<>(candidate.memberPositions().keySet());
         Set<SubjectId> actual = new HashSet<>();
         Set<BlockPosition> floors = new HashSet<>();
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
             BlockPosition floor = lease.memberPosition(member.actorId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(floor)
+                    || !floor.equals(candidate.memberPositions().get(member.actorId()))
                     || !actual.add(member.actorId()) || !floors.add(floor) || !near(assault.settlementAnchor(), floor)) {
                 throw new IllegalArgumentException("assault scene needs exact living actors at distinct local hand-off floors");
             }

@@ -37,6 +37,18 @@ final class FrontierSettlementActorSlots {
         return collect(bounds, anchor, FrontierGrayboxPlan.intactStructureOccupancy(structures), count);
     }
 
+    /** Whether an immutable settlement plan leaves this exact support column clear for one body. */
+    static boolean clearFloor(WorldBounds bounds, Settlement settlement, BlockPosition position) {
+        Objects.requireNonNull(settlement, "settlement");
+        return clearFloor(bounds, settlement.anchor(), settlement.structures(), position);
+    }
+
+    static boolean clearFloor(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, BlockPosition position) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor");
+        Objects.requireNonNull(structures, "structures"); Objects.requireNonNull(position, "position");
+        return traversable(bounds, FrontierGrayboxPlan.intactStructureOccupancy(structures), position);
+    }
+
     private static List<BlockPosition> collect(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
         List<BlockPosition> accepted = new ArrayList<>(count);
         if (count == 0) return List.of();

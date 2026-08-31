@@ -36,9 +36,6 @@ record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveS
         if (defenderIds.isEmpty() || defenderIds.size() > MAX_DEFENDERS || defenderIds.stream().distinct().count() != defenderIds.size()) {
             throw new IllegalArgumentException("assault must retain one to twenty-four distinct defenders");
         }
-        if (attackers.stream().anyMatch(attacker -> !attacker.route().getLast().equals(sighting.settlementAnchor()))) {
-            throw new IllegalArgumentException("assault attacker route must end at its retained settlement anchor");
-        }
         if (nextStrikeEpoch < 0) throw new IllegalArgumentException("assault strike epoch cannot be negative");
         if (status == SettlementAssaultStatus.RESOLVED != outcome.isPresent()) {
             throw new IllegalArgumentException("only resolved assaults retain one outcome");
@@ -48,7 +45,7 @@ record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveS
     SubjectId settlementId() { return sighting.settlementId(); }
     BlockPosition settlementAnchor() { return sighting.settlementAnchor(); }
     List<SubjectId> attackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).toList(); }
-    boolean allAttackersAtSettlement() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
+    boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
 
     SettlementAssault advanceAttacker(SubjectId actorId, int nextRouteIndex) {
         if (status != SettlementAssaultStatus.APPROACHING) {

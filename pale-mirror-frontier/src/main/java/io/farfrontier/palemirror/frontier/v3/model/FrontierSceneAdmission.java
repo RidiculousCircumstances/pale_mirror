@@ -78,6 +78,20 @@ public final class FrontierSceneAdmission {
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
                 || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
                 && operation.participantIds().contains(actorId))
-                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId));
+                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId))
+                || state.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> candidate.memberPositions().containsKey(actorId));
+    }
+
+    /** The assault itself may progress COLD; every other authority remains exclusive. */
+    public static boolean reservedByOtherThanSettlementAssault(FrontierWorldState state, SubjectId actorId, SubjectId assaultId) {
+        Objects.requireNonNull(assaultId, "assault id");
+        return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                && (!(lease.cause() instanceof SettlementAssaultSceneCause cause) || !cause.assaultId().equals(assaultId))
+                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
+                || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
+                && operation.participantIds().contains(actorId))
+                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId))
+                || state.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> !candidate.assaultId().equals(assaultId)
+                && candidate.memberPositions().containsKey(actorId));
     }
 }
