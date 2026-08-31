@@ -224,6 +224,25 @@ HOT/COLD is an execution-location change, not a change of truth or fidelity.
 Every exact actor, cargo batch, operation and building remains canonical in both
 states.
 
+Scenes are not authored timelines or pre-placed encounters. A production scene
+exists only when its owning canonical process emits a current typed `SceneCause`
+from current perceived facts, exact actors and retained spatial state. A
+disposable development fixture may construct such a state solely to make one
+causal/recovery proof fast and deterministic; it is unavailable to a normal
+world start and is never an alternative AI/planning path.
+
+All scene kinds share one generic lifecycle (`candidate → admission → PREPARED
+→ HOT → DRAINING → CLOSED/UNKNOWN/CONFLICT`) and one persisted `SceneLease`.
+A closed NeoForge `SceneBehavior` registry dispatches each known typed cause to
+its own candidate, physical admission, local goals/effects, drain, recovery and
+diagnostic rules. Generic infrastructure owns ordering, lease identity, actor
+exclusivity, persistence and failure policy. A behavior may submit only its
+own typed canonical commands/observations; it may not coerce another cause into
+logistics, invent cargo, substitute an actor or bypass loaded-world admission.
+Adding a scene kind therefore adds one registered behavior plus its canonical
+cause and negative/recovery evidence, rather than scattering type branches
+through the lifecycle.
+
 - COLD execution advances exact actors and processes through domain events
   without Minecraft entities or force-loaded chunks.
 - A scene becomes HOT only from naturally loaded non-spectator player demand.

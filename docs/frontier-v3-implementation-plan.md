@@ -19,6 +19,13 @@ not added speculatively.
   break discovered during transition.
 - Use a fresh v3 test world and namespace. Never make a migration path from a v2
   world to satisfy a test.
+- A disposable development fixture may establish a deterministic canonical
+  precondition, but normal starts must always use the ordinary world profile;
+  fixtures may never be an AI, planner, production or live-server fallback.
+- Scene kinds use one persisted lifecycle and a closed NeoForge behavior
+  registry. Add a new `SceneCause` with one behavior and its normal,
+  negative/recovery tests; do not spread `if cause` branches through generic
+  materialization, persistence or diagnostics.
 - Each commit must leave `architecture.yml`, implementation and
   `CONTINUITY.md` consistent. No wave is complete from code existence alone.
 - Run only the focused tests for the current behavior plus the risk-level gate
