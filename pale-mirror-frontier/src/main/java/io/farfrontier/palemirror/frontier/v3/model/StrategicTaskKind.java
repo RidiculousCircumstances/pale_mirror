@@ -13,4 +13,7 @@ enum StrategicTaskKind {
     PATROL_OBSTRUCTED_ROUTE,
     CONSTRUCT_ROUTE_BYPASS,
     HARVEST_RESOURCE_SITE
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

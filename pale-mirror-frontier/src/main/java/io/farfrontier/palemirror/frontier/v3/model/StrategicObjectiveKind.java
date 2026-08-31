@@ -12,4 +12,7 @@ enum StrategicObjectiveKind {
     SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
     SETTLEMENT_CONSTRUCT_ROUTE_BYPASS,
     SETTLEMENT_HARVEST_RESOURCE_SITE
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

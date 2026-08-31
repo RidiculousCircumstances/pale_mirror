@@ -40,7 +40,7 @@ final class RoutePatrolPayloadCodecs {
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
         subject(output, patrol.taskId()); subject(output, patrol.settlementId()); subject(output, patrol.guardId()); output.writeByte(patrol.route().size());
         for (BlockPosition point : patrol.route()) position(output, point);
-        output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().ordinal()); output.writeBoolean(patrol.obstruction().isPresent());
+        output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
         if (patrol.obstruction().isPresent()) position(output, patrol.obstruction().orElseThrow());
     }
     private static RoutePatrol readPatrol(DataInputStream input) throws IOException {
@@ -48,7 +48,7 @@ final class RoutePatrolPayloadCodecs {
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(position(input));
         int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();
         if (status >= RoutePatrolStatus.values().length) throw new IllegalArgumentException("unknown route patrol status");
-        return new RoutePatrol(task, settlement, guard, route, cursor, RoutePatrolStatus.values()[status], obstruction);
+        return new RoutePatrol(task, settlement, guard, route, cursor, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
     }
     private static void subject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, id); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }

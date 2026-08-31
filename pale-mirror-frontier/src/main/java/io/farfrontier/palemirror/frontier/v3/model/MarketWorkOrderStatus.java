@@ -6,4 +6,7 @@ enum MarketWorkOrderStatus {
     FULFILLED,
     CANCELLED,
     CONFLICT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

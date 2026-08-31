@@ -20,7 +20,7 @@ final class ResourceSiteStateCodec {
         if (state.sites().size() > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
         output.writeByte(state.sites().size());
         for (ResourceSiteLifecycle lifecycle : state.sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList()) {
-            FrontierWorldStateCodec.writeString(output, lifecycle.siteId().value()); output.writeByte(lifecycle.phase().ordinal());
+            FrontierWorldStateCodec.writeString(output, lifecycle.siteId().value()); output.writeByte(lifecycle.phase().wireTag());
             output.writeLong(lifecycle.growthEpoch()); output.writeByte(lifecycle.growthStage());
             output.writeBoolean(lifecycle.activeWork().isPresent());
             if (lifecycle.activeWork().isPresent()) writeWork(output, lifecycle.activeWork().orElseThrow());
@@ -35,7 +35,7 @@ final class ResourceSiteStateCodec {
             long epoch = input.readLong(); int stage = input.readUnsignedByte(); boolean hasWork = input.readBoolean();
             if (phase >= ResourceSitePhase.values().length) throw new IllegalArgumentException("unknown resource-site phase");
             Optional<ResourceSiteWork> work = hasWork ? Optional.of(readWork(input)) : Optional.empty();
-            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, ResourceSitePhase.values()[phase], epoch, stage, work);
+            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work);
             if (sites.put(siteId, lifecycle) != null) throw new IllegalArgumentException("duplicate resource-site lifecycle");
         }
         return new ResourceSiteState(sites);

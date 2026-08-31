@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
 import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
@@ -54,13 +54,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.company_registered"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             Company company = ((CompanyRegistered) payload).company(); writeSubject(output, company.id()); writeSubject(output, company.settlementId());
-            writeSubject(output, company.founderId()); output.writeByte(company.purpose().ordinal()); output.writeByte(company.status().ordinal()); output.writeLong(company.registeredAtTick());
+            writeSubject(output, company.founderId()); output.writeByte(company.purpose().wireTag()); output.writeByte(company.status().wireTag()); output.writeLong(company.registeredAtTick());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectId id = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId founder = readSubject(input).value();
             int purpose = input.readUnsignedByte(); int status = input.readUnsignedByte(); long registeredAt = input.readLong();
             if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length) throw new IllegalArgumentException("invalid company registration payload");
-            return new CompanyRegistered(new Company(id, settlement, founder, CompanyPurpose.values()[purpose], CompanyStatus.values()[status], registeredAt));
+            return new CompanyRegistered(new Company(id, settlement, founder, FrontierWireTags.require(CompanyPurpose.class, purpose), FrontierWireTags.require(CompanyStatus.class, status), registeredAt));
         }); }
     }
     private static final class EmploymentContractOpenedCodec implements PayloadCodec {
@@ -68,7 +68,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             EmploymentContract contract = ((EmploymentContractOpened) payload).contract(); writeSubject(output, contract.id()); writeSubject(output, contract.companyId());
             writeSubject(output, contract.residentId()); output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw());
-            output.writeByte(contract.status().ordinal()); output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
+            output.writeByte(contract.status().wireTag()); output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectId id = readSubject(input).value(); SubjectId company = readSubject(input).value(); SubjectId resident = readSubject(input).value();
@@ -76,19 +76,19 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             long completed = input.readLong(); long totalWages = input.readLong();
             if (status >= EmploymentContractStatus.values().length) throw new IllegalArgumentException("invalid employment contract status");
             return new EmploymentContractOpened(new EmploymentContract(id, company, resident, new FixedScalar(invoice), new FixedScalar(wage),
-                    EmploymentContractStatus.values()[status], openedAt, completed, new FixedScalar(totalWages)));
+                    FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed, new FixedScalar(totalWages)));
         }); }
     }
     private static final class EmploymentContractTerminatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.employment_contract_terminated"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             EmploymentContractTerminated terminated = (EmploymentContractTerminated) payload;
-            writeSubject(output, terminated.contractId()); writeSubject(output, terminated.residentId()); output.writeByte(terminated.reason().ordinal());
+            writeSubject(output, terminated.contractId()); writeSubject(output, terminated.residentId()); output.writeByte(terminated.reason().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectId contract = readSubject(input).value(); SubjectId resident = readSubject(input).value(); int reason = input.readUnsignedByte();
             if (reason >= EmploymentTerminationReason.values().length) throw new IllegalArgumentException("invalid employment termination reason");
-            return new EmploymentContractTerminated(contract, resident, EmploymentTerminationReason.values()[reason]);
+            return new EmploymentContractTerminated(contract, resident, FrontierWireTags.require(EmploymentTerminationReason.class, reason));
         }); }
     }
     private static final class ResourceDepositedCodec implements PayloadCodec {
@@ -146,14 +146,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
-            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().ordinal()); });
+            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 SubjectIdHolder settlement = readSubject(input); SubjectIdHolder facility = readSubject(input); SubjectIdHolder work = readSubject(input);
                 int ordinal = input.readUnsignedByte();
                 if (ordinal >= ProductionBlockReason.values().length) throw new IllegalArgumentException("unknown production block reason");
-                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), ProductionBlockReason.values()[ordinal]);
+                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal));
             });
         }
     }
@@ -229,14 +229,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             writeSubject(output, deferred.operationId()); writeSubject(output, deferred.deferral().actorId());
             output.writeInt(deferred.deferral().target().x()); output.writeInt(deferred.deferral().target().y()); output.writeInt(deferred.deferral().target().z());
             output.writeInt(deferred.deferral().obstructionFloor().x()); output.writeInt(deferred.deferral().obstructionFloor().y()); output.writeInt(deferred.deferral().obstructionFloor().z());
-            output.writeByte(deferred.deferral().reason().ordinal()); }); }
+            output.writeByte(deferred.deferral().reason().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder operation = readSubject(input); SubjectIdHolder actor = readSubject(input);
             BlockPosition target = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
             BlockPosition obstruction = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); int reason = input.readUnsignedByte();
             if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
             return new OperationAssemblyDeferred(operation.value(), new OperationAssemblyDeferral(actor.value(), target, obstruction,
-                    OperationAssemblyDeferral.Reason.values()[reason]));
+                    FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
         }); }
     }
     private static final class OperationTravelStartedCodec implements PayloadCodec {
@@ -272,7 +272,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class PhysicalIntentTransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.physical_intent_transition"; } @Override public byte[] encode(FrontierPayload payload) {
             PhysicalIntentTransition transition = (PhysicalIntentTransition) payload;
-            return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().ordinal());
+            return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().wireTag());
                 output.writeBoolean(transition.observation().isPresent());
                 if (transition.observation().isPresent()) PhysicalEffectObservationPayloadCodec.write(output, transition.observation().orElseThrow()); });
         }
@@ -280,7 +280,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
             var observation = observed ? java.util.Optional.of(PhysicalEffectObservationPayloadCodec.read(input)) : java.util.Optional.<PhysicalEffectObservation>empty();
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
-            return new PhysicalIntentTransition(id, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status], observation);
+            return new PhysicalIntentTransition(id, FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status), observation);
         }); }
     }
     private static final class SceneLeasePreparedCodec implements PayloadCodec {
@@ -321,11 +321,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static final class SceneLeaseTransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.scene_lease_transition"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { SceneLeaseTransition transition = (SceneLeaseTransition) payload;
-            writeString(output, transition.leaseId().value()); output.writeByte(transition.status().ordinal()); }); }
+            writeString(output, transition.leaseId().value()); output.writeByte(transition.status().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-            return new SceneLeaseTransition(id, SceneLeaseStatus.values()[status]);
+            return new SceneLeaseTransition(id, FrontierWireTags.require(SceneLeaseStatus.class, status));
         }); }
     }
     private static final class SceneLeaseReleasedCodec implements PayloadCodec {
@@ -382,14 +382,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             StructureDamaged damage = (StructureDamaged) payload;
             return encodeProduction(output -> {
                 writeSubject(output, damage.structureId()); writePosition(output, damage.position());
-                output.writeByte(damage.semanticPart().ordinal()); writeString(output, damage.cause());
+                output.writeByte(damage.semanticPart().wireTag()); writeString(output, damage.cause());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 SubjectIdHolder structure = readSubject(input); BlockPosition position = readPosition(input); int part = input.readUnsignedByte();
                 if (part >= GrayboxSemanticPart.values().length) throw new IllegalArgumentException("unknown structure damage semantic part");
-                return new StructureDamaged(structure.value(), position, GrayboxSemanticPart.values()[part], readString(input));
+                return new StructureDamaged(structure.value(), position, FrontierWireTags.require(GrayboxSemanticPart.class, part), readString(input));
             });
         }
     }
@@ -398,11 +398,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) {
             PhysicalDelta delta = ((PhysicalDeltaObserved) payload).delta();
             return encodeProduction(output -> {
-                writePosition(output, delta.position()); output.writeByte(delta.kind().ordinal()); writeString(output, delta.cause());
+                writePosition(output, delta.position()); output.writeByte(delta.kind().wireTag()); writeString(output, delta.cause());
                 output.writeBoolean(delta.ownerId().isPresent());
                 if (delta.ownerId().isPresent()) writeSubject(output, delta.ownerId().orElseThrow());
                 output.writeBoolean(delta.semanticPart().isPresent());
-                if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().ordinal());
+                if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().wireTag());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -416,8 +416,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                     throw new IllegalArgumentException("unknown physical delta value");
                 }
                 java.util.Optional<GrayboxSemanticPart> semantic = part < 0 ? java.util.Optional.empty()
-                        : java.util.Optional.of(GrayboxSemanticPart.values()[part]);
-                return new PhysicalDeltaObserved(new PhysicalDelta(position, PhysicalDeltaKind.values()[kind], owner, semantic, cause));
+                        : java.util.Optional.of(FrontierWireTags.require(GrayboxSemanticPart.class, part));
+                return new PhysicalDeltaObserved(new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), owner, semantic, cause));
             });
         }
     }
@@ -454,25 +454,25 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             InventoryConflict conflict = ((InventoryConflictObserved) payload).conflict();
             writeSubject(output, conflict.id()); writeSubject(output, conflict.subjectId()); writeSubject(output, conflict.containerId());
-            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().ordinal());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = readSubject(input).value(); var item = readSubject(input).value(); var container = readSubject(input).value();
             int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
             if (kind >= InventoryConflictKind.values().length) throw new IllegalArgumentException("unknown inventory conflict kind");
-            return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind]));
+            return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind)));
         }); }
     }
     private static final class ContainerSurfaceTransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.container_surface_transition"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             ContainerSurfaceTransition transition = (ContainerSurfaceTransition) payload;
-            writeSubject(output, transition.containerId()); output.writeByte(transition.status().ordinal());
+            writeSubject(output, transition.containerId()); output.writeByte(transition.status().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var container = readSubject(input).value(); int status = input.readUnsignedByte();
             if (status >= ContainerSurfaceStatus.values().length) throw new IllegalArgumentException("unknown container surface status");
-            return new ContainerSurfaceTransition(container, ContainerSurfaceStatus.values()[status]);
+            return new ContainerSurfaceTransition(container, FrontierWireTags.require(ContainerSurfaceStatus.class, status));
         }); }
     }
     private static final class HiveGrowthStartedCodec implements PayloadCodec {
@@ -498,11 +498,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class HiveGrowthBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveGrowthBlocked blocked = (HiveGrowthBlocked) payload;
-            writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().ordinal()); }); }
+            writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder work = readSubject(input); int reason = input.readUnsignedByte();
             if (reason >= HiveGrowthBlockReason.values().length) throw new IllegalArgumentException("unknown hive growth block reason");
-            return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), HiveGrowthBlockReason.values()[reason]);
+            return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), FrontierWireTags.require(HiveGrowthBlockReason.class, reason));
         }); }
     } private static final class HiveNutrientTransferStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_started"; }
@@ -520,10 +520,10 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class HiveNutrientTransferBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveNutrientTransferBlocked blocked = (HiveNutrientTransferBlocked) payload;
-            writeSubject(output, blocked.transferId()); output.writeByte(blocked.reason().ordinal()); }); }
+            writeSubject(output, blocked.transferId()); output.writeByte(blocked.reason().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> { SubjectId transfer = readSubject(input).value(); int reason = input.readUnsignedByte();
             if (reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("unknown hive nutrient transfer block reason");
-            return new HiveNutrientTransferBlocked(transfer, HiveNutrientTransferBlockReason.values()[reason]); }); }
+            return new HiveNutrientTransferBlocked(transfer, FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)); }); }
     } private static final class HiveNutrientTransferEndpointPreparedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_endpoint_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientTransfer(output, ((HiveNutrientTransferEndpointPrepared) payload).transfer())); }
@@ -568,8 +568,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
         writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId()); writeString(output, job.consumptionIntentId().value());
-        writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().ordinal()); writePosition(output, job.organ().anchor());
-        writeSubject(output, job.bioform().id()); output.writeByte(job.bioform().role().ordinal()); writePosition(output, job.bioform().position());
+        writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().wireTag()); writePosition(output, job.organ().anchor());
+        writeSubject(output, job.bioform().id()); output.writeByte(job.bioform().role().wireTag()); writePosition(output, job.bioform().position());
     }
     private static HiveGrowthJob readHiveGrowthJob(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder item = readSubject(input);
@@ -577,16 +577,16 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         SubjectIdHolder organId = readSubject(input); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
         SubjectIdHolder bioformId = readSubject(input); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
         if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length) throw new IllegalArgumentException("unknown hive growth output enum");
-        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), consumption, new HiveOrgan(organId.value(), hive.value(), nest.value(), HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
-                new Bioform(bioformId.value(), hive.value(), nest.value(), BioformRole.values()[role], position));
+        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), consumption, new HiveOrgan(organId.value(), hive.value(), nest.value(), FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
+                new Bioform(bioformId.value(), hive.value(), nest.value(), FrontierWireTags.require(BioformRole.class, role), position));
     }
     private static void writeHiveNutrientTransfer(DataOutputStream output, HiveNutrientTransfer transfer) throws IOException {
         writeSubject(output, transfer.id()); writeSubject(output, transfer.hiveId()); writeSubject(output, transfer.requesterTaskId());
         writeSubject(output, transfer.sourceStoreId()); output.writeByte(transfer.sourceSlot().slot()); writeSubject(output, transfer.targetStoreId()); output.writeByte(transfer.targetSlot().slot());
         writeSubject(output, transfer.cargoId()); writeSubject(output, transfer.itemId()); output.writeShort(transfer.corridor().size());
         for (BlockPosition node : transfer.corridor()) writePosition(output, node);
-        output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().ordinal()); output.writeBoolean(transfer.blockReason().isPresent());
-        if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().ordinal());
+        output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().wireTag()); output.writeBoolean(transfer.blockReason().isPresent());
+        if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().wireTag());
         output.writeBoolean(transfer.endpointIntentId().isPresent()); if (transfer.endpointIntentId().isPresent()) writeString(output, transfer.endpointIntentId().orElseThrow().value());
     }
     private static HiveNutrientTransfer readHiveNutrientTransfer(DataInputStream input) throws IOException {
@@ -595,12 +595,12 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(readPosition(input));
         int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
-        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> endpoint = input.available() == 0 ? java.util.Optional.empty()
-                : input.readBoolean() ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input))) : java.util.Optional.empty();
-        if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.ordinal())
+        var endpoint = input.available() == 0 || !input.readBoolean() ? java.util.Optional.<PhysicalIntentId>empty() : java.util.Optional.of(new PhysicalIntentId(readString(input)));
+        if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.wireTag())
                 || blocked && reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("invalid hive nutrient transfer payload");
-        return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot),
-                cargo, item, corridor, cursor, HiveNutrientTransferPhase.values()[phase], endpoint, blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty());
+        return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, corridor, cursor,
+                FrontierWireTags.require(HiveNutrientTransferPhase.class, phase), endpoint,
+                blocked ? java.util.Optional.of(FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)) : java.util.Optional.empty());
     }
     private static void writeHiveNutrientReceipt(DataOutputStream output, HiveNutrientReceipt receipt) throws IOException {
         writeSubject(output, receipt.transferId()); writeSubject(output, receipt.hiveId()); writeSubject(output, receipt.cargoId()); writeSubject(output, receipt.itemId());
@@ -617,13 +617,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
         writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
-        writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
+        writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().wireTag());
     }
     private static SupplyContract readContract(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder recipient = readSubject(input);
         SubjectIdHolder cargo = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte(); int status = input.readUnsignedByte();
         if (status >= ContractStatus.values().length) throw new IllegalArgumentException("unknown contract status");
-        return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, ContractStatus.values()[status]);
+        return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, FrontierWireTags.require(ContractStatus.class, status));
     }
     private static void writeOperation(DataOutputStream output, RouteOperation operation) throws IOException {
         writeSubject(output, operation.id()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
@@ -690,11 +690,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new OperationAssembly(members, carrier);
     }
     private static void writePhysicalIntent(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) throws IOException {
-        writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());
+        writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
         writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.subjectIds().size());
         for (var subject : intent.subjectIds()) writeSubject(output, subject);
         output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
-        output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal()); output.writeBoolean(intent.postconditionObservationId().isPresent());
+        output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag()); output.writeBoolean(intent.postconditionObservationId().isPresent());
         if (intent.postconditionObservationId().isPresent()) writeString(output, intent.postconditionObservationId().orElseThrow().value());
     }
     private static io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent readPhysicalIntent(DataInputStream input) throws IOException {
@@ -712,8 +712,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         return new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(id,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.values()[kind], io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values()[status],
-                cause.value(), subjects, origin, radius, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.values()[postcondition], observation);
+                FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.class, kind), FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status),
+                cause.value(), subjects, origin, radius, FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.class, postcondition), observation);
     }
     private static void writeCargoHandoffObservation(DataOutputStream output, CargoHandoffObservation observation) throws IOException {
         writeString(output, observation.id().value()); writeString(output, observation.intentId().value()); writeSubject(output, observation.cargoId());
@@ -741,7 +741,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeSubject(output, logistics.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
         output.writeInt(logistics.cargoPosition().x()); output.writeInt(logistics.cargoPosition().y()); output.writeInt(logistics.cargoPosition().z());
-        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.members().size());
+        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             writeSubject(output, member.actorId());
             writeString(output, member.entityId().toString());
@@ -769,7 +769,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
         return new SceneLease(id, world, operation.value(), cargo.value(), position, cargoPosition,
                 new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
-                SceneLeaseStatus.values()[status], engagement, members, memberPositions, handoffActors,
+                FrontierWireTags.require(SceneLeaseStatus.class, status), engagement, members, memberPositions, handoffActors,
                 java.util.Optional.empty());
     }
     private static void writeAssaultSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
@@ -778,7 +778,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, cause.assaultId()); writeSubject(output, cause.settlementId());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
-        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.members().size());
+        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             writeSubject(output, member.actorId()); writeString(output, member.entityId().toString());
             BlockPosition position = lease.memberPosition(member.actorId()); output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
@@ -798,7 +798,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> ambient = new java.util.LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(readSubject(input).value());
         return SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                SceneLeaseStatus.values()[status], members, positions, ambient, java.util.Optional.empty());
+                FrontierWireTags.require(SceneLeaseStatus.class, status), members, positions, ambient, java.util.Optional.empty());
     }
     private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException {
         output.writeByte(values.size()); for (SceneMemberPosition member : values) {

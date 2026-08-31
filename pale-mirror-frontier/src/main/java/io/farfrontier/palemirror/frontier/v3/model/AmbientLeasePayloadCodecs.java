@@ -24,11 +24,11 @@ final class AmbientLeasePayloadCodecs {
     private static final class TransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_transition"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { AmbientLeaseTransition transition = (AmbientLeaseTransition) payload;
-            FrontierWorldPayloadCodecs.writeSubject(output, transition.actorId()); output.writeByte(transition.status().ordinal()); }); }
+            FrontierWorldPayloadCodecs.writeSubject(output, transition.actorId()); output.writeByte(transition.status().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             var actor = FrontierWorldPayloadCodecs.readSubject(input); int status = input.readUnsignedByte();
             if (status >= AmbientLeaseStatus.values().length) throw new IllegalArgumentException("unknown ambient lease status");
-            return new AmbientLeaseTransition(actor.value(), AmbientLeaseStatus.values()[status]);
+            return new AmbientLeaseTransition(actor.value(), FrontierWireTags.require(AmbientLeaseStatus.class, status));
         }); }
     }
     private static final class ReleasedCodec implements PayloadCodec {
@@ -40,13 +40,13 @@ final class AmbientLeasePayloadCodecs {
     }
     private static void writeLease(DataOutputStream output, AmbientActorLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.actorId()); FrontierWorldPayloadCodecs.writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks());
-        output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.goal().ordinal()); FrontierWorldPayloadCodecs.writePosition(output, lease.goalPosition());
+        output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.goal().wireTag()); FrontierWorldPayloadCodecs.writePosition(output, lease.goalPosition());
     }
     private static AmbientActorLease readLease(DataInputStream input) throws IOException {
         var actor = FrontierWorldPayloadCodecs.readSubject(input); BlockPosition handoff = FrontierWorldPayloadCodecs.readPosition(input);
         long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte(); int goal = input.readUnsignedByte();
         BlockPosition goalPosition = FrontierWorldPayloadCodecs.readPosition(input);
         if (status >= AmbientLeaseStatus.values().length || goal >= AmbientGoalKind.values().length) throw new IllegalArgumentException("unknown ambient lease value");
-        return new AmbientActorLease(actor.value(), handoff, new SimInstant(instant), revision, AmbientLeaseStatus.values()[status], AmbientGoalKind.values()[goal], goalPosition);
+        return new AmbientActorLease(actor.value(), handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalPosition);
     }
 }

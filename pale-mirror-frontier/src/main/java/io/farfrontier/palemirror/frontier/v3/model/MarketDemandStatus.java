@@ -7,4 +7,7 @@ enum MarketDemandStatus {
     FULFILLED,
     CANCELLED,
     EXPIRED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

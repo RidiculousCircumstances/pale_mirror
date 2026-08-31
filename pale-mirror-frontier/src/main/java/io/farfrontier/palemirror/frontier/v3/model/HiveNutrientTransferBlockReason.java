@@ -5,4 +5,7 @@ public enum HiveNutrientTransferBlockReason {
     ENDPOINT_MATERIALIZED,
     TARGET_SLOT_UNAVAILABLE,
     CARGO_CUSTODY_LOST
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

@@ -91,12 +91,12 @@ final class HumanPopulationPayloadCodecs {
             @Override public String type() { return "frontier.resident_migration_blocked"; }
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 ResidentMigrationBlocked blocked = (ResidentMigrationBlocked) payload;
-                FrontierWorldPayloadCodecs.writeSubject(output, blocked.residentId()); output.writeByte(blocked.reason().ordinal());
+                FrontierWorldPayloadCodecs.writeSubject(output, blocked.residentId()); output.writeByte(blocked.reason().wireTag());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 var resident = FrontierWorldPayloadCodecs.readSubject(input); int reason = input.readUnsignedByte();
                 if (reason >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
-                return new ResidentMigrationBlocked(resident.value(), ResidentMigrationBlockReason.values()[reason]);
+                return new ResidentMigrationBlocked(resident.value(), FrontierWireTags.require(ResidentMigrationBlockReason.class, reason));
             }); }
         };
     }
@@ -113,7 +113,7 @@ final class HumanPopulationPayloadCodecs {
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, resident.id()); FrontierWorldPayloadCodecs.writeSubject(output, resident.householdId());
-        FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().ordinal()); output.writeLong(resident.birthTick());
+        FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().wireTag()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
     }
     private static ResidentProfile readProfile(DataInputStream input) throws IOException {
@@ -121,7 +121,7 @@ final class HumanPopulationPayloadCodecs {
         int role = input.readUnsignedByte(); if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
-        return new ResidentProfile(id.value(), household.value(), settlement.value(), ResidentRole.values()[role], birthTick, skills);
+        return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
     }
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {
@@ -143,8 +143,8 @@ final class HumanPopulationPayloadCodecs {
         FrontierWorldPayloadCodecs.writeSubject(output, journey.residentId()); FrontierWorldPayloadCodecs.writeSubject(output, journey.originSettlementId());
         FrontierWorldPayloadCodecs.writeSubject(output, journey.destinationHouseholdId()); FrontierWorldPayloadCodecs.writeSubject(output, journey.destinationSettlementId());
         FrontierWorldStateCodec.writeCount(output, journey.route().size()); for (BlockPosition position : journey.route()) FrontierWorldPayloadCodecs.writePosition(output, position);
-        FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().ordinal()); output.writeBoolean(journey.blockReason().isPresent());
-        if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().ordinal());
+        FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
+        if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
     }
 
     private static ResidentMigrationJourney readJourney(DataInputStream input) throws IOException {
@@ -158,9 +158,9 @@ final class HumanPopulationPayloadCodecs {
         if (blocked) {
             int value = input.readUnsignedByte();
             if (value >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
-            reason = java.util.Optional.of(ResidentMigrationBlockReason.values()[value]);
+            reason = java.util.Optional.of(FrontierWireTags.require(ResidentMigrationBlockReason.class, value));
         }
         return new ResidentMigrationJourney(resident.value(), origin.value(), household.value(), destination.value(), route, routeIndex,
-                ResidentMigrationStatus.values()[status], reason);
+                FrontierWireTags.require(ResidentMigrationStatus.class, status), reason);
     }
 }

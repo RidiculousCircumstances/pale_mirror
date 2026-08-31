@@ -9,4 +9,7 @@ public enum GrayboxSemanticPart {
     ROUTE_SURFACE,
     PUBLIC_ACCESS_SURFACE,
     INFECTION_SURFACE
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

@@ -31,27 +31,12 @@ direct_world_state_construction:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 1
 
 persisted_enum_position_tags:
-  max_total: 223
-  allowed_files:
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientLeasePayloadCodecs.java: 6
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/AmbientLeaseStateCodec.java: 4
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 51
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 57
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanHealthPayloadCodecs.java: 4
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanPopulationPayloadCodecs.java: 8
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanPopulationStateCodec.java: 14
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/MarketPayloadCodecs.java: 8
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalEffectObservationPayloadCodec.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalEffectObservationStateCodec.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ResourceSiteStateCodec.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionPayloadCodecs.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionStateCodec.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteEngagementPayloadCodecs.java: 8
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RoutePatrolPayloadCodecs.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultPayloadCodecs.java: 8
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementProvisionPayloadCodecs.java: 6
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StrategicPlanPayloadCodecs.java: 14
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StrategicPlanStateCodec.java: 23
+  max_total: 0
+  allowed_files: {}
+
+wire_tag_position_derivations:
+  max_total: 0
+  allowed_files: {}
 
 scene_cause_type_branches:
   max_total: 4

@@ -126,7 +126,7 @@ final class PhysicalEffectObservationPayloadCodec {
         }
         output.writeByte(value.itemImpacts().size());
         for (ExplosionItemImpact impact : value.itemImpacts()) {
-            FrontierWorldPayloadCodecs.writeSubject(output, impact.itemId()); output.writeByte(impact.outcome().ordinal());
+            FrontierWorldPayloadCodecs.writeSubject(output, impact.itemId()); output.writeByte(impact.outcome().wireTag());
         }
         output.writeInt(value.affectedInfectionOverlayCount()); output.writeInt(value.changedInfectionOverlayCount());
     }
@@ -158,7 +158,7 @@ final class PhysicalEffectObservationPayloadCodec {
         for (int index = 0; index < items; index++) {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId item = FrontierWorldPayloadCodecs.readSubject(input).value(); int outcome = input.readUnsignedByte();
             if (outcome >= ExplosionItemImpact.Outcome.values().length) throw new IllegalArgumentException("unknown explosion item outcome");
-            itemImpacts.add(new ExplosionItemImpact(item, ExplosionItemImpact.Outcome.values()[outcome]));
+            itemImpacts.add(new ExplosionItemImpact(item, FrontierWireTags.require(ExplosionItemImpact.Outcome.class, outcome)));
         }
         return new ExplosionObservation(id, intent, origin, radius, affected, changed, entityImpacts, itemImpacts, input.readInt(), input.readInt());
     }

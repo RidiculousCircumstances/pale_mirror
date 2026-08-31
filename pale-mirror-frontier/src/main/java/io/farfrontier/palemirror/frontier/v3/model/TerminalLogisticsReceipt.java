@@ -24,5 +24,9 @@ record TerminalLogisticsReceipt(SubjectId operationId, SubjectId contractId, Sub
         if (terminalAtTick < 0L) throw new IllegalArgumentException("terminal receipt tick must be non-negative");
     }
 
-    enum TerminalLogisticsOutcome { DELIVERED, FAILED, INTERRUPTED }
+    enum TerminalLogisticsOutcome {
+        DELIVERED, FAILED, INTERRUPTED;
+
+        public int wireTag() { return FrontierWireTags.tag(this); }
+    }
 }

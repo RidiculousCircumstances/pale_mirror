@@ -19,4 +19,7 @@ enum StrategicTaskRequirement {
     AVAILABLE_HIVE_BOMBER,
     ACTIVE_FARM,
     AVAILABLE_FARMER
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

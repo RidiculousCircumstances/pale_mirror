@@ -5,4 +5,7 @@ public enum ResidentNutritionStatus {
     NOURISHED,
     HUNGRY,
     STARVING
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

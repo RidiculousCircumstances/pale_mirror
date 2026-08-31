@@ -32,9 +32,14 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
 
     def test_rejects_more_positional_enum_tags(self) -> None:
         broken = copy.deepcopy(self.actual)
-        path = next(iter(broken["persisted_enum_position_tags"]))
-        broken["persisted_enum_position_tags"][path] += 1
-        with self.assertRaisesRegex(DebtError, "per-file ceiling exceeded"):
+        broken["persisted_enum_position_tags"]["model/HiddenPositionalCodec.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
+    def test_rejects_positional_wire_tag_registry(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["wire_tag_position_derivations"]["model/FrontierWireTags.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
             validate(ROOT, self.policy, broken)
 
     def test_rejects_more_direct_world_state_construction(self) -> None:

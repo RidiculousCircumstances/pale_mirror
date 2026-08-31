@@ -15,5 +15,24 @@ public enum PhysicalPostcondition {
     CARGO_LOADED_FROM_DEPOT_OBSERVED,
     ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED,
     HIVE_NUTRIENT_DEPARTED_OBSERVED,
-    HIVE_NUTRIENT_ARRIVED_OBSERVED
+    HIVE_NUTRIENT_ARRIVED_OBSERVED;
+
+    public int wireTag() {
+        return switch (this) {
+            case CARGO_HANDOFF_OBSERVED -> 0;
+            case STRUCTURAL_REPAIR_OBSERVED -> 1;
+            case ROUTE_CONSTRUCTION_OBSERVED -> 2;
+            case DECONTAMINATION_OBSERVED -> 3;
+            case EXPLOSION_OBSERVED -> 4;
+            case SCENE_STRIKE_OBSERVED -> 5;
+            case EXACT_ITEM_CONSUMED_OBSERVED -> 6;
+            case RESOURCE_SITE_PREPARED_OBSERVED -> 7;
+            case RESOURCE_SITE_HARVESTED_OBSERVED -> 8;
+            case PRODUCTION_TRANSFORMED_OBSERVED -> 9;
+            case CARGO_LOADED_FROM_DEPOT_OBSERVED -> 10;
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED -> 11;
+            case HIVE_NUTRIENT_DEPARTED_OBSERVED -> 12;
+            case HIVE_NUTRIENT_ARRIVED_OBSERVED -> 13;
+        };
+    }
 }

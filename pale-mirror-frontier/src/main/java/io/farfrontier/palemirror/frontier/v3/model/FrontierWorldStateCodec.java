@@ -20,16 +20,13 @@ import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
 public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 79, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
-
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
-
     /**
      * Runtime-local codec that reuses the immutable genesis profile after proving the snapshot belongs to it.
      * This never weakens the serialized world/seed boundary: a foreign header fails before its mutable state is read.
-     */
+    */
     public FrontierWorldStateCodec(FrontierBootstrap pinnedBootstrap) { this.pinnedBootstrap = java.util.Objects.requireNonNull(pinnedBootstrap, "pinnedBootstrap"); }
-
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             verifyPinnedBootstrap(state.bootstrap());
@@ -63,7 +60,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
     }
-
     @Override public FrontierWorldState decode(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
@@ -96,7 +92,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
-
     private FrontierBootstrap bootstrapFor(WorldId worldId, long seed) {
         if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed);
         if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed) {
@@ -104,7 +99,6 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         return pinnedBootstrap;
     }
-
     private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
         if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed())) {
             throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
@@ -115,7 +109,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, ActorLocation> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             writeString(output, entry.getKey().value()); writePosition(output, entry.getValue().position());
-            output.writeByte(entry.getValue().condition().status().ordinal()); output.writeLong(entry.getValue().condition().health().raw());
+            output.writeByte(entry.getValue().condition().status().wireTag()); output.writeLong(entry.getValue().condition().health().raw());
         }
     }
     private static Map<SubjectId, ActorLocation> readActors(DataInputStream input) throws IOException {
@@ -124,7 +118,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input));
             BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
             if (status >= ActorLifeStatus.values().length
-                    || values.put(id, new ActorLocation(position, new ActorCondition(ActorLifeStatus.values()[status], new FixedScalar(input.readLong())))) != null) {
+                    || values.put(id, new ActorLocation(position, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());
             }
         }
@@ -133,7 +127,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeStructures(DataOutputStream output, Map<SubjectId, StructureCondition> values) throws IOException {
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, StructureCondition> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().ordinal());
+            writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().wireTag());
         }
     }
     private static Map<SubjectId, StructureCondition> readStructures(DataInputStream input) throws IOException {
@@ -141,7 +135,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
             int ordinal = input.readUnsignedByte();
-            if (ordinal >= StructureCondition.values().length || values.put(id, StructureCondition.values()[ordinal]) != null) throw new IllegalArgumentException("invalid or duplicate structure state");
+            if (ordinal >= StructureCondition.values().length || values.put(id, FrontierWireTags.require(StructureCondition.class, ordinal)) != null) throw new IllegalArgumentException("invalid or duplicate structure state");
         }
         return values;
     }
@@ -152,7 +146,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (Map.Entry<BlockPosition, StructureDamage.DamageCell> entry : damage.cells().entrySet().stream()
                     .sorted(Comparator.comparingInt((Map.Entry<BlockPosition, StructureDamage.DamageCell> entry) -> entry.getKey().x())
                             .thenComparingInt(entry -> entry.getKey().y()).thenComparingInt(entry -> entry.getKey().z())).toList()) {
-                writePosition(output, entry.getKey()); output.writeByte(entry.getValue().semanticPart().ordinal()); writeString(output, entry.getValue().cause());
+                writePosition(output, entry.getKey()); output.writeByte(entry.getValue().semanticPart().wireTag()); writeString(output, entry.getValue().cause());
             }
         }
     }
@@ -163,7 +157,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             for (int cell = 0, cellCount = readCount(input); cell < cellCount; cell++) {
                 BlockPosition position = readPosition(input); int part = input.readUnsignedByte();
                 if (part >= GrayboxSemanticPart.values().length
-                        || cells.put(position, new StructureDamage.DamageCell(GrayboxSemanticPart.values()[part], readString(input))) != null) {
+                        || cells.put(position, new StructureDamage.DamageCell(FrontierWireTags.require(GrayboxSemanticPart.class, part), readString(input))) != null) {
                     throw new IllegalArgumentException("invalid or duplicate structure damage cell");
                 }
             }
@@ -176,11 +170,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, values.size());
         for (PhysicalDelta delta : values.values().stream().sorted(Comparator.comparingInt((PhysicalDelta value) -> value.position().x())
                 .thenComparingInt(value -> value.position().y()).thenComparingInt(value -> value.position().z())).toList()) {
-            writePosition(output, delta.position()); output.writeByte(delta.kind().ordinal()); writeString(output, delta.cause());
+            writePosition(output, delta.position()); output.writeByte(delta.kind().wireTag()); writeString(output, delta.cause());
             output.writeBoolean(delta.ownerId().isPresent());
             if (delta.ownerId().isPresent()) writeString(output, delta.ownerId().orElseThrow().value());
             output.writeBoolean(delta.semanticPart().isPresent());
-            if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().ordinal());
+            if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().wireTag());
         }
     }
     private static Map<BlockPosition, PhysicalDelta> readPhysicalDeltas(DataInputStream input) throws IOException {
@@ -192,7 +186,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             boolean partPresent = input.readBoolean(); java.util.Optional<GrayboxSemanticPart> part = partPresent
                     ? java.util.Optional.of(readSemanticPart(input)) : java.util.Optional.empty();
             if (kind >= PhysicalDeltaKind.values().length || values.put(position,
-                    new PhysicalDelta(position, PhysicalDeltaKind.values()[kind], owner, part, cause)) != null) {
+                    new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), owner, part, cause)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical delta");
             }
         }
@@ -201,7 +195,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static GrayboxSemanticPart readSemanticPart(DataInputStream input) throws IOException {
         int ordinal = input.readUnsignedByte();
         if (ordinal >= GrayboxSemanticPart.values().length) throw new IllegalArgumentException("unknown graybox semantic part");
-        return GrayboxSemanticPart.values()[ordinal];
+        return FrontierWireTags.require(GrayboxSemanticPart.class, ordinal);
     }
     private static void writeInfection(DataOutputStream output, Map<InfectionCell, FixedRatio> values) throws IOException {
         writeCount(output, values.size());
@@ -221,19 +215,19 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, colony.addedOrgans().size());
         for (HiveOrgan organ : colony.addedOrgans().values().stream().sorted(Comparator.comparing(HiveOrgan::id)).toList()) {
             writeString(output, organ.id().value()); writeString(output, organ.hiveId().value()); writeString(output, organ.nestId().value());
-            output.writeByte(organ.kind().ordinal()); writePosition(output, organ.anchor()); output.writeBoolean(organ.containerId().isPresent());
+            output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor()); output.writeBoolean(organ.containerId().isPresent());
             if (organ.containerId().isPresent()) writeString(output, organ.containerId().orElseThrow().value());
         }
         writeCount(output, colony.spawnedBioforms().size());
         for (Bioform bioform : colony.spawnedBioforms().values().stream().sorted(Comparator.comparing(Bioform::id)).toList()) {
             writeString(output, bioform.id().value()); writeString(output, bioform.hiveId().value()); writeString(output, bioform.nestId().value());
-            output.writeByte(bioform.role().ordinal()); writePosition(output, bioform.position());
+            output.writeByte(bioform.role().wireTag()); writePosition(output, bioform.position());
         }
         writeCount(output, colony.growthJobs().size());
         for (HiveGrowthJob job : colony.growthJobs().values().stream().sorted(Comparator.comparing(HiveGrowthJob::id)).toList()) {
             writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value()); writeString(output, job.consumedItemId().value()); writeString(output, job.consumptionIntentId().value());
-            HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().ordinal()); writePosition(output, organ.anchor());
-            Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); output.writeByte(bioform.role().ordinal()); writePosition(output, bioform.position());
+            HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor());
+            Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); output.writeByte(bioform.role().wireTag()); writePosition(output, bioform.position());
         }
         writeCount(output, colony.nutrientTransfers().size());
         for (HiveNutrientTransfer transfer : colony.nutrientTransfers().values().stream().sorted(Comparator.comparing(HiveNutrientTransfer::id)).toList()) {
@@ -241,15 +235,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, transfer.sourceStoreId().value()); output.writeByte(transfer.sourceSlot().slot()); writeString(output, transfer.targetStoreId().value()); output.writeByte(transfer.targetSlot().slot());
             writeString(output, transfer.cargoId().value()); writeString(output, transfer.itemId().value()); writeCount(output, transfer.corridor().size());
             for (BlockPosition node : transfer.corridor()) writePosition(output, node);
-            output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().ordinal()); output.writeBoolean(transfer.blockReason().isPresent());
-            if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().ordinal());
+            output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().wireTag()); output.writeBoolean(transfer.blockReason().isPresent());
+            if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().wireTag());
             output.writeBoolean(transfer.endpointIntentId().isPresent()); if (transfer.endpointIntentId().isPresent()) writeString(output, transfer.endpointIntentId().orElseThrow().value());
         }
         writeCount(output, colony.nutrientReceipts().size());
         for (HiveNutrientReceipt receipt : colony.nutrientReceipts().values().stream().sorted(Comparator.comparing(HiveNutrientReceipt::transferId)).toList()) {
             writeString(output, receipt.transferId().value()); writeString(output, receipt.hiveId().value()); writeString(output, receipt.cargoId().value()); writeString(output, receipt.itemId().value());
             writeString(output, receipt.sourceSlot().containerId().value()); output.writeByte(receipt.sourceSlot().slot()); writeString(output, receipt.targetSlot().containerId().value()); output.writeByte(receipt.targetSlot().slot());
-            output.writeByte(receipt.status().ordinal()); output.writeBoolean(receipt.consumedByJobId().isPresent()); if (receipt.consumedByJobId().isPresent()) writeString(output, receipt.consumedByJobId().orElseThrow().value());
+            output.writeByte(receipt.status().wireTag()); output.writeBoolean(receipt.consumedByJobId().isPresent()); if (receipt.consumedByJobId().isPresent()) writeString(output, receipt.consumedByJobId().orElseThrow().value());
         }
     }
     private static HiveColony readHiveColony(DataInputStream input, boolean hasNutrientTransfers, boolean hasReceiptConsumption, boolean hasEndpointIntent) throws IOException {
@@ -258,7 +252,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
             int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input); boolean hasContainer = input.readBoolean();
             java.util.Optional<SubjectId> container = hasContainer ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-            if (kind >= HiveOrganKind.values().length || organs.put(id, new HiveOrgan(id, hive, nest, HiveOrganKind.values()[kind], anchor, container)) != null) {
+            if (kind >= HiveOrganKind.values().length || organs.put(id, new HiveOrgan(id, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, container)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate added hive organ");
             }
         }
@@ -266,7 +260,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
             int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
-            if (role >= BioformRole.values().length || bioforms.put(id, new Bioform(id, hive, nest, BioformRole.values()[role], position)) != null) {
+            if (role >= BioformRole.values().length || bioforms.put(id, new Bioform(id, hive, nest, FrontierWireTags.require(BioformRole.class, role), position)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate spawned bioform");
             }
         }
@@ -277,8 +271,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
             SubjectId bioformId = new SubjectId(readString(input)); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
             if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length || jobs.put(id, new HiveGrowthJob(id, hive, nest, item, consumption,
-                    new HiveOrgan(organId, hive, nest, HiveOrganKind.values()[kind], anchor, java.util.Optional.empty()),
-                    new Bioform(bioformId, hive, nest, BioformRole.values()[role], position))) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
+                    new HiveOrgan(organId, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
+                    new Bioform(bioformId, hive, nest, FrontierWireTags.require(BioformRole.class, role), position))) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }
         if (!hasNutrientTransfers) return new HiveColony(organs, bioforms, jobs);
         Map<SubjectId, HiveNutrientTransfer> transfers = new LinkedHashMap<>();
@@ -290,10 +284,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> endpoint = hasEndpointIntent && input.readBoolean()
                     ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input))) : java.util.Optional.empty();
-            if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.ordinal())
+            if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.wireTag())
                     || blocked && reason >= HiveNutrientTransferBlockReason.values().length || transfers.put(id, new HiveNutrientTransfer(id, hive, task,
                     source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, corridor, cursor,
-                    HiveNutrientTransferPhase.values()[phase], endpoint, blocked ? java.util.Optional.of(HiveNutrientTransferBlockReason.values()[reason]) : java.util.Optional.empty())) != null) {
+                    FrontierWireTags.require(HiveNutrientTransferPhase.class, phase), endpoint, blocked ? java.util.Optional.of(FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)) : java.util.Optional.empty())) != null) {
                 throw new IllegalArgumentException("invalid or duplicate hive nutrient transfer");
             }
         }
@@ -303,7 +297,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId source = new SubjectId(readString(input)); int sourceSlot = input.readUnsignedByte(); SubjectId target = new SubjectId(readString(input)); int targetSlot = input.readUnsignedByte();
             HiveNutrientReceiptStatus status = HiveNutrientReceiptStatus.STORED; java.util.Optional<SubjectId> consumedBy = java.util.Optional.empty();
             if (hasReceiptConsumption) { int code = input.readUnsignedByte(); boolean present = input.readBoolean(); if (code >= HiveNutrientReceiptStatus.values().length) throw new IllegalArgumentException("invalid hive nutrient receipt status");
-                status = HiveNutrientReceiptStatus.values()[code]; consumedBy = present ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty(); }
+                status = FrontierWireTags.require(HiveNutrientReceiptStatus.class, code); consumedBy = present ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty(); }
             if (receipts.put(transfer, new HiveNutrientReceipt(transfer, hive, cargo, item, new InventoryCustody.ContainerSlot(source, sourceSlot), new InventoryCustody.ContainerSlot(target, targetSlot), status, consumedBy)) != null) {
                 throw new IllegalArgumentException("duplicate hive nutrient receipt");
             }
@@ -313,7 +307,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
         writeCount(output, ledger.accounts().size());
         for (EconomicAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(EconomicAccount::ownerId)).toList()) {
-            writeString(output, account.ownerId().value()); output.writeByte(account.ownerKind().ordinal()); output.writeByte(account.status().ordinal());
+            writeString(output, account.ownerId().value()); output.writeByte(account.ownerKind().wireTag()); output.writeByte(account.status().wireTag());
             output.writeLong(account.balance().raw()); output.writeLong(account.creditLimit().raw());
         }
         writeCount(output, ledger.reservations().size());
@@ -327,7 +321,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId owner = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
             if (kind >= EconomicOwnerKind.values().length || status >= EconomicAccountStatus.values().length
-                    || accounts.put(owner, new EconomicAccount(owner, EconomicOwnerKind.values()[kind], EconomicAccountStatus.values()[status],
+                    || accounts.put(owner, new EconomicAccount(owner, FrontierWireTags.require(EconomicOwnerKind.class, kind), FrontierWireTags.require(EconomicAccountStatus.class, status),
                     new FixedScalar(input.readLong()), new FixedScalar(input.readLong()))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate economic account");
             }
@@ -346,12 +340,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, registry.companies().size());
         for (Company company : registry.companies().values().stream().sorted(Comparator.comparing(Company::id)).toList()) {
             writeString(output, company.id().value()); writeString(output, company.settlementId().value()); writeString(output, company.founderId().value());
-            output.writeByte(company.purpose().ordinal()); output.writeByte(company.status().ordinal()); output.writeLong(company.registeredAtTick());
+            output.writeByte(company.purpose().wireTag()); output.writeByte(company.status().wireTag()); output.writeLong(company.registeredAtTick());
         }
         writeCount(output, registry.employmentContracts().size());
         for (EmploymentContract contract : registry.employmentContracts().values().stream().sorted(Comparator.comparing(EmploymentContract::id)).toList()) {
             writeString(output, contract.id().value()); writeString(output, contract.companyId().value()); writeString(output, contract.residentId().value());
-            output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw()); output.writeByte(contract.status().ordinal());
+            output.writeLong(contract.invoicePerCompletedJob().raw()); output.writeLong(contract.wagePerCompletedJob().raw()); output.writeByte(contract.status().wireTag());
             output.writeLong(contract.openedAtTick()); output.writeLong(contract.completedJobs()); output.writeLong(contract.totalWagesPaid().raw());
         }
         writeMarketOrderBook(output, registry.market());
@@ -362,7 +356,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId founder = new SubjectId(readString(input));
             int purpose = input.readUnsignedByte(); int status = input.readUnsignedByte(); long registeredAt = input.readLong();
             if (purpose >= CompanyPurpose.values().length || status >= CompanyStatus.values().length
-                    || companies.put(id, new Company(id, settlement, founder, CompanyPurpose.values()[purpose], CompanyStatus.values()[status], registeredAt)) != null) {
+                    || companies.put(id, new Company(id, settlement, founder, FrontierWireTags.require(CompanyPurpose.class, purpose), FrontierWireTags.require(CompanyStatus.class, status), registeredAt)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate company registry entry");
             }
         }
@@ -372,7 +366,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             long invoice = input.readLong(); long wage = input.readLong(); int status = input.readUnsignedByte(); long openedAt = input.readLong();
             long completed = input.readLong(); long totalWages = input.readLong();
             if (status >= EmploymentContractStatus.values().length || contracts.put(id, new EmploymentContract(id, company, resident,
-                    new FixedScalar(invoice), new FixedScalar(wage), EmploymentContractStatus.values()[status], openedAt, completed, new FixedScalar(totalWages))) != null) {
+                    new FixedScalar(invoice), new FixedScalar(wage), FrontierWireTags.require(EmploymentContractStatus.class, status), openedAt, completed, new FixedScalar(totalWages))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
             }
         }
@@ -383,7 +377,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (MarketDemand demand : market.demands().values().stream().sorted(Comparator.comparing(MarketDemand::id)).toList()) {
             writeString(output, demand.id().value()); writeString(output, demand.buyerId().value()); writeString(output, demand.reasonId().value());
             writeString(output, demand.itemKind()); output.writeInt(demand.itemCount()); output.writeLong(demand.maximumTotalPrice().raw());
-            output.writeLong(demand.openedAtTick()); output.writeLong(demand.expiresAtTick()); output.writeByte(demand.status().ordinal());
+            output.writeLong(demand.openedAtTick()); output.writeLong(demand.expiresAtTick()); output.writeByte(demand.status().wireTag());
         }
         writeCount(output, market.quotes().size());
         for (CompanyQuote quote : market.quotes().values().stream().sorted(Comparator.comparing(CompanyQuote::id)).toList()) {
@@ -394,7 +388,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (MarketWorkOrder order : market.workOrders().values().stream().sorted(Comparator.comparing(MarketWorkOrder::id)).toList()) {
             writeString(output, order.id().value()); writeString(output, order.demandId().value()); writeString(output, order.quoteId().value());
             writeString(output, order.sellerId().value()); writeString(output, order.taskId().value()); writeString(output, order.jobId().value()); writeString(output, order.reservationId().value());
-            output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().ordinal());
+            output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().wireTag());
         }
     }
     private static MarketOrderBook readMarketOrderBook(DataInputStream input, boolean hasMarketOrderJob) throws IOException {
@@ -406,7 +400,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             String itemKind = readString(input); int itemCount = input.readInt(); FixedScalar maximum = new FixedScalar(input.readLong());
             long openedAt = input.readLong(), expiresAt = input.readLong(); int status = input.readUnsignedByte();
             if (status >= MarketDemandStatus.values().length || demands.put(id, new MarketDemand(id, buyer, reason, itemKind, itemCount, maximum,
-                    openedAt, expiresAt, MarketDemandStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate market demand");
+                    openedAt, expiresAt, FrontierWireTags.require(MarketDemandStatus.class, status))) != null) throw new IllegalArgumentException("invalid or duplicate market demand");
         }
         Map<SubjectId, CompanyQuote> quotes = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
@@ -420,7 +414,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId seller = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId job = new SubjectId(readString(input)); SubjectId reservation = new SubjectId(readString(input));
             FixedScalar total = new FixedScalar(input.readLong()); int status = input.readUnsignedByte();
             if (status >= MarketWorkOrderStatus.values().length || orders.put(id, new MarketWorkOrder(id, demand, quote, seller, task, job, reservation,
-                    total, MarketWorkOrderStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
+                    total, FrontierWireTags.require(MarketWorkOrderStatus.class, status))) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
         }
         return new MarketOrderBook(demands, quotes, orders);
     }
@@ -431,7 +425,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, inventory.surfaces().size());
         for (ContainerSurface surface : inventory.surfaces().values().stream().sorted(Comparator.comparing(ContainerSurface::containerId)).toList()) {
-            writeString(output, surface.containerId().value()); writePosition(output, surface.position()); output.writeByte(surface.status().ordinal());
+            writeString(output, surface.containerId().value()); writePosition(output, surface.position()); output.writeByte(surface.status().wireTag());
         }
         writeCount(output, inventory.items().size());
         for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
@@ -455,7 +449,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, inventory.conflicts().size());
         for (InventoryConflict conflict : inventory.conflicts().values().stream().sorted(Comparator.comparing(InventoryConflict::id)).toList()) {
             writeString(output, conflict.id().value()); writeString(output, conflict.subjectId().value()); writeString(output, conflict.containerId().value());
-            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().ordinal());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag());
         }
     }
     private static ExactInventory readInventory(DataInputStream input, EconomicLedger economics) throws IOException {
@@ -467,7 +461,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
-            if (status >= ContainerSurfaceStatus.values().length || surfaces.put(id, new ContainerSurface(id, position, ContainerSurfaceStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate container surface");
+            ContainerSurface surface = new ContainerSurface(id, position, FrontierWireTags.require(ContainerSurfaceStatus.class, status));
+            if (status >= ContainerSurfaceStatus.values().length || surfaces.put(id, surface) != null) {
+                throw new IllegalArgumentException("invalid or duplicate container surface");
+            }
         }
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
@@ -498,7 +495,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); SubjectId container = new SubjectId(readString(input));
             int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
             if (kind >= InventoryConflictKind.values().length
-                    || conflicts.put(id, new InventoryConflict(id, item, container, slot, InventoryConflictKind.values()[kind])) != null) {
+                    || conflicts.put(id, new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate inventory conflict");
             }
         }
@@ -538,7 +535,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
         writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
             writeString(output, contract.id().value()); writeString(output, contract.settlementId().value()); writeString(output, contract.recipientId().value());
-            writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());
+            writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().wireTag());
         }
     } private static Map<SubjectId, SupplyContract> readContracts(DataInputStream input) throws IOException {
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>();
@@ -546,7 +543,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId recipient = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
             String kind = readString(input); int itemCount = input.readUnsignedByte(); int status = input.readUnsignedByte();
             if (status >= ContractStatus.values().length
-                    || contracts.put(id, new SupplyContract(id, settlement, recipient, cargo, kind, itemCount, ContractStatus.values()[status])) != null) {
+                    || contracts.put(id, new SupplyContract(id, settlement, recipient, cargo, kind, itemCount, FrontierWireTags.require(ContractStatus.class, status))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate supply contract");
             }
         }
@@ -592,7 +589,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, receipt.operationId().value()); writeString(output, receipt.contractId().value()); writeString(output, receipt.cargoId().value());
             writeString(output, receipt.settlementId().value()); writeString(output, receipt.recipientId().value());
             writeCount(output, receipt.participants().size()); for (SubjectId participant : receipt.participants()) writeString(output, participant.value());
-            output.writeByte(receipt.outcome().ordinal()); output.writeLong(receipt.terminalAtTick());
+            output.writeByte(receipt.outcome().wireTag()); output.writeLong(receipt.terminalAtTick());
         }
     }
     private static LogisticsHistory readLogisticsHistory(DataInputStream input) throws IOException {
@@ -606,7 +603,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int outcome = input.readUnsignedByte(); long terminalAt = input.readLong();
             if (outcome >= TerminalLogisticsReceipt.TerminalLogisticsOutcome.values().length
                     || receipts.put(operation, new TerminalLogisticsReceipt(operation, contract, cargo, settlement, recipient, participants,
-                    TerminalLogisticsReceipt.TerminalLogisticsOutcome.values()[outcome], terminalAt)) != null) {
+                    FrontierWireTags.require(TerminalLogisticsReceipt.TerminalLogisticsOutcome.class, outcome), terminalAt)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate terminal logistics receipt");
             }
         }
@@ -634,7 +631,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         output.writeBoolean(assembly.deferral().isPresent());
         if (assembly.deferral().isPresent()) {
             OperationAssemblyDeferral deferred = assembly.deferral().orElseThrow(); writeString(output, deferred.actorId().value());
-            writePosition(output, deferred.target()); writePosition(output, deferred.obstructionFloor()); output.writeByte(deferred.reason().ordinal());
+            writePosition(output, deferred.target()); writePosition(output, deferred.obstructionFloor()); output.writeByte(deferred.reason().wireTag());
         }
     }
     private static OperationAssembly readAssembly(DataInputStream input, boolean hasDeferral, boolean hasDeferralObstruction) throws IOException {
@@ -649,7 +646,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId actor = new SubjectId(readString(input)); BlockPosition target = readPosition(input);
             BlockPosition obstruction = hasDeferralObstruction ? readPosition(input) : target; int reason = input.readUnsignedByte();
             if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
-            deferral = java.util.Optional.of(new OperationAssemblyDeferral(actor, target, obstruction, OperationAssemblyDeferral.Reason.values()[reason]));
+            deferral = java.util.Optional.of(new OperationAssemblyDeferral(actor, target, obstruction, FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
         }
         return new OperationAssembly(members, carrier, deferral);
     }
@@ -662,7 +659,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeString(output, logistics.engagementId().orElseThrow().value());
                 writePosition(output, logistics.cargoPosition());
             }
-            writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
+            writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag());
             writeCount(output, lease.members().size());
             for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); writePosition(output, lease.memberPosition(member.actorId())); }
             writeCount(output, lease.ambientHandoffActorIds().size());
@@ -710,7 +707,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
             SceneCause cause = causeKind.create(operation, cargo, engagement, cargoPosition);
             SceneLease lease = SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
-                    SceneLeaseStatus.values()[status], members, memberPositions, handoffActors, recovery);
+                    FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;
@@ -746,11 +743,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writePhysicalIntents(DataOutputStream output, Map<PhysicalIntentId, PhysicalIntent> intents) throws IOException {
         writeCount(output, intents.size());
         for (PhysicalIntent intent : intents.values().stream().sorted(Comparator.comparing(PhysicalIntent::id)).toList()) {
-            writeString(output, intent.id().value()); output.writeByte(intent.kind().ordinal()); output.writeByte(intent.status().ordinal());
+            writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
             writeString(output, intent.causeSubjectId().value()); writeCount(output, intent.subjectIds().size());
             for (SubjectId subject : intent.subjectIds()) writeString(output, subject.value());
             output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
-            output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().ordinal());
+            output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag());
             output.writeBoolean(intent.postconditionObservationId().isPresent());
             if (intent.postconditionObservationId().isPresent()) writeString(output, intent.postconditionObservationId().orElseThrow().value());
         }
@@ -765,8 +762,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId> observation = observed
                     ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId(readString(input))) : java.util.Optional.empty();
-            if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length
-                    || intents.put(id, new PhysicalIntent(id, PhysicalIntentKind.values()[kind], PhysicalIntentStatus.values()[status], cause, subjects, origin, radius, PhysicalPostcondition.values()[postcondition], observation)) != null) {
+            PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind),
+                    FrontierWireTags.require(PhysicalIntentStatus.class, status), cause, subjects, origin, radius,
+                    FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation);
+            if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length
+                    || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }
         }

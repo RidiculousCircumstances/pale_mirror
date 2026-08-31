@@ -5,4 +5,7 @@ enum StrategicTaskStatus {
     ACTIVE,
     BLOCKED,
     COMPLETED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

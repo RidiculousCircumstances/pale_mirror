@@ -32,7 +32,7 @@ final class SettlementProvisionPayloadCodecs {
             for (LegacySettlementProvisionStarted.LegacyAllocation allocation : started.allocations()) {
                 FrontierWorldPayloadCodecs.writeSubject(output, allocation.itemId()); FrontierWorldStateCodec.writeCount(output, allocation.count());
             }
-            FrontierWorldStateCodec.writeCount(output, started.nextAllocation()); output.writeByte(started.status().ordinal()); output.writeBoolean(false);
+            FrontierWorldStateCodec.writeCount(output, started.nextAllocation()); output.writeByte(started.status().wireTag()); output.writeBoolean(false);
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId settlement = FrontierWorldPayloadCodecs.readSubject(input).value(); int cycle = FrontierWorldStateCodec.readCount(input); long startedAt = input.readLong();
@@ -43,7 +43,7 @@ final class SettlementProvisionPayloadCodecs {
             }
             int next = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean active = input.readBoolean();
             if (status >= SettlementProvisionStatus.values().length || active) throw new IllegalArgumentException("invalid legacy settlement provision start");
-            return new LegacySettlementProvisionStarted(settlement, cycle, startedAt, required, fulfilled, allocations, next, SettlementProvisionStatus.values()[status]);
+            return new LegacySettlementProvisionStarted(settlement, cycle, startedAt, required, fulfilled, allocations, next, FrontierWireTags.require(SettlementProvisionStatus.class, status));
         }); }
     }; }
 
@@ -62,12 +62,12 @@ final class SettlementProvisionPayloadCodecs {
         @Override public String type() { return "frontier.settlement_provision_resolved"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             SettlementProvisionResolved resolved = (SettlementProvisionResolved) payload;
-            FrontierWorldPayloadCodecs.writeSubject(output, resolved.settlementId()); output.writeByte(resolved.status().ordinal());
+            FrontierWorldPayloadCodecs.writeSubject(output, resolved.settlementId()); output.writeByte(resolved.status().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId settlement = FrontierWorldPayloadCodecs.readSubject(input).value(); int status = input.readUnsignedByte();
             if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision resolution status");
-            return new SettlementProvisionResolved(settlement, SettlementProvisionStatus.values()[status]);
+            return new SettlementProvisionResolved(settlement, FrontierWireTags.require(SettlementProvisionStatus.class, status));
         }); }
     }; }
 
@@ -81,7 +81,7 @@ final class SettlementProvisionPayloadCodecs {
             FrontierWorldPayloadCodecs.writeSubject(output, allocation.itemId()); FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
             for (SubjectId recipient : allocation.recipientIds()) FrontierWorldPayloadCodecs.writeSubject(output, recipient);
         }
-        FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().ordinal()); output.writeBoolean(provision.activeIntentId().isPresent());
+        FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().wireTag()); output.writeBoolean(provision.activeIntentId().isPresent());
         if (provision.activeIntentId().isPresent()) FrontierWorldStateCodec.writeString(output, provision.activeIntentId().orElseThrow().value());
     }
 
@@ -101,6 +101,6 @@ final class SettlementProvisionPayloadCodecs {
         if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");
         Optional<PhysicalIntentId> intent = active ? Optional.of(new PhysicalIntentId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
         return new SettlementProvision(settlement, cycle, startedAt, required, fulfilled, List.copyOf(recipients), List.copyOf(allocations), next,
-                SettlementProvisionStatus.values()[status], intent);
+                FrontierWireTags.require(SettlementProvisionStatus.class, status), intent);
     }
 }

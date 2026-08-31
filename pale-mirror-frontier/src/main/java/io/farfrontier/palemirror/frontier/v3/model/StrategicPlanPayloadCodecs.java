@@ -27,12 +27,12 @@ final class StrategicPlanPayloadCodecs {
     static PayloadCodec transition() { return new PayloadCodec() {
         @Override public String type() { return "frontier.strategic_task_transition"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            StrategicTaskTransition transition = (StrategicTaskTransition) payload; subject(output, transition.taskId()); output.writeByte(transition.status().ordinal());
+            StrategicTaskTransition transition = (StrategicTaskTransition) payload; subject(output, transition.taskId()); output.writeByte(transition.status().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId task = subject(input); int status = input.readUnsignedByte();
             if (status >= StrategicTaskStatus.values().length) throw new IllegalArgumentException("unknown strategic task transition");
-            return new StrategicTaskTransition(task, StrategicTaskStatus.values()[status]);
+            return new StrategicTaskTransition(task, FrontierWireTags.require(StrategicTaskStatus.class, status));
         }); }
     }; }
     static PayloadCodec infectionObserved() { return new PayloadCodec() {
@@ -79,11 +79,11 @@ final class StrategicPlanPayloadCodecs {
     static PayloadCodec hiveDoctrineSelected() { return new PayloadCodec() {
         @Override public String type() { return "frontier.hive_doctrine_selected"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            HiveDoctrineState state = ((HiveDoctrineSelected) payload).state(); output.writeByte(state.doctrine().ordinal()); output.writeLong(state.selectedAt());
+            HiveDoctrineState state = ((HiveDoctrineSelected) payload).state(); output.writeByte(state.doctrine().wireTag()); output.writeLong(state.selectedAt());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             int doctrine = input.readUnsignedByte(); if (doctrine >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
-            return new HiveDoctrineSelected(new HiveDoctrineState(HiveDoctrine.values()[doctrine], input.readLong()));
+            return new HiveDoctrineSelected(new HiveDoctrineState(FrontierWireTags.require(HiveDoctrine.class, doctrine), input.readLong()));
         }); }
     }; }
     static PayloadCodec hotScoutOperationObserved() { return new PayloadCodec() {
@@ -109,21 +109,21 @@ final class StrategicPlanPayloadCodecs {
                 input.available() == 0 ? Optional.empty() : optionalPosition(input))); }
     }; }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
-        subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
+        subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().wireTag()); target(output, value.infectionTarget());
         optionalSubject(output, value.resourceSiteTarget());
-        output.writeInt(value.decisionOrdinal()); output.writeByte(value.status().ordinal());
+        output.writeInt(value.decisionOrdinal()); output.writeByte(value.status().wireTag());
     }
     private static StrategicObjective readObjective(DataInputStream input) throws IOException {
         SubjectId id = subject(input), owner = subject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = target(input);
         Optional<SubjectId> resourceSiteTarget = optionalSubject(input); int ordinal = input.readInt(), status = input.readUnsignedByte();
         if (kind >= StrategicObjectiveKind.values().length || status >= StrategicObjectiveStatus.values().length) throw new IllegalArgumentException("unknown strategic objective value");
-        return new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, resourceSiteTarget, ordinal, StrategicObjectiveStatus.values()[status]);
+        return new StrategicObjective(id, owner, FrontierWireTags.require(StrategicObjectiveKind.class, kind), target, resourceSiteTarget, ordinal, FrontierWireTags.require(StrategicObjectiveStatus.class, status));
     }
     private static void writeTask(DataOutputStream output, StrategicTask value) throws IOException {
-        subject(output, value.id()); subject(output, value.objectiveId()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
+        subject(output, value.id()); subject(output, value.objectiveId()); subject(output, value.ownerId()); output.writeByte(value.kind().wireTag()); target(output, value.infectionTarget());
         optionalSubject(output, value.operationTarget()); optionalSubject(output, value.resourceSiteTarget());
-        count(output, value.requirements().size()); for (StrategicTaskRequirement requirement : value.requirements()) output.writeByte(requirement.ordinal());
-        count(output, value.dependencies().size()); for (SubjectId dependency : value.dependencies()) subject(output, dependency); output.writeByte(value.status().ordinal());
+        count(output, value.requirements().size()); for (StrategicTaskRequirement requirement : value.requirements()) output.writeByte(requirement.wireTag());
+        count(output, value.dependencies().size()); for (SubjectId dependency : value.dependencies()) subject(output, dependency); output.writeByte(value.status().wireTag());
         optionalPosition(output, value.operationObservationPosition());
     }
     private static StrategicTask readTask(DataInputStream input) throws IOException {
@@ -133,13 +133,13 @@ final class StrategicPlanPayloadCodecs {
         for (int index = 0, count = count(input); index < count; index++) {
             int value = input.readUnsignedByte();
             if (value >= StrategicTaskRequirement.values().length) throw new IllegalArgumentException("unknown strategic task requirement");
-            requirements.add(StrategicTaskRequirement.values()[value]);
+            requirements.add(FrontierWireTags.require(StrategicTaskRequirement.class, value));
         }
         List<SubjectId> dependencies = new ArrayList<>(); for (int index = 0, count = count(input); index < count; index++) dependencies.add(subject(input)); int status = input.readUnsignedByte();
         Optional<BlockPosition> operationObservationPosition = input.available() == 0 ? Optional.empty() : optionalPosition(input);
         if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length) throw new IllegalArgumentException("unknown strategic task value");
-        return new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget, requirements, dependencies,
-                StrategicTaskStatus.values()[status], operationObservationPosition);
+        return new StrategicTask(id, objective, owner, FrontierWireTags.require(StrategicTaskKind.class, kind), target, operationTarget, resourceSiteTarget, requirements, dependencies,
+                FrontierWireTags.require(StrategicTaskStatus.class, status), operationObservationPosition);
     }
     private static void target(DataOutputStream output, Optional<InfectionCell> target) throws IOException {
         output.writeBoolean(target.isPresent()); if (target.isPresent()) { output.writeInt(target.orElseThrow().x()); output.writeInt(target.orElseThrow().z()); }

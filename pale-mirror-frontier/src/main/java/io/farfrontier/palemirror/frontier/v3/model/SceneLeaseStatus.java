@@ -17,4 +17,7 @@ public enum SceneLeaseStatus {
             case CONFLICT -> next == PREPARED;
         };
     }
+
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

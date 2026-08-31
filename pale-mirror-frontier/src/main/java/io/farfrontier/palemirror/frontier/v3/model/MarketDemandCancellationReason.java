@@ -4,4 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 enum MarketDemandCancellationReason {
     PRODUCTION_BLOCKED,
     TASK_NO_LONGER_PENDING
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

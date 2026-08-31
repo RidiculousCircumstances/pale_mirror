@@ -29,16 +29,16 @@ final class HumanPopulationStateCodec {
         }
         FrontierWorldStateCodec.writeCount(output, population.health().size());
         for (Map.Entry<SubjectId, ResidentHealth> entry : population.health().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag()); output.writeLong(entry.getValue().sinceTick());
         }
         FrontierWorldStateCodec.writeCount(output, population.nutrition().size());
         for (Map.Entry<SubjectId, ResidentNutrition> entry : population.nutrition().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal());
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag());
             FrontierWorldStateCodec.writeCount(output, entry.getValue().consecutiveMissedCycles()); FrontierWorldStateCodec.writeCount(output, entry.getValue().resolvedCycle());
         }
         FrontierWorldStateCodec.writeCount(output, population.quarantines().size());
         for (Map.Entry<SubjectId, SettlementQuarantine> entry : population.quarantines().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().ordinal()); output.writeLong(entry.getValue().sinceTick());
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag()); output.writeLong(entry.getValue().sinceTick());
         }
         FrontierWorldStateCodec.writeCount(output, population.migrations().size());
         for (ResidentMigrationJourney journey : population.migrations().values().stream().sorted(Comparator.comparing(ResidentMigrationJourney::residentId)).toList()) {
@@ -46,8 +46,8 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, journey.destinationHouseholdId().value()); FrontierWorldStateCodec.writeString(output, journey.destinationSettlementId().value());
             FrontierWorldStateCodec.writeCount(output, journey.route().size());
             for (BlockPosition position : journey.route()) FrontierWorldStateCodec.writePosition(output, position);
-            FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().ordinal()); output.writeBoolean(journey.blockReason().isPresent());
-            if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().ordinal());
+            FrontierWorldStateCodec.writeCount(output, journey.routeIndex()); output.writeByte(journey.status().wireTag()); output.writeBoolean(journey.blockReason().isPresent());
+            if (journey.blockReason().isPresent()) output.writeByte(journey.blockReason().orElseThrow().wireTag());
         }
         FrontierWorldStateCodec.writeCount(output, population.provisions().size());
         for (SettlementProvision provision : population.provisions().values().stream().sorted(Comparator.comparing(SettlementProvision::settlementId)).toList()) {
@@ -60,7 +60,7 @@ final class HumanPopulationStateCodec {
                 FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
                 for (SubjectId recipient : allocation.recipientIds()) FrontierWorldStateCodec.writeString(output, recipient.value());
             }
-            FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().ordinal()); output.writeBoolean(provision.activeIntentId().isPresent());
+            FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().wireTag()); output.writeBoolean(provision.activeIntentId().isPresent());
             if (provision.activeIntentId().isPresent()) FrontierWorldStateCodec.writeString(output, provision.activeIntentId().orElseThrow().value());
         }
     }
@@ -88,7 +88,7 @@ final class HumanPopulationStateCodec {
         Map<SubjectId, ResidentHealth> health = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
-            if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(ResidentHealthStatus.values()[status], input.readLong())) != null) {
+            if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(FrontierWireTags.require(ResidentHealthStatus.class, status), input.readLong())) != null) {
                 throw new IllegalArgumentException("invalid or duplicate resident health");
             }
         }
@@ -96,7 +96,7 @@ final class HumanPopulationStateCodec {
         if (hasNutrition) {
             for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
                 SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
-                if (status >= ResidentNutritionStatus.values().length || nutrition.put(id, new ResidentNutrition(ResidentNutritionStatus.values()[status],
+                if (status >= ResidentNutritionStatus.values().length || nutrition.put(id, new ResidentNutrition(FrontierWireTags.require(ResidentNutritionStatus.class, status),
                         FrontierWorldStateCodec.readCount(input), FrontierWorldStateCodec.readCount(input))) != null) {
                     throw new IllegalArgumentException("invalid or duplicate resident nutrition");
                 }
@@ -106,7 +106,7 @@ final class HumanPopulationStateCodec {
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
             if (status >= SettlementQuarantineStatus.values().length
-                    || quarantines.put(id, new SettlementQuarantine(SettlementQuarantineStatus.values()[status], input.readLong())) != null) {
+                    || quarantines.put(id, new SettlementQuarantine(FrontierWireTags.require(SettlementQuarantineStatus.class, status), input.readLong())) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement quarantine");
             }
         }
@@ -122,7 +122,7 @@ final class HumanPopulationStateCodec {
             java.util.Optional<ResidentMigrationBlockReason> reason = blocked
                     ? java.util.Optional.of(readBlockReason(input)) : java.util.Optional.empty();
             ResidentMigrationJourney journey = new ResidentMigrationJourney(resident, origin, household, destination, route, routeIndex,
-                    ResidentMigrationStatus.values()[status], reason);
+                    FrontierWireTags.require(ResidentMigrationStatus.class, status), reason);
             if (migrations.put(resident, journey) != null) throw new IllegalArgumentException("duplicate resident migration journey");
         }
         if (!hasProvisions) return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations);
@@ -153,7 +153,7 @@ final class HumanPopulationStateCodec {
             if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");
             java.util.Optional<PhysicalIntentId> intent = active ? java.util.Optional.of(new PhysicalIntentId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
             SettlementProvision provision = new SettlementProvision(settlement, cycle, startedAt, required, fulfilled, recipients, allocations, next,
-                    SettlementProvisionStatus.values()[status], intent);
+                    FrontierWireTags.require(SettlementProvisionStatus.class, status), intent);
             if (provisions.put(settlement, provision) != null) throw new IllegalArgumentException("duplicate settlement provision");
         }
         if (!hasNutrition) nutrition = legacyNutrition(residents, provisions);
@@ -174,12 +174,12 @@ final class HumanPopulationStateCodec {
     private static ResidentMigrationBlockReason readBlockReason(DataInputStream input) throws IOException {
         int reason = input.readUnsignedByte();
         if (reason >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
-        return ResidentMigrationBlockReason.values()[reason];
+        return FrontierWireTags.require(ResidentMigrationBlockReason.class, reason);
     }
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldStateCodec.writeString(output, resident.id().value()); FrontierWorldStateCodec.writeString(output, resident.householdId().value());
-        FrontierWorldStateCodec.writeString(output, resident.settlementId().value()); output.writeByte(resident.role().ordinal()); output.writeLong(resident.birthTick());
+        FrontierWorldStateCodec.writeString(output, resident.settlementId().value()); output.writeByte(resident.role().wireTag()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
     }
 
@@ -189,6 +189,6 @@ final class HumanPopulationStateCodec {
         if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
-        return new ResidentProfile(id, household, settlement, ResidentRole.values()[role], birthTick, skills);
+        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
     }
 }

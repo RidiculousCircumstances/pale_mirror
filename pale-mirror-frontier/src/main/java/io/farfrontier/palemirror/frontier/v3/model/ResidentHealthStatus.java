@@ -6,4 +6,7 @@ enum ResidentHealthStatus {
     EXPOSED,
     INFECTED,
     RECOVERING
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

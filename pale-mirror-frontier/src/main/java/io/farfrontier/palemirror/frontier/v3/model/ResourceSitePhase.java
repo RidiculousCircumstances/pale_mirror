@@ -8,4 +8,7 @@ public enum ResourceSitePhase {
     HARVESTING,
     CONFLICT,
     DESTROYED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

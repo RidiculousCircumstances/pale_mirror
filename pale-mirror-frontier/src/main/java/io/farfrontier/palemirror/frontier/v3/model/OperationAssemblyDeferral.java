@@ -12,5 +12,9 @@ public record OperationAssemblyDeferral(SubjectId actorId, BlockPosition target,
         reason = Objects.requireNonNull(reason, "deferred assembly reason");
     }
 
-    public enum Reason { LOADED_WORLD_OBSTRUCTION }
+    public enum Reason {
+        LOADED_WORLD_OBSTRUCTION;
+
+        public int wireTag() { return FrontierWireTags.tag(this); }
+    }
 }

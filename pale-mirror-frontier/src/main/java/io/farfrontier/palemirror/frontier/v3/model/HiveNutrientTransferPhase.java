@@ -8,4 +8,7 @@ public enum HiveNutrientTransferPhase {
     DEPARTURE_PENDING,
     /** Exact cargo reached the retained target socket and awaits loaded-world insertion evidence. */
     ARRIVAL_PENDING
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

@@ -5,4 +5,7 @@ enum HiveDoctrine {
     CONSOLIDATE,
     EXPAND,
     INTERDICT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

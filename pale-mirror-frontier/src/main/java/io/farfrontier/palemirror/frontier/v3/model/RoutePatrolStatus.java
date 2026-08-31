@@ -6,4 +6,7 @@ enum RoutePatrolStatus {
     ROUTE_CLEAR,
     OBSTRUCTION_CONFIRMED,
     FAILED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

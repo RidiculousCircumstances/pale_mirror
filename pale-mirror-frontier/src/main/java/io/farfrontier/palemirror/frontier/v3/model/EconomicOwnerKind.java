@@ -7,4 +7,7 @@ public enum EconomicOwnerKind {
     PUBLIC_INFRASTRUCTURE,
     COMPANY,
     RESIDENT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

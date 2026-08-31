@@ -45,7 +45,7 @@ final class PhysicalEffectObservationStateCodec {
                     output.writeBoolean(impact.frontierActorId().isPresent()); if (impact.frontierActorId().isPresent()) string(output, impact.frontierActorId().orElseThrow().value()); output.writeBoolean(impact.removed());
                 }
                 FrontierWorldStateCodec.writeCount(output, explosion.itemImpacts().size());
-                for (ExplosionItemImpact impact : explosion.itemImpacts()) { string(output, impact.itemId().value()); output.writeByte(impact.outcome().ordinal()); }
+                for (ExplosionItemImpact impact : explosion.itemImpacts()) { string(output, impact.itemId().value()); output.writeByte(impact.outcome().wireTag()); }
                 output.writeInt(explosion.affectedInfectionOverlayCount()); output.writeInt(explosion.changedInfectionOverlayCount());
             } else if (observation instanceof ExactItemConsumedObservation consumed) {
                 output.writeByte(6); string(output, consumed.id().value()); string(output, consumed.intentId().value()); string(output, consumed.itemId().value());
@@ -127,7 +127,7 @@ final class PhysicalEffectObservationStateCodec {
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId item = new SubjectId(text(input)); int outcome = input.readUnsignedByte();
             if (outcome >= ExplosionItemImpact.Outcome.values().length) throw new IllegalArgumentException("invalid explosion item outcome");
-            items.add(new ExplosionItemImpact(item, ExplosionItemImpact.Outcome.values()[outcome]));
+            items.add(new ExplosionItemImpact(item, FrontierWireTags.require(ExplosionItemImpact.Outcome.class, outcome)));
         }
         return new ExplosionObservation(id, intentId, origin, radius, affected, changed, entities, items, input.readInt(), input.readInt());
     }

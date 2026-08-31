@@ -19,24 +19,24 @@ final class StrategicPlanStateCodec {
     static void write(DataOutputStream output, StrategicPlanState plans) throws IOException {
         writeCount(output, plans.objectives().size());
         for (StrategicObjective objective : plans.objectives().values().stream().sorted(Comparator.comparing(StrategicObjective::id)).toList()) {
-            writeSubject(output, objective.id()); writeSubject(output, objective.ownerId()); output.writeByte(objective.kind().ordinal());
+            writeSubject(output, objective.id()); writeSubject(output, objective.ownerId()); output.writeByte(objective.kind().wireTag());
             writeTarget(output, objective.infectionTarget()); writeOptionalSubject(output, objective.resourceSiteTarget());
-            output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().ordinal());
+            output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().wireTag());
         }
         writeCount(output, plans.tasks().size());
         for (StrategicTask task : plans.tasks().values().stream().sorted(Comparator.comparing(StrategicTask::id)).toList()) {
-            writeSubject(output, task.id()); writeSubject(output, task.objectiveId()); writeSubject(output, task.ownerId()); output.writeByte(task.kind().ordinal());
+            writeSubject(output, task.id()); writeSubject(output, task.objectiveId()); writeSubject(output, task.ownerId()); output.writeByte(task.kind().wireTag());
             writeTarget(output, task.infectionTarget()); writeOptionalSubject(output, task.operationTarget()); writeOptionalSubject(output, task.resourceSiteTarget());
             writeCount(output, task.requirements().size());
-            for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.ordinal());
+            for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.wireTag());
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
-            output.writeByte(task.status().ordinal()); writeOptionalPosition(output, task.operationObservationPosition());
+            output.writeByte(task.status().wireTag()); writeOptionalPosition(output, task.operationObservationPosition());
         }
         writeCount(output, plans.routePatrols().size());
         for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
             writeSubject(output, patrol.taskId()); writeSubject(output, patrol.settlementId()); writeSubject(output, patrol.guardId());
             writeCount(output, patrol.route().size()); for (BlockPosition position : patrol.route()) writePosition(output, position);
-            output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().ordinal()); output.writeBoolean(patrol.obstruction().isPresent());
+            output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
             if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
         }
         writeCount(output, plans.routeEngagements().size());
@@ -48,8 +48,8 @@ final class StrategicPlanStateCodec {
                 for (BlockPosition position : attacker.route()) writePosition(output, position);
                 output.writeByte(attacker.routeIndex());
             }
-            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal()); output.writeInt(engagement.nextStrikeEpoch());
-            output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().ordinal());
+            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
+            output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().wireTag());
         }
         writeCount(output, plans.settlementAssaults().size());
         for (SettlementAssault assault : plans.settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id)).toList()) {
@@ -64,8 +64,8 @@ final class StrategicPlanStateCodec {
             }
             writeCount(output, assault.defenderIds().size());
             for (SubjectId defender : assault.defenderIds()) writeSubject(output, defender);
-            output.writeByte(assault.status().ordinal()); output.writeInt(assault.nextStrikeEpoch());
-            output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().ordinal());
+            output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
+            output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
         }
         writeCount(output, plans.infectionKnowledge().entries().size());
         for (Map.Entry<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> settlement : plans.infectionKnowledge().entries().entrySet().stream()
@@ -92,7 +92,7 @@ final class StrategicPlanStateCodec {
             writeSubject(output, sighting.settlementId()); writeSubject(output, sighting.scoutId()); writePosition(output, sighting.settlementAnchor());
             output.writeLong(sighting.observedAt());
         }
-        output.writeByte(plans.hiveDoctrine().doctrine().ordinal()); output.writeLong(plans.hiveDoctrine().selectedAt());
+        output.writeByte(plans.hiveDoctrine().doctrine().wireTag()); output.writeLong(plans.hiveDoctrine().selectedAt());
     }
 
     static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true, true, true, true); }
@@ -115,8 +115,10 @@ final class StrategicPlanStateCodec {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
             Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             int ordinal = input.readInt(), status = input.readUnsignedByte();
+            StrategicObjective objective = new StrategicObjective(id, owner, FrontierWireTags.require(StrategicObjectiveKind.class, kind),
+                    target, resourceSiteTarget, ordinal, FrontierWireTags.require(StrategicObjectiveStatus.class, status));
             if (kind >= StrategicObjectiveKind.values().length || status >= StrategicObjectiveStatus.values().length
-                    || objectives.put(id, new StrategicObjective(id, owner, StrategicObjectiveKind.values()[kind], target, resourceSiteTarget, ordinal, StrategicObjectiveStatus.values()[status])) != null) {
+                    || objectives.put(id, objective) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic objective");
             }
         }
@@ -127,14 +129,14 @@ final class StrategicPlanStateCodec {
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
             Optional<BlockPosition> operationObservationPosition = hasOperationObservationPosition ? readOptionalPosition(input) : Optional.empty();
             if (migrateLegacyProductionSlotRequirement && kind < StrategicTaskKind.values().length
-                    && StrategicTaskKind.values()[kind] == StrategicTaskKind.PRODUCE_BREAD) {
+                    && FrontierWireTags.require(StrategicTaskKind.class, kind) == StrategicTaskKind.PRODUCE_BREAD) {
                 List<StrategicTaskRequirement> legacy = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
                         StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
                 if (requirements.equals(legacy)) requirements = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT);
             }
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
-                    || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget,
-                    requirements, dependencies, StrategicTaskStatus.values()[status], operationObservationPosition)) != null) {
+                    || tasks.put(id, new StrategicTask(id, objective, owner, FrontierWireTags.require(StrategicTaskKind.class, kind), target, operationTarget, resourceSiteTarget,
+                    requirements, dependencies, FrontierWireTags.require(StrategicTaskStatus.class, status), operationObservationPosition)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }
@@ -143,7 +145,7 @@ final class StrategicPlanStateCodec {
             SubjectId task = readSubject(input), settlement = readSubject(input), guard = readSubject(input);
             List<BlockPosition> route = new ArrayList<>(); for (int point = 0, routeCount = readCount(input); point < routeCount; point++) route.add(readPosition(input));
             int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
-            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, guard, route, cursor, RoutePatrolStatus.values()[status], obstruction)) != null) {
+            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, guard, route, cursor, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route patrol");
             }
         }
@@ -158,7 +160,7 @@ final class StrategicPlanStateCodec {
             }
             BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<RouteEngagementOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
-            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status], epoch, outcome)) != null) {
+            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
             }
         }
@@ -177,7 +179,7 @@ final class StrategicPlanStateCodec {
             int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
             if (status >= SettlementAssaultStatus.values().length || assaults.put(id, new SettlementAssault(id, task, hive, sighting, attackers, defenders,
-                    SettlementAssaultStatus.values()[status], epoch, outcome)) != null) {
+                    FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
             }
         }
@@ -212,7 +214,7 @@ final class StrategicPlanStateCodec {
         }
         HiveDoctrineState doctrine = HiveDoctrineState.initial();
         if (hasHiveDoctrine) { int kind = input.readUnsignedByte(); if (kind >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
-            doctrine = new HiveDoctrineState(HiveDoctrine.values()[kind], input.readLong()); }
+            doctrine = new HiveDoctrineState(FrontierWireTags.require(HiveDoctrine.class, kind), input.readLong()); }
         return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
                 new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults);
     }
@@ -221,7 +223,7 @@ final class StrategicPlanStateCodec {
         List<StrategicTaskRequirement> values = new ArrayList<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             int value = input.readUnsignedByte(); if (value >= StrategicTaskRequirement.values().length) throw new IllegalArgumentException("unknown strategic task requirement");
-            values.add(StrategicTaskRequirement.values()[value]);
+            values.add(FrontierWireTags.require(StrategicTaskRequirement.class, value));
         }
         return values;
     }
@@ -248,11 +250,11 @@ final class StrategicPlanStateCodec {
     }
     private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
-        return RouteEngagementOutcome.values()[value];
+        return FrontierWireTags.require(RouteEngagementOutcome.class, value);
     }
     private static SettlementAssaultOutcome readAssaultOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
-        return SettlementAssaultOutcome.values()[value];
+        return FrontierWireTags.require(SettlementAssaultOutcome.class, value);
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

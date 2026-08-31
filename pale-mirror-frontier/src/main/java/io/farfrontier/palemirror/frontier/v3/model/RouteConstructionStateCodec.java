@@ -17,7 +17,7 @@ final class RouteConstructionStateCodec {
         output.writeByte(projects.size());
         for (RouteConstruction project : projects.values().stream().sorted(java.util.Comparator.comparing(RouteConstruction::id)).toList()) {
             FrontierWorldStateCodec.writeString(output, project.id().value()); FrontierWorldStateCodec.writeString(output, project.settlementId().value());
-            output.writeByte(project.status().ordinal()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
+            output.writeByte(project.status().wireTag()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
             for (BlockPosition waypoint : project.waypoints()) FrontierWorldStateCodec.writePosition(output, waypoint);
             output.writeBoolean(project.cargoId().isPresent()); if (project.cargoId().isPresent()) FrontierWorldStateCodec.writeString(output, project.cargoId().orElseThrow().value());
         }
@@ -34,7 +34,7 @@ final class RouteConstructionStateCodec {
             java.util.ArrayList<BlockPosition> waypoints = new java.util.ArrayList<>();
             for (int point = 0; point < waypointCount; point++) waypoints.add(FrontierWorldStateCodec.readPosition(input));
             java.util.Optional<SubjectId> cargo = includesCargo && input.readBoolean() ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
-            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, RouteConstructionStatus.values()[status], cargo);
+            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status), cargo);
             if (projects.put(id, project) != null) throw new IllegalArgumentException("duplicate route construction id");
         }
         return Map.copyOf(projects);

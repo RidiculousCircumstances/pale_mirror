@@ -4,4 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 enum SettlementQuarantineStatus {
     NORMAL,
     QUARANTINED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

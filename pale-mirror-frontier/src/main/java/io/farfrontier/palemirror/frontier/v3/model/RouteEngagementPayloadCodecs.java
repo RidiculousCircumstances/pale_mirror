@@ -33,12 +33,12 @@ final class RouteEngagementPayloadCodecs {
         @Override public String type() { return "frontier.route_engagement_transition"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RouteEngagementTransition transition = (RouteEngagementTransition) payload;
-            subject(output, transition.engagementId()); output.writeByte(transition.status().ordinal());
+            subject(output, transition.engagementId()); output.writeByte(transition.status().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId engagement = subject(input); int status = input.readUnsignedByte();
             if (status >= RouteEngagementStatus.values().length) throw new IllegalArgumentException("unknown route engagement status");
-            return new RouteEngagementTransition(engagement, RouteEngagementStatus.values()[status]);
+            return new RouteEngagementTransition(engagement, FrontierWireTags.require(RouteEngagementStatus.class, status));
         }); }
     }; }
     static PayloadCodec strike() { return new PayloadCodec() {
@@ -53,12 +53,12 @@ final class RouteEngagementPayloadCodecs {
     static PayloadCodec resolved() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_resolved"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            RouteEngagementResolved resolved = (RouteEngagementResolved) payload; subject(output, resolved.engagementId()); output.writeByte(resolved.outcome().ordinal());
+            RouteEngagementResolved resolved = (RouteEngagementResolved) payload; subject(output, resolved.engagementId()); output.writeByte(resolved.outcome().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             int outcome; SubjectId engagement = subject(input); outcome = input.readUnsignedByte();
             if (outcome >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
-            return new RouteEngagementResolved(engagement, RouteEngagementOutcome.values()[outcome]);
+            return new RouteEngagementResolved(engagement, FrontierWireTags.require(RouteEngagementOutcome.class, outcome));
         }); }
     }; }
     private static void write(DataOutputStream output, RouteEngagement engagement) throws IOException {
@@ -69,8 +69,8 @@ final class RouteEngagementPayloadCodecs {
             for (BlockPosition position : attacker.route()) position(output, position);
             output.writeByte(attacker.routeIndex());
         }
-        position(output, engagement.intercept()); output.writeByte(engagement.status().ordinal()); output.writeInt(engagement.nextStrikeEpoch());
-        output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().ordinal());
+        position(output, engagement.intercept()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
+        output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().wireTag());
     }
     private static RouteEngagement read(DataInputStream input) throws IOException {
         SubjectId id = subject(input), task = subject(input), operation = subject(input), hive = subject(input);
@@ -83,11 +83,11 @@ final class RouteEngagementPayloadCodecs {
         BlockPosition intercept = position(input); int status = input.readUnsignedByte(), epoch = input.readInt();
         java.util.Optional<RouteEngagementOutcome> outcome = input.readBoolean() ? java.util.Optional.of(readOutcome(input)) : java.util.Optional.empty();
         if (status >= RouteEngagementStatus.values().length) throw new IllegalArgumentException("unknown route engagement status");
-        return new RouteEngagement(id, task, operation, hive, attackers, intercept, RouteEngagementStatus.values()[status], epoch, outcome);
+        return new RouteEngagement(id, task, operation, hive, attackers, intercept, FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome);
     }
     private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");
-        return RouteEngagementOutcome.values()[value];
+        return FrontierWireTags.require(RouteEngagementOutcome.class, value);
     }
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }

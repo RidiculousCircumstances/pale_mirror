@@ -4,4 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public enum EconomicAccountStatus {
     ACTIVE,
     INSOLVENT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

@@ -11,4 +11,7 @@ public enum ContainerSurfaceStatus {
             case CONFLICT -> false;
         };
     }
+
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

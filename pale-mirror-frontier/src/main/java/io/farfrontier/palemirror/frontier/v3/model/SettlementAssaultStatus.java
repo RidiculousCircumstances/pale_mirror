@@ -9,4 +9,7 @@ enum SettlementAssaultStatus {
     RESOLVED,
     UNKNOWN_AFTER_RESTART,
     CONFLICT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

@@ -47,14 +47,14 @@ final class SettlementAssaultPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultTransition value = (SettlementAssaultTransition) payload;
-                subject(output, value.assaultId()); output.writeByte(value.status().ordinal());
+                subject(output, value.assaultId()); output.writeByte(value.status().wireTag());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int status = input.readUnsignedByte();
                 if (status >= SettlementAssaultStatus.values().length) throw new IllegalArgumentException("unknown settlement assault status");
-                return new SettlementAssaultTransition(assault, SettlementAssaultStatus.values()[status]);
+                return new SettlementAssaultTransition(assault, FrontierWireTags.require(SettlementAssaultStatus.class, status));
             });
         }
     }; }
@@ -79,14 +79,14 @@ final class SettlementAssaultPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultResolved value = (SettlementAssaultResolved) payload;
-                subject(output, value.assaultId()); output.writeByte(value.outcome().ordinal());
+                subject(output, value.assaultId()); output.writeByte(value.outcome().wireTag());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int outcome = input.readUnsignedByte();
                 if (outcome >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
-                return new SettlementAssaultResolved(assault, SettlementAssaultOutcome.values()[outcome]);
+                return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome));
             });
         }
     }; }
@@ -102,8 +102,8 @@ final class SettlementAssaultPayloadCodecs {
             output.writeByte(attacker.routeIndex());
         }
         output.writeByte(assault.defenderIds().size()); for (SubjectId defender : assault.defenderIds()) subject(output, defender);
-        output.writeByte(assault.status().ordinal()); output.writeInt(assault.nextStrikeEpoch());
-        output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().ordinal());
+        output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
+        output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
     }
 
     private static SettlementAssault read(DataInputStream input) throws IOException {
@@ -120,13 +120,13 @@ final class SettlementAssaultPayloadCodecs {
         int status = input.readUnsignedByte(), epoch = input.readInt();
         Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
         if (status >= SettlementAssaultStatus.values().length) throw new IllegalArgumentException("unknown settlement assault status");
-        return new SettlementAssault(id, task, hive, sighting, attackers, defenders, SettlementAssaultStatus.values()[status], epoch, outcome);
+        return new SettlementAssault(id, task, hive, sighting, attackers, defenders, FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
     }
 
     private static SettlementAssaultOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte();
         if (value >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
-        return SettlementAssaultOutcome.values()[value];
+        return FrontierWireTags.require(SettlementAssaultOutcome.class, value);
     }
 
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }

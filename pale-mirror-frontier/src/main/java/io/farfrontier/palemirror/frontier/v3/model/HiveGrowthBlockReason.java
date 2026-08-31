@@ -5,4 +5,7 @@ public enum HiveGrowthBlockReason {
     BIOMASS_UNAVAILABLE,
     GROWTH_CAPACITY_UNAVAILABLE,
     PHYSICAL_CONSUMPTION_UNKNOWN
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

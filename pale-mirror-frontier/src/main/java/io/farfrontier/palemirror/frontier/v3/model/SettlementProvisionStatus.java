@@ -8,4 +8,7 @@ public enum SettlementProvisionStatus {
     RATIONED,
     SHORTAGE,
     CONFLICT
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

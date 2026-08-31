@@ -19,7 +19,7 @@ final class AmbientLeaseStateCodec {
         writeCount(output, leases.size());
         for (AmbientActorLease lease : leases.values().stream().sorted(Comparator.comparing(AmbientActorLease::actorId)).toList()) {
             writeString(output, lease.actorId().value()); writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks());
-            output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.goal().ordinal()); writePosition(output, lease.goalPosition());
+            output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.goal().wireTag()); writePosition(output, lease.goalPosition());
         }
     }
     static Map<SubjectId, AmbientActorLease> read(DataInputStream input) throws IOException {
@@ -28,7 +28,7 @@ final class AmbientLeaseStateCodec {
             SubjectId actor = new SubjectId(readString(input)); BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong();
             int status = input.readUnsignedByte(); int goal = input.readUnsignedByte(); BlockPosition goalPosition = readPosition(input);
             if (status >= AmbientLeaseStatus.values().length || goal >= AmbientGoalKind.values().length || leases.put(actor,
-                    new AmbientActorLease(actor, handoff, new SimInstant(instant), revision, AmbientLeaseStatus.values()[status], AmbientGoalKind.values()[goal], goalPosition)) != null) {
+                    new AmbientActorLease(actor, handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalPosition)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate ambient lease");
             }
         }

@@ -17,6 +17,7 @@ class DebtError(ValueError):
 
 STATE_CONSTRUCTOR = re.compile(r"new\s+FrontierWorldState\s*\(")
 ENUM_POSITION_TAG = re.compile(r"\.ordinal\s*\(\)|\.values\s*\(\)\s*\[")
+WIRE_TAG_POSITION_DERIVATION = re.compile(r"\bvalues\s*\[|\bvalues\s*\.\s*length\b")
 SCENE_CAUSE_BRANCH = re.compile(
     r"instanceof\s+(?:[\w.]+\.)?(?:LogisticsSceneCause|SettlementAssaultSceneCause)\b"
 )
@@ -99,6 +100,14 @@ def collect(root: Path) -> dict[str, Any]:
     enum_tags = _counts(
         root, (FRONTIER_MAIN,), ENUM_POSITION_TAG, codec_only=True
     )
+    wire_tag_position_derivations = _counts(
+        root, (FRONTIER_MAIN / "model",), WIRE_TAG_POSITION_DERIVATION
+    )
+    wire_tag_position_derivations = {
+        path: count
+        for path, count in wire_tag_position_derivations.items()
+        if Path(path).name == "FrontierWireTags.java"
+    }
     scene_branches = _counts(
         root, (FRONTIER_MAIN, NEOFORGE_MAIN), SCENE_CAUSE_BRANCH
     )
@@ -150,6 +159,7 @@ def collect(root: Path) -> dict[str, Any]:
         + len(list(model_root.glob("*Codecs.java"))),
         "direct_world_state_construction": constructors,
         "persisted_enum_position_tags": enum_tags,
+        "wire_tag_position_derivations": wire_tag_position_derivations,
         "scene_cause_type_branches": scene_branches,
         "v3_gametest_forced_chunk_loads": forced_chunk_loads,
         "model_forbidden_package_dependencies": model_forbidden_dependencies,
@@ -289,6 +299,7 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
     for label in (
         "direct_world_state_construction",
         "persisted_enum_position_tags",
+        "wire_tag_position_derivations",
         "scene_cause_type_branches",
         "v3_gametest_forced_chunk_loads",
         "model_forbidden_package_dependencies",

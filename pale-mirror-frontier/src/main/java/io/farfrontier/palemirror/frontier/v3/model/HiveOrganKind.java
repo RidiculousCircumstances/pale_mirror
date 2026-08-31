@@ -5,4 +5,7 @@ public enum HiveOrganKind {
     HEART,
     BROOD,
     STORE
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

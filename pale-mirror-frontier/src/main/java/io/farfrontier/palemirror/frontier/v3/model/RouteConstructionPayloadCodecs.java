@@ -45,7 +45,7 @@ final class RouteConstructionPayloadCodecs {
     }; }
     private static void write(DataOutputStream output, RouteConstruction project) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, project.id().value()); FrontierWorldPayloadCodecs.writeString(output, project.settlementId().value());
-        output.writeByte(project.status().ordinal()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
+        output.writeByte(project.status().wireTag()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
         for (BlockPosition waypoint : project.waypoints()) FrontierWorldPayloadCodecs.writePosition(output, waypoint);
     }
     private static RouteConstruction read(DataInputStream input) throws IOException {
@@ -55,6 +55,6 @@ final class RouteConstructionPayloadCodecs {
             throw new IllegalArgumentException("route construction payload is invalid");
         }
         List<BlockPosition> waypoints = new ArrayList<>(); for (int index = 0; index < points; index++) waypoints.add(FrontierWorldPayloadCodecs.readPosition(input));
-        return new RouteConstruction(id, settlement, waypoints, confirmed, RouteConstructionStatus.values()[status]);
+        return new RouteConstruction(id, settlement, waypoints, confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status));
     }
 }

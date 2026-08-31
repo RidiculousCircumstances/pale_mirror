@@ -5,4 +5,7 @@ public enum ResidentMigrationBlockReason {
     QUARANTINE,
     DESTINATION_HOUSING_LOST,
     ROUTE_OBSTRUCTED
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }
