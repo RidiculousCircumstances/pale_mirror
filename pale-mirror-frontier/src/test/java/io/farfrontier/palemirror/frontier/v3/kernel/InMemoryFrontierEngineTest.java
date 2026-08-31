@@ -217,6 +217,47 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void overCapacityScheduledPlanQuarantinesBeforeWalOrCanonicalQueueMutation() {
+        ScheduledAction trigger = scheduled("schedule:capacity-trigger", "settlement:capacity", 10L, 1);
+        ScheduledAction first = scheduled("schedule:capacity-first", "settlement:capacity", 20L, 1);
+        ScheduledAction second = scheduled("schedule:capacity-second", "settlement:capacity", 21L, 1);
+        List<TransactionRecord> durable = new ArrayList<>();
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Created(first)),
+                        new ProposedEvent(due.subject(), new ScheduleEffect.Created(second))),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8, 1), List.of(trigger), (transaction, durability) -> durable.add(transaction));
+
+        AdvanceResult result = engine.advanceTo(new SimInstant(10L), new WorkBudget(1, 1));
+
+        assertEquals("QUARANTINED", result.status().kind().name());
+        assertEquals(List.of(trigger), engine.scheduledActions(), "an over-cap overlay may not consume its triggering work");
+        assertTrue(engine.transactions().isEmpty() && durable.isEmpty(), "an over-cap queue plan may not reach the WAL");
+        assertEquals(0, engine.projection(ProjectionQuery.summary()).value());
+    }
+
+    @Test
+    void oversizedRecoveredFutureWorkFailsBeforeCanonicalEngineInstallation() {
+        ScheduledAction first = scheduled("schedule:recovery-capacity-first", "settlement:capacity", 10L, 1);
+        ScheduledAction second = scheduled("schedule:recovery-capacity-second", "settlement:capacity", 11L, 1);
+        FrontierEngineConfiguration<Counter, CounterProjection> base = configuration();
+        FrontierEngineConfiguration<Counter, CounterProjection> constrained = new FrontierEngineConfiguration<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(action.weight()))),
+                (state, event) -> reduce(state, event, false), base.stateCodec(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8, 1), List.of(), TransactionCommitter.noOp());
+
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(constrained,
+                new RecoveryImage(WORLD, Optional.of(new SnapshotRecord(new io.farfrontier.palemirror.frontier.v3.api.CheckpointImage(
+                        WORLD, Revision.ZERO, SimInstant.ZERO, base.stateCodec().encode(base.initialState()), List.of(first, second), List.of()), 0L)), List.of())));
+    }
+
+    @Test
     void sameInputStreamProducesTheSameCheckpointAndEvents() {
         InMemoryFrontierEngine<Counter, CounterProjection> first = engine(List.of(), false);
         InMemoryFrontierEngine<Counter, CounterProjection> second = engine(List.of(), false);

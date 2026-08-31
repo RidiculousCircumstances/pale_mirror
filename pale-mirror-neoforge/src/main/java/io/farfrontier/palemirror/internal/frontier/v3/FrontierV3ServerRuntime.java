@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
@@ -34,6 +35,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private FrontierV3RuntimeStatus status;
     private SimInstant instant;
     private int ticksSinceCheckpoint;
+    /**
+     * One immutable defensive image for the current canonical tick/revision.  Physical adapters
+     * routinely inspect it several times in one server tick; rebuilding it would clone the full
+     * canonical byte snapshot for every read without creating any new canonical evidence.
+     */
+    private CheckpointImage cachedCheckpoint;
     private Revision decodedStateRevision;
     private S decodedState;
 
@@ -50,7 +57,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
                     ? FrontierEngines.create(this.configuration)
                     : FrontierEngines.recover(this.configuration, image);
-            instant = engine.checkpoint().instant();
+            cachedCheckpoint = engine.checkpoint();
+            instant = cachedCheckpoint.instant();
             status = FrontierV3RuntimeStatus.active();
         } catch (RuntimeException error) {
             status = FrontierV3RuntimeStatus.quarantined(error);
@@ -65,6 +73,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     FrontierV3RuntimeStatus status() { return status; }
 
+    FrontierExecutionMetrics executionMetrics() { return configuration.executionMetrics(); }
+
     /**
      * Returns an immutable image of the current canonical revision for a server-thread adapter.
      *
@@ -74,7 +84,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
      */
     Optional<CheckpointImage> checkpointImage() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
-        return Optional.of(engine.checkpoint());
+        if (cachedCheckpoint == null) cachedCheckpoint = engine.checkpoint();
+        return Optional.of(cachedCheckpoint);
     }
 
     /**
@@ -97,6 +108,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         CommandResult result = engine.submit(command);
+        // Even a rejected command may have quarantined the engine.  Discarding a read-only
+        // image is harmless; successful commands must never leave a stale snapshot visible to a
+        // later physical executor in the same server tick.
+        cachedCheckpoint = null;
         if (engine.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
             status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, engine.status().failureDetail());
         }
@@ -136,6 +151,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
             AdvanceResult result = engine.advanceTo(instant.plus(1L), budget);
+            // SimInstant advances even when no due action mutates the aggregate, so each server
+            // tick has a distinct immutable checkpoint image for adapter observation.
+            cachedCheckpoint = null;
             instant = result.instant();
             ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, 1);
             if (result.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
@@ -153,7 +171,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<SnapshotReceipt> checkpoint() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
-            CheckpointImage checkpoint = engine.checkpoint();
+            CheckpointImage checkpoint = checkpointImage().orElseThrow();
             RecoveryImage durable = store.recover(configuration.worldId());
             Revision persistedRevision = durable.walTail().isEmpty()
                     ? durable.checkpoint().map(value -> value.checkpoint().revision()).orElse(Revision.ZERO)

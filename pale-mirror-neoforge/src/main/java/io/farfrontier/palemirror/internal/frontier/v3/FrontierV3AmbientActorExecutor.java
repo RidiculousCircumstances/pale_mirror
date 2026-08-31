@@ -87,6 +87,8 @@ final class FrontierV3AmbientActorExecutor {
      * never allowed to fall out of a chunk and serialize after its lease has become COLD.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
+    /** One noncanonical exact reservation index per immutable decoded canonical state. */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, ReservationCache> RESERVATIONS = new IdentityHashMap<>();
 
     private FrontierV3AmbientActorExecutor() { }
 
@@ -102,9 +104,10 @@ final class FrontierV3AmbientActorExecutor {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
+            java.util.Set<SubjectId> reservedActors = reservedActors(runtime, state);
             var location = state.actorLocations().get(actorId);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || FrontierSceneAdmission.reserved(state, actorId)) {
+                    || reservedActors.contains(actorId)) {
                 forgetColdDemand(runtime, actorId);
                 continue;
             }
@@ -516,6 +519,15 @@ final class FrontierV3AmbientActorExecutor {
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         PENDING_ADMISSIONS.remove(runtime);
         COLD_DEMAND_SINCE.remove(runtime);
+        RESERVATIONS.remove(runtime);
+    }
+
+    private static java.util.Set<SubjectId> reservedActors(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
+        ReservationCache cached = RESERVATIONS.get(runtime);
+        if (cached != null && cached.state() == state) return cached.actors();
+        java.util.Set<SubjectId> actors = FrontierSceneAdmission.reservedActors(state);
+        RESERVATIONS.put(runtime, new ReservationCache(state, actors));
+        return actors;
     }
     private static PendingAdmission pending(FrontierV3ServerRuntime<?, ?> runtime, UUID entityId) {
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
@@ -649,6 +661,7 @@ final class FrontierV3AmbientActorExecutor {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    private record ReservationCache(FrontierWorldState state, java.util.Set<SubjectId> actors) { }
     private record SightedCarrier(MinecartChest carrier, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) { }
     private record LocalBrain(double radius, long periodTicks, int identityPhase) { }
     record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement, BlockPosition observedPosition) {

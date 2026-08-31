@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
@@ -14,10 +15,13 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +29,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void rendersBoundedReadOnlyPerformanceAttribution() {
+        FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
+        metrics.begin(FrontierExecutionMetrics.Stage.PHYSICAL, "scenes", "scene").close();
+        metrics.observeQueue(new SimInstant(12L), 7, Optional.of(new ScheduledAction(
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:performance"), new SimInstant(4L), 0,
+                new SubjectId("settlement:1"), "process.performance", 1)));
+        CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:performance-diagnostic"),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(12L), new byte[]{1}, List.of(), List.of());
+
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot());
+
+        assertTrue(value.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"performance\""));
+        assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8"));
+        assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
+    }
+
     @Test
     void rendersBoundedStableReadOnlyViewsForRealCanonicalSubjects(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -24,6 +24,7 @@ test('summary diagnostics need no object identity while object diagnostics do', 
   const inspection = { ...scenario, actions: [{ type: 'inspect', view: 'summary', id: '' }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(inspection));
   assert.throws(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'site', id: '' }] }), /inspect needs a read-only v3 view and id/);
+  assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'performance', id: '' }] }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'summary', id: '', expect: { status: 'ok' } }] }));
   assert.throws(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'site', id: '', expect: { status: 'ok' } }] }), /invalid diagnostic assertion/);
 });
@@ -211,6 +212,14 @@ test('abrupt recovery resolves only the JVM that echoed its exact disposable non
   const runId = '05e2ad0c-69d1-45af-8d3c-4d7908a4a63d';
   assert.equal(pilotServerPid(`other output\nPMV3_PILOT_SERVER runId=${runId} pid=12345\n`, runId), 12345);
   assert.equal(pilotServerPid('PMV3_PILOT_SERVER runId=foreign pid=98765', runId), undefined);
+});
+
+test('JFR evidence is opt-in, bounded and confined to the disposable build profile directory', () => {
+  assert.equal(jfrCaptureRequest({}, '/tmp/frontier-v3'), undefined);
+  assert.deepEqual(jfrCaptureRequest({ FRONTIER_V3_JFR_OUTPUT: 'build/profiles/scale-41.jfr', FRONTIER_V3_JFR_DURATION: '120s' }, '/tmp/frontier-v3'),
+    { output: '/tmp/frontier-v3/build/profiles/scale-41.jfr', duration: '120s' });
+  assert.throws(() => jfrCaptureRequest({ FRONTIER_V3_JFR_OUTPUT: '../outside.jfr' }, '/tmp/frontier-v3'), /build\/profiles/);
+  assert.throws(() => jfrCaptureRequest({ FRONTIER_V3_JFR_OUTPUT: 'build/profiles/scale-41.jfr', FRONTIER_V3_JFR_DURATION: 'forever' }, '/tmp/frontier-v3'), /JFR_DURATION/);
 });
 
 test('pilot module loads its pinned CommonJS pathfinder dependency', async () => {

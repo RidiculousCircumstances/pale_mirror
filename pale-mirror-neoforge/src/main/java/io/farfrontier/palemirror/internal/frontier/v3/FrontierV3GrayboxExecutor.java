@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
-import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -49,12 +48,14 @@ final class FrontierV3GrayboxExecutor {
     private FrontierV3GrayboxExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
-        if (checkpoint == null) return;
+        if (runtime.checkpointImage().isEmpty()) return;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return;
+        FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
-            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive")));
-            cursor = Cursor.from(checkpoint.revision(), plan, cursor);
+        if (cursor == null || !input.equals(cursor.input())) {
+            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+            cursor = Cursor.from(input, plan, cursor);
             CURSORS.put(runtime, cursor);
         }
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
@@ -192,22 +193,22 @@ final class FrontierV3GrayboxExecutor {
      * available promptly even if lexicographically earlier settlements remain unloaded.
      */
     static final class Cursor {
-        private final Revision revision;
+        private final FrontierGrayboxPlan.StructuralInput input;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
-        private Cursor(Revision revision, List<ChunkCells> chunks, int nextChunkIndex) {
-            this.revision = revision;
+        private Cursor(FrontierGrayboxPlan.StructuralInput input, List<ChunkCells> chunks, int nextChunkIndex) {
+            this.input = input;
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
         }
-        static Cursor from(Revision revision, FrontierGrayboxPlan plan, Cursor prior) {
+        static Cursor from(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan plan, Cursor prior) {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            return fromCells(revision, cells, prior);
+            return fromCells(input, cells, prior);
         }
-        static Cursor fromCells(Revision revision, List<GrayboxCell> cells, Cursor prior) {
+        static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior) {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
             cells.forEach(cell -> grouped.computeIfAbsent(ChunkKey.of(cell), ignored -> new ArrayList<>()).add(cell));
             List<ChunkCells> chunks = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
@@ -215,9 +216,13 @@ final class FrontierV3GrayboxExecutor {
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
-            return new Cursor(revision, chunks, next);
+            return new Cursor(input, chunks, next);
         }
-        Revision revision() { return revision; }
+        /** Test-only cell ordering probe; production cursors always retain an exact structural input. */
+        static Cursor fromCells(List<GrayboxCell> cells, Cursor prior) {
+            return fromCells(null, cells, prior);
+        }
+        FrontierGrayboxPlan.StructuralInput input() { return input; }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             for (int attempts = 0; attempts < chunks.size(); attempts++) {

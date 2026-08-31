@@ -45,6 +45,9 @@ COMMAND_PLANNER = FRONTIER_MAIN / "process/FrontierWorldCommandPlanner.java"
 EVENT_REDUCER = FRONTIER_MAIN / "process/FrontierWorldEventReducer.java"
 PROCESS_CATALOG = FRONTIER_MAIN / "process/FrontierWorldProcessCatalog.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
+ENGINE_LIMITS = FRONTIER_MAIN / "kernel/EngineLimits.java"
+ENGINE = FRONTIER_MAIN / "kernel/InMemoryFrontierEngine.java"
+SCHEDULE_QUEUE = FRONTIER_MAIN / "kernel/ScheduledActionQueue.java"
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 MODEL_FORBIDDEN_IMPORT = re.compile(
     r"^\s*import\s+io\.farfrontier\.palemirror\.frontier\.v3\.(?:process|persistence|runtime)\.",
@@ -127,6 +130,18 @@ def collect(root: Path) -> dict[str, Any]:
     event_reducer = _text(root, EVENT_REDUCER)
     process_catalog = _text(root, PROCESS_CATALOG)
     lifecycle = _text(root, SERVER_LIFECYCLE)
+    schedule_capacity_requirements = (
+        (ENGINE_LIMITS, "int maxPendingSchedules"),
+        (ENGINE, "initial.size() > limits.maxPendingSchedules()"),
+        (ENGINE, "nextSchedules.requireCapacity(limits.maxPendingSchedules())"),
+        (SCHEDULE_QUEUE, "int projectedSize()"),
+        (SCHEDULE_QUEUE, "void requireCapacity(int maximum)"),
+    )
+    unbounded_scheduled_queue_paths: dict[str, int] = {}
+    for source, requirement in schedule_capacity_requirements:
+        if requirement not in _text(root, source):
+            relative = source.as_posix()
+            unbounded_scheduled_queue_paths[relative] = unbounded_scheduled_queue_paths.get(relative, 0) + 1
     process_unhashed_tuning_constants = _counts(root, (FRONTIER_MAIN / "process",), PROCESS_UNHASHED_TUNING)
     model_root = root / FRONTIER_MAIN / "model"
     model_forbidden_dependencies: dict[str, int] = {}
@@ -173,6 +188,7 @@ def collect(root: Path) -> dict[str, Any]:
         "scene_cause_type_branches": scene_branches,
         "v3_gametest_forced_chunk_loads": forced_chunk_loads,
         "model_forbidden_package_dependencies": model_forbidden_dependencies,
+        "unbounded_scheduled_queue_paths": unbounded_scheduled_queue_paths,
     }
 
 
@@ -328,6 +344,7 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         "scene_cause_type_branches",
         "v3_gametest_forced_chunk_loads",
         "model_forbidden_package_dependencies",
+        "unbounded_scheduled_queue_paths",
     ):
         _validate_counted_files(metrics[label], policy.get(label), label)
 

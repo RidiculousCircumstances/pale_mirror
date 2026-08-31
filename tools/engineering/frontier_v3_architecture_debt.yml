@@ -55,3 +55,7 @@ v3_gametest_forced_chunk_loads:
 model_forbidden_package_dependencies:
   max_total: 0
   allowed_files: {}
+
+unbounded_scheduled_queue_paths:
+  max_total: 0
+  allowed_files: {}

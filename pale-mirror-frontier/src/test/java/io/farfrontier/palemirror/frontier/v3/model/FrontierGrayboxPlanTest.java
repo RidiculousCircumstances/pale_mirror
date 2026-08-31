@@ -25,6 +25,20 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void structuralInputIgnoresActorMotionButInvalidatesOnSilhouetteChange() {
+        FrontierWorldState state = initial();
+        var actor = state.actorLocations().keySet().iterator().next();
+        FrontierWorldState moved = state.withActorLocation(actor, state.actorLocations().get(actor).position().offset(1, 0, 0));
+        FrontierWorldState damaged = state.withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"),
+                StructureCondition.DAMAGED);
+
+        assertEquals(FrontierGrayboxPlan.structuralInput(state), FrontierGrayboxPlan.structuralInput(moved),
+                "actor-only canonical revisions must retain the same structural projection");
+        assertFalse(FrontierGrayboxPlan.structuralInput(state).equals(FrontierGrayboxPlan.structuralInput(damaged)),
+                "a visible structural condition change must rebuild the projection");
+    }
+
+    @Test
     void destroyedStructureHasNoDesiredCellsButOtherOwnersRemain() {
         FrontierWorldState state = initial().withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"), StructureCondition.DESTROYED);
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

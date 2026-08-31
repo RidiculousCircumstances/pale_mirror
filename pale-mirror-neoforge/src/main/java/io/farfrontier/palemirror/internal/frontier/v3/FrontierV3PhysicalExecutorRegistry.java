@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicStagePlan;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.Collection;
@@ -16,8 +17,8 @@ import java.util.Set;
  * <p>Registration is explicit and deterministic.  It rejects missing dependencies, cycles,
  * duplicate IDs and competing writers before an executor can touch Minecraft.  The per-entry
  * budget is the declared maximum number of executor invocations in a server tick; individual
- * executors retain their existing bounded domain work limits until Wave H0.6 instruments their
- * measured work units.</p>
+ * executors retain their existing bounded domain work limits, while H0.6 timing attributes one
+ * noncanonical measurement span to each staged invocation.</p>
  */
 final class FrontierV3PhysicalExecutorRegistry {
     /**
@@ -73,7 +74,10 @@ final class FrontierV3PhysicalExecutorRegistry {
         for (Definition definition : ordered) {
             // Definitions presently represent one invocation.  A future multi-slice executor must
             // declare and consume its own bounded work units rather than adding a second tick call.
-            definition.tick().run(world, runtime);
+            try (FrontierExecutionMetrics.Span ignored = FrontierExecutionMetrics.safelyBegin(runtime.executionMetrics(), FrontierExecutionMetrics.Stage.PHYSICAL,
+                    definition.id(), definition.stage().name().toLowerCase(java.util.Locale.ROOT))) {
+                definition.tick().run(world, runtime);
+            }
         }
     }
 

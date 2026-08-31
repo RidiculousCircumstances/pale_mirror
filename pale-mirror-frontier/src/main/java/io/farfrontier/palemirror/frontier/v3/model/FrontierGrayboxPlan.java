@@ -50,6 +50,49 @@ public final class FrontierGrayboxPlan {
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
 
     /**
+     * Exact immutable inputs for the static structural projection, deliberately excluding moving
+     * actors, inventory, active operations and infection.  Those domains have independent
+     * executors and must not make an unchanged settlement/hive/route silhouette allocate a new
+     * full graybox plan.  The inputs are already immutable canonical values; this value object
+     * retains references only for read-only equality at the NeoForge projection boundary.
+     */
+    public static StructuralInput structuralInput(FrontierWorldState state) {
+        Objects.requireNonNull(state, "structural projection state");
+        return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
+                state.routeTopology(), state.physicalDeltas());
+    }
+
+    public static final class StructuralInput {
+        private final FrontierBootstrap bootstrap;
+        private final Map<SubjectId, StructureCondition> structureConditions;
+        private final Map<SubjectId, HiveOrgan> addedOrgans;
+        private final RouteTopology routeTopology;
+        private final Map<BlockPosition, PhysicalDelta> physicalDeltas;
+
+        private StructuralInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
+                                Map<SubjectId, HiveOrgan> addedOrgans, RouteTopology routeTopology,
+                                Map<BlockPosition, PhysicalDelta> physicalDeltas) {
+            this.bootstrap = bootstrap;
+            this.structureConditions = structureConditions;
+            this.addedOrgans = addedOrgans;
+            this.routeTopology = routeTopology;
+            this.physicalDeltas = physicalDeltas;
+        }
+
+        @Override public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof StructuralInput input)) return false;
+            return bootstrap.equals(input.bootstrap) && structureConditions.equals(input.structureConditions)
+                    && addedOrgans.equals(input.addedOrgans) && routeTopology.equals(input.routeTopology)
+                    && physicalDeltas.equals(input.physicalDeltas);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, physicalDeltas);
+        }
+    }
+
+    /**
      * Exact current semantic body occupancy for pure COLD route planners.  Visible route cells
      * are deliberate floor support, not body geometry: an actor standing on one needs the two
      * cells above it clear.  This avoids compiling the whole render plan merely to answer that

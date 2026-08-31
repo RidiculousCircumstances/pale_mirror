@@ -54,7 +54,7 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed, ruleset); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+                new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static DeterministicProcessRegistry processRegistry() {
         return new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), PAYLOAD_CODECS,

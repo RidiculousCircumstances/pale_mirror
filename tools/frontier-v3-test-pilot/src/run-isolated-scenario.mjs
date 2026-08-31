@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultPilotProfile, loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
+import { defaultPilotProfile, jfrCaptureRequest, loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -14,6 +14,7 @@ const sourcePath = resolve(scenarioPath);
 const { scenario } = await loadScenario(sourcePath);
 if (scenario.isolation?.mode !== 'disposable_lite') throw new Error('isolated runner requires isolation.mode=disposable_lite');
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const jfr = jfrCaptureRequest(process.env, project);
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 const runId = randomUUID();
 const port = Number(process.env.FRONTIER_V3_PILOT_PORT ?? 25575);
@@ -37,6 +38,7 @@ let abruptStopAttempted = false;
 try {
   const recovery = restartSegments(scenario);
   server = await startServer(true);
+  if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
     await writeScenario(ephemeralScenario, scenario);
     await runPilot(ephemeralScenario, output, server);
@@ -63,6 +65,7 @@ try {
     manifest.recovery = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest };
     await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   }
+  if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;
 } finally {
   if (server != null && !abruptStopAttempted) await stopServerSafely(server, serverLog, server.logOffset, port);
@@ -72,7 +75,7 @@ try {
   if (completed && process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') await rm(disposableWorld, { recursive: true, force: true });
 }
 
-console.log(JSON.stringify({ status: 'ok', profile: 'disposable_lite', world, port, manifest: output }));
+console.log(JSON.stringify({ status: 'ok', profile: 'disposable_lite', world, port, manifest: output, jfr: jfr?.output }));
 
 async function startServer(reset) {
   const serverRunId = randomUUID();
@@ -93,6 +96,38 @@ async function startServer(reset) {
   if (!Number.isInteger(session.serverPid)) throw new Error('disposable v3 server did not announce its exact JVM identity');
   session.logOffset = await logOffsetAfter(serverLog, `PMV3_PILOT_SERVER runId=${serverRunId}`, 10_000);
   return session;
+}
+
+async function startJfrCapture(server, request) {
+  await mkdir(dirname(request.output), { recursive: true });
+  try {
+    await stat(request.output);
+    throw new Error(`refusing to overwrite existing JFR evidence: ${request.output}`);
+  } catch (failure) {
+    if (failure?.code !== 'ENOENT') throw failure;
+  }
+  const script = resolve(project, 'scripts/capture-runtime-jfr.sh');
+  const capture = spawn(script, [String(server.serverPid), request.duration, request.output], {
+    cwd: project, env: process.env, stdio: 'inherit'
+  });
+  if (await exited(capture) !== 0) throw new Error('disposable v3 JFR capture could not be scheduled');
+  console.log(`PMV3_ISOLATED jfr=scheduled pid=${server.serverPid} duration=${request.duration} output=${request.output}`);
+}
+
+async function awaitJfrEvidence(request) {
+  const duration = Number.parseInt(request.duration, 10);
+  const unit = request.duration.at(-1);
+  const durationMs = duration * (unit === 'h' ? 3_600_000 : unit === 'm' ? 60_000 : 1_000);
+  const deadline = Date.now() + durationMs + 30_000;
+  while (Date.now() < deadline) {
+    try {
+      if ((await stat(request.output)).size > 0) return;
+    } catch (failure) {
+      if (failure?.code !== 'ENOENT') throw failure;
+    }
+    await timeout(250);
+  }
+  throw new Error(`JFR evidence was not flushed after ${request.duration}: ${request.output}`);
 }
 
 function waitForServer(session, timeoutMs) {

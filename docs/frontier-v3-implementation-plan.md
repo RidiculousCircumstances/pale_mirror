@@ -63,10 +63,14 @@ scene/domain family until the following ordered corrections land:
    gains, economic rates, facility capacity and COLD combat output; recovered
    worlds resolve its exact installed selector or fail closed, while fixtures
    explicitly pin their test-only selected ruleset.
-6. **H0.6 — complete-load proof.** Instrument process planning, reduction,
-   validation, allocation, queue lag and each physical stage. Run the same-seed
-   12-settlement simultaneous-front pressure route before changing queue shape,
-   concurrency or physical body limits.
+6. **H0.6 — complete-load proof (complete).** Instrument process planning,
+   reduction, validation, allocation, queue lag and each physical stage without
+   making telemetry canonical. A bounded `maxPendingSchedules` safety limit
+   rejects bootstrap/recovery/transaction overlays before canonical mutation.
+   The same-seed 12-settlement simultaneous-front pressure route proves total
+   order and retained-WAL replay; a separate naturally loaded physical JFR
+   route proves the current scene limit. Any future increase to queue shape,
+   concurrency or physical body limits repeats both relevant proofs.
 
 Each H0 item must lower the corresponding metric in
 `tools/engineering/frontier_v3_architecture_debt.yml`. Raising a ceiling needs

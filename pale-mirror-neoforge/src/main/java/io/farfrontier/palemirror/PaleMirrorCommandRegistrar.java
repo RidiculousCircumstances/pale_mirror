@@ -41,6 +41,7 @@ final class PaleMirrorCommandRegistrar {
                 .requires(source -> source.hasPermission(2) && FrontierV3ServerLifecycle.ownsPhysicalWorld(source.getServer()));
         LiteralArgumentBuilder<CommandSourceStack> inspect = Commands.literal("inspect");
         inspect.then(Commands.literal("summary").executes(context -> v3Diagnostic(context, "summary", "")));
+        inspect.then(Commands.literal("performance").executes(context -> v3Diagnostic(context, "performance", "")));
         inspect.then(diagnosticObject("site"));
         inspect.then(diagnosticObject("settlement"));
         inspect.then(diagnosticObject("hive"));

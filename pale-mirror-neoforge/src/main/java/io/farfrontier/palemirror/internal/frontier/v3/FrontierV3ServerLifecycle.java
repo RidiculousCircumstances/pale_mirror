@@ -95,6 +95,7 @@ public final class FrontierV3ServerLifecycle {
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
+        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot());
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
         if ("actor".equals(view)) {
@@ -182,8 +183,9 @@ public final class FrontierV3ServerLifecycle {
     private static void startConfigured(MinecraftServer server,
                                         io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
+        FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                configuration,
+                configuration.withExecutionMetrics(metrics),
                 new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {

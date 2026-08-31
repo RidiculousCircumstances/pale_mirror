@@ -4,7 +4,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /** Pure admission predicates for exclusive scene and ambient execution. */
 public final class FrontierSceneAdmission {
@@ -74,12 +76,24 @@ public final class FrontierSceneAdmission {
      */
     public static boolean reserved(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
-        return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
-                || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
-                && operation.participantIds().contains(actorId))
-                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId))
-                || state.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> candidate.memberPositions().containsKey(actorId));
+        return reservedActors(state).contains(actorId);
+    }
+
+    /**
+     * Exact read-only reservation index for one immutable canonical revision. Materialization
+     * may reuse it for many actor observations; it does not retain, order or alter canonical
+     * state. This prevents recompiling every COLD scene candidate once per candidate body.
+     */
+    public static Set<SubjectId> reservedActors(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
+        Set<SubjectId> reserved = new LinkedHashSet<>();
+        state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
+                .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
+        state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.EN_ROUTE)
+                .forEach(operation -> reserved.addAll(operation.participantIds()));
+        state.coldEngagementSceneCandidates().forEach(candidate -> reserved.addAll(candidate.actorIds()));
+        state.coldSettlementAssaultSceneCandidates().forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+        return Set.copyOf(reserved);
     }
 
     /** The assault itself may progress COLD; every other authority remains exclusive. */

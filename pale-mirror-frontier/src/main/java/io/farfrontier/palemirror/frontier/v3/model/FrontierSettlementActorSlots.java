@@ -28,13 +28,13 @@ public final class FrontierSettlementActorSlots {
     public static BlockPosition slot(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, int ordinal) {
         Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
         if (ordinal < 0) throw new IllegalArgumentException("resident placement ordinal must not be negative");
-        return collect(bounds, anchor, FrontierGrayboxPlan.intactStructureOccupancy(structures), ordinal + 1).get(ordinal);
+        return collect(bounds, anchor, intactStructureOccupancy(structures), ordinal + 1).get(ordinal);
     }
 
     static List<BlockPosition> slots(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, int count) {
         Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
         if (count < 0) throw new IllegalArgumentException("resident placement count must not be negative");
-        return collect(bounds, anchor, FrontierGrayboxPlan.intactStructureOccupancy(structures), count);
+        return collect(bounds, anchor, intactStructureOccupancy(structures), count);
     }
 
     /** Whether an immutable settlement plan leaves this exact support column clear for one body. */
@@ -46,7 +46,23 @@ public final class FrontierSettlementActorSlots {
     static boolean clearFloor(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, BlockPosition position) {
         Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor");
         Objects.requireNonNull(structures, "structures"); Objects.requireNonNull(position, "position");
-        return traversable(bounds, FrontierGrayboxPlan.intactStructureOccupancy(structures), position);
+        return clearFloor(bounds, intactStructureOccupancy(structures), position);
+    }
+
+    /** One exact immutable occupancy view may serve every candidate of the same pure compilation. */
+    static Set<BlockPosition> intactStructureOccupancy(List<SettlementStructure> structures) {
+        return FrontierGrayboxPlan.intactStructureOccupancy(structures);
+    }
+
+    static List<BlockPosition> slots(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structureCells, "structure cells");
+        if (count < 0) throw new IllegalArgumentException("resident placement count must not be negative");
+        return collect(bounds, anchor, structureCells, count);
+    }
+
+    static boolean clearFloor(WorldBounds bounds, Set<BlockPosition> structureCells, BlockPosition position) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(structureCells, "structure cells"); Objects.requireNonNull(position, "position");
+        return traversable(bounds, structureCells, position);
     }
 
     private static List<BlockPosition> collect(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {

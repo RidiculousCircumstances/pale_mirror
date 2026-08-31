@@ -46,6 +46,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsTheReadOnlyGlobalPerformanceDiagnosticWithoutAnObjectIdentity() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"performance","id":"",
+                "expect":{"status":"ok","stageCount":1},"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+    }
+
+    @Test
     void acceptsOneNamedHiveDiagnosticWithoutGrantingMutationAuthority() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"hive","id":"hive:frontier",

@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
@@ -28,7 +27,7 @@ public final class FrontierV3GrayboxCursorGameTests {
         GrayboxCell west = cell(-256, 64, 0, "organ:west");
         GrayboxCell eastA = cell(256, 64, 0, "organ:east-a");
         GrayboxCell eastB = cell(257, 64, 0, "organ:east-b");
-        FrontierV3GrayboxExecutor.Cursor cursor = FrontierV3GrayboxExecutor.Cursor.fromCells(new Revision(1), List.of(west, eastA, eastB), null);
+        FrontierV3GrayboxExecutor.Cursor cursor = FrontierV3GrayboxExecutor.Cursor.fromCells(List.of(west, eastA, eastB), null);
         helper.assertValueEqual(cursor.nextNaturallyLoaded(cell -> cell.position().x() >= 0).orElseThrow().ownerId().value(), "organ:east-a",
                 "one player-loaded east chunk is not delayed behind a remote west chunk");
         helper.assertValueEqual(cursor.nextNaturallyLoaded(cell -> cell.position().x() >= 0).orElseThrow().ownerId().value(), "organ:east-b",

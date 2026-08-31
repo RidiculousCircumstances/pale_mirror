@@ -154,6 +154,8 @@ class HiveSettlementAssaultProcessTest {
         }
         SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
         java.util.Map<SubjectId, BlockPosition> positions = state.coldSettlementAssaultSceneCandidates().getFirst().memberPositions();
+        assertEquals(java.util.Set.copyOf(positions.keySet()), FrontierSceneAdmission.reservedActors(state),
+                "the shared reservation index must retain every exact COLD assault member and no substitute body");
         FrontierWorldState positioned = state;
         List<SceneMember> members = positions.keySet().stream().map(actor -> new SceneMember(actor,
                 SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();

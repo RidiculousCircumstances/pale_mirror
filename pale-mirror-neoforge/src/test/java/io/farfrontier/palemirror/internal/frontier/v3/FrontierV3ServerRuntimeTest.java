@@ -254,6 +254,21 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void checkpointImageIsSharedForReadOnlyAdaptersAndInvalidatedAfterCanonicalMutation(@TempDir Path directory) {
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
+        CheckpointImage first = runtime.checkpointImage().orElseThrow();
+        assertSame(first, runtime.checkpointImage().orElseThrow(), "one server tick must not clone a canonical checkpoint per physical read");
+
+        assertInstanceOf(CommandResult.Accepted.class,
+                runtime.submit(command("command:checkpoint-cache", first.revision(), first.instant(), 3)).orElseThrow());
+
+        CheckpointImage changed = runtime.checkpointImage().orElseThrow();
+        assertNotSame(first, changed, "a successful canonical command must invalidate the read-only image");
+        assertEquals(new Revision(1L), changed.revision());
+        assertSame(changed, runtime.checkpointImage().orElseThrow());
+    }
+
+    @Test
     void corruptDurableHistoryQuarantinesStartupInsteadOfCreatingAReplacementWorld(@TempDir Path directory) throws Exception {
         FrontierStore store = new FrontierFileStore(directory, codecs());
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), store, 20);

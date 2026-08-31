@@ -97,6 +97,12 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_missing_scheduled_queue_capacity_guard(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["unbounded_scheduled_queue_paths"]["kernel/InMemoryFrontierEngine.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
 
 if __name__ == "__main__":
     unittest.main()

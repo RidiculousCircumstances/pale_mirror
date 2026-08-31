@@ -41,6 +41,7 @@ JFR, restart or player-visible gates in the implementation plan.
 | ID | Severity | Classification | Evidence discovered during remediation |
 |---|---:|---|---|
 | V3-AUD-013 | P1 | Confirmed defect | Seven v3 GameTest calls used `ServerLevel.getChunkAt` to force-load canonical scene/field chunks; two test-only v3 helpers also remained in `src/main` and were not rejected by packaged-JAR verification. A GameTest level is intentionally placed outside the finite canonical 1024×1024 world, so treating it as a real remote-scene integration world either forces chunks or creates invalid canonical positions. |
+| V3-AUD-014 | P1 | Confirmed defect | The due-action queue had a per-tick admission budget but no maximum retained future-work cardinality. A malformed or unexpectedly prolific process could therefore retain unbounded scheduled work despite the bounded-runtime invariant. |
 
 ## Remediation status
 
@@ -60,9 +61,10 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-005 | CLOSED | `FrontierWorldStateUpdate` is the sole typed named replacement set for process/support transitions: duplicate declarations fail before aggregate construction, and every undeclared component retains the identical previous object. A declared no-op remains legal for revalidation. The source ratchet now permits full construction only in the aggregate, fresh bootstrap and versioned hydration (38 sites → 14); property coverage proves each unrelated component retains identity. |
 | V3-AUD-006 | CLOSED | Every snapshot/WAL codec now uses explicit `tag → enum value` pairs in `FrontierWireTags`, never enum declaration order; unknown tags fail closed. The historic company-registration byte fixture plus stable-tag tests cover retained tags, and debt ratchets reject codec `ordinal()`/`values()[tag]` use and positional registry derivation. |
 | V3-AUD-007 | CLOSED | `FrontierRuleset` is immutable hashed world data. The bootstrap manifest and snapshot header retain its ID/schema/content hash, while recovery resolves exactly that installed selector or fails before hydration. Canonical processes and physical executors obtain cadence, radii, COLD strides, gains, economic rates, structure capacity and COLD combat output from the bootstrap ruleset; the source ratchet rejects private process tuning constants. Current test fixtures explicitly declare `ruleset=production` in their sole catalog and fail if their resulting bootstrap differs. Pre-ruleset snapshots select a named legacy anchor rather than the current default. Focused deterministic, manifest, fail-closed recovery, physical decontamination recovery and domain regression tests pass; the complete critical gate passes (`guardrails`, `check`, build/package and 248/248 GameTests). |
-| V3-AUD-009 | OPEN — H0.6 | Instrument then measure complete-domain allocation/validation pressure. |
-| V3-AUD-010 | OPEN — H0.6 | Prove deterministic fairness and bounded physical-stage pressure at multi-front scale. |
+| V3-AUD-009 | CLOSED | `FrontierExecutionMetrics` observes command/schedule planning, allocation, reduction, validation, transactions and every staged physical executor without entering the canonical state, WAL or snapshot. The fixed seed-41 live JFR route completes a naturally loaded 27-member settlement assault with no forced chunks: server-tick p95 is 5.912 ms, p99 is 16.773 ms, the longest actual GC pause is 26.885 ms, and the bounded read-only performance diagnostic reports zero dropped attributions. The first profile found repeated full graybox/slot compilation in ambient reservation; the indexed exact reservation set removes that churn without changing canonical outcomes. |
+| V3-AUD-010 | CLOSED | `frontierV3ScaleAudit` runs the same seed twice and proves one-action-per-tick total order, 12 simultaneous ordinary field fronts, 434→435 exact bodies, hive interception/assault decisions, maximum queue depth 86, maximum lag 30 ticks, retained-WAL replay and one identical SHA-256 checkpoint (`14849b68b9ca7d8192989d95bce48f9de24ab366c8016058ace89ea51455758b`). The physical JFR route deliberately proves the current 27-member naturally loaded scene limit, not an invented force-loaded twelve-scene claim. |
 | V3-AUD-013 | CLOSED | Test-only fixture helpers and the resource-site GameTest now live only on the pilot source set; `FrontierV3GameTestSceneLeases` and `FrontierV3ResourceSiteGameTests` are rejected from the production JAR. The fast debt validator enforces zero `getChunkAt` calls in every v3 GameTest. The focused scene slice passes 28/28. Fresh visible native runs on `DISPLAY=:0` passed both canonical-coordinate flows with a graceful restart: `disposable_hot_scout_sighting_restart` retained the exact observed carrier/intercept operation after its scene closed, while `disposable_settlement_assault_restart` reloaded a 27-member assault with its confirmed strike and durable ownership. These scenarios, not an out-of-bounds GameTest surrogate, prove physical canonical coordinates. |
+| V3-AUD-014 | CLOSED | `EngineLimits.maxPendingSchedules` bounds bootstrap, transaction overlays and recovered schedules before canonical engine installation, WAL append or canonical mutation. Over-cap work quarantines visibly without consuming the due action; bootstrap and recovery reject before engine install. The debt ratchet rejects removal of every guard, focused negative/recovery tests pass, and the 12-settlement pressure route remains at 302 pending schedule keys and depth 86 under the production 4,096 safety capacity. |
 
 ## Findings and required corrections
 
@@ -222,7 +224,7 @@ provider, allowed runner, required assertions and source profile. Gradle and
 Node/Java parsers validate or derive their allowlists from it. Unknown,
 duplicate and production-packaged entries fail the fast gate.
 
-### V3-AUD-009 and V3-AUD-010 — scale is not yet disproved
+### V3-AUD-009 and V3-AUD-010 — bounded complete-load evidence
 
 Immutable copies and complete validation buy valuable correctness, and the
 ordered global queue buys determinism. This audit therefore does not prescribe
@@ -235,6 +237,57 @@ Optimization is authorized only from measured attribution. Acceptance records
 schedule lag by kind/owner, queue depth, p50/p95/p99 transition and physical
 stage cost, allocation/GC, TPS/MSPT and canonical hash. Any fairness mechanism
 must retain one total deterministic order and WAL replay equivalence.
+
+H0.6 closes the measured-risk finding at the currently declared limits, not at
+an imagined future mob count. `frontierV3ScaleAudit` uses production seed 41
+and performs one due action per tick through twelve ordinary simultaneous field
+fronts. It runs twice, producing the exact same final checkpoint digest
+`14849b68b9ca7d8192989d95bce48f9de24ab366c8016058ace89ea51455758b`; its
+complete result is 434→435 exact bodies, 18,817 schedule plans, 302 queue
+keys, maximum queue depth 86, maximum lag 30 ticks and exact retained-WAL
+recovery. It neither creates cohorts nor substitutes a fixture population.
+
+The separate disposable native route
+`disposable-settlement-assault-scale-jfr` is intentionally narrower and
+physical: one ordinary player naturally loads a current-limit 27-member
+settlement assault, confirms its strike and captures a 120-second JFR. Its
+seed-41 reservation-index evidence is stored under ignored build artifacts as
+`build/profiles/frontier-v3-aud-h06-seed41-assault-reservation-index.jfr` with
+the matching scenario manifest. The JFR records server-tick p50/p95/p99 of
+2.099/5.912/16.773 ms (119 samples), no watchdog, out-of-memory or "Can't keep
+up" line, and actual GC pauses no longer than 26.885 ms. It exposed a real
+allocation source: ambient admission rebuilt every settlement's full structure
+occupancy once per actor. The correction compiles exact actor reservations once
+per immutable canonical snapshot and reuses the structural slot occupancy per
+candidate. Sampled `FrontierGrayboxPlan.GrayboxCell` allocation falls from
+12,412,453,088 to 15,890,872 bytes for this route; checkpoint-image allocation
+does not appear in the final profile. The observer and caches are bounded,
+read-only and absent from the canonical snapshot/WAL, while focused tests prove
+they do not change the canonical result.
+
+This is not evidence for twelve simultaneous materialized assaults. The
+architecture keeps those fronts COLD until naturally loaded, and the
+`frontier-v3-bounded-runtime` invariant requires a new same-seed JFR plus a
+terminal causal scenario before raising either the active-body or physical
+scene limit. That is an extension gate, not residual H0.6 debt.
+
+### V3-AUD-014 — future-work queue had no retained cardinality bound
+
+The previous per-tick `WorkBudget` bounded admission, not retention. A planner
+could create more future actions than it consumed and make memory/canonical
+snapshot size grow without a fail-closed boundary. This is a correctness defect,
+not a performance tuning question.
+
+Correction: `EngineLimits` owns an explicit `maxPendingSchedules` safety
+maximum. Bootstrap and recovered schedules fail before canonical engine
+installation when they exceed it; a transaction's copy-on-write schedule overlay proves its exact
+post-commit size before validation/WAL, and an over-cap due action remains
+unconsumed while the engine visibly quarantines. The architecture debt ratchet
+must reject removal of the bootstrap, overlay or recovery protection.
+
+Exit evidence: focused over-cap and oversized-recovery negative tests; the
+12-settlement pressure route stays below the production maximum; H0.6's full
+critical gate and real-server JFR evidence pass.
 
 ### V3-AUD-011 — declared package ownership has collapsed into `model`
 

@@ -142,6 +142,22 @@ public final class ScheduledActionQueue {
             if (created.remove(action.id()) == null) removed.add(action.id());
         }
 
+        /**
+         * Exact post-commit cardinality without copying unchanged future work. The engine checks
+         * this before WAL durability, so an over-cap plan cannot become canonical history.
+         */
+        int projectedSize() {
+            return Math.addExact(Math.subtractExact(base.ordered.size(), removed.size()), created.size());
+        }
+
+        void requireCapacity(int maximum) {
+            if (maximum <= 0) throw new IllegalArgumentException("scheduled-action capacity must be positive");
+            int projected = projectedSize();
+            if (projected > maximum) {
+                throw new IllegalStateException("scheduled-action capacity exhausted: " + projected + ">" + maximum);
+            }
+        }
+
         /** Applies a prevalidated overlay. No allocation proportional to unchanged future work occurs. */
         void commit() {
             requireOpen();
