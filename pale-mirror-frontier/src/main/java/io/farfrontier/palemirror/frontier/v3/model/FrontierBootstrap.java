@@ -12,12 +12,16 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Immutable, fresh-world-only v3 bootstrap manifest. */
-public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive) {
+public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset) {
+    public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive) {
+        this(worldId, seed, bounds, settlements, hive, FrontierRulesets.production());
+    }
     public FrontierBootstrap {
         Objects.requireNonNull(worldId, "world id");
         Objects.requireNonNull(bounds, "bounds");
         settlements = List.copyOf(settlements);
         Objects.requireNonNull(hive, "hive");
+        ruleset = Objects.requireNonNull(ruleset, "ruleset");
         if (bounds.width() != 1024 || bounds.depth() != 1024) throw new IllegalArgumentException("Frontier v3 bootstrap is exactly 1024 by 1024 blocks");
         if (settlements.size() != 12) throw new IllegalArgumentException("Frontier v3 bootstrap requires exactly 12 settlements");
         Set<SubjectId> ids = new HashSet<>();
@@ -48,7 +52,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
 
     private String canonicalText() {
         StringBuilder text = new StringBuilder(worldId.value()).append('|').append(seed).append('|')
-                .append(bounds.minX()).append(',').append(bounds.minZ()).append(',').append(bounds.width()).append(',').append(bounds.depth());
+                .append(bounds.minX()).append(',').append(bounds.minZ()).append(',').append(bounds.width()).append(',').append(bounds.depth())
+                .append('|').append(ruleset.id()).append(':').append(ruleset.schemaVersion()).append(':').append(ruleset.contentSha256());
         for (Settlement settlement : settlements) {
             append(text, settlement.id(), settlement.anchor());
             text.append('|').append(settlement.displayName());

@@ -59,7 +59,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-012 | CLOSED | Every process now declares individual emitted wire type IDs rather than inheriting a domain union; the new ratchet rejects the former domain-emission fallback. Persistence separately maps each of the ten process owners to its codecs, while runtime composition rejects a missing/duplicate owner, descriptor/persistence disagreement, missing codec, missing reducer or undeclared emission before an engine starts. Negative composition coverage includes omitted codec, missing reducer, duplicate scheduled owner and persistence-owner disagreement. One representative payload from every owner round-trips directly and together through one WAL transaction envelope. The complete critical gate passes: `guardrails`, `check`, NeoForge build/package verification and 248/248 GameTests. |
 | V3-AUD-005 | CLOSED | `FrontierWorldStateUpdate` is the sole typed named replacement set for process/support transitions: duplicate declarations fail before aggregate construction, and every undeclared component retains the identical previous object. A declared no-op remains legal for revalidation. The source ratchet now permits full construction only in the aggregate, fresh bootstrap and versioned hydration (38 sites → 14); property coverage proves each unrelated component retains identity. |
 | V3-AUD-006 | CLOSED | Every snapshot/WAL codec now uses explicit `tag → enum value` pairs in `FrontierWireTags`, never enum declaration order; unknown tags fail closed. The historic company-registration byte fixture plus stable-tag tests cover retained tags, and debt ratchets reject codec `ordinal()`/`values()[tag]` use and positional registry derivation. |
-| V3-AUD-007 | OPEN — H0.5 | Add a persisted, hashed, explicitly selected `FrontierRuleset`. |
+| V3-AUD-007 | CLOSED | `FrontierRuleset` is immutable hashed world data. The bootstrap manifest and snapshot header retain its ID/schema/content hash, while recovery resolves exactly that installed selector or fails before hydration. Canonical processes and physical executors obtain cadence, radii, COLD strides, gains, economic rates, structure capacity and COLD combat output from the bootstrap ruleset; the source ratchet rejects private process tuning constants. Current test fixtures explicitly declare `ruleset=production` in their sole catalog and fail if their resulting bootstrap differs. Pre-ruleset snapshots select a named legacy anchor rather than the current default. Focused deterministic, manifest, fail-closed recovery, physical decontamination recovery and domain regression tests pass; the complete critical gate passes (`guardrails`, `check`, build/package and 248/248 GameTests). |
 | V3-AUD-009 | OPEN — H0.6 | Instrument then measure complete-domain allocation/validation pressure. |
 | V3-AUD-010 | OPEN — H0.6 | Prove deterministic fairness and bounded physical-stage pressure at multi-front scale. |
 | V3-AUD-013 | CLOSED | Test-only fixture helpers and the resource-site GameTest now live only on the pilot source set; `FrontierV3GameTestSceneLeases` and `FrontierV3ResourceSiteGameTests` are rejected from the production JAR. The fast debt validator enforces zero `getChunkAt` calls in every v3 GameTest. The focused scene slice passes 28/28. Fresh visible native runs on `DISPLAY=:0` passed both canonical-coordinate flows with a graceful restart: `disposable_hot_scout_sighting_restart` retained the exact observed carrier/intercept operation after its scene closed, while `disposable_settlement_assault_restart` reloaded a 27-member assault with its confirmed strike and durable ownership. These scenarios, not an out-of-bounds GameTest surrogate, prove physical canonical coordinates. |
@@ -202,6 +202,18 @@ Exit evidence: same state/seed/ruleset is deterministic; a changed ruleset has
 a different manifest hash; recovery with an unavailable ruleset fails closed;
 fixture composition reuses the production ruleset unless a scenario declares a
 test-only override in its catalog.
+
+Closure evidence: `FrontierRuleset` carries stable ID/schema plus canonical
+SHA-256 across cadence, spatial and rate inputs. Version-80 state snapshots
+write the selector immediately after world/seed and use the installed catalog
+to require the exact ID/schema/hash before any mutable aggregate is read.
+Versions 41–79 take one explicit named legacy anchor, never the current
+production default. The bootstrap digest includes that selector; independent
+same-seed/same-ruleset configurations produce equal state, schedules and state
+bytes, while a changed rate changes both ruleset and manifest hashes. The
+fixture catalog now requires a declared ruleset identity and verifies it against
+the produced bootstrap. `frontier_v3_architecture_debt.py` permits zero
+unhashed process cadence/radius/step/gain/lifetime/cost constants.
 
 ### V3-AUD-008 — pilot profile catalog is duplicated
 

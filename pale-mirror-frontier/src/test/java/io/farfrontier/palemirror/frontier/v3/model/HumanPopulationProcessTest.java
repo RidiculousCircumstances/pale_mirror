@@ -179,10 +179,10 @@ class HumanPopulationProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SettlementStructure housing = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow();
 
-        assertEquals(SettlementFacilityCapability.INTACT_HOUSING_BEDS, SettlementFacilityCapability.housingCapacity(state, settlement.id()));
+        assertEquals(state.bootstrap().ruleset().facilityCapacity().intactHousingBeds(), SettlementFacilityCapability.housingCapacity(state, settlement.id()));
         assertEquals(settlement.residents().size(), SettlementFacilityCapability.livingResidents(state, settlement.id()));
-        assertEquals(SettlementFacilityCapability.DAMAGED_HOUSING_BEDS,
-                SettlementFacilityCapability.forCondition(StructureKind.HOUSING, StructureCondition.DAMAGED).residentCapacity());
+        assertEquals(state.bootstrap().ruleset().facilityCapacity().damagedHousingBeds(),
+                SettlementFacilityCapability.forCondition(state.bootstrap().ruleset(), StructureKind.HOUSING, StructureCondition.DAMAGED).residentCapacity());
 
         FrontierWorldState destroyed = state.withStructureCondition(housing.id(), StructureCondition.DESTROYED);
         assertEquals(0, SettlementFacilityCapability.housingCapacity(destroyed, settlement.id()));
@@ -194,7 +194,7 @@ class HumanPopulationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());
-        assertTrue(board.text().contains(settlement.residents().size() + " / " + SettlementFacilityCapability.INTACT_HOUSING_BEDS + " RESIDENTS"));
+        assertTrue(board.text().contains(settlement.residents().size() + " / " + state.bootstrap().ruleset().facilityCapacity().intactHousingBeds() + " RESIDENTS"));
     }
 
     private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {

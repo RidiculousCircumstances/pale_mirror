@@ -58,9 +58,11 @@ scene/domain family until the following ordered corrections land:
    persisted codec out of `model` ownership and every enum family from source
    ordinals to explicit stable wire tags, retaining golden old-byte recovery
    tests.
-5. **H0.5 — reproducible world rules.** Introduce the immutable persisted
-   `FrontierRuleset`; distinguish tunable balance/cadence data from code-level
-   safety bounds and pin test overrides in the test-only catalog.
+5. **H0.5 — reproducible world rules (complete).** `FrontierRuleset` is an
+   immutable persisted selector with a content hash. It owns cadence, radii,
+   gains, economic rates, facility capacity and COLD combat output; recovered
+   worlds resolve its exact installed selector or fail closed, while fixtures
+   explicitly pin their test-only selected ruleset.
 6. **H0.6 — complete-load proof.** Instrument process planning, reduction,
    validation, allocation, queue lag and each physical stage. Run the same-seed
    12-settlement simultaneous-front pressure route before changing queue shape,

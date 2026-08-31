@@ -26,9 +26,6 @@ public final class HiveInfectionProcess {
      * immediately. This preserves a readable, background world process without producing a
      * high-frequency stream of otherwise invisible immutable COLD transactions.</p>
      */
-    public static final long COLD_PULSE_INTERVAL = 600L;
-    private static final long PULSE_GAIN = 125_000L;
-
     private HiveInfectionProcess() { }
 
     public static ScheduledAction task(StrategicTask task, int pulse, long dueAt) {
@@ -52,24 +49,26 @@ public final class HiveInfectionProcess {
         InfectionCell target = task.infectionTarget().orElseThrow();
         if (!state.bootstrap().bounds().contains(target.originAtY(64))) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         FixedRatio prior = state.infection().getOrDefault(target, new FixedRatio(FixedScalar.ZERO));
-        long raw = Math.min(FixedScalar.SCALE, Math.addExact(prior.value().raw(), PULSE_GAIN));
+        long raw = Math.min(FixedScalar.SCALE, Math.addExact(prior.value().raw(), state.bootstrap().ruleset().rates().hiveInfectionPulseGain().raw()));
         List<ProposedEvent> events = new java.util.ArrayList<>();
         if (task.status() == StrategicTaskStatus.PENDING) events.add(transition(task, StrategicTaskStatus.ACTIVE));
         events.add(new ProposedEvent(task.ownerId(), new InfectionChanged(target, new FixedRatio(new FixedScalar(raw)))));
         if (raw == FixedScalar.SCALE) {
             events.add(transition(task, StrategicTaskStatus.COMPLETED));
         } else {
-            events.add(new ProposedEvent(task.ownerId(), new ScheduleEffect.Created(task(task, pulse(action) + 1, action.dueAt().ticks() + COLD_PULSE_INTERVAL))));
+            events.add(new ProposedEvent(task.ownerId(), new ScheduleEffect.Created(task(task, pulse(action) + 1,
+                    action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveInfectionPulseInterval()))));
         }
         return List.copyOf(events);
     }
 
     public static Optional<InfectionCell> expansionTarget(FrontierWorldState state, long now) {
         if (!hasOperationalHeart(state)) return Optional.empty();
-        Map<InfectionCell, FixedRatio> perceived = state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now);
+        Map<InfectionCell, FixedRatio> perceived = state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now);
         if (perceived.isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
         FrontierInfectionFrontier frontier = FrontierWorldStateSupport.infectionFrontier(perceived, state.bootstrap().bounds());
-        return state.strategicPlans().hiveSettlementKnowledge().freshest(now).flatMap(sighting -> frontier.bestToward(perceived, sighting.settlementAnchor()))
+        return state.strategicPlans().hiveSettlementKnowledge().freshest(state.bootstrap().ruleset(), now)
+                .flatMap(sighting -> frontier.bestToward(perceived, sighting.settlementAnchor()))
                 .or(() -> frontier.best(perceived));
     }
 

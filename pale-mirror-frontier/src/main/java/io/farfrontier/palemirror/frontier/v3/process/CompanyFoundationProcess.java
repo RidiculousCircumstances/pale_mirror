@@ -14,7 +14,6 @@ import java.util.List;
 
 /** One deterministic initial works company per settlement, emitted by the canonical scheduler. */
 public final class CompanyFoundationProcess {
-    private static final long REVIEW_INTERVAL = 24_000L;
     private CompanyFoundationProcess() { }
 
     public static ScheduledAction review(SubjectId settlementId, int ordinal, long dueAt) {
@@ -37,10 +36,10 @@ public final class CompanyFoundationProcess {
         }
         if (company.status() == CompanyStatus.ACTIVE && !state.companies().employmentContracts().containsKey(employmentId(settlement.id()))
                 && state.actorLocations().get(company.founderId()).condition().status() == ActorLifeStatus.ALIVE) {
-            events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(employment(company, action.dueAt().ticks()))));
+            events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(employment(state, company, action.dueAt().ticks()))));
         }
         events.add(new ProposedEvent(settlement.id(), new ScheduleEffect.Created(review(settlement.id(), nextOrdinal(action),
-                Math.addExact(action.dueAt().ticks(), REVIEW_INTERVAL)))));
+                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().companyFoundationReviewInterval())))));
         return List.copyOf(events);
     }
 
@@ -64,7 +63,7 @@ public final class CompanyFoundationProcess {
         if (company == null || !subject.equals(company.settlementId()) || !contract.residentId().equals(company.founderId())) {
             throw new IllegalArgumentException("works employment must be opened by its founder's settlement");
         }
-        EmploymentContract expected = employment(company, contract.openedAtTick());
+        EmploymentContract expected = employment(state, company, contract.openedAtTick());
         if (!expected.equals(contract)) throw new IllegalArgumentException("works employment must use canonical exact terms");
         return state.openEmployment(contract);
     }
@@ -91,8 +90,9 @@ public final class CompanyFoundationProcess {
     public static SubjectId companyId(SubjectId settlementId) { return new SubjectId("company:" + suffix(settlementId) + "-works"); }
 
     public static SubjectId employmentId(SubjectId settlementId) { return new SubjectId("contract:employment-" + suffix(settlementId) + "-works-founder"); }
-    private static EmploymentContract employment(Company company, long tick) {
-        return new EmploymentContract(employmentId(company.settlementId()), company.id(), company.founderId(), FixedScalar.whole(2L), FixedScalar.ONE,
+    private static EmploymentContract employment(FrontierWorldState state, Company company, long tick) {
+        return new EmploymentContract(employmentId(company.settlementId()), company.id(), company.founderId(),
+                state.bootstrap().ruleset().rates().worksJobPrice(), FixedScalar.ONE,
                 EmploymentContractStatus.ACTIVE, tick, 0L, FixedScalar.ZERO);
     }
 

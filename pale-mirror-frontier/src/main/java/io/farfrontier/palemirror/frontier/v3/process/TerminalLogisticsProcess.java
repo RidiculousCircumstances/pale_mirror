@@ -16,7 +16,6 @@ import java.util.List;
 public final class TerminalLogisticsProcess {
     private static final SubjectId SYSTEM = new SubjectId("system:terminal-logistics-retention");
     private static final int MAX_COMPACTIONS_PER_REVIEW = 12;
-    private static final long INTERVAL = 6_000L;
     private TerminalLogisticsProcess() { }
 
     public static ScheduledAction review(int ordinal, long dueAt) {
@@ -29,7 +28,8 @@ public final class TerminalLogisticsProcess {
         List<ProposedEvent> events = new ArrayList<>();
         state.operations().values().stream().sorted(Comparator.comparing(RouteOperation::id)).filter(operation -> state.canCompactTerminalLogistics(operation.id()))
                 .limit(MAX_COMPACTIONS_PER_REVIEW).forEach(operation -> events.add(new ProposedEvent(operation.settlementId(), new TerminalLogisticsCompacted(operation.id()))));
-        events.add(new ProposedEvent(SYSTEM, new ScheduleEffect.Created(review(nextOrdinal(action), Math.addExact(action.dueAt().ticks(), INTERVAL)))));
+        events.add(new ProposedEvent(SYSTEM, new ScheduleEffect.Created(review(nextOrdinal(action), Math.addExact(action.dueAt().ticks(),
+                state.bootstrap().ruleset().cadence().terminalLogisticsReviewInterval())))));
         return List.copyOf(events);
     }
 

@@ -80,9 +80,10 @@ class CompanyFoundationProcessTest {
         assertTrue(CompanyWorkPaymentProcess.canReserve(state, job));
         FrontierWorldState reserved = CompanyWorkPaymentProcess.reserve(state, job);
         assertEquals(1, reserved.inventory().economics().reservations().size());
-        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY, reserved.inventory().economics().require(settlement.id()).balance());
+        assertEquals(state.bootstrap().ruleset().rates().initialSettlementTreasury(), reserved.inventory().economics().require(settlement.id()).balance());
         FrontierWorldState settled = CompanyWorkPaymentProcess.settle(reserved, job);
-        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY.minus(FixedScalar.whole(2L)), settled.inventory().economics().require(settlement.id()).balance());
+        assertEquals(state.bootstrap().ruleset().rates().initialSettlementTreasury().minus(state.bootstrap().ruleset().rates().worksJobPrice()),
+                settled.inventory().economics().require(settlement.id()).balance());
         assertEquals(FixedScalar.ONE, settled.inventory().economics().require(company.id()).balance());
         assertEquals(FixedScalar.ONE, settled.inventory().economics().require(contract.residentId()).balance());
         assertEquals(1L, settled.companies().employmentContracts().get(contract.id()).completedJobs());

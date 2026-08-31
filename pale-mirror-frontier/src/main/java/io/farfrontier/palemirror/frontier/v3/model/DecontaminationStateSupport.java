@@ -36,7 +36,7 @@ public final class DecontaminationStateSupport {
         if (!intent.subjectIds().contains(observation.itemId()) || !observation.cell().equals(cell) || observation.priorRaw() != current.value().raw()) {
             throw new IllegalArgumentException("decontamination receipt does not match its exact target");
         }
-        long remaining = Math.max(0L, Math.subtractExact(observation.priorRaw(), DecontaminationPolicy.REDUCTION_RAW));
+        long remaining = Math.max(0L, Math.subtractExact(observation.priorRaw(), state.bootstrap().ruleset().rates().decontaminationReduction().raw()));
         if (observation.remainingRaw() != remaining) throw new IllegalArgumentException("decontamination receipt has an invalid intensity reduction");
         intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
@@ -53,7 +53,8 @@ public final class DecontaminationStateSupport {
             throw new IllegalArgumentException("decontamination observation has a foreign physical intent");
         }
         owner(bootstrap, intent.causeSubjectId());
-        InfectionCell cell = cell(intent); long expected = Math.max(0L, Math.subtractExact(observation.priorRaw(), DecontaminationPolicy.REDUCTION_RAW));
+        InfectionCell cell = cell(intent); long expected = Math.max(0L, Math.subtractExact(observation.priorRaw(),
+                bootstrap.ruleset().rates().decontaminationReduction().raw()));
         // A confirmed observation is historical evidence. The atomic completion path above
         // verifies the live field before it writes this receipt; a later ordinary hive pulse may
         // legitimately reinfect the exact same cell. Requiring the present field to preserve an

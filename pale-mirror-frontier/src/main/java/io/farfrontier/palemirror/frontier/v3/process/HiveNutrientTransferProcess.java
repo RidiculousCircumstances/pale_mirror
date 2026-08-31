@@ -17,7 +17,6 @@ import java.util.List;
 
 /** Bounded deterministic COLD progression of one exact nutrient across hive store organs. */
 public final class HiveNutrientTransferProcess {
-    private static final long STEP_TICKS = 20L;
     private HiveNutrientTransferProcess() { }
 
     public static ScheduledAction advance(HiveNutrientTransfer transfer, long dueAt) {
@@ -35,7 +34,7 @@ public final class HiveNutrientTransferProcess {
         int nextCursor = transfer.cursor() + 1;
         if (nextCursor < transfer.corridor().size() - 1) {
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
-                    schedule(advance(transfer, action.dueAt().ticks() + STEP_TICKS)));
+                    schedule(advance(transfer, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveNutrientTransferStepInterval())));
         }
         ContainerSurfaceStatus targetSurface = state.inventory().surfaces().get(transfer.targetStoreId()).status();
         if (targetSurface == ContainerSurfaceStatus.CONFLICT) {
@@ -94,7 +93,7 @@ public final class HiveNutrientTransferProcess {
         List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferStarted(transfer)));
         if (transfer.phase() == HiveNutrientTransferPhase.DEPARTURE_PENDING) {
             events.add(new ProposedEvent(transfer.hiveId(), new PhysicalIntentPrepared(HiveNutrientTransferStateSupport.departureIntent(state, transfer))));
-        } else events.add(schedule(advance(transfer, dueAt + STEP_TICKS)));
+        } else events.add(schedule(advance(transfer, dueAt + state.bootstrap().ruleset().cadence().hiveNutrientTransferStepInterval())));
         return List.copyOf(events);
     }
 
@@ -106,7 +105,8 @@ public final class HiveNutrientTransferProcess {
             throw new IllegalArgumentException("hive endpoint intent has foreign exact subjects");
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
             List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(transfer.hiveId(), transition));
-            if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) events.add(schedule(advance(transfer, now + STEP_TICKS)));
+            if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) events.add(schedule(advance(transfer,
+                    now + state.bootstrap().ruleset().cadence().hiveNutrientTransferStepInterval())));
             else events.add(schedule(HiveGrowthProcess.start(task(state, transfer), now + 1L)));
             return List.copyOf(events);
         }

@@ -6,19 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus; import io
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 79, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 80, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -33,7 +23,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC); output.writeByte(VERSION);
-                writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed());
+                writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeStructureDamage(output, state.structureDamage());
@@ -69,10 +59,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != 79 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
-            FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
+            WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
+            FrontierRuleset ruleset = version >= 80 ? readRuleset(input) : FrontierRulesets.legacyForSnapshotVersion(version);
+            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset);
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
@@ -92,17 +84,25 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
-    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed) {
-        if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed);
-        if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed) {
+    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset) {
+        if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed, ruleset);
+        if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed || !pinnedBootstrap.ruleset().equals(ruleset)) {
             throw new IllegalArgumentException("Frontier v3 state belongs to a different pinned bootstrap");
         }
         return pinnedBootstrap;
     }
     private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
-        if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed())) {
+        if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed()
+                || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()))) {
             throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
         }
+    }
+
+    private static void writeRuleset(DataOutputStream output, FrontierRuleset ruleset) throws IOException {
+        writeString(output, ruleset.id()); output.writeInt(ruleset.schemaVersion()); writeString(output, ruleset.contentSha256());
+    }
+    private static FrontierRuleset readRuleset(DataInputStream input) throws IOException {
+        return FrontierRulesets.require(readString(input), input.readInt(), readString(input));
     }
 
     private static void writeActors(DataOutputStream output, Map<SubjectId, ActorLocation> values) throws IOException {

@@ -15,7 +15,6 @@ import java.util.Objects;
  */
 public final class HiveTerritoryKnowledge {
     public static final int MAX_BELIEFS = 256;
-    public static final long MAX_AGE = 2_400L;
     private final Map<InfectionCell, Belief> beliefs;
 
     public HiveTerritoryKnowledge(Map<InfectionCell, Belief> beliefs) {
@@ -44,9 +43,9 @@ public final class HiveTerritoryKnowledge {
         return new HiveTerritoryKnowledge(next);
     }
 
-    public Map<InfectionCell, FixedRatio> freshInfection(long now) {
+    public Map<InfectionCell, FixedRatio> freshInfection(FrontierRuleset ruleset, long now) {
         Map<InfectionCell, FixedRatio> result = new LinkedHashMap<>();
-        beliefs.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, MAX_AGE))
+        beliefs.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, ruleset.cadence().hiveTerritoryKnowledgeMaxAge()))
                 .sorted(Comparator.comparingInt((Belief value) -> value.cell().x()).thenComparingInt(value -> value.cell().z()))
                 .forEach(value -> result.put(value.cell(), value.intensity()));
         return Map.copyOf(result);
@@ -79,7 +78,8 @@ public final class HiveTerritoryKnowledge {
     }
 
     private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
-        return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer)) ? 32 : 48;
+        return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer))
+                ? bootstrap.ruleset().spatial().hiveTerritoryHeartRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
     }
 
     private static java.util.List<HiveOrgan> organs(FrontierBootstrap bootstrap, HiveColony colony) {

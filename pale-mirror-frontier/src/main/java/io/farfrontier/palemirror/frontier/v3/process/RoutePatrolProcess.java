@@ -13,7 +13,6 @@ import java.util.List;
 
 /** COLD guard movement which turns existing physical deltas into bounded route evidence. */
 public final class RoutePatrolProcess {
-    private static final long STEP_INTERVAL = 100L;
     private RoutePatrolProcess() { }
 
     static ScheduledAction start(StrategicTask task, long due) {
@@ -32,7 +31,7 @@ public final class RoutePatrolProcess {
         RoutePatrol patrol = new RoutePatrol(task.id(), settlement.id(), guard.id(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()),
                 0, RoutePatrolStatus.EN_ROUTE, java.util.Optional.empty());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new RoutePatrolStarted(patrol)),
-                schedule(progress(patrol, action.dueAt().ticks() + STEP_INTERVAL)));
+                schedule(progress(patrol, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().routePatrolStepInterval())));
     }
 
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
@@ -53,7 +52,8 @@ public final class RoutePatrolProcess {
                     transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(patrol.settlementId(), new ScheduleEffect.Created(reconsideration)));
         }
         if (next == patrol.route().size() - 1) return List.of(advanced, transition(task, StrategicTaskStatus.COMPLETED));
-        return List.of(advanced, schedule(progress(patrol.advance(next), action.dueAt().ticks() + STEP_INTERVAL)));
+        return List.of(advanced, schedule(progress(patrol.advance(next), action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().routePatrolStepInterval())));
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RoutePatrolStarted started) {

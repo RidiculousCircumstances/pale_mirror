@@ -12,20 +12,19 @@ import java.util.Optional;
 
 /** Bounded COLD and physically proven HOT sighting are the only bridges into hive strategic knowledge. */
 public final class HivePerceptionProcess {
-    public static final long SIGHT_RADIUS_SQUARED = 9_216L, REFRESH_INTERVAL = 800L;
     private HivePerceptionProcess() { }
     public static Refresh refresh(FrontierWorldState state, long now) {
         HiveOperationKnowledge next = state.strategicPlans().hiveOperationKnowledge();
         List<ProposedEvent> events = new java.util.ArrayList<>();
         for (RouteOperation operation : state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).sorted(Comparator.comparing(RouteOperation::id)).toList()) {
             BlockPosition carrierPosition = carrierPosition(operation);
-            Bioform scout = scouts(state).stream().filter(value -> nearby(state.actorLocations().get(value.id()).position(), carrierPosition))
+            Bioform scout = scouts(state).stream().filter(value -> nearby(state, state.actorLocations().get(value.id()).position(), carrierPosition))
                     .min(Comparator.comparing(Bioform::id)).orElse(null);
             if (scout == null) continue;
             HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, now);
             HiveOperationKnowledge.Sighting previous = next.entries().get(operation.id());
             if (previous != null && previous.scoutId().equals(scout.id()) && previous.position().equals(sighting.position())
-                    && previous.observedAt() > now - REFRESH_INTERVAL) continue;
+                    && previous.observedAt() > now - state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval()) continue;
             next = next.observe(sighting); events.add(new ProposedEvent(state.bootstrap().hive().id(), new HiveOperationObserved(sighting)));
         }
         return new Refresh(next, List.copyOf(events));
@@ -36,7 +35,7 @@ public final class HivePerceptionProcess {
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), sighting.scoutId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || scout.role() != BioformRole.SCOUT
                 || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
-                || !carrierPosition(operation).equals(sighting.position()) || !nearby(state.actorLocations().get(scout.id()).position(), sighting.position())) {
+                || !carrierPosition(operation).equals(sighting.position()) || !nearby(state, state.actorLocations().get(scout.id()).position(), sighting.position())) {
             throw new IllegalArgumentException("hive sighting lacks a nearby living scout and current caravan");
         }
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -60,7 +59,7 @@ public final class HivePerceptionProcess {
                 || !FrontierSceneBehaviors.logistics(scene).operationId().equals(operation.id()) || !FrontierSceneBehaviors.logistics(scene).cargoId().equals(operation.cargoId())
                 || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
                 || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(observed.seenCarrierPosition())
-                || !nearby(state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
+                || !nearby(state, state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
             throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
         }
         if (!shouldRefresh(state, operation.id(), scout.id(), observed.seenCarrierPosition(), observed.observedAt())) {
@@ -74,7 +73,7 @@ public final class HivePerceptionProcess {
         HiveOperationKnowledge knowledge = state.strategicPlans().hiveOperationKnowledge();
         HiveOperationKnowledge.Sighting previous = knowledge.entries().get(operationId);
         return previous == null || !previous.scoutId().equals(scoutId) || !previous.position().equals(position)
-                || previous.observedAt() <= now - REFRESH_INTERVAL;
+                || previous.observedAt() <= now - state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval();
     }
     /** Narrow read-only projection for adapters/tests; it does not expose the mutable plan type. */
     public static Optional<BlockPosition> observedCarrierPosition(FrontierWorldState state, SubjectId operationId) {
@@ -104,7 +103,11 @@ public final class HivePerceptionProcess {
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
             .filter(value -> value.role() == BioformRole.SCOUT).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
             .filter(value -> { AmbientActorLease lease = state.ambientLeases().get(value.id()); return lease == null || lease.status() == AmbientLeaseStatus.CLOSED; }).toList(); }
-    public static boolean nearby(BlockPosition left, BlockPosition right) { long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z <= SIGHT_RADIUS_SQUARED; }
+    private static boolean nearby(FrontierWorldState state, BlockPosition left, BlockPosition right) {
+        long x = (long) left.x() - right.x(), z = (long) left.z() - right.z();
+        int radius = state.bootstrap().ruleset().spatial().hivePerceptionRadius();
+        return x * x + z * z <= (long) radius * radius;
+    }
     /** The cargo carrier is the caravan's exact target even when its walkers use an adjacent cell. */
     private static BlockPosition carrierPosition(RouteOperation operation) {
         return operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());

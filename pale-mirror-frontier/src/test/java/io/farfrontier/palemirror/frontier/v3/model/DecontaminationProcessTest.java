@@ -41,14 +41,14 @@ class DecontaminationProcessTest {
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         long prior = state.infection().get(cell).value().raw();
         DecontaminationObservation observation = new DecontaminationObservation(new PhysicalObservationId("observation:decontamination"), intent.id(), item,
-                cell, prior, prior - DecontaminationPolicy.REDUCTION_RAW);
+                cell, prior, prior - bootstrap.ruleset().rates().decontaminationReduction().raw());
         StrategicTask task = onlyTask(state);
         CommandPlan plan = FrontierWorldRuntimeDefinition.planCommand(state, command(state, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)));
         CommandPlan.Accepted accepted = assertInstanceOf(CommandPlan.Accepted.class, plan);
         assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.COMPLETED), accepted.events().getLast().payload());
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, settlement.id(), (StrategicTaskTransition) accepted.events().getLast().payload());
-        assertEquals(prior - DecontaminationPolicy.REDUCTION_RAW, state.infection().get(cell).value().raw());
+        assertEquals(prior - bootstrap.ruleset().rates().decontaminationReduction().raw(), state.infection().get(cell).value().raw());
         assertEquals(1, state.inventory().items().get(item).count());
         assertEquals(StrategicTaskStatus.COMPLETED, onlyTask(state).status());
         assertEquals(StrategicObjectiveStatus.COMPLETED, onlyObjective(state).status());
@@ -104,16 +104,16 @@ class DecontaminationProcessTest {
         FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
-        state = state.withInfection(cell, new FixedRatio(new FixedScalar(DecontaminationPolicy.REDUCTION_RAW)));
+        state = state.withInfection(cell, new FixedRatio(new FixedScalar(bootstrap.ruleset().rates().decontaminationReduction().raw())));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         DecontaminationObservation stale = new DecontaminationObservation(new PhysicalObservationId("observation:stale-decontamination"), intent.id(), item,
-                cell, DecontaminationPolicy.REDUCTION_RAW + 1L, 1L);
+                cell, bootstrap.ruleset().rates().decontaminationReduction().raw() + 1L, 1L);
         FrontierWorldState running = state;
         assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(stale)));
         DecontaminationObservation cleared = new DecontaminationObservation(new PhysicalObservationId("observation:final-decontamination"), intent.id(), item,
-                cell, DecontaminationPolicy.REDUCTION_RAW, 0L);
+                cell, bootstrap.ruleset().rates().decontaminationReduction().raw(), 0L);
         FrontierWorldState complete = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(cleared));
         assertTrue(!complete.infection().containsKey(cell) && !complete.inventory().items().containsKey(item));
     }
@@ -127,12 +127,12 @@ class DecontaminationProcessTest {
         FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
-        state = state.withInfection(cell, new FixedRatio(new FixedScalar(DecontaminationPolicy.REDUCTION_RAW)));
+        state = state.withInfection(cell, new FixedRatio(new FixedScalar(bootstrap.ruleset().rates().decontaminationReduction().raw())));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         DecontaminationObservation receipt = new DecontaminationObservation(new PhysicalObservationId("observation:reinfection"), intent.id(), item,
-                cell, DecontaminationPolicy.REDUCTION_RAW, 0L);
+                cell, bootstrap.ruleset().rates().decontaminationReduction().raw(), 0L);
 
         FrontierWorldState cleared = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         FrontierWorldState reinfected = cleared.withInfection(cell, new FixedRatio(new FixedScalar(125_000L)));

@@ -37,7 +37,7 @@ class ResourceSiteProcessTest {
         FrontierWorldState next = ResourceSiteProcess.reduceGrowth(state, site, advanced);
         assertEquals(1, next.resourceSites().site(site).growthStage());
         ScheduledAction successor = ((ScheduleEffect.Created) planned.get(1).payload()).action();
-        assertEquals(5_000L + ResourceSiteProcess.WHEAT_STAGE_INTERVAL, successor.dueAt().ticks());
+        assertEquals(5_000L + state.bootstrap().ruleset().cadence().resourceGrowthStageInterval(), successor.dueAt().ticks());
         assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
     }
 

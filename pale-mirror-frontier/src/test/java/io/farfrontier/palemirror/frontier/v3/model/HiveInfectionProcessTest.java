@@ -37,7 +37,7 @@ class HiveInfectionProcessTest {
         assertEquals(target, changed.cell());
         assertTrue(changed.intensity().value().raw() > 0L);
         ScheduleEffect.Created successor = assertInstanceOf(ScheduleEffect.Created.class, planned.get(2).payload());
-        assertEquals(100L + HiveInfectionProcess.COLD_PULSE_INTERVAL, successor.action().dueAt().ticks(),
+        assertEquals(100L + state.bootstrap().ruleset().cadence().hiveInfectionPulseInterval(), successor.action().dueAt().ticks(),
                 "COLD infection must wait for its next visible semantic boundary");
     }
 

@@ -27,10 +27,6 @@ import java.util.List;
  */
 public final class SettlementProvisionProcess {
     public static final String BREAD = "minecraft:bread";
-    /** Allows the first COLD harvest and its exact workshop transformation to complete. */
-    static final long INITIAL_REVIEW_TICK = 24_000L;
-    private static final long REVIEW_INTERVAL = 24_000L;
-
     private SettlementProvisionProcess() { }
 
     public static ScheduledAction review(SubjectId settlementId, int ordinal, long dueAt) {
@@ -42,7 +38,8 @@ public final class SettlementProvisionProcess {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), action.subject());
         SettlementProvision current = state.humanPopulation().provision(settlement.id()); int nextOrdinal = nextReviewOrdinal(action);
         List<ProposedEvent> events = new ArrayList<>();
-        events.add(schedule(review(settlement.id(), nextOrdinal, Math.addExact(action.dueAt().ticks(), REVIEW_INTERVAL))));
+        events.add(schedule(review(settlement.id(), nextOrdinal,
+                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().provisionReviewInterval()))));
         if (current.status() == SettlementProvisionStatus.IN_PROGRESS) return List.copyOf(events);
         List<SubjectId> recipients = recipients(state, settlement.id(), nextOrdinal);
         SettlementProvision provision = SettlementProvision.started(settlement.id(), nextOrdinal, action.dueAt().ticks(), recipients.size(), recipients,

@@ -19,10 +19,6 @@ import java.util.Optional;
 
 /** Durable admission and COLD progression of a Scout-rooted settlement assault. */
 public final class HiveSettlementAssaultProcess {
-    private static final int LOCAL_TERRITORY_RADIUS_BLOCKS = 64;
-    private static final int COLD_STEP_BLOCKS = 12;
-    private static final long STEP_INTERVAL = 20L;
-    private static final long COMBAT_INTERVAL = 20L;
     private HiveSettlementAssaultProcess() { }
 
     public static ScheduledAction start(StrategicTask task, HiveSettlementKnowledge.Sighting sighting, long dueAt) {
@@ -38,8 +34,9 @@ public final class HiveSettlementAssaultProcess {
     }
 
     public static boolean hasFreshLocalTerritory(FrontierWorldState state, HiveSettlementKnowledge.Sighting sighting, long now) {
-        return state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now).keySet().stream().anyMatch(cell -> nearby(
-                cell.originAtY(sighting.settlementAnchor().y()), sighting.settlementAnchor(), LOCAL_TERRITORY_RADIUS_BLOCKS));
+        return state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now).keySet().stream().anyMatch(cell -> nearby(
+                cell.originAtY(sighting.settlementAnchor().y()), sighting.settlementAnchor(),
+                state.bootstrap().ruleset().spatial().hiveSettlementAssaultTerritoryRadius()));
     }
 
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
@@ -47,7 +44,8 @@ public final class HiveSettlementAssaultProcess {
         if (task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || task.status() != StrategicTaskStatus.PENDING) return List.of();
         Optional<HiveSettlementKnowledge.Sighting> sighting = state.strategicPlans().hiveSettlementKnowledge().entries().values().stream()
                 .filter(value -> start(task, value, action.dueAt().ticks()).id().equals(action.id()))
-                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(), HiveSettlementKnowledge.MAX_AGE)).findFirst();
+                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(),
+                        state.bootstrap().ruleset().cadence().hiveSettlementKnowledgeMaxAge())).findFirst();
         if (state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.INTERDICT || sighting.isEmpty()
                 || !hasFreshLocalTerritory(state, sighting.orElseThrow(), action.dueAt().ticks())
                 || hasPendingOrActiveAssault(state, sighting.orElseThrow().settlementId()) || !targetGeometryExists(state, sighting.orElseThrow())) {
@@ -56,7 +54,7 @@ public final class HiveSettlementAssaultProcess {
         SettlementAssault assault = assault(state, task, sighting.orElseThrow());
         if (assault == null) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)),
-                schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+                schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
     }
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
@@ -69,16 +67,18 @@ public final class HiveSettlementAssaultProcess {
             if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
                 return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
             }
-            if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+            if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
+                    + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
             return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT)),
-                    schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
+                    schedule(combat(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         }
-        if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+        if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         SettlementAssaultAttacker next = assault.attackers().stream().filter(value -> !value.atDestination()).findFirst().orElse(null);
         if (next == null) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE)),
-                schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+                schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
         return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultAttackerAdvanced(assault.id(), next.actorId(), next.routeIndex() + 1)),
-                schedule(progress(assault, action.dueAt().ticks() + STEP_INTERVAL)));
+                schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
     }
 
     public static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
@@ -89,7 +89,8 @@ public final class HiveSettlementAssaultProcess {
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
             return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
         }
-        if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
+        if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         boolean hiveTurn = (assault.nextStrikeEpoch() & 1) == 0;
         SubjectId attacker = choose(hiveTurn ? attackers : defenders, assault.nextStrikeEpoch());
         SubjectId target = choose(hiveTurn ? defenders : attackers, assault.nextStrikeEpoch());
@@ -99,7 +100,8 @@ public final class HiveSettlementAssaultProcess {
         if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
             events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultResolved(assault.id(),
                     hiveTurn ? SettlementAssaultOutcome.HIVE_VICTORY : SettlementAssaultOutcome.SETTLEMENT_VICTORY)));
-        } else events.add(schedule(combat(assault, action.dueAt().ticks() + COMBAT_INTERVAL)));
+        } else events.add(schedule(combat(assault, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
         return List.copyOf(events);
     }
 
@@ -190,7 +192,7 @@ public final class HiveSettlementAssaultProcess {
         if (floors == null) return null;
         return new SettlementAssault(new SubjectId("assault:" + task.id().value().substring("task:".length())), task.id(), task.ownerId(), sighting,
                 java.util.stream.IntStream.range(0, selected.size()).mapToObj(index -> new SettlementAssaultAttacker(selected.get(index).id(),
-                        approach(state.actorLocations().get(selected.get(index).id()).position(), floors.get(index)), 0)).toList(),
+                        approach(state, state.actorLocations().get(selected.get(index).id()).position(), floors.get(index)), 0)).toList(),
                 defenders, SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
     }
 
@@ -236,11 +238,12 @@ public final class HiveSettlementAssaultProcess {
         return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultResolved(assault.id(), outcome)));
     }
     private static FixedScalar damage(FrontierWorldState state, SubjectId actor) { return RouteEngagementCombatRules.damage(state, actor); }
-    private static List<BlockPosition> approach(BlockPosition start, BlockPosition end) {
+    private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {
         if (start.equals(end)) return List.of(start);
         long dx = (long) end.x() - start.x(), dy = (long) end.y() - start.y(), dz = (long) end.z() - start.z();
         long distance = Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz));
-        int steps = Math.max(1, Math.toIntExact((distance + COLD_STEP_BLOCKS - 1) / COLD_STEP_BLOCKS));
+        int step = state.bootstrap().ruleset().spatial().hiveSettlementAssaultColdStepBlocks();
+        int steps = Math.max(1, Math.toIntExact((distance + step - 1) / step));
         List<BlockPosition> route = new ArrayList<>(steps + 1);
         for (int index = 0; index <= steps; index++) route.add(new BlockPosition(interpolate(start.x(), dx, index, steps), interpolate(start.y(), dy, index, steps), interpolate(start.z(), dz, index, steps)));
         return List.copyOf(route);

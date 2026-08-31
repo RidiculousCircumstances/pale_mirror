@@ -17,8 +17,6 @@ import java.util.List;
  * scans one settlement at a time on a persisted cadence.</p>
  */
 public final class HumanHealthProcess {
-    public static final long PROGRESSION_DELAY = 1_200L;
-
     private HumanHealthProcess() { }
 
     /** One assessment driven by an existing owner reconsideration, without creating another global pulse. */
@@ -29,7 +27,7 @@ public final class HumanHealthProcess {
         HumanPopulation populationAfter = state.humanPopulation();
         if (subject != null) {
             ResidentHealth current = populationAfter.health(subject.id());
-            ResidentHealthStatus next = nextStatus(current, contaminated, now);
+            ResidentHealthStatus next = nextStatus(state, current, contaminated, now);
             events.add(new ProposedEvent(settlement.id(), new ResidentHealthTransition(subject.id(), next, now)));
             populationAfter = populationAfter.transitionHealth(subject.id(), next, now);
         }
@@ -73,31 +71,33 @@ public final class HumanHealthProcess {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .filter(resident -> eligible(state.humanPopulation().health(resident.id()), contaminated, now))
-                .sorted(Comparator.comparing((ResidentProfile resident) -> priority(state.humanPopulation().health(resident.id()), contaminated, now))
+                .filter(resident -> eligible(state, state.humanPopulation().health(resident.id()), contaminated, now))
+                .sorted(Comparator.comparing((ResidentProfile resident) -> priority(state, state.humanPopulation().health(resident.id()), contaminated, now))
                         .thenComparing(ResidentProfile::id))
                 .findFirst().orElse(null);
     }
 
-    private static boolean eligible(ResidentHealth health, boolean contaminated, long now) {
-        return nextStatus(health, contaminated, now) != null;
+    private static boolean eligible(FrontierWorldState state, ResidentHealth health, boolean contaminated, long now) {
+        return nextStatus(state, health, contaminated, now) != null;
     }
 
-    private static ResidentHealthStatus nextStatus(ResidentHealth health, boolean contaminated, long now) {
+    private static ResidentHealthStatus nextStatus(FrontierWorldState state, ResidentHealth health, boolean contaminated, long now) {
         long elapsed = Math.subtractExact(now, health.sinceTick());
+        long delay = state.bootstrap().ruleset().cadence().humanHealthProgressionDelay();
         if (contaminated) {
-            if (health.status() == ResidentHealthStatus.EXPOSED && elapsed >= PROGRESSION_DELAY) return ResidentHealthStatus.INFECTED;
+            if (health.status() == ResidentHealthStatus.EXPOSED && elapsed >= delay) return ResidentHealthStatus.INFECTED;
             if (health.status() == ResidentHealthStatus.HEALTHY || health.status() == ResidentHealthStatus.RECOVERING) return ResidentHealthStatus.EXPOSED;
             return null;
         }
         if (health.status() == ResidentHealthStatus.EXPOSED) return ResidentHealthStatus.HEALTHY;
-        if (health.status() == ResidentHealthStatus.INFECTED && elapsed >= PROGRESSION_DELAY) return ResidentHealthStatus.RECOVERING;
-        if (health.status() == ResidentHealthStatus.RECOVERING && elapsed >= PROGRESSION_DELAY) return ResidentHealthStatus.HEALTHY;
+        if (health.status() == ResidentHealthStatus.INFECTED && elapsed >= delay) return ResidentHealthStatus.RECOVERING;
+        if (health.status() == ResidentHealthStatus.RECOVERING && elapsed >= delay) return ResidentHealthStatus.HEALTHY;
         return null;
     }
 
-    private static int priority(ResidentHealth health, boolean contaminated, long now) {
-        if (contaminated && health.status() == ResidentHealthStatus.EXPOSED && Math.subtractExact(now, health.sinceTick()) >= PROGRESSION_DELAY) return 0;
+    private static int priority(FrontierWorldState state, ResidentHealth health, boolean contaminated, long now) {
+        if (contaminated && health.status() == ResidentHealthStatus.EXPOSED && Math.subtractExact(now, health.sinceTick())
+                >= state.bootstrap().ruleset().cadence().humanHealthProgressionDelay()) return 0;
         return 1;
     }
 

@@ -118,7 +118,7 @@ final class FrontierV3DecontaminationExecutor {
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId()); FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);
         if (surface == null || surface.status() != io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE
                 || claim == null || !claim.active()) return null;
-        long remaining = Math.max(0L, prior - DecontaminationPolicy.REDUCTION_RAW); InfectionOverlayStage before = InfectionOverlayStage.fromRaw(prior);
+        long remaining = Math.max(0L, prior - state.bootstrap().ruleset().rates().decontaminationReduction().raw()); InfectionOverlayStage before = InfectionOverlayStage.fromRaw(prior);
         return new Target(cell, claim.blockPositions(), material, slot.containerId(), slot.slot(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()),
                 prior, remaining, before, remaining == 0L ? Optional.empty() : Optional.of(InfectionOverlayStage.fromRaw(remaining)));
     }

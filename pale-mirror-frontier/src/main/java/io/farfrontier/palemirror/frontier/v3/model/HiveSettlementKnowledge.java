@@ -17,7 +17,6 @@ import java.util.Optional;
  */
 public final class HiveSettlementKnowledge {
     public static final int MAX_SIGHTINGS = 32;
-    public static final long MAX_AGE = 2_400L;
     private final Map<SubjectId, Sighting> sightings;
 
     public HiveSettlementKnowledge(Map<SubjectId, Sighting> sightings) {
@@ -35,8 +34,8 @@ public final class HiveSettlementKnowledge {
     public static HiveSettlementKnowledge empty() { return new HiveSettlementKnowledge(Map.of()); }
     public Map<SubjectId, Sighting> entries() { return sightings; }
 
-    public Optional<Sighting> freshest(long now) {
-        return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, MAX_AGE))
+    public Optional<Sighting> freshest(FrontierRuleset ruleset, long now) {
+        return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, ruleset.cadence().hiveSettlementKnowledgeMaxAge()))
                 .sorted(Comparator.comparingLong(Sighting::observedAt).reversed().thenComparing(Sighting::settlementId)).findFirst();
     }
 

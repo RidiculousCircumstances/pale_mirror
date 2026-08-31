@@ -11,7 +11,6 @@ import java.util.List;
 
 /** Scout-local settlement discovery that supplies the future assault planner with no hidden target authority. */
 public final class HiveSettlementPerceptionProcess {
-    public static final int SIGHT_RADIUS_BLOCKS = 64;
     private static final int MAX_OBSERVATIONS_PER_REFRESH = 2;
     private HiveSettlementPerceptionProcess() { }
 
@@ -19,13 +18,13 @@ public final class HiveSettlementPerceptionProcess {
         HiveSettlementKnowledge next = state.strategicPlans().hiveSettlementKnowledge();
         List<ProposedEvent> events = new ArrayList<>();
         for (Settlement settlement : state.bootstrap().settlements().stream().sorted(Comparator.comparing(Settlement::id)).toList()) {
-            Bioform scout = scouts(state).stream().filter(value -> nearby(state.actorLocations().get(value.id()).position(), settlement.anchor()))
+            Bioform scout = scouts(state).stream().filter(value -> nearby(state.bootstrap().ruleset(), state.actorLocations().get(value.id()).position(), settlement.anchor()))
                     .min(Comparator.comparing(Bioform::id)).orElse(null);
             if (scout == null) continue;
             HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), now);
             HiveSettlementKnowledge.Sighting prior = next.entries().get(settlement.id());
             if (prior != null && prior.scoutId().equals(scout.id()) && prior.settlementAnchor().equals(settlement.anchor())
-                    && prior.observedAt() > now - HivePerceptionProcess.REFRESH_INTERVAL) continue;
+                    && prior.observedAt() > now - state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval()) continue;
             next = next.observe(sighting);
             events.add(new ProposedEvent(state.bootstrap().hive().id(), new HiveSettlementObserved(sighting)));
             events.add(new ProposedEvent(state.bootstrap().hive().id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
@@ -38,23 +37,23 @@ public final class HiveSettlementPerceptionProcess {
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, HiveSettlementObserved observed) {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive settlement sighting has a foreign owner");
         HiveSettlementKnowledge.Sighting sighting = observed.sighting();
-        validateObservation(state.bootstrap(), state.hiveColony(), state.actorLocations(), sighting);
+        validateObservation(state.bootstrap(), state.bootstrap().ruleset(), state.hiveColony(), state.actorLocations(), sighting);
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), sighting.scoutId());
         if (!state.actorLocations().get(scout.id()).position().equals(sighting.settlementAnchor())
-                && !nearby(state.actorLocations().get(scout.id()).position(), sighting.settlementAnchor())) {
+                && !nearby(state.bootstrap().ruleset(), state.actorLocations().get(scout.id()).position(), sighting.settlementAnchor())) {
             throw new IllegalArgumentException("hive settlement sighting scout is no longer local");
         }
         return state.withStrategicPlans(state.strategicPlans().withHiveSettlementKnowledge(state.strategicPlans().hiveSettlementKnowledge().observe(sighting)));
     }
 
-    static void validateObservation(FrontierBootstrap bootstrap, HiveColony colony, java.util.Map<SubjectId, ActorLocation> actors,
+    static void validateObservation(FrontierBootstrap bootstrap, FrontierRuleset ruleset, HiveColony colony, java.util.Map<SubjectId, ActorLocation> actors,
                                     HiveSettlementKnowledge.Sighting sighting) {
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(sighting.settlementId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("hive settlement sighting names an unknown settlement"));
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, sighting.scoutId());
         ActorLocation location = actors.get(scout.id());
         if (scout.role() != BioformRole.SCOUT || location.condition().status() != ActorLifeStatus.ALIVE
-                || !settlement.anchor().equals(sighting.settlementAnchor()) || !nearby(location.position(), settlement.anchor())) {
+                || !settlement.anchor().equals(sighting.settlementAnchor()) || !nearby(ruleset, location.position(), settlement.anchor())) {
             throw new IllegalArgumentException("hive settlement sighting lacks one nearby living scout");
         }
     }
@@ -67,9 +66,10 @@ public final class HiveSettlementPerceptionProcess {
                 .toList();
     }
 
-    private static boolean nearby(BlockPosition left, BlockPosition right) {
+    private static boolean nearby(FrontierRuleset ruleset, BlockPosition left, BlockPosition right) {
         long x = (long) left.x() - right.x(), z = (long) left.z() - right.z();
-        return x * x + z * z <= (long) SIGHT_RADIUS_BLOCKS * SIGHT_RADIUS_BLOCKS;
+        int radius = ruleset.spatial().hiveSettlementSightRadius();
+        return x * x + z * z <= (long) radius * radius;
     }
 
     public record Refresh(HiveSettlementKnowledge knowledge, List<ProposedEvent> events) { }

@@ -16,8 +16,6 @@ import java.util.List;
  * seed nest; it neither queries human routes nor target operations, and pauses while the same body is HOT.
  */
 public final class HiveScoutPatrolProcess {
-    public static final long INTERVAL = 100L;
-    private static final int RADIUS = 128, STEP = 16;
     private static final int LEGACY_RADIUS = 48, LEGACY_STEP = 12;
 
     private HiveScoutPatrolProcess() { }
@@ -40,7 +38,7 @@ public final class HiveScoutPatrolProcess {
                     nextPosition(state, scout, prior), java.util.Optional.of(prior))));
         }
         events.add(new ProposedEvent(scout.id(), new ScheduleEffect.Created(patrol(scout.id(), ordinal + 1,
-                Math.addExact(action.dueAt().ticks(), INTERVAL)))));
+                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().hiveScoutPatrolInterval())))));
         return List.copyOf(events);
     }
 
@@ -80,29 +78,31 @@ public final class HiveScoutPatrolProcess {
         List<BlockPosition> perimeter = perimeter(state, scout); int index = perimeter.indexOf(current);
         if (index >= 0) return perimeter.get((index + 1) % perimeter.size());
         BlockPosition target = perimeter.get(Math.floorMod(scout.id().value().hashCode(), perimeter.size()));
-        return stepToward(current, target);
+        return stepToward(state, current, target);
     }
 
     private static List<BlockPosition> perimeter(FrontierWorldState state, Bioform scout) {
         HiveNest nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(scout.nestId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("scout has no seed nest"));
-        int radius = circuitRadius(state.bootstrap().bounds(), nest);
+        int radius = circuitRadius(state.bootstrap().bounds(), nest, state.bootstrap().ruleset());
         List<BlockPosition> positions = new java.util.ArrayList<>();
-        for (int z = 0; z <= radius; z += STEP) positions.add(nest.anchor().offset(radius, 0, z));
-        for (int x = radius - STEP; x >= -radius; x -= STEP) positions.add(nest.anchor().offset(x, 0, radius));
-        for (int z = radius - STEP; z >= -radius; z -= STEP) positions.add(nest.anchor().offset(-radius, 0, z));
-        for (int x = -radius + STEP; x <= radius; x += STEP) positions.add(nest.anchor().offset(x, 0, -radius));
-        for (int z = -radius + STEP; z < 0; z += STEP) positions.add(nest.anchor().offset(radius, 0, z));
+        int step = state.bootstrap().ruleset().spatial().hiveScoutPatrolStep();
+        for (int z = 0; z <= radius; z += step) positions.add(nest.anchor().offset(radius, 0, z));
+        for (int x = radius - step; x >= -radius; x -= step) positions.add(nest.anchor().offset(x, 0, radius));
+        for (int z = radius - step; z >= -radius; z -= step) positions.add(nest.anchor().offset(-radius, 0, z));
+        for (int x = -radius + step; x <= radius; x += step) positions.add(nest.anchor().offset(x, 0, -radius));
+        for (int z = -radius + step; z < 0; z += step) positions.add(nest.anchor().offset(radius, 0, z));
         positions.forEach(position -> FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position));
         return List.copyOf(positions);
     }
 
-    private static int circuitRadius(WorldBounds bounds, HiveNest nest) {
+    private static int circuitRadius(WorldBounds bounds, HiveNest nest, FrontierRuleset ruleset) {
         BlockPosition anchor = nest.anchor();
         int boundary = Math.min(Math.min(anchor.x() - bounds.minX(), bounds.maxXExclusive() - 1 - anchor.x()),
                 Math.min(anchor.z() - bounds.minZ(), bounds.maxZExclusive() - 1 - anchor.z()));
-        int radius = Math.min(RADIUS, Math.floorDiv(boundary, STEP) * STEP);
-        if (radius < STEP) throw new IllegalStateException("hive seed nest has no bounded scout circuit");
+        int step = ruleset.spatial().hiveScoutPatrolStep();
+        int radius = Math.min(ruleset.spatial().hiveScoutPatrolRadius(), Math.floorDiv(boundary, step) * step);
+        if (radius < step) throw new IllegalStateException("hive seed nest has no bounded scout circuit");
         return radius;
     }
 
@@ -119,13 +119,14 @@ public final class HiveScoutPatrolProcess {
         return List.copyOf(positions);
     }
 
-    private static BlockPosition stepToward(BlockPosition current, BlockPosition target) {
-        int x = step(current.x(), target.x()), z = current.x() == target.x() ? step(current.z(), target.z()) : current.z();
+    private static BlockPosition stepToward(FrontierWorldState state, BlockPosition current, BlockPosition target) {
+        int x = step(state, current.x(), target.x()), z = current.x() == target.x() ? step(state, current.z(), target.z()) : current.z();
         return new BlockPosition(x, current.y(), z);
     }
 
-    private static int step(int current, int target) {
-        return current + Math.max(-STEP, Math.min(STEP, target - current));
+    private static int step(FrontierWorldState state, int current, int target) {
+        int step = state.bootstrap().ruleset().spatial().hiveScoutPatrolStep();
+        return current + Math.max(-step, Math.min(step, target - current));
     }
 
     private static Bioform scout(FrontierWorldState state, SubjectId scoutId) {

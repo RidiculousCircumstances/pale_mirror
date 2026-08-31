@@ -181,22 +181,27 @@ public final class FrontierWorldProcessCatalog {
 
     /** Bootstrap is data-only; this catalog owns the finite initial process schedule. */
     public static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
-        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, 800),
-                RouteConstructionProcess.scan(1, 900), DecontaminationProcess.scan(1, 1_000)));
+        FrontierRuleset.Cadence cadence = bootstrap.ruleset().cadence();
+        List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, cadence.structuralRepairInitialScanTick()),
+                RouteConstructionProcess.scan(1, cadence.routeConstructionInitialScanTick()), DecontaminationProcess.scan(1, cadence.decontaminationInitialScanTick())));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
-            actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1, 2_000L + index * 100L));
-            actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
+            actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1,
+                    cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
+            actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1,
+                    cadence.populationBirthInitialReviewTick() + index * cadence.settlementInitialStagger()));
             actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
-                    SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
-            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1, 1_000L + index * 100L));
+                    cadence.provisionInitialReviewTick() + index * cadence.settlementInitialStagger()));
+            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1,
+                    cadence.companyFoundationInitialReviewTick() + index * cadence.settlementInitialStagger()));
         }
-        actions.add(PopulationMigrationProcess.review(1, 8_000L));
-        actions.add(TerminalLogisticsProcess.review(1, 8_100L));
+        actions.add(PopulationMigrationProcess.review(1, cadence.populationMigrationInitialReviewTick()));
+        actions.add(TerminalLogisticsProcess.review(1, cadence.terminalLogisticsInitialReviewTick()));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted()
-                .forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
+                .forEach(site -> actions.add(ResourceSiteProcess.preparation(site, cadence.resourceInitialPreparationTick())));
         bootstrap.hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).sorted(java.util.Comparator.comparing(Bioform::id))
-                .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1, 1_600L + actions.size() * 20L)));
-        actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L));
+                .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1,
+                        cadence.hiveScoutInitialPatrolTick() + actions.size() * cadence.hiveScoutInitialStagger())));
+        actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, cadence.hiveStrategicInitialReviewTick()));
         return List.copyOf(actions);
     }
 

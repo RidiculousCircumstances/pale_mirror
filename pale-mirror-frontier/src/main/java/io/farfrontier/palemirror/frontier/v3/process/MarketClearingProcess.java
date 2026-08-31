@@ -19,16 +19,15 @@ import java.util.Set;
 
 /** Bounded deterministic clearing for production demand; it has no global inventory or money pool. */
 public final class MarketClearingProcess {
-    static final long RETRY_INTERVAL = 400L;
-    static final long DEMAND_LIFETIME = 24_000L;
     private static final String BREAD = "minecraft:bread";
     private MarketClearingProcess() { }
 
-    public static MarketDemand foodDemand(StrategicTask task, long openedAt) {
+    public static MarketDemand foodDemand(FrontierWorldState state, StrategicTask task, long openedAt) {
         if (task.kind() != StrategicTaskKind.PRODUCE_BREAD) throw new IllegalArgumentException("only bread work creates the current food demand");
         String suffix = task.id().value().substring("task:".length());
-        return new MarketDemand(new SubjectId("demand:" + suffix), task.ownerId(), task.id(), BREAD, 64, FixedScalar.whole(2L), openedAt,
-                Math.addExact(openedAt, DEMAND_LIFETIME), MarketDemandStatus.OPEN);
+        return new MarketDemand(new SubjectId("demand:" + suffix), task.ownerId(), task.id(), BREAD, 64,
+                state.bootstrap().ruleset().rates().worksJobPrice(), openedAt,
+                Math.addExact(openedAt, state.bootstrap().ruleset().cadence().marketDemandLifetime()), MarketDemandStatus.OPEN);
     }
 
     public static ScheduledAction clear(MarketDemand demand, int ordinal, long dueAt) {
@@ -43,7 +42,7 @@ public final class MarketClearingProcess {
         if (now > demand.expiresAtTick()) return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandExpired(demand.id())),
                 taskTransition(state, demand, StrategicTaskStatus.PENDING, StrategicTaskStatus.BLOCKED));
         Optional<EmploymentContract> employment = worksEmployment(state, demand.buyerId());
-        if (employment.isEmpty()) return retry(demand, action, now);
+        if (employment.isEmpty()) return retry(state, demand, action, now);
         EmploymentContract contract = employment.orElseThrow();
         Company company = state.companies().companies().get(contract.companyId());
         Optional<CompanyQuote> existing = state.companies().market().bestCurrentQuote(demand.id(), now);
@@ -87,7 +86,7 @@ public final class MarketClearingProcess {
     public static FrontierWorldState reduceOpened(FrontierWorldState state, SubjectId subject, MarketDemandOpened opened) {
         MarketDemand demand = opened.demand(); StrategicTask task = state.strategicPlans().tasks().get(demand.reasonId());
         if (!subject.equals(demand.buyerId()) || task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != StrategicTaskStatus.PENDING
-                || !task.ownerId().equals(demand.buyerId()) || !foodDemand(task, demand.openedAtTick()).equals(demand)) {
+                || !task.ownerId().equals(demand.buyerId()) || !foodDemand(state, task, demand.openedAtTick()).equals(demand)) {
             throw new IllegalArgumentException("market food demand must be emitted for its exact pending production task");
         }
         MarketOrderBook compacted = state.companies().market().compactTerminal(protectedReferences(state));
@@ -176,8 +175,9 @@ public final class MarketClearingProcess {
                 && input.count() == job.outputCount() && input.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(job.settlementId()));
     }
-    private static List<ProposedEvent> retry(MarketDemand demand, ScheduledAction action, long now) {
-        return List.of(new ProposedEvent(demand.id(), new ScheduleEffect.Created(clear(demand, nextOrdinal(action), Math.addExact(now, RETRY_INTERVAL)))));
+    private static List<ProposedEvent> retry(FrontierWorldState state, MarketDemand demand, ScheduledAction action, long now) {
+        return List.of(new ProposedEvent(demand.id(), new ScheduleEffect.Created(clear(demand, nextOrdinal(action), Math.addExact(now,
+                state.bootstrap().ruleset().cadence().marketRetryInterval())))));
     }
     private static int nextOrdinal(ScheduledAction action) {
         String suffix = action.id().value().substring(action.id().value().lastIndexOf('-') + 1);

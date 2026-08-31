@@ -27,7 +27,7 @@ class ResourceSitePreparationProcessTest {
                 .count());
         assertTrue(configuration.initialSchedules().stream()
                 .filter(action -> action.kind().equals(ResourceSiteProcess.PREPARATION_ACTION))
-                .allMatch(action -> action.dueAt().ticks() == ResourceSiteProcess.INITIAL_PREPARATION_TICK));
+                .allMatch(action -> action.dueAt().ticks() == configuration.initialState().bootstrap().ruleset().cadence().resourceInitialPreparationTick()));
 
         var engine = FrontierEngines.create(configuration);
         engine.advanceTo(new SimInstant(100L), new WorkBudget(64, 512));
@@ -59,7 +59,8 @@ class ResourceSitePreparationProcessTest {
         SubjectId site = new SubjectId("site:1-wheat-field");
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 8_000L));
         assertEquals(3, planned.size()); assertTrue(planned.get(2).payload() instanceof ScheduleEffect.Created);
-        assertEquals(8_000L + ResourceSiteProcess.WHEAT_STAGE_INTERVAL, ((ScheduleEffect.Created) planned.get(2).payload()).action().dueAt().ticks());
+        assertEquals(8_000L + state.bootstrap().ruleset().cadence().resourceGrowthStageInterval(),
+                ((ScheduleEffect.Created) planned.get(2).payload()).action().dueAt().ticks());
         state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) planned.getFirst().payload());
         FrontierWorldState prepared = ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) planned.get(1).payload());
         assertEquals(ResourceSitePhase.GROWING, prepared.resourceSites().site(site).phase());

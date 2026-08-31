@@ -13,41 +13,37 @@ import java.util.Objects;
  * is explicit so economy, AI and the player-facing board use the same limits.</p>
  */
 public final class SettlementFacilityCapability {
-    /** A graybox housing block is a communal longhouse, not one Minecraft-sized bedroom. */
-    public static final int INTACT_HOUSING_BEDS = 48;
-    /** A damaged longhouse remains a temporary shelter, but cannot sustain normal growth. */
-    public static final int DAMAGED_HOUSING_BEDS = 16;
-
     private SettlementFacilityCapability() { }
 
     public static Capability forStructure(FrontierWorldState state, SettlementStructure structure) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(structure, "structure");
         StructureCondition condition = state.structureConditions().get(structure.id());
         if (condition == null) throw new IllegalArgumentException("unknown canonical structure: " + structure.id().value());
-        return forCondition(structure.kind(), condition);
+        return forCondition(state.bootstrap().ruleset(), structure.kind(), condition);
     }
 
-    public static Capability forCondition(StructureKind kind, StructureCondition condition) {
-        Objects.requireNonNull(kind, "structure kind"); Objects.requireNonNull(condition, "structure condition");
+    public static Capability forCondition(FrontierRuleset ruleset, StructureKind kind, StructureCondition condition) {
+        Objects.requireNonNull(ruleset, "ruleset"); Objects.requireNonNull(kind, "structure kind"); Objects.requireNonNull(condition, "structure condition");
+        FrontierRuleset.FacilityCapacity capacity = ruleset.facilityCapacity();
         int factor = switch (condition) {
             case INTACT -> 1;
             case DAMAGED -> 0;
             case DESTROYED -> -1;
         };
         if (kind == StructureKind.HOUSING) {
-            return new Capability(kind, condition, condition == StructureCondition.INTACT ? INTACT_HOUSING_BEDS
-                    : condition == StructureCondition.DAMAGED ? DAMAGED_HOUSING_BEDS : 0, 0);
+            return new Capability(kind, condition, condition == StructureCondition.INTACT ? capacity.intactHousingBeds()
+                    : condition == StructureCondition.DAMAGED ? capacity.damagedHousingBeds() : 0, 0);
         }
         // Work capacity is intentionally a capability, not an assigned worker count. Later
         // allocation processes reserve named residents against it; no building invents people.
-        return new Capability(kind, condition, factor < 0 ? 0 : factor == 0 ? 1 : switch (kind) {
-            case HALL -> 4;
-            case FARM -> 8;
-            case WORKSHOP -> 4;
-            case DEPOT -> 2;
-            case INFIRMARY -> 3;
+        return new Capability(kind, condition, 0, factor < 0 ? 0 : factor == 0 ? capacity.damagedWorkCapacity() : switch (kind) {
+            case HALL -> capacity.intactHallWorkCapacity();
+            case FARM -> capacity.intactFarmWorkCapacity();
+            case WORKSHOP -> capacity.intactWorkshopWorkCapacity();
+            case DEPOT -> capacity.intactDepotWorkCapacity();
+            case INFIRMARY -> capacity.intactInfirmaryWorkCapacity();
             case HOUSING -> throw new IllegalStateException("housing handled above");
-        }, 0);
+        });
     }
 
     public static int housingCapacity(FrontierWorldState state, SubjectId settlementId) {

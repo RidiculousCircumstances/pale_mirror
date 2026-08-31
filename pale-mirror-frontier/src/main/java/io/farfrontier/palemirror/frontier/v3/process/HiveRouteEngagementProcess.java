@@ -17,9 +17,6 @@ import java.util.Optional;
 
 /** Starts one exact hive route interception and advances its COLD bodies along retained routes. */
 public final class HiveRouteEngagementProcess {
-    private static final long STEP_INTERVAL = 100L;
-    private static final long COMBAT_INTERVAL = 20L;
-    private static final int COLD_STEP_BLOCKS = 16;
     private HiveRouteEngagementProcess() { }
 
     /**
@@ -52,7 +49,7 @@ public final class HiveRouteEngagementProcess {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
         if (!FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id())) {
-            return List.of(schedule(start(task, action.dueAt().ticks() + STEP_INTERVAL)));
+            return List.of(schedule(start(task, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         }
         // The task retains the exact Scout-observed location.  The operation lookup above
         // is only a liveness precondition, never a hidden targeting query.
@@ -62,7 +59,7 @@ public final class HiveRouteEngagementProcess {
                 intercept, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
         List<ProposedEvent> events = new ArrayList<>(List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(task.ownerId(), new RouteEngagementStarted(engagement))));
         if (engagement.allAttackersAtIntercept()) events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
-        else events.add(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        else events.add(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         return List.copyOf(events);
     }
 
@@ -75,7 +72,7 @@ public final class HiveRouteEngagementProcess {
             return abort(engagement);
         }
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
-            return List.of(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+            return List.of(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         }
         if (engagement.attackerIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
             return abort(engagement);
@@ -87,7 +84,7 @@ public final class HiveRouteEngagementProcess {
         }
         if (engagement.attackers().stream().allMatch(attacker -> attacker.routeIndex() + 1 >= attacker.route().size() - 1)) {
             events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
-        } else events.add(schedule(progress(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        } else events.add(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         return List.copyOf(events);
     }
 
@@ -99,21 +96,22 @@ public final class HiveRouteEngagementProcess {
             return abort(engagement);
         }
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
-            return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+            return List.of(schedule(readiness(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         }
         if (!engagement.allAttackersAtIntercept() || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
             return abort(engagement);
         }
-        if (!cargoAtIntercept(operation, engagement)) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        if (!cargoAtIntercept(operation, engagement)) return List.of(schedule(readiness(engagement, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
-                schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
+                schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
     }
 
     public static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
         if (engagement == null || engagement.status() != RouteEngagementStatus.COLD_COMBAT) return List.of();
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
-            return List.of(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
+            return List.of(schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
         }
         List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
         List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
@@ -131,7 +129,7 @@ public final class HiveRouteEngagementProcess {
             if (outcome == RouteEngagementOutcome.HIVE_VICTORY) {
                 events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
             }
-        } else events.add(schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
+        } else events.add(schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
         return List.copyOf(events);
     }
 
@@ -194,12 +192,13 @@ public final class HiveRouteEngagementProcess {
                 .sorted(nearest).toList();
         return java.util.stream.Stream.concat(eligible.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).limit(1),
                         eligible.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2))
-                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state.actorLocations().get(bioform.id()).position(), intercept), 0)).toList();
+                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state, state.actorLocations().get(bioform.id()).position(), intercept), 0)).toList();
     }
-    private static List<BlockPosition> approach(BlockPosition start, BlockPosition end) {
+    private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {
         if (start.equals(end)) return List.of(start);
         long dx = (long) end.x() - start.x(), dy = (long) end.y() - start.y(), dz = (long) end.z() - start.z();
-        long distance = Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz)); int steps = Math.max(1, Math.toIntExact((distance + COLD_STEP_BLOCKS - 1) / COLD_STEP_BLOCKS));
+        int step = state.bootstrap().ruleset().spatial().hiveRouteEngagementColdStepBlocks();
+        long distance = Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz)); int steps = Math.max(1, Math.toIntExact((distance + step - 1) / step));
         List<BlockPosition> route = new ArrayList<>(steps + 1);
         for (int index = 0; index <= steps; index++) route.add(new BlockPosition(interpolate(start.x(), dx, index, steps),
                 interpolate(start.y(), dy, index, steps), interpolate(start.z(), dz, index, steps)));
@@ -219,10 +218,10 @@ public final class HiveRouteEngagementProcess {
         RouteOperation operation = state.operations().get(engagement.operationId());
         if (cargoAtIntercept(operation, engagement)) {
             return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
-                    schedule(combat(engagement, now + COMBAT_INTERVAL)));
+                    schedule(combat(engagement, now + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
         }
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.WAITING_FOR_INTERCEPT)),
-                schedule(readiness(engagement, now + STEP_INTERVAL)));
+                schedule(readiness(engagement, now + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
     }
     /** The Scout pins the exact carrier it saw; people and cargo may occupy adjacent route cells. */
     private static boolean cargoAtIntercept(RouteOperation operation, RouteEngagement engagement) {

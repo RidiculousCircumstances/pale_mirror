@@ -26,8 +26,6 @@ import java.util.Optional;
  */
 public final class PopulationBirthProcess {
     public static final String BREAD = "minecraft:bread";
-    private static final long REVIEW_INTERVAL = 24_000L;
-    private static final long COMPLETION_DELAY = 200L;
 
     private PopulationBirthProcess() { }
 
@@ -39,7 +37,7 @@ public final class PopulationBirthProcess {
     public static List<ProposedEvent> planReview(FrontierWorldState state, ScheduledAction action) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), action.subject());
         List<ProposedEvent> events = new java.util.ArrayList<>();
-        events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + REVIEW_INTERVAL)));
+        events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
         if (hasActiveJob(state, settlement.id()) || !hasHousing(state, settlement.id())) return List.copyOf(events);
         Optional<ExactItemStack> food = food(state, settlement.id());
         if (food.isEmpty()) return List.copyOf(events);
@@ -48,7 +46,8 @@ public final class PopulationBirthProcess {
         int ordinal = nextOrdinal(action);
         int placementOrdinal = Math.toIntExact(state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())).count());
-        ResidentBirthJob job = job(state.bootstrap().bounds(), settlement, household, food.orElseThrow(), ordinal, placementOrdinal, action.dueAt().ticks() + COMPLETION_DELAY);
+        ResidentBirthJob job = job(state.bootstrap().bounds(), settlement, household, food.orElseThrow(), ordinal, placementOrdinal,
+                action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay());
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.foodItemId()), fixed(job.position()), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
@@ -60,7 +59,8 @@ public final class PopulationBirthProcess {
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         ResidentBirthJob job = jobForIntent(state, intent);
         ProposedEvent physical = new ProposedEvent(job.settlementId(), transition);
-        if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, schedule(complete(job, now + COMPLETION_DELAY)));
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical,
+                schedule(complete(job, now + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             return List.of(physical, new ProposedEvent(job.settlementId(), new ResidentBirthCancelled(job.id())));
         }

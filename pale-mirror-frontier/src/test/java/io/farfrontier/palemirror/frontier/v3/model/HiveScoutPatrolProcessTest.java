@@ -37,7 +37,7 @@ class HiveScoutPatrolProcessTest {
         assertEquals(advanced.position(), moved.actorLocations().get(scout.id()).position());
         assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
         ScheduleEffect.Created next = (ScheduleEffect.Created) events.getLast().payload();
-        assertEquals(action.dueAt().ticks() + HiveScoutPatrolProcess.INTERVAL, next.action().dueAt().ticks());
+        assertEquals(action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveScoutPatrolInterval(), next.action().dueAt().ticks());
     }
 
     @Test void aHotScoutKeepsItsExactPhysicalHandOffAndColdPatrolOnlyReschedules() {
@@ -69,7 +69,8 @@ class HiveScoutPatrolProcessTest {
         BlockPosition position = state.actorLocations().get(scout.id()).position(); boolean reached = false;
         for (int step = 0; step < 96; step++) {
             position = HiveScoutPatrolProcess.nextPosition(state, scout, position);
-            if (distanceSquared(position, nearest.anchor()) <= (long) HiveSettlementPerceptionProcess.SIGHT_RADIUS_BLOCKS * HiveSettlementPerceptionProcess.SIGHT_RADIUS_BLOCKS) {
+            int radius = state.bootstrap().ruleset().spatial().hiveSettlementSightRadius();
+            if (distanceSquared(position, nearest.anchor()) <= (long) radius * radius) {
                 reached = true; break;
             }
         }

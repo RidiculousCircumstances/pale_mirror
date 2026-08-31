@@ -14,8 +14,6 @@ import java.util.Objects;
 public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<SubjectId, FinancialReservation> reservations) {
     public static final int MAX_ACCOUNTS = 4_096;
     public static final int MAX_RESERVATIONS = 4_096;
-    /** Finite fresh-world currency issue per settlement; all later mutations are zero-sum transfers. */
-    public static final FixedScalar INITIAL_SETTLEMENT_TREASURY = FixedScalar.whole(100L);
 
     public EconomicLedger {
         accounts = Map.copyOf(accounts);
@@ -42,7 +40,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         Map<SubjectId, EconomicAccount> accounts = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {
             accounts.put(settlement.id(), new EconomicAccount(settlement.id(), EconomicOwnerKind.SETTLEMENT_TREASURY,
-                    EconomicAccountStatus.ACTIVE, INITIAL_SETTLEMENT_TREASURY, FixedScalar.ZERO));
+                    EconomicAccountStatus.ACTIVE, bootstrap.ruleset().rates().initialSettlementTreasury(), FixedScalar.ZERO));
         }
         accounts.put(bootstrap.hive().id(), account(bootstrap.hive().id(), EconomicOwnerKind.HIVE_COLLECTIVE));
         accounts.put(FrontierRouteNetwork.OWNER, account(FrontierRouteNetwork.OWNER, EconomicOwnerKind.PUBLIC_INFRASTRUCTURE));

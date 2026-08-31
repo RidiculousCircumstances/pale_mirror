@@ -11,17 +11,18 @@ public final class RouteEngagementCombatRules {
     private RouteEngagementCombatRules() { }
 
     public static FixedScalar damage(FrontierWorldState state, SubjectId actor) {
+        FrontierRuleset.Combat combat = state.bootstrap().ruleset().combat();
         Bioform bioform = bioform(state, actor);
         if (bioform != null) return switch (bioform.role()) {
-            case GUARD -> FixedScalar.whole(4);
-            case WORKER, SCOUT -> FixedScalar.whole(2);
-            case BOMBER -> FixedScalar.whole(6);
+            case GUARD -> combat.hiveGuardDamage();
+            case WORKER, SCOUT -> combat.hiveWorkerScoutDamage();
+            case BOMBER -> combat.hiveBomberDamage();
         };
         ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
         return switch (resident.role()) {
-            case GUARD -> FixedScalar.whole(3);
-            case HAULER, BUILDER, FARMER, CRAFTER, MEDIC -> FixedScalar.ONE;
+            case GUARD -> combat.residentGuardDamage();
+            case HAULER, BUILDER, FARMER, CRAFTER, MEDIC -> combat.residentWorkerDamage();
         };
     }
 

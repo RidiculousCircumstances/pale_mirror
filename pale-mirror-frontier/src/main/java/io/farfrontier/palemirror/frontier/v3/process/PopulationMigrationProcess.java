@@ -24,8 +24,6 @@ import java.util.Optional;
  */
 public final class PopulationMigrationProcess {
     private static final SubjectId OWNER = new SubjectId("system:population");
-    private static final long REVIEW_INTERVAL = 1_200L;
-    private static final long STEP_INTERVAL = 20L;
     private static final int MAX_ACTIVE_JOURNEYS = 24;
     private static final int MAX_JOURNEYS_PER_ORIGIN = 2;
     private static final int MAX_NEW_JOURNEYS_PER_REVIEW = 12;
@@ -40,12 +38,12 @@ public final class PopulationMigrationProcess {
     public static List<ProposedEvent> planReview(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         List<ProposedEvent> events = new ArrayList<>();
-        events.add(schedule(review(ordinal + 1, Math.addExact(action.dueAt().ticks(), REVIEW_INTERVAL))));
+        events.add(schedule(review(ordinal + 1, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationReviewInterval()))));
         FrontierWorldState working = state;
         for (ResidentMigrationJourney journey : orderedJourneys(state, ordinal)) {
             if (journey.status() == ResidentMigrationStatus.BLOCKED && HumanPopulationStateSupport.migrationBlockReason(working, journey) == null) {
                 events.add(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationResumed(journey.residentId())));
-                events.add(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
+                events.add(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
                 working = HumanPopulationStateSupport.resumeMigration(working, new ResidentMigrationResumed(journey.residentId()));
             }
         }
@@ -58,7 +56,7 @@ public final class PopulationMigrationProcess {
                 if (candidate.isEmpty()) continue;
                 Candidate value = candidate.orElseThrow();
                 events.add(new ProposedEvent(value.origin().id(), new ResidentMigrationStarted(value.journey())));
-                events.add(schedule(progress(value.journey().residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
+                events.add(schedule(progress(value.journey().residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
                 working = HumanPopulationStateSupport.startMigration(working, value.journey());
                 started++; admitted = true;
             }
@@ -74,12 +72,12 @@ public final class PopulationMigrationProcess {
         ResidentMigrationBlockReason reason = HumanPopulationStateSupport.migrationBlockReason(state, journey);
         if (reason != null) return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationBlocked(journey.residentId(), reason)));
         if (!coldAvailable(state, journey.residentId())) {
-            return List.of(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
+            return List.of(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
         }
         if (journey.arriving()) return List.of(new ProposedEvent(journey.destinationSettlementId(), new ResidentMigrated(journey.residentId(),
                 journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition())));
         return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex())),
-                schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), STEP_INTERVAL))));
+                schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
     }
 
     public static FrontierWorldState reduceHotAdvance(FrontierWorldState state, ResidentTransitAdvanced advanced) {

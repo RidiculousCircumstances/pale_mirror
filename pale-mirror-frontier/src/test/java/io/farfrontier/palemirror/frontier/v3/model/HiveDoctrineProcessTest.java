@@ -28,7 +28,7 @@ class HiveDoctrineProcessTest {
         HiveDoctrineState interdict = HiveDoctrineProcess.select(state, 100L, true);
         assertEquals(HiveDoctrine.INTERDICT, interdict.doctrine());
 
-        HiveDoctrineState expand = HiveDoctrineProcess.select(state, 100L + HivePerceptionProcess.REFRESH_INTERVAL + 1L, true);
+        HiveDoctrineState expand = HiveDoctrineProcess.select(state, 100L + state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval() + 1L, true);
         assertEquals(HiveDoctrine.EXPAND, expand.doctrine(), "an expired scout fact must not retain an interception posture");
         FrontierWorldState reduced = HiveDoctrineProcess.reduce(state, hive, new HiveDoctrineSelected(expand));
         assertEquals(expand, reduced.strategicPlans().hiveDoctrine());

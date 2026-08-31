@@ -20,9 +20,6 @@ import java.util.List;
 
 /** Advances a canonical field by COLD server time; projection never gates its food economy. */
 public final class ResourceSiteProcess {
-    /** The first canonical preparation occurs without requiring a loaded Minecraft chunk. */
-    public static final long INITIAL_PREPARATION_TICK = 1L;
-    public static final long WHEAT_STAGE_INTERVAL = 3_000L;
     public static final String PREPARATION_ACTION = "frontier.resource_site.prepare";
     private ResourceSiteProcess() { }
 
@@ -46,7 +43,8 @@ public final class ResourceSiteProcess {
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); BlockPosition origin = site.cropSlots().getFirst();
         ResourceSiteLifecycle prepared = lifecycle.preparing(job).prepared();
         return List.of(new ProposedEvent(lifecycle.siteId(), new ResourceSitePreparationStarted(job)), new ProposedEvent(lifecycle.siteId(), new ResourceSitePrepared(job)),
-                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(prepared, Math.addExact(action.dueAt().ticks(), WHEAT_STAGE_INTERVAL)))));
+                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(prepared, Math.addExact(action.dueAt().ticks(),
+                        state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
     }
 
     public static FrontierWorldState reducePreparationStarted(FrontierWorldState state, SubjectId subject, ResourceSitePreparationStarted started) {
@@ -86,7 +84,8 @@ public final class ResourceSiteProcess {
         if (lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
                 .filter(job -> job.intentId().equals(intent.id())).isEmpty()) throw new IllegalArgumentException("resource-site preparation transition has no active work");
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
-            return List.of(new ProposedEvent(lifecycle.siteId(), transition), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(lifecycle.prepared(), Math.addExact(now, WHEAT_STAGE_INTERVAL)))));
+            return List.of(new ProposedEvent(lifecycle.siteId(), transition), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(
+                    nextGrowth(lifecycle.prepared(), Math.addExact(now, state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
         }
         return List.of(new ProposedEvent(lifecycle.siteId(), transition));
     }
@@ -99,7 +98,7 @@ public final class ResourceSiteProcess {
         if (next.phase() == ResourceSitePhase.READY) return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(),
                 new ScheduleEffect.Created(StrategicObjectiveProcess.resourceHarvestOpportunity(state, next, Math.addExact(action.dueAt().ticks(), 1L)))));
         return List.of(new ProposedEvent(lifecycle.siteId(), advanced), new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(next,
-                Math.addExact(action.dueAt().ticks(), WHEAT_STAGE_INTERVAL)))));
+                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
     }
 
     public static FrontierWorldState reduceGrowth(FrontierWorldState state, SubjectId subject, ResourceSiteGrowthAdvanced advanced) {

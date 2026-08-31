@@ -37,6 +37,8 @@ import java.util.function.BiFunction;
  */
 public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
+    /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
+    private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("uncontestedSupply", FrontierV3FixtureCatalog::uncontestedSupplyConfiguration),
@@ -65,7 +67,12 @@ public final class FrontierV3FixtureCatalog {
         Objects.requireNonNull(worldId, "worldId");
         Profile profile = PROFILES.get(profileId);
         if (profile == null) throw new IllegalArgumentException("unknown Frontier v3 test fixture profile: " + profileId);
-        return profile.factory().apply(worldId, seed);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = profile.factory().apply(worldId, seed);
+        FrontierRuleset expected = RULESETS.get(profile.rulesetId());
+        if (expected == null || !expected.equals(configuration.initialState().bootstrap().ruleset())) {
+            throw new IllegalStateException("fixture profile ruleset is undeclared or does not match its canonical bootstrap: " + profile.id());
+        }
+        return configuration;
     }
 
     public static Profile profile(String profileId) {
@@ -188,7 +195,7 @@ public final class FrontierV3FixtureCatalog {
             String provider = required(properties, id + ".provider");
             BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>> factory = PROVIDERS.get(provider);
             if (factory == null) throw new IllegalStateException("unknown Frontier v3 test fixture provider: " + provider);
-            profiles.add(new Profile(id, provider, required(properties, id + ".source"), required(properties, id + ".runner"),
+            profiles.add(new Profile(id, provider, required(properties, id + ".ruleset"), required(properties, id + ".source"), required(properties, id + ".runner"),
                     required(properties, id + ".assertion"), factory));
         }
         Map<String, Profile> byId = catalog(profiles.toArray(Profile[]::new));
@@ -239,10 +246,10 @@ public final class FrontierV3FixtureCatalog {
         return FrontierWorldRuntimeDefinition.planScheduled(state, action, false);
     }
 
-    public record Profile(String id, String provider, String sourceProfile, String allowedRunner, String requiredAssertion,
+    public record Profile(String id, String provider, String rulesetId, String sourceProfile, String allowedRunner, String requiredAssertion,
                           BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>> factory) {
         public Profile {
-            if (id == null || id.isBlank() || provider == null || provider.isBlank() || sourceProfile == null || sourceProfile.isBlank() || allowedRunner == null || allowedRunner.isBlank()
+            if (id == null || id.isBlank() || provider == null || provider.isBlank() || rulesetId == null || rulesetId.isBlank() || sourceProfile == null || sourceProfile.isBlank() || allowedRunner == null || allowedRunner.isBlank()
                     || requiredAssertion == null || requiredAssertion.isBlank() || factory == null) throw new IllegalArgumentException("invalid Frontier v3 test fixture profile");
         }
     }

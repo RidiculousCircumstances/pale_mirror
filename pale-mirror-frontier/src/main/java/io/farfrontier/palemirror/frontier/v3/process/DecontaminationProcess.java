@@ -23,7 +23,6 @@ import java.util.Optional;
 /** Plans one exact reagent-backed, physically observable infection-cell treatment at a time. */
 public final class DecontaminationProcess {
     private static final SubjectId SYSTEM = new SubjectId("system:decontamination");
-    private static final long RESPONSE_RADIUS_SQUARED = 25_600L;
     private DecontaminationProcess() { }
 
     public static ScheduledAction scan(int ordinal, long dueAt) {
@@ -33,7 +32,8 @@ public final class DecontaminationProcess {
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
-        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal + 1, action.dueAt().ticks() + 200L)));
+        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal + 1, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().decontaminationScanInterval())));
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.DECONTAMINATION
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<StrategicTask> task = pendingTask(state);
@@ -90,7 +90,7 @@ public final class DecontaminationProcess {
         Optional<ExactItemStack> material = state.inventory().items().values().stream().filter(item -> item.itemKind().equals(DecontaminationPolicy.REAGENT))
                 .filter(item -> ownedActiveMaterial(state, settlement, item)).sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
         InfectionCell cell = task.infectionTarget().orElseThrow();
-        return facility.isPresent() && material.isPresent() && state.infection().containsKey(cell) && nearby(facility.orElseThrow(), cell)
+        return facility.isPresent() && material.isPresent() && state.infection().containsKey(cell) && nearby(state.bootstrap().ruleset(), facility.orElseThrow(), cell)
                 ? Optional.of(new Candidate(task, settlement, facility.orElseThrow(), material.orElseThrow(), cell)) : Optional.empty();
     }
 
@@ -101,9 +101,10 @@ public final class DecontaminationProcess {
         return container != null && container.ownerId().equals(settlement.id()) && surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE;
     }
 
-    private static boolean nearby(SettlementStructure facility, InfectionCell cell) {
+    private static boolean nearby(FrontierRuleset ruleset, SettlementStructure facility, InfectionCell cell) {
         BlockPosition position = cell.originAtY(facility.anchor().y()); long dx = position.x() - facility.anchor().x(), dz = position.z() - facility.anchor().z();
-        return dx * dx + dz * dz <= RESPONSE_RADIUS_SQUARED;
+        int radius = ruleset.spatial().decontaminationResponseRadius();
+        return dx * dx + dz * dz <= (long) radius * radius;
     }
 
     public static Settlement owner(FrontierWorldState state, SubjectId facilityId) {

@@ -16,7 +16,6 @@ import java.util.Optional;
 
 /** Event-triggered deterministic utility selection and first durable task expansion. */
 public final class StrategicObjectiveProcess {
-    private static final long REVIEW_INTERVAL = 400L;
     private StrategicObjectiveProcess() { }
 
     public static ScheduledAction review(SubjectId owner, int ordinal, long dueAt) {
@@ -64,7 +63,8 @@ public final class StrategicObjectiveProcess {
         // wake-up cannot fall through into an unrelated growth objective.
         Optional<HiveOperationKnowledge.Sighting> sighting = state.strategicPlans().hiveOperationKnowledge().entries().values().stream()
                 .filter(value -> interceptOpportunityId(value).equals(action.id()))
-                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(), HivePerceptionProcess.REFRESH_INTERVAL)).findFirst();
+                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(),
+                        state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval())).findFirst();
         if (sighting.isEmpty()) {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
@@ -83,7 +83,8 @@ public final class StrategicObjectiveProcess {
         }
         Optional<HiveSettlementKnowledge.Sighting> sighting = state.strategicPlans().hiveSettlementKnowledge().entries().values().stream()
                 .filter(value -> assaultOpportunityId(value).equals(action.id()))
-                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(), HiveSettlementKnowledge.MAX_AGE)).findFirst();
+                .filter(value -> value.observedAt() >= Math.subtractExact(action.dueAt().ticks(),
+                        state.bootstrap().ruleset().cadence().hiveSettlementKnowledgeMaxAge())).findFirst();
         if (sighting.isEmpty() || state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.INTERDICT
                 || !HiveSettlementAssaultProcess.hasFreshLocalTerritory(state, sighting.orElseThrow(), action.dueAt().ticks())
                 || HiveSettlementAssaultProcess.hasPendingOrActiveAssault(state, sighting.orElseThrow().settlementId())) {
@@ -126,7 +127,7 @@ public final class StrategicObjectiveProcess {
         SubjectId owner = site.settlementId();
         if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.FACILITY)) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
-                    Math.addExact(action.dueAt().ticks(), ResourceSiteHarvestProcess.RETRY_INTERVAL)))));
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())))));
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
@@ -150,7 +151,8 @@ public final class StrategicObjectiveProcess {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
-                new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks() + REVIEW_INTERVAL)))) : List.of();
+                new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks()
+                        + state.bootstrap().ruleset().cadence().strategicReviewInterval())))) : List.of();
         List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
                 : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         boolean hive = state.bootstrap().hive().id().equals(owner);
@@ -205,7 +207,7 @@ public final class StrategicObjectiveProcess {
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 1L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
-            MarketDemand demand = MarketClearingProcess.foodDemand(task, action.dueAt().ticks());
+            MarketDemand demand = MarketClearingProcess.foodDemand(state, task, action.dueAt().ticks());
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new MarketDemandOpened(demand)),
                     new ProposedEvent(demand.id(), new ScheduleEffect.Created(MarketClearingProcess.clear(demand, 1, action.dueAt().ticks() + 100L))));
@@ -308,7 +310,8 @@ public final class StrategicObjectiveProcess {
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
                                                       Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
         Optional<HiveOperationKnowledge.Sighting> sighted = allowInterception
-                ? interceptSighting.or(() -> state.strategicPlans().hiveOperationKnowledge().freshest(now, HivePerceptionProcess.REFRESH_INTERVAL)) : Optional.empty();
+                ? interceptSighting.or(() -> state.strategicPlans().hiveOperationKnowledge().freshest(now,
+                        state.bootstrap().ruleset().cadence().hivePerceptionRefreshInterval())) : Optional.empty();
         if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.INTERDICT && sighted.isPresent()) {
             HiveOperationKnowledge.Sighting observation = sighted.orElseThrow();
             return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.empty(),
@@ -317,7 +320,7 @@ public final class StrategicObjectiveProcess {
         if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.CONSOLIDATE) return hiveGrowthCandidate(state);
         if (state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.EXPAND) return Optional.empty();
         return HiveInfectionProcess.expansionTarget(state, now).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
-                Math.subtractExact(FixedScalar.SCALE, state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now)
+                Math.subtractExact(FixedScalar.SCALE, state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now)
                         .getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
     }
     private static Optional<Candidate> hiveGrowthCandidate(FrontierWorldState state) {

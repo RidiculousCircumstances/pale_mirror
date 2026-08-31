@@ -12,7 +12,6 @@ import java.util.Map;
 
 /** Local hive biology is the only source of durable territorial beliefs. */
 public final class HiveTerritoryPerceptionProcess {
-    private static final int HEART_RADIUS_BLOCKS = 32, SCOUT_RADIUS_BLOCKS = 48;
     private static final int MAX_OBSERVATIONS_PER_REFRESH = 4;
     private HiveTerritoryPerceptionProcess() { }
 
@@ -29,7 +28,8 @@ public final class HiveTerritoryPerceptionProcess {
             HiveTerritoryKnowledge.Belief belief = new HiveTerritoryKnowledge.Belief(entry.getKey(), entry.getValue(), observer, sensorPosition, now);
             HiveTerritoryKnowledge.Belief previous = next.entries().get(entry.getKey());
             if (previous != null && previous.intensity().equals(belief.intensity()) && previous.observerId().equals(observer)
-                    && previous.sensorPosition().equals(sensorPosition) && previous.observedAt() >= now - HiveTerritoryKnowledge.MAX_AGE / 3L) continue;
+                    && previous.sensorPosition().equals(sensorPosition) && previous.observedAt() >= now
+                    - state.bootstrap().ruleset().cadence().hiveTerritoryKnowledgeMaxAge() / 3L) continue;
             next = next.observe(belief); events.add(new ProposedEvent(state.bootstrap().hive().id(), new HiveTerritoryObserved(belief)));
             if (events.size() >= MAX_OBSERVATIONS_PER_REFRESH) break;
         }
@@ -86,7 +86,8 @@ public final class HiveTerritoryPerceptionProcess {
     }
 
     private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
-        return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer)) ? HEART_RADIUS_BLOCKS : SCOUT_RADIUS_BLOCKS;
+        return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer))
+                ? bootstrap.ruleset().spatial().hiveTerritoryHeartRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
     }
 
     private static List<HiveOrgan> organs(FrontierBootstrap bootstrap, HiveColony colony) {

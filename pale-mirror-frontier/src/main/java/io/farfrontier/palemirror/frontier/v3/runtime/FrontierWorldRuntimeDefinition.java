@@ -19,6 +19,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierRuleset;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldEventReducer;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
@@ -36,10 +38,20 @@ public final class FrontierWorldRuntimeDefinition {
     private static final PayloadCodecs PAYLOAD_CODECS = FrontierWorldPayloadCodecs.create();
     private static final DeterministicProcessRegistry PROCESS_REGISTRY = processRegistry();
     private FrontierWorldRuntimeDefinition() { }
-    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) { return configuration(worldId, seed, true); }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
+        return configuration(worldId, seed, FrontierRulesets.production(), true);
+    }
+    /** Explicit ruleset entry point used by new-world creation and test-only declared overrides. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, FrontierRuleset ruleset) {
+        return configuration(worldId, seed, ruleset, true);
+    }
     /** Shared internal composition used by the test-fixture catalog without creating a second runtime. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
-        FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        return configuration(worldId, seed, FrontierRulesets.production(), autonomousInterception);
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed,
+                                                                                                           FrontierRuleset ruleset, boolean autonomousInterception) {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed, ruleset); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }

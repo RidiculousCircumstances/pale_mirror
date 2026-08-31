@@ -50,7 +50,8 @@ public final class RouteConstructionProcess {
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
-        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks() + 100L)));
+        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().routeConstructionScanInterval())));
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
                 || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);

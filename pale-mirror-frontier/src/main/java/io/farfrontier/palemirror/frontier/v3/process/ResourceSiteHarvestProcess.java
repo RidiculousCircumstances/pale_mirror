@@ -21,7 +21,6 @@ import java.util.OptionalInt;
 
 /** Plans one exact 64-cell COLD harvest; loaded-world projection follows canonical completion. */
 public final class ResourceSiteHarvestProcess {
-    static final long RETRY_INTERVAL = 200L;
     private ResourceSiteHarvestProcess() { }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
@@ -52,7 +51,7 @@ public final class ResourceSiteHarvestProcess {
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
                 new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvested(job, output)), transition(task, StrategicTaskStatus.COMPLETED),
                 new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(harvested,
-                        Math.addExact(action.dueAt().ticks(), ResourceSiteProcess.WHEAT_STAGE_INTERVAL)))));
+                        Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
@@ -91,7 +90,8 @@ public final class ResourceSiteHarvestProcess {
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
         ResourceSiteLifecycle next = lifecycle.harvested();
         return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(lifecycle.siteId(),
-                new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now, ResourceSiteProcess.WHEAT_STAGE_INTERVAL)))));
+                new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
+                        state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
     }
 
     public static void validateIntent(FrontierWorldState state, ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {

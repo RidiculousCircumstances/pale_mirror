@@ -32,7 +32,8 @@ public final class StructuralRepairProcess {
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int nextOrdinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
-        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(nextOrdinal, action.dueAt().ticks() + 200L)));
+        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(nextOrdinal, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().structuralRepairScanInterval())));
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<PhysicalDelta> repairable = state.physicalDeltas().values().stream()

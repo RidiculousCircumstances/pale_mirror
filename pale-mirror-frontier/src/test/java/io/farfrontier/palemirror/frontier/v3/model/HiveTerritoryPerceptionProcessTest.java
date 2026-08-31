@@ -62,7 +62,8 @@ class HiveTerritoryPerceptionProcessTest {
         assertEquals(state.strategicPlans().hiveTerritoryKnowledge(), restored.strategicPlans().hiveTerritoryKnowledge());
         assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
-        assertTrue(restored.strategicPlans().hiveTerritoryKnowledge().freshInfection(10L).containsKey(local));
-        assertTrue(restored.strategicPlans().hiveTerritoryKnowledge().freshInfection(10L + HiveTerritoryKnowledge.MAX_AGE + 1L).isEmpty());
+        assertTrue(restored.strategicPlans().hiveTerritoryKnowledge().freshInfection(restored.bootstrap().ruleset(), 10L).containsKey(local));
+        assertTrue(restored.strategicPlans().hiveTerritoryKnowledge().freshInfection(restored.bootstrap().ruleset(),
+                10L + restored.bootstrap().ruleset().cadence().hiveTerritoryKnowledgeMaxAge() + 1L).isEmpty());
     }
 }
