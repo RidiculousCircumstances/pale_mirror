@@ -385,6 +385,11 @@ remains present because breadth, balance and product comprehension are not done.
   resident becomes a defender. Restart retains the same people. It deliberately
   does not yet interrupt
   committed civilian work or model equipment/readiness/leader replacement.
+- The first pure tactical read model now makes the retained unit legible without
+  adding a second roster: exact assignment, leader identity, profession and
+  actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
+  `GUARD` or `SQUAD_LEADER`. It deliberately does not issue, reserve or recover
+  equipment; those remain owning-process work rather than presentation state.
 
 ### Verification matrix
 

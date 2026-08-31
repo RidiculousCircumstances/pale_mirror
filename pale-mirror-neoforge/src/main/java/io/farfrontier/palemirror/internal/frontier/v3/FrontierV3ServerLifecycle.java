@@ -11,8 +11,10 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -184,9 +186,17 @@ public final class FrontierV3ServerLifecycle {
                                         io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
-                configuration.withExecutionMetrics(metrics),
-                new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
+        FrontierFileStore store = new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime;
+        try {
+            RecoveryImage recovery = store.recover(configuration.worldId());
+            long physicalSeed = configuration.initialState().bootstrap().seed();
+            configuration = FrontierWorldRecoveryConfiguration.select(configuration.worldId(), physicalSeed,
+                    recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
+            runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200);
+        } catch (RuntimeException error) {
+            runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error);
+        }
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             FrontierV3ResourceSiteExecutor.beginRecovery(runtime);

@@ -20,7 +20,7 @@ public final class RouteEngagementCombatRules {
         };
         ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
-        return resident.profession() == ResidentProfession.SECURITY_WORKER || carriesWeapon(state, resident.id())
+        return resident.profession() == ResidentProfession.SECURITY_WORKER || HumanTacticalFunctionProjection.hasWeapon(state, resident.id())
                 ? combat.residentGuardDamage() : combat.residentWorkerDamage();
     }
 
@@ -57,8 +57,5 @@ public final class RouteEngagementCombatRules {
     }
     private static ResidentProfile resident(FrontierWorldState state, SubjectId actor) {
         return state.humanPopulation().resident(actor);
-    }
-    private static boolean carriesWeapon(FrontierWorldState state, SubjectId actor) {
-        return state.inventory().actorItems(actor).stream().anyMatch(item -> item.itemKind().equals("minecraft:iron_sword"));
     }
 }

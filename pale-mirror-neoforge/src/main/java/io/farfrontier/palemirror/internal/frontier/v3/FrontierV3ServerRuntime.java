@@ -45,15 +45,21 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private S decodedState;
 
     private FrontierV3ServerRuntime(
-            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RecoveryImage recovered,
+            RuntimeException startupFailure
     ) {
         this.configuration = Objects.requireNonNull(configuration, "configuration")
                 .withTransactionCommitter(new FrontierStoreTransactionCommitter(store));
         this.store = Objects.requireNonNull(store, "store");
         if (checkpointIntervalTicks < 1) throw new IllegalArgumentException("checkpoint interval must be positive");
         this.checkpointIntervalTicks = checkpointIntervalTicks;
+        if (startupFailure != null) {
+            status = FrontierV3RuntimeStatus.quarantined(startupFailure);
+            return;
+        }
         try {
-            RecoveryImage image = store.recover(configuration.worldId());
+            RecoveryImage image = recovered == null ? store.recover(configuration.worldId()) : recovered;
+            if (!configuration.worldId().equals(image.worldId())) throw new IllegalArgumentException("recovery image belongs to a different Frontier world");
             engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
                     ? FrontierEngines.create(this.configuration)
                     : FrontierEngines.recover(this.configuration, image);
@@ -68,7 +74,21 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> start(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks);
+        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, null, null);
+    }
+
+    /** Starts from one already-verified recovery image, avoiding a second store read after profile selection. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered, int checkpointIntervalTicks
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, Objects.requireNonNull(recovered, "recovered image"), null);
+    }
+
+    /** Preserves visible fail-closed lifecycle state when recovery selection itself is invalid. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, null, Objects.requireNonNull(failure, "startup failure"));
     }
 
     FrontierV3RuntimeStatus status() { return status; }

@@ -15,7 +15,8 @@ public final class FrontierSceneLabels {
         if (resident != null) {
             Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(resident.settlementId()))
                     .findFirst().orElseThrow(() -> new IllegalStateException("resident settlement is missing: " + actorId.value()));
-            return settlement.displayName() + " " + words(resident.profession().name());
+            HumanTacticalFunction tactical = HumanTacticalFunctionProjection.derive(state, resident.id());
+            return settlement.displayName() + " " + words(tactical == HumanTacticalFunction.CIVILIAN ? resident.profession().name() : tactical.name());
         }
         return Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actorId)).findFirst()

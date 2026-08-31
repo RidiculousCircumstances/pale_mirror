@@ -190,6 +190,18 @@ codecs retain that identity. This is a custody primitive, not implicit issue
 authority: an owning unit process must still reserve, hand off and recover the
 item through explicit observed transitions.
 
+The implemented first read model is intentionally narrower than the full
+future roster. It derives `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`, `GUARD` and
+`SQUAD_LEADER` solely from an exact current assignment, retained defender-unit
+leadership, profession and actor-held exact weapon. `SQUAD_LEADER` identifies
+the retained unit leader; it does not grant a weapon or replace their ordinary
+equipment truth. An exact weapon without an owning tactical assignment remains
+`CIVILIAN`. The projection is pure and persisted nowhere, so loss, theft or
+recovery of the same item changes the next projection rather than requiring a
+role migration. Scout, sapper, medic, heavy-weapon and fixed-weapon functions
+must wait for their real operation and equipment owners; they are not labels
+invented ahead of those systems.
+
 ## Work, mobilization and opportunity cost
 
 Mobilization is a visible resource-allocation decision:

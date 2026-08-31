@@ -79,6 +79,18 @@ class FrontierV3ServerRuntimeTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test
+    void failedRecoverySelectionRemainsAVisibleQuarantinedV3Runtime(@TempDir Path directory) {
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.failedStart(
+                configuration(), new FrontierFileStore(directory, codecs()), 20,
+                new IllegalArgumentException("recovery header does not match selected physical world"));
+
+        assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, runtime.status().kind());
+        assertTrue(runtime.status().detail().orElseThrow().contains("recovery header"));
+        assertTrue(runtime.checkpointImage().isEmpty());
+        assertTrue(runtime.submit(command("command:must-not-run", Revision.ZERO, SimInstant.ZERO, 1)).isEmpty());
+    }
+
+    @Test
     void explosionObservationCommandsNormalizeNestedIdsIntoOneStrictCommandPath() {
         long packedPosition = -1L;
 

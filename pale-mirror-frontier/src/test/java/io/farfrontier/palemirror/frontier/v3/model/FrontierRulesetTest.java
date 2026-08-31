@@ -1,10 +1,15 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldSnapshotHeader;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -76,6 +81,22 @@ class FrontierRulesetTest {
         assertNotEquals(FrontierRulesets.production().id(), legacy.id());
         assertEquals(legacy, FrontierRulesets.legacyForSnapshotVersion(41));
         assertThrows(IllegalArgumentException.class, () -> FrontierRulesets.legacyForSnapshotVersion(80));
+    }
+
+    @Test
+    void recoveryPinsTheExplicitLegacyHeaderInsteadOfRebindingItToCurrentProduction() {
+        WorldId world = new WorldId("frontier:legacy-recovery");
+        long seed = 645L;
+        FrontierWorldState legacyState = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed, FrontierRulesets.legacyForSnapshotVersion(79)));
+        byte[] legacyHeader = new FrontierWorldStateCodec().encode(legacyState);
+        legacyHeader[4] = 79; // Header selection is intentionally independent of the old body layout.
+        CheckpointImage checkpoint = new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO, legacyHeader, java.util.List.of(), java.util.List.of());
+
+        assertEquals(FrontierRulesets.legacyForSnapshotVersion(79), FrontierWorldSnapshotHeader.read(legacyHeader).ruleset());
+        assertEquals(FrontierRulesets.legacyForSnapshotVersion(79), FrontierWorldRecoveryConfiguration
+                .select(world, seed, java.util.Optional.of(checkpoint)).initialState().bootstrap().ruleset());
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRecoveryConfiguration
+                .select(world, seed + 1L, java.util.Optional.of(checkpoint)));
     }
 
     private static int indexOf(byte[] bytes, byte[] target) {
