@@ -47,16 +47,41 @@ final class RouteConstructionPayloadCodecs {
     }; }
     private static void write(DataOutputStream output, RouteConstruction project) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, project.id().value()); FrontierWorldPayloadCodecs.writeString(output, project.settlementId().value());
+        output.writeByte(0xFF); output.writeBoolean(project.team().isPresent());
+        if (project.team().isPresent()) writeTeam(output, project.team().orElseThrow());
         output.writeByte(project.status().wireTag()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
         for (BlockPosition waypoint : project.waypoints()) FrontierWorldPayloadCodecs.writePosition(output, waypoint);
     }
     private static RouteConstruction read(DataInputStream input) throws IOException {
         SubjectId id = new SubjectId(FrontierWorldPayloadCodecs.readString(input)), settlement = new SubjectId(FrontierWorldPayloadCodecs.readString(input));
-        int status = input.readUnsignedByte(), confirmed = input.readUnsignedShort(), points = input.readUnsignedByte();
+        int marker = input.readUnsignedByte();
+        java.util.Optional<EngineeringRecoveryTeam> team = java.util.Optional.empty();
+        int status;
+        if (marker == 0xFF) {
+            if (input.readBoolean()) team = java.util.Optional.of(readTeam(input));
+            status = input.readUnsignedByte();
+        } else status = marker;
+        int confirmed = input.readUnsignedShort(), points = input.readUnsignedByte();
         if (status >= RouteConstructionStatus.values().length || points < RouteTopology.MIN_WAYPOINTS || points > RouteTopology.MAX_WAYPOINTS) {
             throw new IllegalArgumentException("route construction payload is invalid");
         }
         List<BlockPosition> waypoints = new ArrayList<>(); for (int index = 0; index < points; index++) waypoints.add(FrontierWorldPayloadCodecs.readPosition(input));
-        return new RouteConstruction(id, settlement, waypoints, confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status));
+        return new RouteConstruction(id, settlement, waypoints, confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status), java.util.Optional.empty(), team);
+    }
+
+    private static void writeTeam(DataOutputStream output, EngineeringRecoveryTeam team) throws IOException {
+        FrontierWorldPayloadCodecs.writeSubject(output, team.id()); FrontierWorldPayloadCodecs.writeSubject(output, team.ownerId());
+        FrontierWorldPayloadCodecs.writeSubject(output, team.settlementId()); FrontierWorldPayloadCodecs.writeSubject(output, team.leaderId());
+        output.writeByte(team.memberIds().size());
+        for (SubjectId member : team.memberIds()) FrontierWorldPayloadCodecs.writeSubject(output, member);
+    }
+
+    private static EngineeringRecoveryTeam readTeam(DataInputStream input) throws IOException {
+        SubjectId id = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId owner = FrontierWorldPayloadCodecs.readSubject(input).value();
+        SubjectId settlement = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId leader = FrontierWorldPayloadCodecs.readSubject(input).value();
+        int count = input.readUnsignedByte();
+        if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) throw new IllegalArgumentException("route construction team payload has invalid size");
+        List<SubjectId> members = new ArrayList<>(); for (int index = 0; index < count; index++) members.add(FrontierWorldPayloadCodecs.readSubject(input).value());
+        return new EngineeringRecoveryTeam(id, owner, settlement, leader, members);
     }
 }

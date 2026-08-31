@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 83; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 84; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -61,7 +61,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
                     && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75
                     && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81
-                    && version != 82 && version != VERSION) {
+                    && version != 82 && version != 83 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -77,7 +77,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55, version >= 83),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     PhysicalIntentStateCodec.read(input, version >= 82), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
+                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45, version >= 84), RouteTopologyStateCodec.read(input, bootstrap),
                     StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version),
                     HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81),
                     companies,

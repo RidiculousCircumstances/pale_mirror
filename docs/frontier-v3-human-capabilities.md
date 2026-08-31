@@ -251,6 +251,25 @@ formations, may finish through their existing owner, and cannot recruit or
 manufacture a replacement during recovery.  Only new admissions obey the
 current composition ranges.
 
+### First engineering / recovery owner
+
+The first engineering slice is route reconstruction. A new `RouteConstruction`
+does not mean that the route network builds itself: it embeds one immutable
+`EngineeringRecoveryTeam` with one to four exact local residents, a retained
+leader and a stable ID derived from the construction project. The team is the
+only owner of its `ENGINEERING_RECOVERY` assignment; it remains in the ordinary
+population register, cannot be selected from an active civilian, patrol,
+escort, defence, migration or another recovery assignment, and survives a
+snapshot/WAL boundary unchanged.
+
+Historical schema-83 construction records deliberately retain an empty team.
+They are explicit autonomous legacy work and may finish only through their
+existing owner; recovery must never manufacture residents to modernize them.
+New construction instead chooses idle, living local people by engineering
+capability, then profession and stable ID. This is an organization/assignment
+foundation, not an implicit tool grant or a `SAPPER` label: exact tool issue,
+physical crew assembly and tool loss remain the next owner boundary.
+
 ### Implemented foundation
 
 The first exact tactical organization is the defender unit owned by one

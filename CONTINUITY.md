@@ -295,3 +295,12 @@
   replacement. The next human work extends through engineering/recovery and
   medical/evacuation operation/equipment owners while preserving one canonical
   item claim and accounting for physical results.
+- The first engineering/recovery owner is now closed at schema 84: every newly
+  admitted `RouteConstruction` embeds a stable one-to-four-person exact local
+  `EngineeringRecoveryTeam`; the same people derive exclusive
+  `ENGINEERING_RECOVERY` assignment and are rejected when another active human
+  owner already claims them. Its snapshot/WAL value is durable. Historical
+  schema-83 construction remains explicit autonomous legacy work rather than
+  silently acquiring invented residents. This is intentionally not yet a
+  sapper role, tool issue or physical crew lease; the next slice owns those
+  exact equipment/assembly consequences, followed by medical/evacuation.

@@ -9,5 +9,6 @@ public enum HumanAssignmentKind {
     ESCORT,
     ROUTE_PATROL,
     SETTLEMENT_DEFENCE,
+    ENGINEERING_RECOVERY,
     TRANSIT
 }

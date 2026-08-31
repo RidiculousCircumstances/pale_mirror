@@ -15,7 +15,10 @@ public final class RouteConstructionStateSupport {
     public static final int MAX_CONSTRUCTIONS = 12;
     private RouteConstructionStateSupport() { }
 
-    static void validate(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> constructions) {
+    static void validate(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> constructions,
+                         HumanPopulation population, Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
+                         Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
+                         StrategicPlanState plans) {
         if (constructions.size() > MAX_CONSTRUCTIONS) throw new IllegalArgumentException("route construction retention limit exceeded");
         HashSet<SubjectId> settlements = new HashSet<>();
         for (Map.Entry<SubjectId, RouteConstruction> entry : constructions.entrySet()) {
@@ -30,6 +33,7 @@ public final class RouteConstructionStateSupport {
                 throw new IllegalArgumentException("route construction readiness does not match confirmed work");
             }
         }
+        RouteConstructionTeamStateSupport.validate(population, constructions, jobs, sites, operations, contracts, plans);
     }
 
     static FrontierWorldState begin(FrontierWorldState state, RouteConstruction project) {

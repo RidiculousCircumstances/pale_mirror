@@ -102,11 +102,34 @@ public final class RouteConstructionProcess {
                 List<BlockPosition> route = List.of(origin, detourEgress, detourLane, new BlockPosition(spineX, detourLane.y(), detourLane.z()),
                         new BlockPosition(spineX, destination.y(), destination.z()), destination);
                 if (accepts(state, settlement.id(), route)) {
-                    return Optional.of(new RouteConstruction(projectId(settlement.id(), state), settlement.id(), route, 0, RouteConstructionStatus.BUILDING));
+                    SubjectId projectId = projectId(settlement.id(), state);
+                    EngineeringRecoveryTeam team = team(state, settlement.id(), projectId);
+                    if (team != null) return Optional.of(new RouteConstruction(projectId, settlement.id(), route, 0,
+                            RouteConstructionStatus.BUILDING, Optional.empty(), Optional.of(team)));
                 }
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Admits only free, living exact people from the owner settlement.  The team is an explicit
+     * opportunity cost: no construction can silently borrow a farmer, cargo crew or defender.
+     * Tool issue remains its own later owner; this admission deliberately does not pretend that
+     * engineering capability is an item grant.
+     */
+    private static EngineeringRecoveryTeam team(FrontierWorldState state, SubjectId settlementId, SubjectId projectId) {
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
+        List<SubjectId> members = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId))
+                .filter(resident -> assignments.idle(resident.id()))
+                .filter(resident -> FrontierWorldStateSupport.workCapable(state, resident))
+                .filter(resident -> resident.capability(HumanCapability.ENGINEERING) > 0)
+                .sorted(Comparator.comparing((ResidentProfile resident) -> resident.profession() != ResidentProfession.ENGINEER)
+                        .thenComparing(Comparator.comparing((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed())
+                        .thenComparing(ResidentProfile::id))
+                .limit(EngineeringRecoveryTeam.MAX_MEMBERS).map(ResidentProfile::id).toList();
+        return members.isEmpty() ? null : EngineeringRecoveryTeam.forProject(projectId, settlementId, members);
     }
 
     private static Optional<ExactItemStack> maintenanceMaterial(FrontierWorldState state) {

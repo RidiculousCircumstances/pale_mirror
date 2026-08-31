@@ -415,6 +415,14 @@ remains present because breadth, balance and product comprehension are not done.
   subsequent expansion must add real engineering/recovery and medical/
   evacuation operation/equipment owners before it introduces sapper or medic
   labels.
+- The first engineering/recovery owner is now route reconstruction: each new
+  `RouteConstruction` embeds one immutable one-to-four-person local
+  `EngineeringRecoveryTeam`, and those same exact people derive exclusive
+  `ENGINEERING_RECOVERY` assignment across snapshot/WAL recovery. Schema-83
+  autonomous construction is preserved as explicit legacy work, never hydrated
+  with invented people. This deliberately stops before a sapper label, tool
+  issue or physical crew actor lease; those must be owned by their own exact
+  equipment/assembly processes.
 
 ### Verification matrix
 

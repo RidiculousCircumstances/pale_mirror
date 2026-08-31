@@ -37,6 +37,19 @@ class RouteConstructionProcessIntegrationTest {
         RouteConstruction candidate = after.routeConstructions().values().stream()
                 .filter(value -> value.settlementId().equals(settlement)).findFirst().orElseThrow();
         assertEquals(settlement, candidate.settlementId());
+        EngineeringRecoveryTeam team = candidate.team().orElseThrow();
+        assertEquals(candidate.id(), team.ownerId());
+        assertEquals(settlement, team.settlementId());
+        assertTrue(team.memberIds().size() >= EngineeringRecoveryTeam.MIN_MEMBERS
+                && team.memberIds().size() <= EngineeringRecoveryTeam.MAX_MEMBERS);
+        HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(after);
+        team.memberIds().forEach(member -> {
+            assertEquals(HumanAssignmentKind.ENGINEERING_RECOVERY, assignments.assignment(member).kind());
+            assertEquals(candidate.id(), assignments.assignment(member).ownerId().orElseThrow());
+        });
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after));
+        assertEquals(team, restored.routeConstructions().get(candidate.id()).team().orElseThrow());
+        assertEquals(assignments, HumanAssignmentProjection.compile(restored));
         assertTrue(FrontierRouteNetwork.isPassable(after.bootstrap(), candidate.waypoints(), after.physicalDeltas()));
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement)
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().equals(Optional.of(loss))));

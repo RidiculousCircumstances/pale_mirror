@@ -22,9 +22,11 @@ final class RouteConstructionStateCodec {
             output.writeByte(project.status().wireTag()); output.writeShort(project.confirmedCells()); output.writeByte(project.waypoints().size());
             for (BlockPosition waypoint : project.waypoints()) FrontierWorldStateCodec.writePosition(output, waypoint);
             output.writeBoolean(project.cargoId().isPresent()); if (project.cargoId().isPresent()) FrontierWorldStateCodec.writeString(output, project.cargoId().orElseThrow().value());
+            output.writeBoolean(project.team().isPresent());
+            if (project.team().isPresent()) writeTeam(output, project.team().orElseThrow());
         }
     }
-    static Map<SubjectId, RouteConstruction> read(DataInputStream input, boolean includesCargo) throws IOException {
+    static Map<SubjectId, RouteConstruction> read(DataInputStream input, boolean includesCargo, boolean includesTeam) throws IOException {
         int count = input.readUnsignedByte(); if (count > RouteConstructionStateSupport.MAX_CONSTRUCTIONS) throw new IllegalArgumentException("route construction count is out of bounds");
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
@@ -36,9 +38,27 @@ final class RouteConstructionStateCodec {
             java.util.ArrayList<BlockPosition> waypoints = new java.util.ArrayList<>();
             for (int point = 0; point < waypointCount; point++) waypoints.add(FrontierWorldStateCodec.readPosition(input));
             java.util.Optional<SubjectId> cargo = includesCargo && input.readBoolean() ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))) : java.util.Optional.empty();
-            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status), cargo);
+            java.util.Optional<EngineeringRecoveryTeam> team = includesTeam && input.readBoolean() ? java.util.Optional.of(readTeam(input)) : java.util.Optional.empty();
+            RouteConstruction project = new RouteConstruction(id, settlement, List.copyOf(waypoints), confirmed, FrontierWireTags.require(RouteConstructionStatus.class, status), cargo, team);
             if (projects.put(id, project) != null) throw new IllegalArgumentException("duplicate route construction id");
         }
         return Map.copyOf(projects);
+    }
+
+    private static void writeTeam(DataOutputStream output, EngineeringRecoveryTeam team) throws IOException {
+        FrontierWorldStateCodec.writeString(output, team.id().value()); FrontierWorldStateCodec.writeString(output, team.ownerId().value());
+        FrontierWorldStateCodec.writeString(output, team.settlementId().value()); FrontierWorldStateCodec.writeString(output, team.leaderId().value());
+        output.writeByte(team.memberIds().size());
+        for (SubjectId member : team.memberIds()) FrontierWorldStateCodec.writeString(output, member.value());
+    }
+
+    private static EngineeringRecoveryTeam readTeam(DataInputStream input) throws IOException {
+        SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId owner = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId leader = new SubjectId(FrontierWorldStateCodec.readString(input));
+        int count = input.readUnsignedByte();
+        if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) throw new IllegalArgumentException("route construction team size is invalid");
+        java.util.ArrayList<SubjectId> members = new java.util.ArrayList<>();
+        for (int index = 0; index < count; index++) members.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
+        return new EngineeringRecoveryTeam(id, owner, settlement, leader, List.copyOf(members));
     }
 }

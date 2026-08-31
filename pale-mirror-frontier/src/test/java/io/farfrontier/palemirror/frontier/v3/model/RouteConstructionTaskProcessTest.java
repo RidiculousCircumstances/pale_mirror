@@ -24,6 +24,7 @@ class RouteConstructionTaskProcessTest {
 
         RouteConstruction project = started.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
                 .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
+        assertTrue(project.team().isPresent(), "new construction must retain an exact engineering crew instead of an autonomous builder");
         state = state.withStrategicPlans(state.strategicPlans().transitionTask(construction.id(), StrategicTaskStatus.ACTIVE));
         state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
         state = state.withInventory(state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)

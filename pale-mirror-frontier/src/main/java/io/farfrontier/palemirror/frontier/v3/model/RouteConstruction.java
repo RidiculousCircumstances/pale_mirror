@@ -8,18 +8,28 @@ import java.util.Optional;
 
 /** Exact, resumable work order for one replacement route; active topology remains unchanged. */
 public record RouteConstruction(SubjectId id, SubjectId settlementId, List<BlockPosition> waypoints,
-                                int confirmedCells, RouteConstructionStatus status, Optional<SubjectId> cargoId) {
+                                int confirmedCells, RouteConstructionStatus status, Optional<SubjectId> cargoId,
+                                Optional<EngineeringRecoveryTeam> team) {
     public RouteConstruction {
         Objects.requireNonNull(id, "route construction id"); Objects.requireNonNull(settlementId, "route construction settlement");
         waypoints = List.copyOf(Objects.requireNonNull(waypoints, "route construction waypoints"));
         if (confirmedCells < 0) throw new IllegalArgumentException("route construction cursor is negative");
         Objects.requireNonNull(status, "route construction status");
         cargoId = Objects.requireNonNull(cargoId, "route construction cargo");
+        team = Objects.requireNonNull(team, "route construction team");
+        if (team.isPresent() && (!team.orElseThrow().ownerId().equals(id) || !team.orElseThrow().settlementId().equals(settlementId))) {
+            throw new IllegalArgumentException("route construction team must belong to its exact project and settlement");
+        }
     }
 
     public RouteConstruction(SubjectId id, SubjectId settlementId, List<BlockPosition> waypoints,
                              int confirmedCells, RouteConstructionStatus status) {
-        this(id, settlementId, waypoints, confirmedCells, status, Optional.empty());
+        this(id, settlementId, waypoints, confirmedCells, status, Optional.empty(), Optional.empty());
+    }
+
+    public RouteConstruction(SubjectId id, SubjectId settlementId, List<BlockPosition> waypoints,
+                             int confirmedCells, RouteConstructionStatus status, Optional<SubjectId> cargoId) {
+        this(id, settlementId, waypoints, confirmedCells, status, cargoId, Optional.empty());
     }
 
     /** Stable planned identities for the one exact replacement-cell cargo, before it is loaded. */
@@ -32,16 +42,16 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
     }
 
     RouteConstruction withConfirmedCells(int nextConfirmedCells, RouteConstructionStatus nextStatus) {
-        return new RouteConstruction(id, settlementId, waypoints, nextConfirmedCells, nextStatus, cargoId);
+        return new RouteConstruction(id, settlementId, waypoints, nextConfirmedCells, nextStatus, cargoId, team);
     }
 
     RouteConstruction withCargo(SubjectId nextCargoId) {
         if (cargoId.isPresent()) throw new IllegalArgumentException("route construction cargo is already assigned");
-        return new RouteConstruction(id, settlementId, waypoints, confirmedCells, status, Optional.of(Objects.requireNonNull(nextCargoId, "route construction cargo")));
+        return new RouteConstruction(id, settlementId, waypoints, confirmedCells, status, Optional.of(Objects.requireNonNull(nextCargoId, "route construction cargo")), team);
     }
 
     RouteConstruction withoutCargo() {
         if (cargoId.isEmpty()) throw new IllegalArgumentException("route construction has no cargo to clear");
-        return new RouteConstruction(id, settlementId, waypoints, confirmedCells, status, Optional.empty());
+        return new RouteConstruction(id, settlementId, waypoints, confirmedCells, status, Optional.empty(), team);
     }
 }
