@@ -93,6 +93,28 @@ class HotScoutOperationObservationTest {
                 .filter(value -> value.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION).count());
     }
 
+    @Test
+    void interceptFixtureKeepsOnlyTheThreeRequiredAttackersAtDistinctApproachPositions() {
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
+                FrontierWorldRuntimeDefinition.developmentHotScoutInterceptConfiguration(new WorldId("frontier:hot-scout-intercept-fixture"), 41L));
+        FrontierWorldState state = state(engine);
+        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        var selected = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(value -> value.role() == BioformRole.BOMBER || value.role() == BioformRole.GUARD)
+                .sorted(java.util.Comparator.comparingLong((Bioform value) -> distance(state.actorLocations().get(value.id()).position(), operation.currentPosition()))
+                        .thenComparing(Bioform::id)).limit(3).toList();
+        assertEquals(3, selected.size());
+        assertEquals(3L, selected.stream().map(value -> state.actorLocations().get(value.id()).position()).distinct().count(),
+                "the pilot fixture must not make vanilla entity cramming into an invented combat outcome");
+        assertEquals(1L, selected.stream().filter(value -> value.role() == BioformRole.BOMBER).count());
+        assertEquals(2L, selected.stream().filter(value -> value.role() == BioformRole.GUARD).count());
+    }
+
+    private static long distance(BlockPosition left, BlockPosition right) {
+        long x = (long) left.x() - right.x(), y = (long) left.y() - right.y(), z = (long) left.z() - right.z();
+        return x * x + y * y + z * z;
+    }
+
     private static Fixture fixture() {
         WorldId world = new WorldId("frontier:hot-scout-observation-negative");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(world, 41L));

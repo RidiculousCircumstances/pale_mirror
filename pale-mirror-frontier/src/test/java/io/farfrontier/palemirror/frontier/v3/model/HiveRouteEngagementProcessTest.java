@@ -67,7 +67,7 @@ class HiveRouteEngagementProcessTest {
     @Test void taskBindsOneOperationAndMovesExactGuardsThroughPersistedColdRoutes() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept.offset(-16, 0, 0));
         }
@@ -111,7 +111,7 @@ class HiveRouteEngagementProcessTest {
     @Test void loadedSceneConflictIsNotRestartUnknownAndCanResumeOnlyThroughFreshPreparation() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
@@ -132,7 +132,7 @@ class HiveRouteEngagementProcessTest {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().values().stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:hot-scene-conflict");
         List<SubjectId> actorIds = java.util.stream.Stream.concat(operation.participantIds().stream(), engagement.attackerIds().stream()).sorted().toList();
-        SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, operation.id(), operation.cargoId(), intercept,
+        SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, operation.id(), operation.cargoId(), operation.currentPosition(),
                 new SimInstant(3_000L), 0L, Optional.of(engagement.id()), actorIds);
 
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
@@ -187,7 +187,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -210,7 +210,10 @@ class HiveRouteEngagementProcessTest {
         SceneEngagementCandidate candidate = state.coldEngagementSceneCandidates().getFirst();
         assertEquals(engagementId, candidate.engagementId());
         assertEquals(operation.id(), candidate.operationId());
-        assertEquals(intercept, candidate.handoffPosition());
+        assertEquals(operation.currentPosition(), candidate.handoffPosition(),
+                "a carrier sighting must not overwrite the adjacent participant hand-off");
+        assertEquals(intercept, candidate.cargoPosition(),
+                "the engagement must retain the exact cargo anchor the Scout observed");
         assertEquals(5, candidate.actorIds().size());
         SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
         var world = state.bootstrap().worldId();
@@ -298,7 +301,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatWaitsRatherThanResolvingOverAnActiveRouteScene() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -331,7 +334,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatDefersAndReducerRejectsAnActorRetainedByActiveOrRecoveryAmbientLease() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.route().get(operation.routeIndex());
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -412,8 +415,9 @@ class HiveRouteEngagementProcessTest {
 
     private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), operation.currentPosition());
-        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), operation.currentPosition(), observedAt);
+        BlockPosition carrierPosition = operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+        state = state.withActorLocation(scout.id(), carrierPosition);
+        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }
 }

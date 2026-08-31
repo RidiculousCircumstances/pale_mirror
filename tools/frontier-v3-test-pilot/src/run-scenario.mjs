@@ -5,7 +5,7 @@ import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { correlation, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, saveManifest, selectMutterXauthority, traceRecord } from './scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, saveManifest, selectMutterXauthority, traceRecord } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [manifest.json]');
@@ -24,6 +24,7 @@ await mkdir(dirname(tracePath), { recursive: true });
 await mkdir(captureControlDirectory, { recursive: true });
 let traceWrites = Promise.resolve();
 let activeAction = null;
+let activeActionStep = null;
 function trace(kind, data = {}) {
   traceWrites = traceWrites.then(() => appendFile(tracePath, `${JSON.stringify(traceRecord({ runId, kind, ...data }))}\n`, 'utf8'));
   return traceWrites;
@@ -63,7 +64,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     if (pilotDiagnostic != null) {
       try {
         if (pilotDiagnostic.error) throw new Error(pilotDiagnostic.error);
-        const diagnostic = { at: new Date().toISOString(), value: pilotDiagnostic.value, line: pilotDiagnostic.line };
+        const diagnostic = { at: new Date().toISOString(), actionStep: activeActionStep, value: pilotDiagnostic.value, line: pilotDiagnostic.line };
         diagnostics.push(diagnostic); trace('diagnostic_received', { correlation: activeAction, diagnostic: diagnostic.value });
       }
       catch { failure ??= `malformed diagnostic line: ${line}`; }
@@ -73,7 +74,8 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     const completed = line.match(/PMV3_PILOT complete action step=(\d+) type=/);
     const started = line.match(/PMV3_PILOT step=(\d+) phase=(setup|action) type=([^\s]+)/);
     if (started) {
-      pilotStartedAt ??= Date.now(); activeAction = started[2] === 'action' ? correlation(runId, Number(started[1])) : null;
+      pilotStartedAt ??= Date.now(); activeActionStep = started[2] === 'action' ? Number(started[1]) : null;
+      activeAction = activeActionStep === null ? null : correlation(runId, activeActionStep);
       trace('action_started', { correlation: activeAction, phase: started[2], step: Number(started[1]), actionType: started[3] });
     }
     if (completed) trace('action_completed', { correlation: correlation(runId, Number(completed[1])), step: Number(completed[1]) });
@@ -101,7 +103,7 @@ try {
   await Promise.all(frameTasks);
   for (const [index, action] of (scenario.actions ?? []).entries()) manifest.actions.push({ correlation: correlation(runId, index + 1), action });
   for (const assertion of scenario.assertions ?? []) {
-    const observed = diagnostics.findLast((entry) => entry.value.kind === assertion.view && entry.value.id === assertion.id);
+    const observed = diagnosticForAssertion(diagnostics, assertion);
     if (!observed || !matches(observed.value, assertion.expect)) throw new Error(`diagnostic assertion failed: ${assertion.view} ${assertion.id}`);
     manifest.diagnostics.push({ assertion, observed });
   }

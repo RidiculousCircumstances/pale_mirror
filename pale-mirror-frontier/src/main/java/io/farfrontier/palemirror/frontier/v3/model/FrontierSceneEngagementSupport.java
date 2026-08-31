@@ -18,11 +18,13 @@ final class FrontierSceneEngagementSupport {
 
     private static SceneEngagementCandidate candidate(FrontierWorldState state, RouteEngagement engagement) {
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE
-                || !operation.currentPosition().equals(engagement.intercept())) {
+        OperationTravel travel = operation == null ? null : operation.activeTravel().orElse(null);
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || travel == null
+                || !travel.cargoAnchor().equals(engagement.intercept())) {
             throw new IllegalStateException("COLD engagement has no current interception operation");
         }
         List<SubjectId> actors = new ArrayList<>(operation.participantIds()); actors.addAll(engagement.attackerIds()); actors.sort(Comparator.naturalOrder());
-        return new SceneEngagementCandidate(engagement.id(), operation.id(), operation.cargoId(), engagement.intercept(), actors);
+        return new SceneEngagementCandidate(engagement.id(), operation.id(), operation.cargoId(), operation.currentPosition(),
+                travel.cargoAnchor(), actors);
     }
 }

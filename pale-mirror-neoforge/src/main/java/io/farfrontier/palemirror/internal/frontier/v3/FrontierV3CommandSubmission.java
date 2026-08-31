@@ -13,7 +13,7 @@ final class FrontierV3CommandSubmission {
     private FrontierV3CommandSubmission() { }
     static CommandResult submit(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
+        CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));

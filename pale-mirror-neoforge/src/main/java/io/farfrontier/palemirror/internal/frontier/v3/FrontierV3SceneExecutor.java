@@ -153,9 +153,7 @@ final class FrontierV3SceneExecutor {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + candidate.engagementId().value().substring("engagement:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
-        RouteOperation operation = state.operations().get(candidate.operationId());
-        BlockPosition cargoPosition = operation != null ? operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(candidate.handoffPosition()) : candidate.handoffPosition();
-        return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), cargoPosition, checkpoint.instant(), checkpoint.revision().value(),
+        return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), candidate.cargoPosition(), checkpoint.instant(), checkpoint.revision().value(),
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members, positions(state, members));
     }
 
@@ -402,7 +400,9 @@ final class FrontierV3SceneExecutor {
         // volatile pre-effect sample must never be used to release a later unloaded aftermath.
         forgetLastObserved(runtime, lease.id());
         BlockPos origin = target.entity().blockPosition();
-        String key = lease.id().value().replace(':', '-') + "-" + bomber.member().actorId().value().replace(':', '-');
+        long effectEpoch = state.physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION)
+                .filter(value -> value.subjectIds().contains(engagement)).count();
+        String key = "scene-r" + lease.revision() + "-e" + effectEpoch;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-" + key), PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED,
                 bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
         submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));
@@ -425,8 +425,7 @@ final class FrontierV3SceneExecutor {
                     .thenComparing(body -> body.member().actorId())).orElseThrow();
             if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
             forgetLastObserved(runtime, lease.id());
-            String key = lease.id().value().replace(':', '-') + "-" + attacker.member().actorId().value().replace(':', '-')
-                    + "-" + target.member().actorId().value().replace(':', '-') + "-t" + level.getGameTime();
+            String key = "scene-r" + lease.revision() + "-s" + confirmedStrikeCount(state, lease);
             PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-" + key), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
                     lease.operationId(), List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
@@ -756,7 +755,7 @@ final class FrontierV3SceneExecutor {
         // same lease identity.  Bind the command identity to the expected canonical revision,
         // as every other physical executor does, so a later grid checkpoint is not mistaken
         // for a duplicate of the earlier checkpoint.
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
+        CommandId commandId = FrontierV3CommandIds.scene(phase, checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));

@@ -32,7 +32,7 @@ final class FrontierDevelopmentScenarios {
             }
         }
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
-        BlockPosition intercept = operation.currentPosition();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -113,6 +113,34 @@ final class FrontierDevelopmentScenarios {
         List<ScheduledAction> schedules = base.schedules().stream().filter(action -> !(action.kind().equals("frontier.objective.review")
                 && action.subject().equals(state.bootstrap().hive().id()))).toList();
         return new RouteSceneReturnFixture(state, base.instant(), schedules);
+    }
+
+    /**
+     * Disposable end-to-end perception fixture.  The real HOT Scout sighting still creates the
+     * intercept; only the otherwise independent guard/bomber approach is shortened so a pilot
+     * can observe the ensuing naturally loaded engagement before the disposable world expires.
+     * It never pre-creates an objective, task, engagement, lease, knowledge fact or effect.
+     */
+    static RouteSceneReturnFixture hotScoutInterceptFixture(WorldId worldId, long seed) {
+        RouteSceneReturnFixture base = hotScoutSightingFixture(worldId, seed);
+        RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
+        if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout intercept fixture has no active exact cargo route");
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        FrontierWorldState state = base.state();
+        List<Bioform> attackers = java.util.stream.Stream.concat(
+                        state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(bioform -> bioform.role() == BioformRole.BOMBER || bioform.role() == BioformRole.GUARD)
+                .sorted(java.util.Comparator.comparing(Bioform::role).thenComparing(Bioform::id)).toList();
+        Bioform bomber = attackers.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).findFirst()
+                .orElseThrow(() -> new IllegalStateException("hot scout intercept fixture has no bomber"));
+        List<Bioform> guards = attackers.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2).toList();
+        if (guards.size() != 2) throw new IllegalStateException("hot scout intercept fixture has fewer than two guards");
+        // These three exact bodies get distinct nearby starts.  Co-locating every eligible hive
+        // attacker would invoke vanilla entity cramming and turn a causal fixture into deaths.
+        state = state.withActorLocation(bomber.id(), intercept.offset(-1, 0, 0));
+        state = state.withActorLocation(guards.getFirst().id(), intercept.offset(1, 0, 0));
+        state = state.withActorLocation(guards.getLast().id(), intercept.offset(0, 0, -1));
+        return new RouteSceneReturnFixture(state, base.instant(), base.schedules());
     }
 
     /**

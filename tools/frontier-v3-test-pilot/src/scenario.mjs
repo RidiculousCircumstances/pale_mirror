@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, settlement-provision, scene-return, hot-scout-sighting, operation-assembly, health-quarantine, resident-transit, production-input-theft or production-worker-death');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'hot-scout-intercept', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, settlement-provision, scene-return, hot-scout-sighting, hot-scout-intercept, operation-assembly, health-quarantine, resident-transit, production-input-theft or production-worker-death');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
@@ -239,6 +239,16 @@ export function correlation(runId, step) {
 /** A native client receives command replies on later render/network ticks. */
 export function hasDiagnosticResponses(diagnostics, assertions) {
   return assertions.every((assertion) => diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
+}
+
+/**
+ * Selects evidence emitted while the action named by an assertion was executing.
+ * A later read of the same object may legitimately observe a different world state;
+ * it cannot retroactively invalidate the earlier milestone.
+ */
+export function diagnosticForAssertion(diagnostics, assertion) {
+  return diagnostics.findLast((entry) => entry.actionStep === assertion.after
+    && entry.value?.kind === assertion.view && entry.value?.id === assertion.id);
 }
 
 /**

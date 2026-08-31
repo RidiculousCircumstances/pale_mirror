@@ -783,7 +783,7 @@ tasks.named('runFrontierV3PilotServer') {
         def username = frontierV3PilotOperator
         if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
                 || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
-                || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'])
+                || !(frontierV3PilotProfile in ['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'hot-scout-sighting', 'hot-scout-intercept', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'])
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
             throw new GradleException('Frontier v3 pilot world, username, port, view distance, profile or run id is invalid')
         }

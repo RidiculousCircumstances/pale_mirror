@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, diagnosticFromPilotLine, hasDiagnosticResponses, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -79,6 +79,7 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
 test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-sighting' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'hot-scout-intercept' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'operation-assembly' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-provision' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
@@ -166,6 +167,13 @@ test('runner waits for every requested asynchronous diagnostic response', () => 
   const trace = { value: { kind: 'trace', id: 'player:pilot' } };
   assert.equal(hasDiagnosticResponses([site], assertions), false);
   assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
+});
+
+test('an action-bound assertion retains its own diagnostic when a later action reads the same object', () => {
+  const assertion = { after: 4, view: 'operation', id: 'operation:supply-1-2' };
+  const cold = { actionStep: 4, value: { kind: 'operation', id: 'operation:supply-1-2', hiveEngagement: { status: 'COLD_COMBAT' } } };
+  const hot = { actionStep: 6, value: { kind: 'operation', id: 'operation:supply-1-2', hiveEngagement: { status: 'HOT' } } };
+  assert.equal(diagnosticForAssertion([cold, hot], assertion), cold);
 });
 
 test('native pilot diagnostics use the quiet structured marker before legacy chat', () => {

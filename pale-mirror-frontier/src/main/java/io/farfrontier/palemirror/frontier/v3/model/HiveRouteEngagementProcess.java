@@ -102,7 +102,7 @@ final class HiveRouteEngagementProcess {
         if (!engagement.allAttackersAtIntercept() || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
             return abort(engagement);
         }
-        if (!operation.currentPosition().equals(engagement.intercept())) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
+        if (!cargoAtIntercept(operation, engagement)) return List.of(schedule(readiness(engagement, action.dueAt().ticks() + STEP_INTERVAL)));
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
                 schedule(combat(engagement, action.dueAt().ticks() + COMBAT_INTERVAL)));
     }
@@ -215,12 +215,17 @@ final class HiveRouteEngagementProcess {
             new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.combat", 1); }
     private static List<ProposedEvent> beginOrWait(FrontierWorldState state, RouteEngagement engagement, long now) {
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation.currentPosition().equals(engagement.intercept())) {
+        if (cargoAtIntercept(operation, engagement)) {
             return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
                     schedule(combat(engagement, now + COMBAT_INTERVAL)));
         }
         return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.WAITING_FOR_INTERCEPT)),
                 schedule(readiness(engagement, now + STEP_INTERVAL)));
+    }
+    /** The Scout pins the exact carrier it saw; people and cargo may occupy adjacent route cells. */
+    private static boolean cargoAtIntercept(RouteOperation operation, RouteEngagement engagement) {
+        return operation.activeTravel().map(travel -> travel.cargoAnchor().equals(engagement.intercept()))
+                .orElseGet(() -> operation.currentPosition().equals(engagement.intercept()));
     }
     private static List<ProposedEvent> terminal(FrontierWorldState state, RouteEngagement engagement) {
         List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);

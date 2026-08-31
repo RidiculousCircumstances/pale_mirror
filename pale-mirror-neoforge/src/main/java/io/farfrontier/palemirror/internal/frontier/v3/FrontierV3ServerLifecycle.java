@@ -216,6 +216,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("hot-scout-sighting") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentHotScoutSightingConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("hot-scout-intercept") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentHotScoutInterceptConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         if (profile.equals("operation-assembly") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentOperationAssemblyConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
@@ -423,9 +426,7 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) return CargoCarrierInteraction.REJECTED;
         CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
         if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
-        String observer = observerPlayerId.map(java.util.UUID::toString).orElse("physical-effect");
-        CommandId commandId = new CommandId("executor:cargo-carrier-release-" + lease.orElseThrow().id().value().replace(':', '-')
-                + "-observer-" + observer + "-r" + checkpoint.revision().value());
+        CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
                 new CargoCarrierReleased(lease.orElseThrow().id(), lease.orElseThrow().cargoId(), entity.getUUID(), observerPlayerId)))
@@ -522,7 +523,7 @@ public final class FrontierV3ServerLifecycle {
                                                                String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
         if (checkpoint == null) return ExactCustodyObservation.REJECTED;
-        CommandId commandId = new CommandId("executor:" + phase + "-" + id.replace(':', '-') + "-r" + checkpoint.revision().value());
+        CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElse(null);
         return result instanceof CommandResult.Accepted ? ExactCustodyObservation.ACCEPTED : ExactCustodyObservation.REJECTED;

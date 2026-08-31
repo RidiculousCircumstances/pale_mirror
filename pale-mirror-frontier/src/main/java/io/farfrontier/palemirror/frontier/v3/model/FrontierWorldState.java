@@ -312,7 +312,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (operation == null || !operation.cargoId().equals(lease.cargoId())) {
                 throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
             }
-            boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.currentPosition().equals(lease.handoffPosition());
+            boolean enRouteScene = operation.stage() == OperationStage.EN_ROUTE && operation.currentPosition().equals(lease.handoffPosition()) && operation.activeTravel().map(travel -> travel.cargoAnchor().equals(lease.cargoPosition())).orElse(true);
             boolean interruptedScene = operation.stage() == OperationStage.INTERRUPTED
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
             boolean unresolvedRestartScene = operation.stage() == OperationStage.FAILED && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
@@ -331,7 +331,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && engagement != null && engagement.status() == RouteEngagementStatus.RESOLVED
                         && engagement.outcome().filter(outcome -> outcome == RouteEngagementOutcome.ABORTED).isPresent();
                 if (engagement == null || !engagement.operationId().equals(operation.id())
-                        || !lease.handoffPosition().equals(engagement.intercept())
+                        || !lease.cargoPosition().equals(engagement.intercept())
                         || (lease.status() != SceneLeaseStatus.CLOSED && engagement.status() != RouteEngagementStatus.COLD_COMBAT
                         && engagement.status() != RouteEngagementStatus.HOT && engagement.status() != RouteEngagementStatus.UNKNOWN_AFTER_RESTART
                         && engagement.status() != RouteEngagementStatus.CONFLICT

@@ -16,10 +16,11 @@ public final class HivePerceptionProcess {
         HiveOperationKnowledge next = state.strategicPlans().hiveOperationKnowledge();
         List<ProposedEvent> events = new java.util.ArrayList<>();
         for (RouteOperation operation : state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).sorted(Comparator.comparing(RouteOperation::id)).toList()) {
-            Bioform scout = scouts(state).stream().filter(value -> nearby(state.actorLocations().get(value.id()).position(), operation.currentPosition()))
+            BlockPosition carrierPosition = carrierPosition(operation);
+            Bioform scout = scouts(state).stream().filter(value -> nearby(state.actorLocations().get(value.id()).position(), carrierPosition))
                     .min(Comparator.comparing(Bioform::id)).orElse(null);
             if (scout == null) continue;
-            HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), operation.currentPosition(), now);
+            HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, now);
             HiveOperationKnowledge.Sighting previous = next.entries().get(operation.id());
             if (previous != null && previous.scoutId().equals(scout.id()) && previous.position().equals(sighting.position())
                     && previous.observedAt() > now - REFRESH_INTERVAL) continue;
@@ -33,7 +34,7 @@ public final class HivePerceptionProcess {
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), sighting.scoutId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || scout.role() != BioformRole.SCOUT
                 || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
-                || !operation.currentPosition().equals(sighting.position()) || !nearby(state.actorLocations().get(scout.id()).position(), sighting.position())) {
+                || !carrierPosition(operation).equals(sighting.position()) || !nearby(state.actorLocations().get(scout.id()).position(), sighting.position())) {
             throw new IllegalArgumentException("hive sighting lacks a nearby living scout and current caravan");
         }
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -87,9 +88,24 @@ public final class HivePerceptionProcess {
     public record InterceptTask(BlockPosition position, String status) {
         public InterceptTask { Objects.requireNonNull(position, "intercept position"); Objects.requireNonNull(status, "intercept task status"); }
     }
+    /** Read-only operation-local engagement state for diagnostics; no task or lease is exposed for mutation. */
+    public static Optional<InterceptEngagement> interceptEngagement(FrontierWorldState state, SubjectId operationId) {
+        return state.strategicPlans().routeEngagements().values().stream()
+                .filter(engagement -> engagement.operationId().equals(operationId))
+                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
+                .sorted(java.util.Comparator.comparing(RouteEngagement::id))
+                .map(engagement -> new InterceptEngagement(engagement.status().name())).findFirst();
+    }
+    public record InterceptEngagement(String status) {
+        public InterceptEngagement { Objects.requireNonNull(status, "intercept engagement status"); }
+    }
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
             .filter(value -> value.role() == BioformRole.SCOUT).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
             .filter(value -> { AmbientActorLease lease = state.ambientLeases().get(value.id()); return lease == null || lease.status() == AmbientLeaseStatus.CLOSED; }).toList(); }
     static boolean nearby(BlockPosition left, BlockPosition right) { long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z <= SIGHT_RADIUS_SQUARED; }
+    /** The cargo carrier is the caravan's exact target even when its walkers use an adjacent cell. */
+    private static BlockPosition carrierPosition(RouteOperation operation) {
+        return operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+    }
     record Refresh(HiveOperationKnowledge knowledge, List<ProposedEvent> events) { }
 }
