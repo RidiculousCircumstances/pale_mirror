@@ -275,8 +275,13 @@
 ## Working set
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, the v3 docs/plan, archived ledger; test-pilot now has a minimal current-source NeoForge profile, unique seeded disposable worlds, terminal domain waits, settlement-work reasons, read-only fixture preconditions, ordinary chunk visits, camera-semantic frames, graceful/abrupt recovery splitting, bounded PMV3 JSONL/client-log diagnostics, ordinary exact player/container ingress and withdrawal, a quiet pilot-only system-message policy, bounded contextual-card presentation, and scope-based physical V3 board grammar.
 - The exact issue/return, first managed-death loss/drop/pickup and first
-  defender-readiness boundaries are closed at schema 82. Next is role expansion
-  through real patrol/escort, engineering/recovery and medical/evacuation
-  operation/equipment owners; it must preserve one canonical item claim,
-  account for physical results and never compensate a loss by reconstructing a
-  stack or actor inventory.
+  defender-readiness boundaries are closed at schema 82. The accepted human
+  composition exposed one new confirmed architecture defect: current
+  `RoutePatrol` is a one-guard record and `RouteOperation` hard-codes one
+  logistician plus one guard, contrary to a patrol/scout group and separate
+  cargo escort. Next is an embedded shared immutable unit manifest owned only
+  by those route records, with explicit schema-82 understrength-legacy
+  hydration that never invents a replacement person, weapon or inventory.
+  It must then extend through engineering/recovery and medical/evacuation
+  operation/equipment owners while preserving one canonical item claim and
+  accounting for physical results.

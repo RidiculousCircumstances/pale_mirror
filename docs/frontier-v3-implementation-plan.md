@@ -406,8 +406,15 @@ remains present because breadth, balance and product comprehension are not done.
   compile `UNAVAILABLE`, `IMPROVISED`, `DEGRADED` or `READY`. COLD settlement
   combat consumes that same fact, so a lost weapon reduces the same person's
   output and a lost leader degrades surviving members without a replacement.
-  Remaining role expansion must add real operation and equipment owners before
-  it introduces scout, sapper, medic or crew labels.
+  The next role owner correction is `V3-AUD-017`: `RoutePatrol` and
+  `RouteOperation` embed a shared immutable exact-unit manifest instead of a
+  global roster. New patrols are one leader plus one-to-three scouts; a named
+  cargo crew is distinct from its two-to-four exact escorts. Schema-82 routes
+  may retain only an explicit understrength legacy formation until their
+  ordinary terminal outcome, never a hydrated or invented replacement. The
+  subsequent expansion must add real engineering/recovery and medical/
+  evacuation operation/equipment owners before it introduces sapper or medic
+  labels.
 
 ### Verification matrix
 

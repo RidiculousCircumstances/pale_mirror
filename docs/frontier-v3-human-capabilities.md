@@ -234,6 +234,23 @@ unequipped settlement may field none. Unit labels and colours communicate the
 current assignment; they never grant a skill, weapon, medical capability or
 authority by themselves.
 
+### Route-owner representation
+
+For the first route slice, a patrol or cargo operation is itself the durable
+owner of its exact unit.  It embeds one shared immutable manifest with a
+derived stable organization ID, retained leader, ordered exact members and
+explicit duties; there is no second global `HumanUnit` roster and no mutable
+assignment record.  A patrol has one leader and one to three scouts.  A cargo
+operation has named transport crew plus a separately named two-to-four-person
+escort.  Assignment, COLD/HOT formation, labels, equipment custody and
+casualty degradation all derive from that one owner value.
+
+The historical schema-82 one-person patrol and one-guard cargo route are not
+silently repaired during loading: they decode as explicit understrength legacy
+formations, may finish through their existing owner, and cannot recruit or
+manufacture a replacement during recovery.  Only new admissions obey the
+current composition ranges.
+
 ### Implemented foundation
 
 The first exact tactical organization is the defender unit owned by one

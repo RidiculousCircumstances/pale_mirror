@@ -44,6 +44,7 @@ JFR, restart or player-visible gates in the implementation plan.
 | V3-AUD-014 | P1 | Confirmed defect | The due-action queue had a per-tick admission budget but no maximum retained future-work cardinality. A malformed or unexpectedly prolific process could therefore retain unbounded scheduled work despite the bounded-runtime invariant. |
 | V3-AUD-015 | P1 | Confirmed defect | A real r41 restart exposed that the codec recognized a pre-ruleset snapshot's named legacy ruleset only after the lifecycle had already pinned current production rules. The resulting bootstrap mismatch correctly quarantined the world, but made a supported persisted world undeployable. |
 | V3-AUD-016 | P1 | Confirmed defect | After V3-AUD-015 selected r41's legacy bootstrap correctly, the same real snapshot exposed an internally inconsistent schema-79 lineage: its raw strategic ordinal `8` retained a field target and therefore meant harvest in the pre-assault layout, while the current stable decoder read it as route-bypass construction. Quarantine preserved the world but made recovery incomplete. |
+| V3-AUD-017 | P1 | Confirmed defect | `RoutePatrol` persists exactly one `guardId`; `RouteOperation` persists an index-derived pair and `FrontierWorldState` rejects every shape other than one logistician plus one guard. This contradicts the accepted exact-person patrol/scout and separately owned cargo-escort contract. |
 
 ## Remediation status
 
@@ -69,8 +70,41 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-014 | CLOSED | `EngineLimits.maxPendingSchedules` bounds bootstrap, transaction overlays and recovered schedules before canonical engine installation, WAL append or canonical mutation. Over-cap work quarantines visibly without consuming the due action; bootstrap and recovery reject before engine install. The debt ratchet rejects removal of every guard, focused negative/recovery tests pass, and the 12-settlement pressure route remains at 302 pending schedule keys and depth 86 under the production 4,096 safety capacity. |
 | V3-AUD-015 | CLOSED | Recovery now reads only the verified snapshot header before engine construction, selects the exact installed persisted ruleset, then proves world ID/seed and pins that bootstrap. Foreign headers and unavailable selectors remain visibly fail-closed. The critical gate passed with 248/248 GameTests, and the deployed r41 world restarted and replayed on hosted SHA-512 `61e5d3c0…c71c1d0` without quarantine. |
 | V3-AUD-016 | CLOSED | Versioned strategic hydration recognizes the pre-assault r41 ordinal layout only from its unambiguous raw field-target evidence, uses explicit objective/task maps and retains the normal schema-78/79 assault layout otherwise. An old-byte regression and full critical gate pass; the same deployed r41 snapshot and WAL replayed on SHA-512 `61e5d3c0…c71c1d0`, reached `Frontier v3 runtime started`, and remained healthy on port 25565. |
+| V3-AUD-017 | OPEN | Route owners remain the sole durable organization owners: a shared immutable unit manifest will be embedded in `RoutePatrol` and `RouteOperation`, never placed in a second global roster. New patrols require one leader plus one to three scouts; new cargo operations require one named transport crew member plus two to four escorts. Schema-82 hydration must retain an already-running historical one-guard patrol or one-guard escort as an explicitly understrength legacy manifest until it reaches its ordinary terminal outcome; it may never invent a person or guard during recovery. New admission, assignment projection, COLD positions, exact custody, restart and conflict tests must prove the new shape. |
 
 ## Findings and required corrections
+
+### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
+
+The accepted human-capability contract distinguishes exact crew members from
+their current duty and requires a patrol/scout group of two to four residents
+and a separately retained cargo escort.  The current route models predate that
+contract: patrols keep one `guardId`, while route operations infer the first
+participant as a hauler and every later participant as escort, then hard-reject
+anything except two people.  That prevents a real patrol pair, makes train crew
+and escort inseparable, and leaves no durable leader/member composition to
+degrade or recover.
+
+Correction: keep `RoutePatrol` and `RouteOperation` as the only owners; embed
+one shared immutable exact-unit manifest in each record.  The manifest has a
+stable derived ID, exact ordered member IDs, one retained leader and explicit
+member duties.  It is a value of its route owner, not a global unit registry or
+an additional assignment ledger.  New patrol admission selects a security-capable
+leader and one to three exact scouts.  New cargo admission names transport crew
+separately and selects two to four exact escorts.  Assignment, actor positions,
+combat/readiness and HOT materialization must derive from this same manifest.
+
+Schema-82 is historical state.  A decoder may represent its one-person patrol
+or one-guard escort only as an explicit understrength legacy manifest until the
+already-running owner completes, fails or is interrupted.  Hydration may not
+choose, create or equip a replacement resident.  No new process may create an
+understrength manifest.
+
+Exit evidence: new admission rejects a missing or conflicting exact member;
+assignment compilation proves one owner per person and transport crew remains
+distinct from escorts; normal traversal plus death/loss and snapshot/WAL
+recovery retain the same surviving IDs and item custody; a native HOT scenario
+shows the same named members before and after an ordinary unload/reload.
 
 ### V3-AUD-001 — scene behavior is not owned by one registry
 
