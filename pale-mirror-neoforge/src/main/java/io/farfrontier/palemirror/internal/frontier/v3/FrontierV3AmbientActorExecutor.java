@@ -19,7 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;

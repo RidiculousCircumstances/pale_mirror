@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierObjectBoard;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;

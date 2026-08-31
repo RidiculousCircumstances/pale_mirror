@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /** Bounded invariants for inactive construction work; no project is a route until cutover. */
-final class RouteConstructionStateSupport {
-    static final int MAX_CONSTRUCTIONS = 12;
+public final class RouteConstructionStateSupport {
+    public static final int MAX_CONSTRUCTIONS = 12;
     private RouteConstructionStateSupport() { }
 
     static void validate(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> constructions) {

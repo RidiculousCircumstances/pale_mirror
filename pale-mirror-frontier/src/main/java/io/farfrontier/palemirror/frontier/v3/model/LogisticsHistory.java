@@ -8,12 +8,12 @@ import java.util.Objects;
 import java.util.Comparator;
 
 /** Immutable bounded terminal-logistics receipt owner. */
-final class LogisticsHistory {
+public final class LogisticsHistory {
     static final int MAX_RECEIPTS = 256;
     private final Map<SubjectId, TerminalLogisticsReceipt> receipts;
     private final long deliveredCount, failedCount, interruptedCount;
 
-    LogisticsHistory(Map<SubjectId, TerminalLogisticsReceipt> receipts, long deliveredCount, long failedCount, long interruptedCount) {
+    public LogisticsHistory(Map<SubjectId, TerminalLogisticsReceipt> receipts, long deliveredCount, long failedCount, long interruptedCount) {
         this.receipts = Map.copyOf(new LinkedHashMap<>(Objects.requireNonNull(receipts, "receipts")));
         if (this.receipts.size() > MAX_RECEIPTS) throw new IllegalArgumentException("terminal logistics receipt retention limit exceeded");
         if (deliveredCount < 0L || failedCount < 0L || interruptedCount < 0L) throw new IllegalArgumentException("terminal logistics aggregate count must be non-negative");
@@ -21,11 +21,11 @@ final class LogisticsHistory {
         this.receipts.forEach((id, receipt) -> { if (!id.equals(receipt.operationId())) throw new IllegalArgumentException("receipt key must be its operation identity"); });
     }
 
-    static LogisticsHistory empty() { return new LogisticsHistory(Map.of(), 0L, 0L, 0L); }
-    Map<SubjectId, TerminalLogisticsReceipt> receipts() { return receipts; }
-    long deliveredCount() { return deliveredCount; }
-    long failedCount() { return failedCount; }
-    long interruptedCount() { return interruptedCount; }
+    public static LogisticsHistory empty() { return new LogisticsHistory(Map.of(), 0L, 0L, 0L); }
+    public Map<SubjectId, TerminalLogisticsReceipt> receipts() { return receipts; }
+    public long deliveredCount() { return deliveredCount; }
+    public long failedCount() { return failedCount; }
+    public long interruptedCount() { return interruptedCount; }
 
     LogisticsHistory record(TerminalLogisticsReceipt receipt) {
         Objects.requireNonNull(receipt, "terminal receipt");

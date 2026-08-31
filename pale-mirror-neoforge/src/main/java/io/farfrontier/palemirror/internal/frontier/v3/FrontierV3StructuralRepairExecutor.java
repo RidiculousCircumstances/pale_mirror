@@ -17,7 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;

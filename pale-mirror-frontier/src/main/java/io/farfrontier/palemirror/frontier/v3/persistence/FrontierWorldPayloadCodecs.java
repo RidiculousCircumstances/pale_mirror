@@ -1,5 +1,5 @@
-package io.farfrontier.palemirror.frontier.v3.model;
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+package io.farfrontier.palemirror.frontier.v3.persistence;
+import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload; import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
@@ -528,8 +528,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.hive_nutrient_transfer_endpoint_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientTransfer(output, ((HiveNutrientTransferEndpointPrepared) payload).transfer())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveNutrientTransferEndpointPrepared(readHiveNutrientTransfer(input))); }
-    } @FunctionalInterface interface ProductionEncoder { void write(DataOutputStream output) throws IOException; } @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
-    record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { } static byte[] encodeProduction(ProductionEncoder encoder) {
+    } @FunctionalInterface public interface ProductionEncoder { void write(DataOutputStream output) throws IOException; } @FunctionalInterface interface ProductionDecoder { FrontierPayload read(DataInputStream input) throws IOException; }
+    record SubjectIdHolder(io.farfrontier.palemirror.frontier.v3.api.SubjectId value) { } public static byte[] encodeProduction(ProductionEncoder encoder) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) { encoder.write(output); }
@@ -823,9 +823,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
         };
-    } static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
+    } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
-    static void writeString(DataOutputStream output, String value) throws IOException {
+    public static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long"); output.writeShort(encoded.length); output.write(encoded);
     } static String readString(DataInputStream input) throws IOException {
         int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");

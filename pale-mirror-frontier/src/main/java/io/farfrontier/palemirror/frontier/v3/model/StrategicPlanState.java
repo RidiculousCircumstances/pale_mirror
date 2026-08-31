@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Canonical bounded owner of retained utility decisions and their durable task graphs. */
-final class StrategicPlanState {
+public final class StrategicPlanState {
     static final int MAX_OBJECTIVES = 128;
     static final int MAX_TASKS = 512;
     static final int MAX_ROUTE_PATROLS = 128;
@@ -28,40 +28,40 @@ final class StrategicPlanState {
     private final HiveSettlementKnowledge hiveSettlementKnowledge;
     private final HiveDoctrineState hiveDoctrine;
 
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements) {
         this(objectives, tasks, routePatrols, routeEngagements, SettlementInfectionKnowledge.empty());
     }
 
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, HiveOperationKnowledge.empty(), HiveTerritoryKnowledge.empty(),
                 HiveSettlementKnowledge.empty(), HiveDoctrineState.initial());
     }
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, HiveTerritoryKnowledge.empty(),
                 HiveSettlementKnowledge.empty(), HiveDoctrineState.initial());
     }
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
                 HiveSettlementKnowledge.empty(), HiveDoctrineState.initial(), Map.of());
     }
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveDoctrineState hiveDoctrine) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
                 HiveSettlementKnowledge.empty(), hiveDoctrine, Map.of());
     }
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveSettlementKnowledge hiveSettlementKnowledge, HiveDoctrineState hiveDoctrine) {
         this(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge,
                 hiveSettlementKnowledge, hiveDoctrine, Map.of());
     }
-    StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
+    public StrategicPlanState(Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, StrategicTask> tasks, Map<SubjectId, RoutePatrol> routePatrols,
                        Map<SubjectId, RouteEngagement> routeEngagements, SettlementInfectionKnowledge infectionKnowledge, HiveOperationKnowledge hiveOperationKnowledge,
                        HiveTerritoryKnowledge hiveTerritoryKnowledge, HiveSettlementKnowledge hiveSettlementKnowledge, HiveDoctrineState hiveDoctrine,
                        Map<SubjectId, SettlementAssault> settlementAssaults) {
@@ -191,18 +191,18 @@ final class StrategicPlanState {
         tasks.keySet().forEach(id -> requireAcyclic(id, new java.util.HashSet<>(), new java.util.HashSet<>()));
     }
 
-    static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of(), Map.of()); }
+    public static StrategicPlanState empty() { return new StrategicPlanState(Map.of(), Map.of(), Map.of(), Map.of()); }
 
-    Map<SubjectId, StrategicObjective> objectives() { return objectives; }
-    Map<SubjectId, StrategicTask> tasks() { return tasks; }
-    Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
-    Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
-    Map<SubjectId, SettlementAssault> settlementAssaults() { return settlementAssaults; }
-    SettlementInfectionKnowledge infectionKnowledge() { return infectionKnowledge; }
-    HiveOperationKnowledge hiveOperationKnowledge() { return hiveOperationKnowledge; }
-    HiveTerritoryKnowledge hiveTerritoryKnowledge() { return hiveTerritoryKnowledge; }
-    HiveSettlementKnowledge hiveSettlementKnowledge() { return hiveSettlementKnowledge; }
-    HiveDoctrineState hiveDoctrine() { return hiveDoctrine; }
+    public Map<SubjectId, StrategicObjective> objectives() { return objectives; }
+    public Map<SubjectId, StrategicTask> tasks() { return tasks; }
+    public Map<SubjectId, RoutePatrol> routePatrols() { return routePatrols; }
+    public Map<SubjectId, RouteEngagement> routeEngagements() { return routeEngagements; }
+    public Map<SubjectId, SettlementAssault> settlementAssaults() { return settlementAssaults; }
+    public SettlementInfectionKnowledge infectionKnowledge() { return infectionKnowledge; }
+    public HiveOperationKnowledge hiveOperationKnowledge() { return hiveOperationKnowledge; }
+    public HiveTerritoryKnowledge hiveTerritoryKnowledge() { return hiveTerritoryKnowledge; }
+    public HiveSettlementKnowledge hiveSettlementKnowledge() { return hiveSettlementKnowledge; }
+    public HiveDoctrineState hiveDoctrine() { return hiveDoctrine; }
 
     StrategicPlanState withInfectionKnowledge(SettlementInfectionKnowledge next) {
         return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);

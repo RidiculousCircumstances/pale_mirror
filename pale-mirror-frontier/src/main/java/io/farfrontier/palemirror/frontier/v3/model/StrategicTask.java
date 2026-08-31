@@ -7,11 +7,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** One exact durable task with explicit requirements and predecessor identities. */
-record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
+public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                      Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget, Optional<SubjectId> resourceSiteTarget,
                      List<StrategicTaskRequirement> requirements,
                      List<SubjectId> dependencies, StrategicTaskStatus status, Optional<BlockPosition> operationObservationPosition) {
-    StrategicTask {
+    public StrategicTask {
         Objects.requireNonNull(id, "task id"); Objects.requireNonNull(objectiveId, "task objective");
         Objects.requireNonNull(ownerId, "task owner"); Objects.requireNonNull(kind, "task kind");
         Objects.requireNonNull(infectionTarget, "task infection target"); Objects.requireNonNull(operationTarget, "task operation target");

@@ -7,9 +7,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** One exact guard traversal. It observes a physical route; it never edits it. */
-record RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId guardId, List<BlockPosition> route,
+public record RoutePatrol(SubjectId taskId, SubjectId settlementId, SubjectId guardId, List<BlockPosition> route,
                    int routeIndex, RoutePatrolStatus status, Optional<BlockPosition> obstruction) {
-    RoutePatrol {
+    public RoutePatrol {
         Objects.requireNonNull(taskId, "patrol task"); Objects.requireNonNull(settlementId, "patrol settlement");
         Objects.requireNonNull(guardId, "patrol guard"); route = List.copyOf(route); Objects.requireNonNull(status, "patrol status");
         Objects.requireNonNull(obstruction, "patrol obstruction");

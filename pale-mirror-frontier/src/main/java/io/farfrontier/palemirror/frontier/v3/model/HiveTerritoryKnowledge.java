@@ -13,12 +13,12 @@ import java.util.Objects;
  * separate from the canonical infection field: a strategic decision may reason from this map,
  * but may not scan the whole world field to discover a remote frontier.
  */
-final class HiveTerritoryKnowledge {
+public final class HiveTerritoryKnowledge {
     static final int MAX_BELIEFS = 256;
     static final long MAX_AGE = 2_400L;
     private final Map<InfectionCell, Belief> beliefs;
 
-    HiveTerritoryKnowledge(Map<InfectionCell, Belief> beliefs) {
+    public HiveTerritoryKnowledge(Map<InfectionCell, Belief> beliefs) {
         Map<InfectionCell, Belief> copy = new LinkedHashMap<>();
         for (Map.Entry<InfectionCell, Belief> entry : Objects.requireNonNull(beliefs, "hive territory beliefs").entrySet()) {
             if (!entry.getKey().equals(entry.getValue().cell())) throw new IllegalArgumentException("hive territory key must match cell");
@@ -28,8 +28,8 @@ final class HiveTerritoryKnowledge {
         this.beliefs = Map.copyOf(copy);
     }
 
-    static HiveTerritoryKnowledge empty() { return new HiveTerritoryKnowledge(Map.of()); }
-    Map<InfectionCell, Belief> entries() { return beliefs; }
+    public static HiveTerritoryKnowledge empty() { return new HiveTerritoryKnowledge(Map.of()); }
+    public Map<InfectionCell, Belief> entries() { return beliefs; }
 
     HiveTerritoryKnowledge observe(Belief belief) {
         Map<InfectionCell, Belief> next = new LinkedHashMap<>(beliefs);
@@ -59,8 +59,8 @@ final class HiveTerritoryKnowledge {
     @Override public boolean equals(Object other) { return other instanceof HiveTerritoryKnowledge value && beliefs.equals(value.beliefs); }
     @Override public int hashCode() { return beliefs.hashCode(); }
 
-    record Belief(InfectionCell cell, FixedRatio intensity, SubjectId observerId, BlockPosition sensorPosition, long observedAt) {
-        Belief {
+    public record Belief(InfectionCell cell, FixedRatio intensity, SubjectId observerId, BlockPosition sensorPosition, long observedAt) {
+        public Belief {
             Objects.requireNonNull(cell, "hive territory cell"); Objects.requireNonNull(intensity, "hive territory intensity");
             Objects.requireNonNull(observerId, "hive territory observer"); Objects.requireNonNull(sensorPosition, "hive territory sensor position");
             if (intensity.value().raw() <= 0L) throw new IllegalArgumentException("hive territory belief must retain nonzero infection");

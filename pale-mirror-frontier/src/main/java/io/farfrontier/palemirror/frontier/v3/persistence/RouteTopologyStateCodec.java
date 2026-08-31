@@ -1,4 +1,6 @@
-package io.farfrontier.palemirror.frontier.v3.model;
+package io.farfrontier.palemirror.frontier.v3.persistence;
+
+import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
@@ -10,9 +12,9 @@ import java.util.List;
 import java.util.Map;
 
 /** Bounded snapshot encoding for canonical route replacements. */
-final class RouteTopologyStateCodec {
+public final class RouteTopologyStateCodec {
     private RouteTopologyStateCodec() { }
-    static void write(DataOutputStream output, RouteTopology topology) throws IOException {
+    public static void write(DataOutputStream output, RouteTopology topology) throws IOException {
         List<Map.Entry<SubjectId, List<BlockPosition>>> routes = topology.replacementSupplyRoutes().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
         output.writeByte(routes.size());
         for (Map.Entry<SubjectId, List<BlockPosition>> route : routes) {
@@ -20,7 +22,7 @@ final class RouteTopologyStateCodec {
             for (BlockPosition point : route.getValue()) FrontierWorldStateCodec.writePosition(output, point);
         }
     }
-    static RouteTopology read(DataInputStream input, FrontierBootstrap bootstrap) throws IOException {
+    public static RouteTopology read(DataInputStream input, FrontierBootstrap bootstrap) throws IOException {
         Map<SubjectId, List<BlockPosition>> routes = new LinkedHashMap<>(); int count = input.readUnsignedByte();
         if (count > RouteTopology.MAX_REPLACEMENTS) throw new IllegalArgumentException("route replacement count is out of bounds");
         for (int index = 0; index < count; index++) {

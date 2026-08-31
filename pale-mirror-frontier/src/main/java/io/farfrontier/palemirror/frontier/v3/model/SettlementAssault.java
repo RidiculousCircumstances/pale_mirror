@@ -14,13 +14,13 @@ import java.util.Optional;
  * inferred operation target.  The retained sighting is the sole strategic discovery authority;
  * defenders are exact resident identities captured at admission, not an aggregate population.</p>
  */
-record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
+public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
                          List<SettlementAssaultAttacker> attackers, List<SubjectId> defenderIds,
                          SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
     static final int MAX_ATTACKERS = 16;
     static final int MAX_DEFENDERS = 24;
 
-    SettlementAssault {
+    public SettlementAssault {
         Objects.requireNonNull(id, "assault id");
         Objects.requireNonNull(taskId, "assault task");
         Objects.requireNonNull(hiveId, "assault hive");

@@ -12,9 +12,9 @@ import java.util.Objects;
  * only accepted replacement paths, never a scan or adoption of player-built blocks.
  */
 public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementSupplyRoutes) {
-    static final int MAX_REPLACEMENTS = 12;
-    static final int MIN_WAYPOINTS = 3;
-    static final int MAX_WAYPOINTS = 127;
+    public static final int MAX_REPLACEMENTS = 12;
+    public static final int MIN_WAYPOINTS = 3;
+    public static final int MAX_WAYPOINTS = 127;
     public RouteTopology {
         Objects.requireNonNull(replacementSupplyRoutes, "replacement supply routes");
         if (replacementSupplyRoutes.size() > MAX_REPLACEMENTS) throw new IllegalArgumentException("route replacement limit exceeded");

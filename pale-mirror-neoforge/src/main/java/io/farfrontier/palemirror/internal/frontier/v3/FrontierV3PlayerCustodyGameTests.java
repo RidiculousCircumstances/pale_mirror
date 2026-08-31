@@ -9,7 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;

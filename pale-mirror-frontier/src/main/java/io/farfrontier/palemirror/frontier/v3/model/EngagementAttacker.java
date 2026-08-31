@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Objects;
 
 /** One exact bioform's persisted COLD approach route into a route engagement. */
-record EngagementAttacker(SubjectId actorId, List<BlockPosition> route, int routeIndex) {
-    EngagementAttacker {
+public record EngagementAttacker(SubjectId actorId, List<BlockPosition> route, int routeIndex) {
+    public EngagementAttacker {
         Objects.requireNonNull(actorId, "engagement attacker"); route = List.copyOf(route);
         if (route.isEmpty() || route.size() > 128 || routeIndex < 0 || routeIndex >= route.size()) {
             throw new IllegalArgumentException("engagement attacker route cursor is invalid");

@@ -21,12 +21,12 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldCommandPlanner;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldEventReducer;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldPayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjectionCompiler;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateTransitionValidator;
 import java.util.List;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */

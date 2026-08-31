@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 

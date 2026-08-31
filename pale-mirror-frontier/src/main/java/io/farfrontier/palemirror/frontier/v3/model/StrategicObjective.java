@@ -6,10 +6,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** A deterministic strategic decision, retained until its durable task graph reaches a terminal state. */
-record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind,
+public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind,
                           Optional<InfectionCell> infectionTarget, Optional<SubjectId> resourceSiteTarget,
                           int decisionOrdinal, StrategicObjectiveStatus status) {
-    StrategicObjective {
+    public StrategicObjective {
         Objects.requireNonNull(id, "objective id"); Objects.requireNonNull(ownerId, "objective owner");
         Objects.requireNonNull(kind, "objective kind"); Objects.requireNonNull(infectionTarget, "infection target");
         Objects.requireNonNull(resourceSiteTarget, "objective resource-site target");

@@ -37,7 +37,7 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
 
     public EconomicLedger(Map<SubjectId, EconomicAccount> accounts) { this(accounts, Map.of()); }
 
-    static EconomicLedger bootstrap(FrontierBootstrap bootstrap) {
+    public static EconomicLedger bootstrap(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         Map<SubjectId, EconomicAccount> accounts = new LinkedHashMap<>();
         for (Settlement settlement : bootstrap.settlements()) {

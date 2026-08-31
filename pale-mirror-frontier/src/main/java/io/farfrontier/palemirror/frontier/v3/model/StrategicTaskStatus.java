@@ -1,6 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-enum StrategicTaskStatus {
+public enum StrategicTaskStatus {
     PENDING,
     ACTIVE,
     BLOCKED,

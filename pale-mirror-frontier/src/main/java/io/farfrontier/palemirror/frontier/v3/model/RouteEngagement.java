@@ -13,10 +13,10 @@ import java.util.Optional;
  * does not contain hit points, drops or block outcomes: those remain actor state, custody and
  * physical observations respectively.</p>
  */
-record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operationId, SubjectId hiveId,
+public record RouteEngagement(SubjectId id, SubjectId taskId, SubjectId operationId, SubjectId hiveId,
                        List<EngagementAttacker> attackers, BlockPosition intercept, RouteEngagementStatus status,
                        int nextStrikeEpoch, Optional<RouteEngagementOutcome> outcome) {
-    RouteEngagement {
+    public RouteEngagement {
         Objects.requireNonNull(id, "engagement id"); Objects.requireNonNull(taskId, "engagement task");
         Objects.requireNonNull(operationId, "engagement operation"); Objects.requireNonNull(hiveId, "engagement hive");
         attackers = List.copyOf(attackers); Objects.requireNonNull(intercept, "engagement intercept");

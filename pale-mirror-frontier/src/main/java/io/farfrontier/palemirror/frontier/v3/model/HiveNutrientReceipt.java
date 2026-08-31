@@ -17,7 +17,7 @@ public record HiveNutrientReceipt(SubjectId transferId, SubjectId hiveId, Subjec
         if (status == HiveNutrientReceiptStatus.CONSUMED != consumedByJobId.isPresent()) throw new IllegalArgumentException("only consumed nutrient receipt names its exact local work");
     }
 
-    HiveNutrientReceipt(SubjectId transferId, SubjectId hiveId, SubjectId cargoId, SubjectId itemId,
+    public HiveNutrientReceipt(SubjectId transferId, SubjectId hiveId, SubjectId cargoId, SubjectId itemId,
                         InventoryCustody.ContainerSlot sourceSlot, InventoryCustody.ContainerSlot targetSlot) {
         this(transferId, hiveId, cargoId, itemId, sourceSlot, targetSlot, HiveNutrientReceiptStatus.STORED, Optional.empty());
     }

@@ -3,8 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.Objects;
 
 /** The current exact quarantine policy for one settlement. */
-record SettlementQuarantine(SettlementQuarantineStatus status, long sinceTick) {
-    SettlementQuarantine {
+public record SettlementQuarantine(SettlementQuarantineStatus status, long sinceTick) {
+    public SettlementQuarantine {
         Objects.requireNonNull(status, "settlement quarantine status");
     }
 

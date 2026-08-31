@@ -15,7 +15,7 @@ import java.util.Set;
  * their own aggregates; this book only records demand, offers and the one
  * accepted order that gives a work its commercial cause.
  */
-final class MarketOrderBook {
+public final class MarketOrderBook {
     static final int MAX_DEMANDS = 1_024;
     static final int MAX_QUOTES = 2_048;
     static final int MAX_WORK_ORDERS = 1_024;
@@ -24,7 +24,7 @@ final class MarketOrderBook {
     private final Map<SubjectId, CompanyQuote> quotes;
     private final Map<SubjectId, MarketWorkOrder> workOrders;
 
-    MarketOrderBook(Map<SubjectId, MarketDemand> demands, Map<SubjectId, CompanyQuote> quotes,
+    public MarketOrderBook(Map<SubjectId, MarketDemand> demands, Map<SubjectId, CompanyQuote> quotes,
                     Map<SubjectId, MarketWorkOrder> workOrders) {
         this.demands = Map.copyOf(demands); this.quotes = Map.copyOf(quotes); this.workOrders = Map.copyOf(workOrders);
         if (this.demands.size() > MAX_DEMANDS || this.quotes.size() > MAX_QUOTES || this.workOrders.size() > MAX_WORK_ORDERS) {
@@ -54,10 +54,10 @@ final class MarketOrderBook {
                 });
     }
 
-    static MarketOrderBook empty() { return new MarketOrderBook(Map.of(), Map.of(), Map.of()); }
-    Map<SubjectId, MarketDemand> demands() { return demands; }
-    Map<SubjectId, CompanyQuote> quotes() { return quotes; }
-    Map<SubjectId, MarketWorkOrder> workOrders() { return workOrders; }
+    public static MarketOrderBook empty() { return new MarketOrderBook(Map.of(), Map.of(), Map.of()); }
+    public Map<SubjectId, MarketDemand> demands() { return demands; }
+    public Map<SubjectId, CompanyQuote> quotes() { return quotes; }
+    public Map<SubjectId, MarketWorkOrder> workOrders() { return workOrders; }
 
     MarketOrderBook open(MarketDemand demand) {
         Objects.requireNonNull(demand, "market demand");

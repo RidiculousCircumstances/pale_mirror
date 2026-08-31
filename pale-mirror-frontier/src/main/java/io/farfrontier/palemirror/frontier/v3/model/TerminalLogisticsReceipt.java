@@ -10,10 +10,10 @@ import java.util.Objects;
  * the active world indexes.  It deliberately keeps no route, lease, inventory custody or
  * mutable task reference: those must be closed before compaction is legal.
  */
-record TerminalLogisticsReceipt(SubjectId operationId, SubjectId contractId, SubjectId cargoId,
+public record TerminalLogisticsReceipt(SubjectId operationId, SubjectId contractId, SubjectId cargoId,
                                SubjectId settlementId, SubjectId recipientId, List<SubjectId> participants,
                                TerminalLogisticsOutcome outcome, long terminalAtTick) {
-    TerminalLogisticsReceipt {
+    public TerminalLogisticsReceipt {
         Objects.requireNonNull(operationId, "operation id"); Objects.requireNonNull(contractId, "contract id");
         Objects.requireNonNull(cargoId, "cargo id"); Objects.requireNonNull(settlementId, "settlement id");
         Objects.requireNonNull(recipientId, "recipient id"); participants = List.copyOf(participants);
@@ -24,7 +24,7 @@ record TerminalLogisticsReceipt(SubjectId operationId, SubjectId contractId, Sub
         if (terminalAtTick < 0L) throw new IllegalArgumentException("terminal receipt tick must be non-negative");
     }
 
-    enum TerminalLogisticsOutcome {
+    public enum TerminalLogisticsOutcome {
         DELIVERED, FAILED, INTERRUPTED;
 
         public int wireTag() { return FrontierWireTags.tag(this); }

@@ -7,11 +7,11 @@ import java.util.UUID;
 
 /** Exactly one custody location for a stack; it cannot be counted by two inventories. */
 public sealed interface InventoryCustody permits InventoryCustody.ContainerSlot, InventoryCustody.Cargo, InventoryCustody.Player, InventoryCustody.WorldCarrier {
-    record ContainerSlot(SubjectId containerId, int slot) implements InventoryCustody {
+    public record ContainerSlot(SubjectId containerId, int slot) implements InventoryCustody {
         public ContainerSlot { Objects.requireNonNull(containerId, "container id"); if (slot < 0) throw new IllegalArgumentException("slot cannot be negative"); }
     }
-    record Cargo(SubjectId cargoId) implements InventoryCustody { public Cargo { Objects.requireNonNull(cargoId, "cargo id"); } }
-    record Player(UUID playerId) implements InventoryCustody { public Player { Objects.requireNonNull(playerId, "player id"); } }
+    public record Cargo(SubjectId cargoId) implements InventoryCustody { public Cargo { Objects.requireNonNull(cargoId, "cargo id"); } }
+    public record Player(UUID playerId) implements InventoryCustody { public Player { Objects.requireNonNull(playerId, "player id"); } }
     /** A loaded Minecraft carrier with one retained UUID; it is never an untracked item entity. */
-    record WorldCarrier(UUID carrierId) implements InventoryCustody { public WorldCarrier { Objects.requireNonNull(carrierId, "world carrier id"); } }
+    public record WorldCarrier(UUID carrierId) implements InventoryCustody { public WorldCarrier { Objects.requireNonNull(carrierId, "world carrier id"); } }
 }

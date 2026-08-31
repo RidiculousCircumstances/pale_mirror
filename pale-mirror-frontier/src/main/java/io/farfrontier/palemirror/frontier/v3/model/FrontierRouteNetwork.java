@@ -36,7 +36,7 @@ public final class FrontierRouteNetwork {
                 new BlockPosition(-405, destination.y(), destination.z()), destination);
     }
 
-    static void validateSupplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
+    public static void validateSupplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(route, "route");
         Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown route settlement: " + settlementId.value()));

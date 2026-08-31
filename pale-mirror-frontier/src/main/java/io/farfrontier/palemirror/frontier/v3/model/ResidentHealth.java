@@ -3,8 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.Objects;
 
 /** Exact resident disease state and the simulation tick at which that state began. */
-record ResidentHealth(ResidentHealthStatus status, long sinceTick) {
-    ResidentHealth {
+public record ResidentHealth(ResidentHealthStatus status, long sinceTick) {
+    public ResidentHealth {
         Objects.requireNonNull(status, "resident health status");
     }
 

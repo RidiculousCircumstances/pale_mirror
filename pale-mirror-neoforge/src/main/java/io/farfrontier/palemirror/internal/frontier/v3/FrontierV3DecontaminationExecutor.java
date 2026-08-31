@@ -20,7 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.DecontaminationPolicy;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionCell;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionOverlayStage;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;

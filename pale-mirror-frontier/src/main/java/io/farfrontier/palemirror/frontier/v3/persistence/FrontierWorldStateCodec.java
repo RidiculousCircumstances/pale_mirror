@@ -1,5 +1,5 @@
-package io.farfrontier.palemirror.frontier.v3.model;
-import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+package io.farfrontier.palemirror.frontier.v3.persistence;
+import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus; import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;

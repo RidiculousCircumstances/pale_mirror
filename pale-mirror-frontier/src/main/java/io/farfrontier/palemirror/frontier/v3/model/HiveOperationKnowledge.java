@@ -8,11 +8,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Bounded scout-owned sightings; a hive objective cannot inspect a route operation directly. */
-final class HiveOperationKnowledge {
+public final class HiveOperationKnowledge {
     static final int MAX_SIGHTINGS = 64;
     private final Map<SubjectId, Sighting> sightings;
 
-    HiveOperationKnowledge(Map<SubjectId, Sighting> sightings) {
+    public HiveOperationKnowledge(Map<SubjectId, Sighting> sightings) {
         Map<SubjectId, Sighting> copy = new LinkedHashMap<>();
         for (Map.Entry<SubjectId, Sighting> entry : Objects.requireNonNull(sightings, "hive sightings").entrySet()) {
             if (!entry.getKey().equals(entry.getValue().operationId())) throw new IllegalArgumentException("hive sighting key must match operation");
@@ -22,8 +22,8 @@ final class HiveOperationKnowledge {
         this.sightings = Map.copyOf(copy);
     }
 
-    static HiveOperationKnowledge empty() { return new HiveOperationKnowledge(Map.of()); }
-    Map<SubjectId, Sighting> entries() { return sightings; }
+    public static HiveOperationKnowledge empty() { return new HiveOperationKnowledge(Map.of()); }
+    public Map<SubjectId, Sighting> entries() { return sightings; }
     Optional<Sighting> freshest(long now, long maximumAge) {
         return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, maximumAge))
                 .sorted(java.util.Comparator.comparingLong(Sighting::observedAt).reversed().thenComparing(Sighting::operationId)).findFirst();
@@ -45,8 +45,8 @@ final class HiveOperationKnowledge {
     @Override public boolean equals(Object other) { return other instanceof HiveOperationKnowledge value && sightings.equals(value.sightings); }
     @Override public int hashCode() { return sightings.hashCode(); }
 
-    record Sighting(SubjectId operationId, SubjectId scoutId, BlockPosition position, long observedAt) {
-        Sighting {
+    public record Sighting(SubjectId operationId, SubjectId scoutId, BlockPosition position, long observedAt) {
+        public Sighting {
             Objects.requireNonNull(operationId, "sighted operation");
             Objects.requireNonNull(scoutId, "sighting scout");
             Objects.requireNonNull(position, "sighting position");

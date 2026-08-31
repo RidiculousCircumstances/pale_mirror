@@ -40,7 +40,7 @@ public record ProductionJob(
         this(id, settlementId, facilityId, workerId, consumedItemId, new ProductionInputHold.Materialized(consumedItemId), outputItemId, outputItemKind, outputCount);
     }
 
-    ProductionJob withInputHold(ProductionInputHold next) {
+    public ProductionJob withInputHold(ProductionInputHold next) {
         return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount);
     }
 }

@@ -9,11 +9,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Bounded facts about local infection that a settlement has actually observed. */
-final class SettlementInfectionKnowledge {
+public final class SettlementInfectionKnowledge {
     static final int MAX_CELLS_PER_SETTLEMENT = 64;
     private final Map<SubjectId, Map<InfectionCell, KnownInfection>> bySettlement;
 
-    SettlementInfectionKnowledge(Map<SubjectId, Map<InfectionCell, KnownInfection>> bySettlement) {
+    public SettlementInfectionKnowledge(Map<SubjectId, Map<InfectionCell, KnownInfection>> bySettlement) {
         Objects.requireNonNull(bySettlement, "settlement knowledge");
         Map<SubjectId, Map<InfectionCell, KnownInfection>> copy = new LinkedHashMap<>();
         for (Map.Entry<SubjectId, Map<InfectionCell, KnownInfection>> entry : bySettlement.entrySet()) {
@@ -29,9 +29,9 @@ final class SettlementInfectionKnowledge {
         this.bySettlement = Map.copyOf(copy);
     }
 
-    static SettlementInfectionKnowledge empty() { return new SettlementInfectionKnowledge(Map.of()); }
+    public static SettlementInfectionKnowledge empty() { return new SettlementInfectionKnowledge(Map.of()); }
 
-    Map<SubjectId, Map<InfectionCell, KnownInfection>> entries() { return bySettlement; }
+    public Map<SubjectId, Map<InfectionCell, KnownInfection>> entries() { return bySettlement; }
     Map<InfectionCell, KnownInfection> known(SubjectId settlementId) { return bySettlement.getOrDefault(settlementId, Map.of()); }
 
     SettlementInfectionKnowledge observe(SubjectId settlementId, InfectionCell cell, FixedRatio intensity, long observedAt) {
@@ -59,8 +59,8 @@ final class SettlementInfectionKnowledge {
     @Override public boolean equals(Object other) { return other instanceof SettlementInfectionKnowledge value && bySettlement.equals(value.bySettlement); }
     @Override public int hashCode() { return bySettlement.hashCode(); }
 
-    record KnownInfection(InfectionCell cell, FixedRatio intensity, long observedAt) {
-        KnownInfection {
+    public record KnownInfection(InfectionCell cell, FixedRatio intensity, long observedAt) {
+        public KnownInfection {
             Objects.requireNonNull(cell, "known infection cell"); Objects.requireNonNull(intensity, "known infection intensity");
             if (intensity.value().equals(FixedScalar.ZERO) || observedAt < 0L) throw new IllegalArgumentException("known infection must be nonzero and dated");
         }

@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;

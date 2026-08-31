@@ -6,9 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** One accepted quote bound to the producing task and its exact financial reservation. */
-record MarketWorkOrder(SubjectId id, SubjectId demandId, SubjectId quoteId, SubjectId sellerId, SubjectId taskId, SubjectId jobId,
+public record MarketWorkOrder(SubjectId id, SubjectId demandId, SubjectId quoteId, SubjectId sellerId, SubjectId taskId, SubjectId jobId,
                        SubjectId reservationId, FixedScalar acceptedTotalPrice, MarketWorkOrderStatus status) {
-    MarketWorkOrder {
+    public MarketWorkOrder {
         Objects.requireNonNull(id, "market work order id"); Objects.requireNonNull(demandId, "market work order demand");
         Objects.requireNonNull(quoteId, "market work order quote"); Objects.requireNonNull(sellerId, "market work order seller");
         Objects.requireNonNull(taskId, "market work order task"); Objects.requireNonNull(jobId, "market work order job");

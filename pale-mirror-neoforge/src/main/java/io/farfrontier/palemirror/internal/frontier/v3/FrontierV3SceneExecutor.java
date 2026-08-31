@@ -25,7 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;

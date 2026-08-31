@@ -15,12 +15,12 @@ import java.util.Optional;
  * scanning bootstrap geometry.  A sighting names the exact Scout, the exact visible settlement
  * anchor and the instant at which that local fact was observed.</p>
  */
-final class HiveSettlementKnowledge {
+public final class HiveSettlementKnowledge {
     static final int MAX_SIGHTINGS = 32;
     static final long MAX_AGE = 2_400L;
     private final Map<SubjectId, Sighting> sightings;
 
-    HiveSettlementKnowledge(Map<SubjectId, Sighting> sightings) {
+    public HiveSettlementKnowledge(Map<SubjectId, Sighting> sightings) {
         Map<SubjectId, Sighting> copy = new LinkedHashMap<>();
         for (Map.Entry<SubjectId, Sighting> entry : Objects.requireNonNull(sightings, "hive settlement sightings").entrySet()) {
             if (!entry.getKey().equals(entry.getValue().settlementId())) {
@@ -32,8 +32,8 @@ final class HiveSettlementKnowledge {
         this.sightings = Map.copyOf(copy);
     }
 
-    static HiveSettlementKnowledge empty() { return new HiveSettlementKnowledge(Map.of()); }
-    Map<SubjectId, Sighting> entries() { return sightings; }
+    public static HiveSettlementKnowledge empty() { return new HiveSettlementKnowledge(Map.of()); }
+    public Map<SubjectId, Sighting> entries() { return sightings; }
 
     Optional<Sighting> freshest(long now) {
         return sightings.values().stream().filter(value -> value.observedAt() >= Math.subtractExact(now, MAX_AGE))
@@ -67,8 +67,8 @@ final class HiveSettlementKnowledge {
     @Override public boolean equals(Object other) { return other instanceof HiveSettlementKnowledge value && sightings.equals(value.sightings); }
     @Override public int hashCode() { return sightings.hashCode(); }
 
-    record Sighting(SubjectId settlementId, SubjectId scoutId, BlockPosition settlementAnchor, long observedAt) {
-        Sighting {
+    public record Sighting(SubjectId settlementId, SubjectId scoutId, BlockPosition settlementAnchor, long observedAt) {
+        public Sighting {
             Objects.requireNonNull(settlementId, "sighted settlement");
             Objects.requireNonNull(scoutId, "settlement sighting scout");
             Objects.requireNonNull(settlementAnchor, "sighted settlement anchor");

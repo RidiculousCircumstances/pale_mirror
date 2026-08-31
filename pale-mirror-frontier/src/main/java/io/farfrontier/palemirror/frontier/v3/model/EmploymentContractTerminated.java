@@ -6,9 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Durable end of an exact resident's legal work authority. */
-record EmploymentContractTerminated(SubjectId contractId, SubjectId residentId,
+public record EmploymentContractTerminated(SubjectId contractId, SubjectId residentId,
                                     EmploymentTerminationReason reason) implements FrontierPayload {
-    EmploymentContractTerminated {
+    public EmploymentContractTerminated {
         Objects.requireNonNull(contractId, "employment contract");
         Objects.requireNonNull(residentId, "employment resident");
         Objects.requireNonNull(reason, "employment termination reason");

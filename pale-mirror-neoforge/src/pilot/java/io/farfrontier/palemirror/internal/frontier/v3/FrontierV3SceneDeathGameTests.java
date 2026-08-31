@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;

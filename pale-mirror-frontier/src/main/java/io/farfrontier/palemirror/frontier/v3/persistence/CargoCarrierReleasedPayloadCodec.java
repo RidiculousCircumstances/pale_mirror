@@ -1,4 +1,6 @@
-package io.farfrontier.palemirror.frontier.v3.model;
+package io.farfrontier.palemirror.frontier.v3.persistence;
+
+import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -7,7 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 import java.util.UUID;
 
 /** Versioned durable encoding for the atomic HOT-cargo release boundary. */
-final class CargoCarrierReleasedPayloadCodec implements PayloadCodec {
+public final class CargoCarrierReleasedPayloadCodec implements PayloadCodec {
     private static final int OPTIONAL_OBSERVER_FORMAT = 2;
 
     @Override public String type() { return "frontier.cargo_carrier_released"; }

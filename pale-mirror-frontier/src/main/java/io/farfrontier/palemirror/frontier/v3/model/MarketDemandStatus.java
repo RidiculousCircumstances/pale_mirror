@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Lifecycle of one buyer need; terminal status never authorizes a new order for that identity. */
-enum MarketDemandStatus {
+public enum MarketDemandStatus {
     OPEN,
     ORDERED,
     FULFILLED,

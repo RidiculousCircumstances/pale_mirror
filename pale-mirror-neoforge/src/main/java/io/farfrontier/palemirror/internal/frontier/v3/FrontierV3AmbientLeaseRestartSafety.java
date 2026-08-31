@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 
 /** Restart-only recovery boundary for exact ambient actor leases; no Minecraft class is required. */
 final class FrontierV3AmbientLeaseRestartSafety {

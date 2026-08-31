@@ -13,9 +13,9 @@ public enum OperationStage {
      * snapshots and WAL payloads written before return travel used 3/4 for
      * FAILED/INTERRUPTED, and enum declaration order is not a persistence API.
      */
-    int wireCode() { return wireCode; }
+    public int wireCode() { return wireCode; }
 
-    static OperationStage fromWireCode(int wireCode) {
+    public static OperationStage fromWireCode(int wireCode) {
         return switch (wireCode) {
             case 0 -> ASSEMBLING;
             case 1 -> EN_ROUTE;

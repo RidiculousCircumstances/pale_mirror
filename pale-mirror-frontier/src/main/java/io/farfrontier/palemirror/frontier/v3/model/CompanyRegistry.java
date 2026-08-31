@@ -38,7 +38,7 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
         this(companies, employmentContracts, MarketOrderBook.empty());
     }
     public CompanyRegistry(Map<SubjectId, Company> companies) { this(companies, Map.of(), MarketOrderBook.empty()); }
-    static CompanyRegistry empty() { return new CompanyRegistry(Map.of(), Map.of(), MarketOrderBook.empty()); }
+    public static CompanyRegistry empty() { return new CompanyRegistry(Map.of(), Map.of(), MarketOrderBook.empty()); }
 
     CompanyRegistry register(Company company) {
         Objects.requireNonNull(company, "company");

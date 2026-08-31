@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Objects;
 
 /** One exact bioform's bounded COLD approach into a named settlement assault. */
-record SettlementAssaultAttacker(SubjectId actorId, List<BlockPosition> route, int routeIndex) {
-    SettlementAssaultAttacker {
+public record SettlementAssaultAttacker(SubjectId actorId, List<BlockPosition> route, int routeIndex) {
+    public SettlementAssaultAttacker {
         Objects.requireNonNull(actorId, "assault attacker");
         route = List.copyOf(route);
         if (route.isEmpty() || route.size() > 128 || routeIndex < 0 || routeIndex >= route.size()) {

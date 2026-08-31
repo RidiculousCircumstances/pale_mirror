@@ -1,4 +1,6 @@
-package io.farfrontier.palemirror.frontier.v3.model;
+package io.farfrontier.palemirror.frontier.v3.persistence;
+
+import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
@@ -13,10 +15,10 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Snapshot encoding for the bounded strategic objective/task owner. */
-final class StrategicPlanStateCodec {
+public final class StrategicPlanStateCodec {
     private StrategicPlanStateCodec() { }
 
-    static void write(DataOutputStream output, StrategicPlanState plans) throws IOException {
+    public static void write(DataOutputStream output, StrategicPlanState plans) throws IOException {
         writeCount(output, plans.objectives().size());
         for (StrategicObjective objective : plans.objectives().values().stream().sorted(Comparator.comparing(StrategicObjective::id)).toList()) {
             writeSubject(output, objective.id()); writeSubject(output, objective.ownerId()); output.writeByte(objective.kind().wireTag());
@@ -95,7 +97,7 @@ final class StrategicPlanStateCodec {
         output.writeByte(plans.hiveDoctrine().doctrine().wireTag()); output.writeLong(plans.hiveDoctrine().selectedAt());
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true, true, true, true); }
+    public static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true, true, true, true); }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {

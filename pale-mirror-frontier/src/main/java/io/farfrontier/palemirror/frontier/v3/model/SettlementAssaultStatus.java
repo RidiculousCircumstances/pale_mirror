@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Durable COLD/HOT lifecycle of one exact hive assault against a named settlement. */
-enum SettlementAssaultStatus {
+public enum SettlementAssaultStatus {
     APPROACHING,
     WAITING_FOR_BATTLE,
     COLD_COMBAT,
