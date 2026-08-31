@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotDiagnosticActionStep, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -185,6 +185,12 @@ test('native pilot diagnostics use the quiet structured marker before legacy cha
   const legacy = diagnosticFromPilotLine('PMV3_DIAG {"kind":"summary","id":""}');
   assert.deepEqual(legacy.value, { kind: 'summary', id: '' });
   assert.equal(diagnosticFromPilotLine('ordinary log line'), null);
+});
+
+test('pilot diagnostic action identity survives interleaved Gradle output', () => {
+  assert.equal(pilotDiagnosticActionStep({ pilotActionStep: 3 }, 1), 3);
+  assert.equal(pilotDiagnosticActionStep({ pilotActionStep: 0 }, 2), 2);
+  assert.equal(pilotDiagnosticActionStep({}, 2), 2);
 });
 
 test('recovery log boundary follows the unique current server marker, not stale log size', () => {

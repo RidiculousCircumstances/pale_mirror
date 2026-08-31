@@ -56,6 +56,7 @@ public final class FrontierV3TestPilotClient {
     private static long visitChunkReadyTick = -1L;
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
+    private static boolean inspectSent;
     private static boolean boardInteractionAttempted;
     private static boolean entityInteractionAttempted;
     private static int attackedEntityRuntimeId = -1;
@@ -77,6 +78,7 @@ public final class FrontierV3TestPilotClient {
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
+            inspectSent = false;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
@@ -107,6 +109,10 @@ public final class FrontierV3TestPilotClient {
                 JsonObject value = JsonParser.parseString(message.substring(marker + "PMV3_DIAG ".length())).getAsJsonObject();
                 if (value.has("kind") && value.has("id")) {
                     Minecraft minecraft = Minecraft.getInstance(); long tick = minecraft.level == null ? Long.MIN_VALUE : minecraft.level.getGameTime();
+                    // Client/Gradle stdout and stderr are separate pipes. Preserve the action
+                    // identity in the local evidence itself rather than inferring it from
+                    // incidental cross-pipe log ordering in the Node runner.
+                    if (!runningSetup && actionStartedTick >= 0L) value.addProperty("pilotActionStep", index + 1);
                     diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
                     PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
                 }
@@ -153,8 +159,7 @@ public final class FrontierV3TestPilotClient {
                 case "attack_nearest_entity" -> attackNearestEntity(minecraft, action);
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
-                case "inspect" -> { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + action.get("view").getAsString()
-                        + (action.get("id").getAsString().isBlank() ? "" : " " + action.get("id").getAsString())); advance(type); }
+                case "inspect" -> inspect(minecraft, action);
                 case "look" -> {
                     look(minecraft, position(action, action.has("at") ? "at" : "position"));
                     advance(type);
@@ -389,7 +394,7 @@ public final class FrontierV3TestPilotClient {
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
         boolean visible = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maxDistance), entity -> {
             if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
-                    || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
+                    || !entity.isCustomNameVisible() || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
                     || !minecraft.player.hasLineOfSight(entity)) return false;
             Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
@@ -535,6 +540,23 @@ public final class FrontierV3TestPilotClient {
     }
 
     /**
+     * An inspect completes only after its ordinary read-only command returned. Advancing on
+     * packet submission would make that delayed reply look like evidence for the next action.
+     */
+    private static void inspect(Minecraft minecraft, JsonObject action) {
+        String view = action.get("view").getAsString(); String id = action.get("id").getAsString();
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
+        if (observed != null && observed.tick() >= actionStartedTick) { advance("inspect"); return; }
+        if (!inspectSent) {
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id));
+            inspectSent = true;
+        }
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= 30_000L) {
+            throw new IllegalStateException("timed out awaiting read-only diagnostic " + view + " " + id);
+        }
+    }
+
+    /**
      * Waits for one complete physical harvest result: the intent is durably confirmed,
      * the exact wheat stack has canonical depot custody, and the site entered its next
      * growth epoch.  It intentionally never treats READY/HARVESTING as success.
@@ -676,7 +698,7 @@ public final class FrontierV3TestPilotClient {
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; breaking = false; placementAttempted = false;
-        visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false;
+        visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
@@ -742,7 +764,7 @@ public final class FrontierV3TestPilotClient {
         actions = null; setup = null; frames = null; captureBarrier = null;
         runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L;
-        containerOpenAttempted = false; quickMoveAttempted = false;
+        containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear();

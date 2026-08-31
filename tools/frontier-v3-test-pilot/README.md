@@ -14,7 +14,7 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
-`hot-scene-strike`, `settlement-assault`, `hive-growth`, `hive-nutrient-transfer`,
+`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `hive-growth`, `hive-nutrient-transfer`,
 `scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `health-quarantine`
 or `resident-transit`. These fail-closed development fixtures are available
 only to the named disposable pilot runner. `hot-scene-strike` selects a
@@ -28,8 +28,7 @@ facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 exact stack must leave one loaded chest, cross the retained COLD corridor, then
 enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded
 reserved-bed corridor and no HOT body; an ordinary visit must materialize and
-advance that same journey. `settlement-assault` stops at a real Scout-rooted COLD battle: a visit must admit only its exact cargo-free attackers and defenders. The normal `world` profile remains the default. No profile gives the
-pilot a canonical mutation API or force-loads chunks.
+advance that same journey. `settlement-assault` stops at a real Scout-rooted COLD battle: a visit must admit only its exact cargo-free attackers and defenders. `defender-equipment` retains an approaching real assault and one exact depot sword, but no issue intent, active chest or resident body; an ordinary visit must make the normal surface, ambient-actor and equipment executors complete the hand-off. The normal `world` profile remains the default. No profile gives the pilot a canonical mutation API or force-loads chunks.
 
 Run the checked-in isolated terminal-harvest regression on the visible `:0`
 display:

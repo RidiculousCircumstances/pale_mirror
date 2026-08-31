@@ -26,7 +26,7 @@ class HiveSettlementAssaultProcessTest {
         List<ProposedEvent> events = HiveSettlementAssaultProcess.planStart(fixture.state(),
                 HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
 
-        assertEquals(3, events.size());
+        assertEquals(4, events.size());
         FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, events.getFirst().payload()));
         SettlementAssaultStarted started = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload());
@@ -46,7 +46,7 @@ class HiveSettlementAssaultProcessTest {
             return assignment.kind() == HumanAssignmentKind.SETTLEMENT_DEFENCE && assignment.ownerId().equals(java.util.Optional.of(retained.id()));
         }));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
-        ScheduledAction scheduled = assertInstanceOf(ScheduleEffect.Created.class, events.get(2).payload()).action();
+        ScheduledAction scheduled = scheduled(events, "frontier.settlement_assault.progress");
         assertEquals(retained.id(), scheduled.subject());
     }
 
@@ -114,7 +114,7 @@ class HiveSettlementAssaultProcessTest {
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
-        ScheduledAction next = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
         for (int step = 0; step < 8; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
@@ -141,6 +141,17 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void defenderEquipmentReviewCannotAdvanceTheAssaultApproach() {
+        Fixture fixture = fixture(true);
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(), HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
+        SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+
+        assertTrue(HiveSettlementAssaultProcess.planProgress(state, DefenderEquipmentProcess.review(assault, 201L)).isEmpty());
+    }
+
     @Test void battleWaitsForDistinctCompiledFloorsAndConflictsInsteadOfMovingASeparatedDefender() {
         Fixture fixture = fixture(true); FrontierWorldState state = fixture.state();
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
@@ -154,7 +165,7 @@ class HiveSettlementAssaultProcessTest {
         assertTrue(started.attackers().stream().map(attacker -> attacker.route().getLast()).noneMatch(defenderFloors::contains));
         assertTrue(started.attackers().stream().noneMatch(attacker -> attacker.route().getLast().equals(started.settlementAnchor())));
 
-        ScheduledAction next = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
         for (int step = 0; step < 256; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
@@ -178,7 +189,7 @@ class HiveSettlementAssaultProcessTest {
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
-        ScheduledAction next = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
         for (int step = 0; step < 256; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
@@ -237,6 +248,12 @@ class HiveSettlementAssaultProcessTest {
                 StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
                 StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
         return new Fixture(state.withStrategicPlans(plans.addObjective(objective).addTask(task)), hive, task, sighting);
+    }
+
+    private static ScheduledAction scheduled(List<ProposedEvent> events, String kind) {
+        return events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).filter(action -> action.kind().equals(kind))
+                .findFirst().orElseThrow(() -> new AssertionError("missing scheduled action: " + kind));
     }
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }

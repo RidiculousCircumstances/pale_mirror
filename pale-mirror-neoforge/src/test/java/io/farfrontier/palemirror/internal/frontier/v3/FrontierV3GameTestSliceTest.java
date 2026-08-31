@@ -19,6 +19,7 @@ class FrontierV3GameTestSliceTest {
     void economySliceIncludesExactItemAndStoreProofsButNotCombatScenes() {
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-exact-consumption"));
         assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-object-boards"));
+        assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-equipment-issue"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-container-recovery"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-scene-explosion"));
         assertFalse(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-resource-harvest"));

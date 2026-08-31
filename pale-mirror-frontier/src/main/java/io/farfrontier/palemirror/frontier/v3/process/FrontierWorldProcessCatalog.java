@@ -110,6 +110,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.population.birth.complete", (state, action, autonomous) -> PopulationBirthProcess.planCompletion(state, action)),
             Map.entry("frontier.population.migration.review", (state, action, autonomous) -> PopulationMigrationProcess.planReview(state, action)),
             Map.entry("frontier.population.migration.progress", (state, action, autonomous) -> PopulationMigrationProcess.planProgress(state, action)),
+            Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry("frontier.settlement.provision.review", (state, action, autonomous) -> SettlementProvisionProcess.planReview(state, action)),
             Map.entry("frontier.settlement.provision.progress", (state, action, autonomous) -> SettlementProvisionProcess.planProgress(state, action)),
             Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
@@ -250,7 +251,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_assault.progress", "frontier.settlement_assault.combat"); }
     private static Set<String> populationSchedules() { return types(
             "frontier.population.birth.review", "frontier.population.birth.complete", "frontier.population.migration.review",
-            "frontier.population.migration.progress", "frontier.settlement.provision.review", "frontier.settlement.provision.progress"); }
+            "frontier.population.migration.progress", DefenderEquipmentProcess.REVIEW_ACTION, "frontier.settlement.provision.review", "frontier.settlement.provision.progress"); }
     private static Set<String> economySchedules() { return types(
             "frontier.settlement.production.task.start", "frontier.settlement.production.task.complete",
             "frontier.company.foundation.review", "frontier.market.clear"); }

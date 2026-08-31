@@ -230,6 +230,17 @@ codecs retain that identity. This is a custody primitive, not implicit issue
 authority: an owning unit process must still reserve, hand off and recover the
 item through explicit observed transitions.
 
+The first outbound defender issue is implemented. Its deterministic review
+process selects one unarmed exact member and one suitable exact active-depot
+stack; it creates a durable `EQUIPMENT_ISSUE` request binding the assault,
+resident, source slot, item and expected body. The loaded executor performs
+the outbound hand-off only after that request is `RUNNING`, and confirms only
+the exact empty-source/held-item observation. The normal actor projection then
+refreshes the resident to a visible `MILITIA`/`ARMED DEFENDER` nameplate without
+turning presentation into a roster. The first native scenario proves the
+outbound custody and graceful-restart inspection; inverse return and observed
+loss/drop/destruction remain separate work.
+
 The implemented first read model is intentionally narrower than the full
 future roster. It derives `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`, `GUARD` and
 `SQUAD_LEADER` solely from an exact current assignment, retained defender-unit

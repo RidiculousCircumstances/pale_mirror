@@ -66,6 +66,53 @@ final class FrontierDevelopmentScenarios {
      * nor a Minecraft body: a naturally visiting player must admit the typed HOT scene.
      */
     static SettlementAssaultFixture settlementAssaultFixture(WorldId worldId, long seed) {
+        SettlementAssaultFixture started = startedSettlementAssaultFixture(worldId, seed);
+        FrontierWorldState state = started.state();
+        ScheduledAction next = started.schedules().stream().filter(action -> action.kind().equals("frontier.settlement_assault.progress")).findFirst()
+                .orElseThrow(() -> new IllegalStateException("development assault fixture did not schedule approach"));
+        SubjectId hive = state.bootstrap().hive().id();
+        for (int step = 0; step < 256; step++) {
+            List<ProposedEvent> progress = HiveSettlementAssaultProcess.planProgress(state, next);
+            for (ProposedEvent event : progress) {
+                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive, advanced);
+                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, hive, transition);
+            }
+            SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst()
+                    .orElseThrow(() -> new IllegalStateException("development assault fixture lost its assault"));
+            if (assault.status() == SettlementAssaultStatus.COLD_COMBAT) {
+                if (state.coldSettlementAssaultSceneCandidates().size() != 1) {
+                    throw new IllegalStateException("development assault fixture has no exact COLD battlefield");
+                }
+                // The fixture stops at the COLD/HOT boundary. It deliberately does not let a
+                // background COLD combat due action decide the battle before the native pilot
+                // has naturally loaded its scene.
+                return new SettlementAssaultFixture(state, new SimInstant(400L), List.of(), assault.id());
+            }
+            next = progress.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
+                    .filter(action -> action.kind().equals("frontier.settlement_assault.progress")).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("development assault fixture approach stalled"));
+        }
+        throw new IllegalStateException("development assault fixture did not reach COLD combat");
+    }
+
+    /**
+     * Read-only equipment hand-off boundary. It retains an approaching assault and one exact
+     * depot sword, but neither an intent nor an active surface/body: the native visit must make
+     * the ordinary container, resident and issue schedulers produce the hand-off.
+     */
+    static SettlementAssaultFixture defenderEquipmentFixture(WorldId worldId, long seed) {
+        SettlementAssaultFixture started = startedSettlementAssaultFixture(worldId, seed);
+        SettlementAssault assault = started.state().strategicPlans().settlementAssaults().get(started.assaultId());
+        SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
+        int slot = started.state().inventory().firstFreeSlot(depot).orElseThrow();
+        ExactItemStack sword = new ExactItemStack(new SubjectId("item:development-defender-sword"), assault.settlementId(),
+                "minecraft:iron_sword", 1, new InventoryCustody.ContainerSlot(depot, slot));
+        return new SettlementAssaultFixture(started.state().withInventory(started.state().inventory().store(sword)),
+                started.instant(), started.schedules(), started.assaultId());
+    }
+
+    private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst()
@@ -92,31 +139,11 @@ final class FrontierDevelopmentScenarios {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
             if (event.payload() instanceof SettlementAssaultStarted started) state = HiveSettlementAssaultProcess.reduceStarted(state, hive, started);
         }
-        ScheduledAction next = start.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
-                .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
-                .orElseThrow(() -> new IllegalStateException("development assault fixture did not schedule approach"));
-        for (int step = 0; step < 256; step++) {
-            List<ProposedEvent> progress = HiveSettlementAssaultProcess.planProgress(state, next);
-            for (ProposedEvent event : progress) {
-                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive, advanced);
-                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, hive, transition);
-            }
-            SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst()
-                    .orElseThrow(() -> new IllegalStateException("development assault fixture lost its assault"));
-            if (assault.status() == SettlementAssaultStatus.COLD_COMBAT) {
-                if (state.coldSettlementAssaultSceneCandidates().size() != 1) {
-                    throw new IllegalStateException("development assault fixture has no exact COLD battlefield");
-                }
-                // The fixture stops at the COLD/HOT boundary. It deliberately does not let a
-                // background COLD combat due action decide the battle before the native pilot
-                // has naturally loaded its scene.
-                return new SettlementAssaultFixture(state, new SimInstant(400L), List.of(), assault.id());
-            }
-            next = progress.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
-                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
-                    .orElseThrow(() -> new IllegalStateException("development assault fixture approach stalled"));
-        }
-        throw new IllegalStateException("development assault fixture did not reach COLD combat");
+        List<ScheduledAction> schedules = start.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).toList();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("development assault fixture did not retain its assault"));
+        return new SettlementAssaultFixture(state, new SimInstant(200L), schedules, assault.id());
     }
 
     /**

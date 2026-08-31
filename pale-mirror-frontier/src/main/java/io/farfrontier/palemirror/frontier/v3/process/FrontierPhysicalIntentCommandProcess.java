@@ -70,7 +70,7 @@ public final class FrontierPhysicalIntentCommandProcess {
         }
     }
     private static CommandPlan equipmentIssueTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
-        EquipmentIssueStateSupport.validateIntent(state, intent);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
         return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
     }
 

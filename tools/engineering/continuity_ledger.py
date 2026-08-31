@@ -9,7 +9,10 @@ import sys
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LEDGER_PATH = REPOSITORY_ROOT / "CONTINUITY.md"
-MAX_LEDGER_LINES = 240
+# Keep this mechanically aligned with the active-ledger limit in AGENTS.md.
+# The ledger is compact by convention; 1000 lines is the hard cap at which it
+# must be archived rather than silently rejecting current engineering evidence.
+MAX_LEDGER_LINES = 1000
 REQUIRED_HEADINGS = (
     "# Continuity Ledger",
     "## Goal (success criteria)",

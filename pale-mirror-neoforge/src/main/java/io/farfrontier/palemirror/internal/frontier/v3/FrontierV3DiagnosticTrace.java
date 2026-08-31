@@ -43,6 +43,12 @@ final class FrontierV3DiagnosticTrace {
         return "hive-nutrient:" + transferId.value();
     }
 
+    /** One exact depot stack's irreversible hand-off to its named defender. */
+    static String defenderEquipmentCorrelation(SubjectId itemId) {
+        Objects.requireNonNull(itemId, "defender equipment item");
+        return "defender-equipment:" + itemId.value();
+    }
+
     static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result) {
         record(server, correlation, kind, subject, result, Context.empty());
     }

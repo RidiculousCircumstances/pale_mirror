@@ -151,6 +151,7 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
+                FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
                 if (observeHotScoutSighting(level, runtime, state, actorId, mob, lease)) {
                     admitted++;
                     continue;
@@ -184,7 +185,7 @@ final class FrontierV3AmbientActorExecutor {
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
-        body.setCustomName(FrontierV3ScenePresentation.actorName(state, actorId, bioform)); body.setCustomNameVisible(false);
+        FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }

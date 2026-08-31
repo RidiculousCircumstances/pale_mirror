@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
+import io.farfrontier.palemirror.frontier.v3.process.DefenderEquipmentProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -37,9 +38,7 @@ class HumanTacticalFunctionProjectionTest {
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
 
         SubjectId leader = assault.defenderUnit().leaderId();
-        SubjectId militia = assault.defenderIds().stream().filter(id -> !id.equals(leader)).findFirst().orElseThrow();
         assertEquals(HumanTacticalFunction.SQUAD_LEADER, HumanTacticalFunctionProjection.derive(state, leader));
-        assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, militia));
         assertEquals("Northwatch SQUAD LEADER", FrontierSceneLabels.actor(state, leader, false));
 
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
@@ -49,10 +48,11 @@ class HumanTacticalFunctionProjectionTest {
                 .store(new ExactItemStack(sword, assault.settlementId(), "minecraft:iron_sword", 1,
                 new InventoryCustody.ContainerSlot(depot, slot)));
         state = state.withInventory(stored);
-        PhysicalIntent issue = new PhysicalIntent(new PhysicalIntentId("intent:tactical-function-issue"), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), militia, sword),
-                new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
-                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED);
+        PhysicalIntent issue = DefenderEquipmentProcess.plan(state, DefenderEquipmentProcess.review(assault, 201L)).stream()
+                .map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast)
+                .map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
+        SubjectId militia = issue.subjectIds().get(1);
+        assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, militia));
         state = state.preparePhysicalIntent(issue).transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         FrontierWorldState runningState = state;
         EquipmentIssueObservation forgedSource = new EquipmentIssueObservation(new PhysicalObservationId("observation:tactical-function-forged"), issue.id(),

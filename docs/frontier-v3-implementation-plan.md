@@ -388,14 +388,18 @@ remains present because breadth, balance and product comprehension are not done.
 - The first pure tactical read model now makes the retained unit legible without
   adding a second roster: exact assignment, leader identity, profession and
   actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
-  `GUARD` or `SQUAD_LEADER`. It deliberately does not issue, reserve or recover
-  equipment; those remain owning-process work rather than presentation state.
-- The next human-mobilization slice is one exact defender-equipment issue and
-  inverse return lifecycle. It must retain assault/member/source-slot/item/body
-  identity, perform durable-before-effect transfer only between naturally loaded
-  active chest and matching owned Villager hand, and reconcile physical loss or
-  restart by postcondition inspection. A projection or direct inventory rewrite
-  is not equipment issue.
+  `GUARD` or `SQUAD_LEADER`. It owns no equipment mutation.
+- The first owning human-mobilization slice is complete for one exact outbound
+  defender-equipment issue. One scheduled process binds assault/member/source
+  slot/item/body identity; its loaded executor durably enters `RUNNING`, moves
+  the tagged stack only from the naturally loaded active chest to the matching
+  owned Villager hand, then confirms only the exact empty-source/held-item
+  postcondition. Unloaded endpoints defer; forged, changed or mixed evidence,
+  including recovery, remains visible conflict/`UNKNOWN_AFTER_RESTART` rather
+  than a direct inventory rewrite or replacement. The native restart scenario
+  proves the same custody and player-visible derived defender role after a
+  graceful restart. The next slice is the separate inverse return lifecycle,
+  then loss/drop/destruction and the rest of readiness/role expansion.
 
 ### Verification matrix
 

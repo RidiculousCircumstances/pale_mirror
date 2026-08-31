@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,7 +15,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(16, profiles.size());
+        assertEquals(17, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -35,5 +36,16 @@ class FrontierV3FixtureCatalogTest {
         FrontierV3FixtureCatalog.Profile duplicate = new FrontierV3FixtureCatalog.Profile("duplicate", "world", "production", "normal-world", "unit",
                 "terminal", FrontierWorldRuntimeDefinition::configuration);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3FixtureCatalog.catalog(duplicate, duplicate));
+    }
+
+    @Test
+    void defenderEquipmentFixtureStartsBeforeAnyIssueOrPhysicalSurfaceExists() {
+        var configuration = FrontierV3FixtureCatalog.defenderEquipmentConfiguration(new WorldId("frontier:defender-equipment-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(new SubjectId("container:1-depot")).status());
+        ExactItemStack sword = state.inventory().items().get(new SubjectId("item:development-defender-sword"));
+        assertEquals("minecraft:iron_sword", sword.itemKind());
+        assertTrue(state.physicalIntents().isEmpty(), "the fixture may declare canonical preconditions but may not pre-issue the hand-off");
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.population.defender_equipment.review")));
     }
 }

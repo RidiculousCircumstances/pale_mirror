@@ -190,8 +190,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime;
         try {
             RecoveryImage recovery = store.recover(configuration.worldId());
-            long physicalSeed = configuration.initialState().bootstrap().seed();
-            configuration = FrontierWorldRecoveryConfiguration.select(configuration.worldId(), physicalSeed,
+            configuration = FrontierWorldRecoveryConfiguration.select(configuration,
                     recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
             runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200);
         } catch (RuntimeException error) {

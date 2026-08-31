@@ -26,6 +26,14 @@ public final class FrontierSceneLabels {
                 .orElse(bioform ? "HIVE BIOFORM" : "FRONTIER RESIDENT");
     }
 
+    /**
+     * Ambient civilians keep their identity available but their nameplate quiet. Mobilized
+     * residents and hive bioforms are operational information a player must be able to read.
+     */
+    public static boolean ambientActorNameVisible(FrontierWorldState state, SubjectId actorId, boolean bioform) {
+        return bioform || HumanTacticalFunctionProjection.derive(state, actorId) != HumanTacticalFunction.CIVILIAN;
+    }
+
     public static String cargo(FrontierWorldState state, CargoBatch cargo) {
         ExactItemStack stack = cargo.itemIds().stream().map(state.inventory().items()::get).filter(java.util.Objects::nonNull)
                 .min(Comparator.comparing(ExactItemStack::id))

@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
+import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunction;
+import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -50,5 +52,24 @@ class FrontierV3ScenePresentationTest {
 
         assertEquals("FRONTIER RESIDENT", FrontierSceneLabels.actor(runtime.decodedState().orElseThrow(),
                 new io.farfrontier.palemirror.frontier.v3.api.SubjectId("resident:missing"), false));
+    }
+
+    @Test
+    void keepsAmbientCivilianNameplatesQuietButMakesAMobilizedDefenderReadable(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.defenderEquipmentConfiguration(new WorldId("frontier:scene-presentation-defender"), 73L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var assault = state.strategicPlans().settlementAssaults().values().iterator().next();
+        var defender = assault.defenderIds().stream().filter(id -> !id.equals(assault.defenderUnit().leaderId())).findFirst().orElseThrow();
+
+        assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, defender));
+        assertEquals("Northwatch MILITIA", FrontierSceneLabels.actor(state, defender, false));
+        assertEquals(true, FrontierSceneLabels.ambientActorNameVisible(state, defender, false));
+
+        var civilian = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
+                .filter(resident -> !assault.defenderIds().contains(resident.id())).findFirst().orElseThrow();
+        assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, civilian.id()));
+        assertFalse(FrontierSceneLabels.ambientActorNameVisible(state, civilian.id(), false));
     }
 }

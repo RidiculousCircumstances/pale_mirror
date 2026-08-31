@@ -291,6 +291,11 @@ export function hasDiagnosticResponses(diagnostics, assertions) {
   return assertions.every((assertion) => diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
 }
 
+/** A local pilot annotation is authoritative over the runner's interleaved stdout/stderr view. */
+export function pilotDiagnosticActionStep(value, fallbackStep) {
+  return Number.isInteger(value?.pilotActionStep) && value.pilotActionStep > 0 ? value.pilotActionStep : fallbackStep;
+}
+
 /**
  * Selects evidence emitted while the action named by an assertion was executing.
  * A later read of the same object may legitimately observe a different world state;

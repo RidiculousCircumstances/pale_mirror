@@ -58,13 +58,15 @@ public final class HiveSettlementAssaultProcess {
         events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
         events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
         events.add(schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
+        events.add(schedule(DefenderEquipmentProcess.review(assault, action.dueAt().ticks() + 1L)));
         return List.copyOf(events);
     }
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
         if (assault == null || (assault.status() != SettlementAssaultStatus.APPROACHING
-                && assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE)) return List.of();
+                && assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE)
+                || !action.id().equals(progress(assault, action.dueAt().ticks()).id())) return List.of();
         if (assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE) {
             List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
             if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
@@ -87,7 +89,8 @@ public final class HiveSettlementAssaultProcess {
 
     public static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
-        if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT) return List.of();
+        if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT
+                || !action.id().equals(combat(assault, action.dueAt().ticks()).id())) return List.of();
         List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
