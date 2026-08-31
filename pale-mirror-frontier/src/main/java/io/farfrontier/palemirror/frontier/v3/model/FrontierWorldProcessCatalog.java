@@ -1,9 +1,14 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
+import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -15,6 +20,11 @@ import java.util.Set;
  * engine can be created.</p>
  */
 final class FrontierWorldProcessCatalog {
+    @FunctionalInterface
+    private interface ScheduledPlanner {
+        List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomousInterception);
+    }
+
     private static final Set<String> KERNEL = types(
             "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
     private static final Set<String> PHYSICAL = types(
@@ -71,6 +81,48 @@ final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, STRATEGY);
     private static final Set<String> ALL_EMISSIONS = union(ALL_WORLD, KERNEL);
+    private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
+            Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
+            Map.entry("frontier.settlement.production.task.complete", (state, action, autonomous) -> ProductionProcess.planCompletion(state, action)),
+            Map.entry("frontier.supply.task.start", (state, action, autonomous) -> SupplyOperationProcess.planStart(state, action)),
+            Map.entry("frontier.supply.cargo.load", SupplyOperationProcess::planCargoLoad),
+            Map.entry("frontier.operation.assembly", (state, action, autonomous) -> SupplyOperationProcess.planAssembly(state, action)),
+            Map.entry("frontier.operation.progress", (state, action, autonomous) -> SupplyOperationProcess.planProgress(state, action)),
+            Map.entry("frontier.terminal_logistics.retention", (state, action, autonomous) -> TerminalLogisticsProcess.plan(state, action)),
+            Map.entry("frontier.hive.growth.task.start", (state, action, autonomous) -> HiveGrowthProcess.planStart(state, action)),
+            Map.entry("frontier.hive.growth.task.complete", (state, action, autonomous) -> HiveGrowthProcess.planCompletion(state, action)),
+            Map.entry("frontier.hive.nutrient.transfer.progress", (state, action, autonomous) -> HiveNutrientTransferProcess.plan(state, action)),
+            Map.entry("frontier.population.birth.review", (state, action, autonomous) -> PopulationBirthProcess.planReview(state, action)),
+            Map.entry("frontier.population.birth.complete", (state, action, autonomous) -> PopulationBirthProcess.planCompletion(state, action)),
+            Map.entry("frontier.population.migration.review", (state, action, autonomous) -> PopulationMigrationProcess.planReview(state, action)),
+            Map.entry("frontier.population.migration.progress", (state, action, autonomous) -> PopulationMigrationProcess.planProgress(state, action)),
+            Map.entry("frontier.settlement.provision.review", (state, action, autonomous) -> SettlementProvisionProcess.planReview(state, action)),
+            Map.entry("frontier.settlement.provision.progress", (state, action, autonomous) -> SettlementProvisionProcess.planProgress(state, action)),
+            Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
+            Map.entry("frontier.market.clear", (state, action, autonomous) -> MarketClearingProcess.plan(state, action)),
+            Map.entry("frontier.resource_site.growth", (state, action, autonomous) -> ResourceSiteProcess.planGrowth(state, action)),
+            Map.entry("frontier.resource_site.prepare", (state, action, autonomous) -> ResourceSiteProcess.planPreparation(state, action)),
+            Map.entry("frontier.resource_site.harvest", (state, action, autonomous) -> ResourceSiteHarvestProcess.plan(state, action)),
+            Map.entry("frontier.objective.resource_harvest", (state, action, autonomous) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
+            Map.entry("frontier.structural_repair.scan", (state, action, autonomous) -> StructuralRepairProcess.plan(state, action)),
+            Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
+            Map.entry("frontier.route_construction.start", (state, action, autonomous) -> RouteConstructionProcess.planStart(state, action)),
+            Map.entry("frontier.route_patrol.start", (state, action, autonomous) -> RoutePatrolProcess.planStart(state, action)),
+            Map.entry("frontier.route_patrol.progress", (state, action, autonomous) -> RoutePatrolProcess.planProgress(state, action)),
+            Map.entry("frontier.hive_route_engagement.start", (state, action, autonomous) -> HiveRouteEngagementProcess.planStart(state, action)),
+            Map.entry("frontier.hive_route_engagement.progress", (state, action, autonomous) -> HiveRouteEngagementProcess.planProgress(state, action)),
+            Map.entry("frontier.hive_route_engagement.readiness", (state, action, autonomous) -> HiveRouteEngagementProcess.planReadiness(state, action)),
+            Map.entry("frontier.hive_route_engagement.combat", (state, action, autonomous) -> HiveRouteEngagementProcess.planCombat(state, action)),
+            Map.entry("frontier.hive.scout.patrol", (state, action, autonomous) -> HiveScoutPatrolProcess.plan(state, action)),
+            Map.entry("frontier.decontamination.scan", (state, action, autonomous) -> DecontaminationProcess.plan(state, action)),
+            Map.entry("frontier.objective.review", StrategicObjectiveProcess::plan),
+            Map.entry("frontier.objective.reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planReconsideration(state, action)),
+            Map.entry("frontier.objective.interrupt", (state, action, autonomous) -> StrategicObjectiveProcess.planOpportunity(state, action)),
+            Map.entry("frontier.objective.assault", (state, action, autonomous) -> StrategicObjectiveProcess.planAssaultOpportunity(state, action)),
+            Map.entry("frontier.settlement_assault.start", (state, action, autonomous) -> HiveSettlementAssaultProcess.planStart(state, action)),
+            Map.entry("frontier.settlement_assault.progress", (state, action, autonomous) -> HiveSettlementAssaultProcess.planProgress(state, action)),
+            Map.entry("frontier.settlement_assault.combat", (state, action, autonomous) -> HiveSettlementAssaultProcess.planCombat(state, action)));
 
     private FrontierWorldProcessCatalog() { }
 
@@ -89,6 +141,20 @@ final class FrontierWorldProcessCatalog {
     }
 
     static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
+
+    static Set<String> scheduledKinds() { return SCHEDULED_PLANNERS.keySet(); }
+
+    static List<ProposedEvent> planScheduled(DeterministicProcessRegistry registry, FrontierWorldState state,
+                                              ScheduledAction action, boolean autonomousInterception) {
+        String processId = registry.requireScheduledOwner(action.kind());
+        ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
+        List<ProposedEvent> planned = planner.plan(state, action, autonomousInterception);
+        List<ProposedEvent> result = planned.isEmpty()
+                ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())))
+                : planned;
+        return registry.validateEmissions(processId, result);
+    }
 
     private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,
                                                               Set<String> events, Set<String> emissions, Set<String> codecs) {

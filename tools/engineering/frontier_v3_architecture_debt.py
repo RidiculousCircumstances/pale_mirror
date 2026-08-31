@@ -21,6 +21,8 @@ SCENE_CAUSE_BRANCH = re.compile(
     r"instanceof\s+(?:[\w.]+\.)?(?:LogisticsSceneCause|SettlementAssaultSceneCause)\b"
 )
 SCHEDULED_STRING_CASE = re.compile(r'case\s+"frontier\.[^"]+"\s*->')
+COMMAND_PAYLOAD_TYPE_TEST = re.compile(r"command\.payload\(\)\s+instanceof")
+RUNTIME_REDUCER_CASE = re.compile(r"^\s*case\s+\w+", re.MULTILINE)
 MANUAL_EXECUTOR_TICK = re.compile(r"FrontierV3\w+Executor\.tick\s*\(")
 DEVELOPMENT_CONFIGURATION = re.compile(
     r"public\s+static\s+FrontierEngineConfiguration<FrontierWorldState,\s*"
@@ -104,6 +106,10 @@ def collect(root: Path) -> dict[str, Any]:
         "runtime_scheduled_string_cases": len(
             SCHEDULED_STRING_CASE.findall(runtime)
         ),
+        "runtime_command_payload_type_tests": len(
+            COMMAND_PAYLOAD_TYPE_TEST.findall(runtime)
+        ),
+        "runtime_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(runtime)),
         "production_development_configurations": len(
             DEVELOPMENT_CONFIGURATION.findall(runtime)
         ),
@@ -176,6 +182,24 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         raise DebtError(
             "runtime scheduled dispatcher grew: "
             f"{metrics['runtime_scheduled_string_cases']}>{scheduled_limit}"
+        )
+    command_type_limit = _positive_int(
+        policy.get("max_runtime_command_payload_type_tests"),
+        "max_runtime_command_payload_type_tests",
+    )
+    if metrics["runtime_command_payload_type_tests"] > command_type_limit:
+        raise DebtError(
+            "runtime command dispatcher grew: "
+            f"{metrics['runtime_command_payload_type_tests']}>{command_type_limit}"
+        )
+    reducer_case_limit = _positive_int(
+        policy.get("max_runtime_reducer_cases"),
+        "max_runtime_reducer_cases",
+    )
+    if metrics["runtime_reducer_cases"] > reducer_case_limit:
+        raise DebtError(
+            "runtime reducer dispatcher grew: "
+            f"{metrics['runtime_reducer_cases']}>{reducer_case_limit}"
         )
 
     fixture_configuration_limit = _positive_int(

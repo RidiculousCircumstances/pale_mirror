@@ -296,58 +296,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                boolean autonomousInterception) {
-        String processId = PROCESS_REGISTRY.requireScheduledOwner(action.kind());
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = switch (action.kind()) {
-            case "frontier.hive.infection.task" -> HiveInfectionProcess.plan(state, action);
-            case "frontier.settlement.production.task.start" -> ProductionProcess.planStart(state, action);
-            case "frontier.settlement.production.task.complete" -> ProductionProcess.planCompletion(state, action);
-            case "frontier.supply.task.start" -> SupplyOperationProcess.planStart(state, action);
-            case "frontier.supply.cargo.load" -> SupplyOperationProcess.planCargoLoad(state, action, autonomousInterception);
-            case "frontier.operation.assembly" -> SupplyOperationProcess.planAssembly(state, action);
-            case "frontier.operation.progress" -> SupplyOperationProcess.planProgress(state, action);
-            case "frontier.terminal_logistics.retention" -> TerminalLogisticsProcess.plan(state, action);
-            case "frontier.hive.growth.task.start" -> HiveGrowthProcess.planStart(state, action);
-            case "frontier.hive.growth.task.complete" -> HiveGrowthProcess.planCompletion(state, action);
-            case "frontier.hive.nutrient.transfer.progress" -> HiveNutrientTransferProcess.plan(state, action);
-            case "frontier.population.birth.review" -> PopulationBirthProcess.planReview(state, action);
-            case "frontier.population.birth.complete" -> PopulationBirthProcess.planCompletion(state, action);
-            case "frontier.population.migration.review" -> PopulationMigrationProcess.planReview(state, action);
-            case "frontier.population.migration.progress" -> PopulationMigrationProcess.planProgress(state, action);
-            case "frontier.settlement.provision.review" -> SettlementProvisionProcess.planReview(state, action);
-            case "frontier.settlement.provision.progress" -> SettlementProvisionProcess.planProgress(state, action);
-            case "frontier.company.foundation.review" -> CompanyFoundationProcess.plan(state, action);
-            case "frontier.market.clear" -> MarketClearingProcess.plan(state, action);
-            case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
-            case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
-            case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
-            case "frontier.objective.resource_harvest" -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action);
-            case "frontier.structural_repair.scan" -> StructuralRepairProcess.plan(state, action);
-            case "frontier.route_construction.scan" -> RouteConstructionProcess.plan(state, action);
-            case "frontier.route_construction.start" -> RouteConstructionProcess.planStart(state, action);
-            case "frontier.route_patrol.start" -> RoutePatrolProcess.planStart(state, action);
-            case "frontier.route_patrol.progress" -> RoutePatrolProcess.planProgress(state, action);
-            case "frontier.hive_route_engagement.start" -> HiveRouteEngagementProcess.planStart(state, action);
-            case "frontier.hive_route_engagement.progress" -> HiveRouteEngagementProcess.planProgress(state, action);
-            case "frontier.hive_route_engagement.readiness" -> HiveRouteEngagementProcess.planReadiness(state, action);
-            case "frontier.hive_route_engagement.combat" -> HiveRouteEngagementProcess.planCombat(state, action);
-            case "frontier.hive.scout.patrol" -> HiveScoutPatrolProcess.plan(state, action);
-            case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
-            case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action, autonomousInterception);
-            case "frontier.objective.reconsider" -> StrategicObjectiveProcess.planReconsideration(state, action);
-            case "frontier.objective.interrupt" -> StrategicObjectiveProcess.planOpportunity(state, action);
-            case "frontier.objective.assault" -> StrategicObjectiveProcess.planAssaultOpportunity(state, action);
-            case "frontier.settlement_assault.start" -> HiveSettlementAssaultProcess.planStart(state, action);
-            case "frontier.settlement_assault.progress" -> HiveSettlementAssaultProcess.planProgress(state, action);
-            case "frontier.settlement_assault.combat" -> HiveSettlementAssaultProcess.planCombat(state, action);
-            default -> throw new IllegalStateException("unknown v3 scheduled action: " + action.kind());
-        };
-        // A known planner can deliberately find that a durable physical observation has already
-        // invalidated its work. That no-op must still become a persisted schedule transition:
-        // otherwise a later tick/restart would rediscover the same head and quarantine the world.
-        List<ProposedEvent> result = planned.isEmpty()
-                ? List.of(new ProposedEvent(action.subject(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(action.id())))
-                : planned;
-        return PROCESS_REGISTRY.validateEmissions(processId, result);
+        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, autonomousInterception);
     }
     /** A HOT observer may acknowledge exactly one visible next-cursor arrival, never a COLD batch. */
     private static void validateHotAssemblyObservation(FrontierWorldState state, RouteOperation operation, OperationAssembly next) {

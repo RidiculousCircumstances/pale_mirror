@@ -11,7 +11,9 @@ hotspot_line_ceiling:
   pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 808
 
 max_manual_executor_ticks: 0
-max_runtime_scheduled_string_cases: 41
+max_runtime_scheduled_string_cases: 0
+max_runtime_command_payload_type_tests: 34
+max_runtime_reducer_cases: 104
 max_production_development_configurations: 0
 max_lifecycle_fixture_profile_branches: 0
 max_process_classes_in_model: 33
