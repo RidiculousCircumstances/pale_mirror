@@ -31,17 +31,22 @@ final class HiveGrowthProcess {
 
     static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
-        SubjectId hive = state.bootstrap().hive().id(); HiveNest nest = state.bootstrap().hive().seedNests().getFirst();
+        SubjectId hive = state.bootstrap().hive().id();
         if (!hive.equals(task.ownerId())) throw new IllegalStateException("hive growth task has a foreign owner");
         boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS
                 && state.hiveColony().spawnedBioforms().size() < HiveColony.MAX_SPAWNED_BIOFORMS;
         Optional<ExactItemStack> biomass = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
                 .filter(item -> BIOMASS.equals(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId())).findFirst();
         if (!capacity || biomass.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
+        HiveNest nest = HiveStorageSupport.operationalNestForStore(state, sourceStore);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);
-        SubjectId store = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
-        if (state.inventory().surfaces().get(store).status() != ContainerSurfaceStatus.ACTIVE) {
+        // A prepared surface is a durable, owned pending physical socket.  Growth may bind its
+        // exact intent to it, but the NeoForge executor will refuse to consume until that socket
+        // has materialized as ACTIVE.  An unmaterialized store, on the other hand, has no
+        // loaded-world boundary and remains eligible for the normal COLD calculation.
+        if (state.inventory().surfaces().get(sourceStore).status() == ContainerSurfaceStatus.UNMATERIALIZED) {
             return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(hive, new HiveGrowthStarted(job)),
                     new ProposedEvent(hive, new HiveGrowthBiomassConsumed(job.id(), job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 200L)));
         }
@@ -71,6 +76,10 @@ final class HiveGrowthProcess {
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, HiveGrowthStarted started) {
         HiveGrowthJob job = started.job(); ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (!subject.equals(job.hiveId()) || input == null || !BIOMASS.equals(input.itemKind()) || input.count() != 64) throw new IllegalArgumentException("hive growth start lacks exact biomass");
+        if (!(input.custody() instanceof InventoryCustody.ContainerSlot slot)
+                || !HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
+            throw new IllegalArgumentException("hive growth start crosses nest-local biomass custody");
+        }
         activeTask(state, job.hiveId()); return state.startHiveGrowth(job);
     }
 
@@ -83,6 +92,9 @@ final class HiveGrowthProcess {
         if (item == null || !BIOMASS.equals(item.itemKind()) || item.count() != 64 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !state.isHiveStore(slot.containerId()) || state.inventory().surfaces().get(slot.containerId()).status() == ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("cold hive growth consumption bypasses its exact inactive store");
+        }
+        if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
+            throw new IllegalArgumentException("cold hive growth consumption crosses nest-local biomass custody");
         }
         activeTask(state, job.hiveId()); return state.consumeHiveGrowthBiomass(job.id(), item.id());
     }
@@ -108,7 +120,14 @@ final class HiveGrowthProcess {
                 || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId()))) throw new IllegalArgumentException("hive growth consumption intent does not bind its active job");
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !BIOMASS.equals(input.itemKind()) || input.count() != 64 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
-                || !state.isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth consumption requires an active exact biomass stack");
+                || !state.isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth consumption requires an exact biomass stack");
+        ContainerSurfaceStatus surface = state.inventory().surfaces().get(slot.containerId()).status();
+        if (surface != ContainerSurfaceStatus.PREPARED && surface != ContainerSurfaceStatus.ACTIVE) {
+            throw new IllegalArgumentException("hive growth physical consumption requires a prepared local store");
+        }
+        if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
+            throw new IllegalArgumentException("hive growth consumption intent crosses nest-local biomass custody");
+        }
         return state.preparePhysicalIntent(intent);
     }
 
@@ -147,8 +166,9 @@ final class HiveGrowthProcess {
     private static HiveGrowthJob growthJob(SubjectId hive, HiveNest nest, ExactItemStack input, int ordinal) {
         int column = (ordinal - 1) % 8; int row = (ordinal - 1) / 8; int x = nest.anchor().x() + 12 + column * 8; int z = nest.anchor().z() + 12 + row * 8;
         SubjectId jobId = new SubjectId("job:hive-growth-" + ordinal);
+        String nestSuffix = nest.id().value().substring("nest:seed-".length());
         return new HiveGrowthJob(jobId, hive, nest.id(), input.id(), new PhysicalIntentId("intent:hive-growth-biomass-" + ordinal),
-                new HiveOrgan(new SubjectId("organ:west-grown-heart-" + ordinal), hive, nest.id(), HiveOrganKind.HEART, new BlockPosition(x, nest.anchor().y(), z), Optional.empty()),
-                new Bioform(new SubjectId("bioform:west-grown-" + ordinal), hive, nest.id(), BioformRole.GUARD, new BlockPosition(x + 4, nest.anchor().y(), z)));
+                new HiveOrgan(new SubjectId("organ:" + nestSuffix + "-grown-heart-" + ordinal), hive, nest.id(), HiveOrganKind.HEART, new BlockPosition(x, nest.anchor().y(), z), Optional.empty()),
+                new Bioform(new SubjectId("bioform:" + nestSuffix + "-grown-" + ordinal), hive, nest.id(), BioformRole.GUARD, new BlockPosition(x + 4, nest.anchor().y(), z)));
     }
 }

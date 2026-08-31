@@ -66,13 +66,24 @@ final class FrontierV3ContainerSurfaceExecutor {
             transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
             return;
         }
-        if (!hasReadySocket(level, FrontierV3GrayboxLedger.get(level), target,
-                FrontierContainerSocketPlan.support(state, surface).orElse(null))) {
+        // PREPARED can survive a restart both before and after the physical chest write.  Its
+        // support may still be one materializer turn behind, so wait for an absent owned
+        // foundation; then either claim an empty socket or inspect the already-owned chest.
+        SocketReadiness readiness = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target,
+                FrontierContainerSocketPlan.support(state, surface).orElse(null));
+        if (readiness == SocketReadiness.DEFERRED) return;
+        if (readiness == SocketReadiness.CONFLICT) {
             reportConflict(runtime, surface.containerId());
             return;
         }
         ChestBlockEntity chest = activeChest(level, target, surface.containerId());
-        if (chest == null || !matchesCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
+        if (chest != null) {
+            if (!matchesCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
+            else transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+            return;
+        }
+        chest = claimFreshChest(level, target, surface.containerId());
+        if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
         else transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
     }
 
@@ -142,8 +153,13 @@ final class FrontierV3ContainerSurfaceExecutor {
     static SocketReadiness socketReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
         // A destroyed/temporarily unavailable canonical facility has no socket to materialize;
         // it is capacity loss, not evidence that the player obstructed a future chest.
-        if (support == null) return SocketReadiness.DEFERRED;
         if (!level.getBlockState(target).isAir()) return SocketReadiness.CONFLICT;
+        return supportReadiness(level, ledger, target, support);
+    }
+
+    /** Checks only the owned foundation, so PREPARED recovery can inspect an already-owned chest. */
+    static SocketReadiness supportReadiness(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos target, GrayboxCell support) {
+        if (support == null) return SocketReadiness.DEFERRED;
         BlockPos supportPosition = target.below();
         FrontierV3GrayboxLedger.Claim claim = ledger.claim(supportPosition);
         if (claim == null && level.getBlockState(supportPosition).isAir()) return SocketReadiness.DEFERRED;

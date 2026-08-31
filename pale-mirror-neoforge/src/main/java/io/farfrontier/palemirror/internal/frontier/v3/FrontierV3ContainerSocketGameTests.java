@@ -61,4 +61,26 @@ public final class FrontierV3ContainerSocketGameTests {
                 "socket validation must leave the changed world block untouched");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-container-socket", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedRecoveryKeepsAnOwnedChestDistinctFromAForeignObstruction(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(24, 8, 0));
+        SubjectId container = new SubjectId("container:prepared-recovery");
+        GrayboxCell support = new GrayboxCell(new BlockPosition(target.getX(), target.getY() - 1, target.getZ()),
+                new SubjectId("organ:prepared-recovery"), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        FrontierV3GrayboxExecutor.project(level, ledger, support);
+
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, target, container) != null,
+                "the recovery fixture needs one exact owned chest after durable PREPARED");
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT,
+                "fresh-socket admission must never adopt an already occupied target");
+        helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.supportReadiness(level, ledger, target, support),
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY,
+                "PREPARED recovery must retain the valid semantic foundation for its owned chest");
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.activeChest(level, target, container) != null,
+                "only the matching durable container identity may resume this prepared lifecycle");
+        helper.succeed();
+    }
 }

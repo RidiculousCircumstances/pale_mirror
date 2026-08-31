@@ -172,8 +172,11 @@ final class FrontierDevelopmentScenarios {
     static HiveGrowthFixture hiveGrowthFixture(WorldId worldId, long seed) {
         var base = FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(worldId, seed);
         SubjectId store = new SubjectId("container:hive-east-store");
+        // This is the durable boundary after a socket has been claimed but before its physical
+        // chest write.  The native pilot must load the chunk and let the ordinary container
+        // executor complete PREPARED -> ACTIVE before exact consumption can run.
         FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory()
-                .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE));
+                .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED));
         var engine = FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter()));

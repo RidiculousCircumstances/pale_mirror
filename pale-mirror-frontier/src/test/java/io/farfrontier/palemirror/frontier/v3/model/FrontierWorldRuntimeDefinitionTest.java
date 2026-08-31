@@ -195,19 +195,19 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
-    void sharedHiveGrowthConsumesEastStoreBiomassThenPublishesWestOrganAndBioform() {
+    void hiveGrowthConsumesNestLocalEastStoreBiomassThenPublishesEastOrganAndBioform() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentUncontestedSupplyConfiguration(new WorldId("frontier:hive-growth"), 91L));
         FrontierWorldState completed = advanceUntil(engine, 12_000L,
                 state -> state.hiveColony().growthJobs().containsKey(new SubjectId("job:hive-growth-1")));
         SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
         assertTrue(!completed.inventory().items().containsKey(biomass), "COLD growth consumes its exact inactive-store biomass before completion");
         HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), completed.bootstrap().hive().id(),
-                completed.bootstrap().hive().seedNests().getFirst().id(), biomass,
+                new SubjectId("nest:seed-east"), biomass,
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
-                new HiveOrgan(new SubjectId("organ:west-grown-heart-1"), completed.bootstrap().hive().id(), completed.bootstrap().hive().seedNests().getFirst().id(),
-                        HiveOrganKind.HEART, new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:west-grown-1"), completed.bootstrap().hive().id(), completed.bootstrap().hive().seedNests().getFirst().id(),
-                        BioformRole.GUARD, new BlockPosition(-404, 64, 432)));
+                new HiveOrgan(new SubjectId("organ:east-grown-heart-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
+                        HiveOrganKind.HEART, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:east-grown-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
+                        BioformRole.GUARD, new BlockPosition(436, 64, 432)));
         HiveGrowthStarted started = new HiveGrowthStarted(job);
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         HiveGrowthBiomassConsumed consumed = new HiveGrowthBiomassConsumed(job.id(), biomass);
@@ -228,6 +228,8 @@ class FrontierWorldRuntimeDefinitionTest {
 
         assertTrue(job != null, "the profile must retain the real scheduled growth job");
         assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(job.consumptionIntentId()).status());
+        assertEquals(ContainerSurfaceStatus.PREPARED, state.inventory().surfaces().get(new SubjectId("container:hive-east-store")).status(),
+                "the profile must await one real PREPARED -> ACTIVE chest lifecycle, not pretend a chest already exists");
         assertEquals(0, state.hiveColony().addedOrgans().size());
         assertEquals(0, state.hiveColony().spawnedBioforms().size());
         assertEquals(18, state.infection().size());

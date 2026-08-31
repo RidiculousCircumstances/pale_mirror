@@ -11,7 +11,10 @@ final class HiveGrowthStateSupport {
 
     static FrontierWorldState start(FrontierWorldState state, HiveGrowthJob job) {
         Objects.requireNonNull(job, "hive growth job"); ExactItemStack input = state.inventory().items().get(job.consumedItemId());
-        if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot slot) || !state.isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth needs one exact hive-store input");
+        if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot slot) || !state.isHiveStore(slot.containerId())
+                || !HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
+            throw new IllegalArgumentException("hive growth needs one exact nest-local hive-store input");
+        }
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startGrowth(job), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }

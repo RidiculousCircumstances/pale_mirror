@@ -260,18 +260,18 @@ class FrontierWorldStateTest {
 
     @Test
     void hiveGrowthConsumesOneExactStoreItemBeforeItPublishesItsNewIdentities() {
-        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId west = new SubjectId("nest:seed-west");
-        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, west, new SubjectId("item:bootstrap-hive-biomass"),
+        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
-                new HiveOrgan(new SubjectId("organ:west-grown-heart-1"), hive, west, HiveOrganKind.HEART, new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:west-grown-1"), hive, west, BioformRole.GUARD, new BlockPosition(-404, 64, 432)));
+                new HiveOrgan(new SubjectId("organ:east-grown-heart-1"), hive, east, HiveOrganKind.HEART, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:east-grown-1"), hive, east, BioformRole.GUARD, new BlockPosition(436, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
         FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);
         assertTrue(active.inventory().items().containsKey(job.consumedItemId()));
         assertEquals(job, active.hiveColony().growthJobs().get(job.id()));
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
-                job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(-420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
+                job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
         FrontierWorldState prepared = HiveGrowthProcess.reducePrepared(active, hive, intent);
         FrontierWorldState running = prepared.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
@@ -279,10 +279,15 @@ class FrontierWorldStateTest {
                 new ExactItemConsumedObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:hive-growth-biomass-1"), intent.id(), job.consumedItemId(), 64, 0)));
         assertTrue(!consumed.inventory().items().containsKey(job.consumedItemId()));
         assertEquals(consumed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(consumed)));
-        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, west,
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, east,
                 new SubjectId("item:bootstrap-1-wheat"), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-bad"), job.organ(), job.bioform())));
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-remote"), hive,
+                new SubjectId("nest:seed-west"), job.consumedItemId(), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-remote"),
+                new HiveOrgan(new SubjectId("organ:west-grown-heart-remote"), hive, new SubjectId("nest:seed-west"), HiveOrganKind.HEART,
+                        new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:west-grown-remote"), hive, new SubjectId("nest:seed-west"), BioformRole.GUARD, new BlockPosition(-404, 64, 432)))));
         assertEquals(baseline, HiveGrowthProcess.reduceBlocked(baseline, hive,
-                new HiveGrowthBlocked(hive, west, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
+                new HiveGrowthBlocked(hive, east, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
         FrontierWorldState completed = consumed.completeHiveGrowth(job.id());
         assertTrue(completed.hiveColony().growthJobs().isEmpty());
         assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
@@ -292,22 +297,22 @@ class FrontierWorldStateTest {
 
     @Test
     void unknownHiveBiomassEffectReleasesTheActiveGrowthSlotWithoutAssumingConsumption() {
-        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId west = new SubjectId("nest:seed-west");
-        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), hive, west, new SubjectId("item:bootstrap-hive-biomass"),
+        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-unknown"),
-                new HiveOrgan(new SubjectId("organ:west-grown-heart-unknown"), hive, west, HiveOrganKind.HEART, new BlockPosition(-400, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:west-grown-unknown"), hive, west, BioformRole.GUARD, new BlockPosition(-396, 64, 432)));
+                new HiveOrgan(new SubjectId("organ:east-grown-heart-unknown"), hive, east, HiveOrganKind.HEART, new BlockPosition(440, 64, 432), java.util.Optional.empty()),
+                new Bioform(new SubjectId("bioform:east-grown-unknown"), hive, east, BioformRole.GUARD, new BlockPosition(444, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
         FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
-                job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(-420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
+                job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
         FrontierWorldState running = HiveGrowthProcess.reducePrepared(active, hive, intent)
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         FrontierWorldState unknown = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
         FrontierWorldState released = HiveGrowthProcess.reduceBlocked(unknown, hive,
-                new HiveGrowthBlocked(hive, west, job.id(), HiveGrowthBlockReason.PHYSICAL_CONSUMPTION_UNKNOWN));
+                new HiveGrowthBlocked(hive, east, job.id(), HiveGrowthBlockReason.PHYSICAL_CONSUMPTION_UNKNOWN));
         assertTrue(released.hiveColony().growthJobs().isEmpty());
         assertTrue(released.inventory().items().containsKey(job.consumedItemId()), "unknown postcondition must never silently consume biomass");
     }

@@ -197,7 +197,11 @@ silently erase the journey.
 The distributed hive owns biomass, energy, nutrients, organs, brood, bioforms,
 adaptations, infection, territorial knowledge, logistics and operations. The
 two seed nests are topology roots of one polity, not independent scripted
-encounters.
+encounters. They are not, however, a magic global inventory: an exact nutrient
+crosses stores only through one retained organ-network transfer with an exact
+source, target, cargo identity, bounded continuation and terminal receipt.
+Growth and brood consume a local store input or that completed transfer, never
+an item silently located at another nest.
 
 Both sides use the same three-level decision boundary:
 
