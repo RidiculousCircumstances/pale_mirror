@@ -26,7 +26,10 @@ public record EconomicAccount(SubjectId ownerId, EconomicOwnerKind ownerKind, Ec
     }
 
     EconomicAccount credit(FixedScalar amount) {
-        if (status != EconomicAccountStatus.ACTIVE) throw new IllegalArgumentException("insolvent account may not receive a new transfer");
+        if (amount.raw() <= 0L) throw new IllegalArgumentException("account credit must be positive");
+        // Insolvency blocks new obligations and outgoing payments.  It must not erase a
+        // counterparty's already-owned claim: a creditor, court settlement or future
+        // recapitalization can still pay this exact account without minting money.
         return new EconomicAccount(ownerId, ownerKind, status, balance.plus(amount), creditLimit);
     }
 }

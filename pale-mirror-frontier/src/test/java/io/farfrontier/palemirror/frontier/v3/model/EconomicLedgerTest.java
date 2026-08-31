@@ -70,4 +70,19 @@ class EconomicLedgerTest {
         assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY.minus(hold.amount()), settled.require(payer).balance());
         assertEquals(hold.amount(), settled.require(payee).balance());
     }
+
+    @Test
+    void insolventAccountCanReceiveAnExactPaymentButCannotCreateANewDebit() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:economy-insolvent-credit"), 92L));
+        SubjectId payer = new SubjectId("settlement:1"), insolvent = state.bootstrap().hive().id();
+        Map<SubjectId, EconomicAccount> accounts = new java.util.LinkedHashMap<>(state.inventory().economics().accounts());
+        accounts.put(insolvent, new EconomicAccount(insolvent, EconomicOwnerKind.HIVE_COLLECTIVE, EconomicAccountStatus.INSOLVENT,
+                FixedScalar.whole(-4L), FixedScalar.ZERO));
+        EconomicLedger ledger = new EconomicLedger(accounts);
+
+        EconomicLedger paid = ledger.transfer(payer, insolvent, FixedScalar.whole(3L));
+        assertEquals(FixedScalar.whole(-1L), paid.require(insolvent).balance());
+        assertEquals(EconomicLedger.INITIAL_SETTLEMENT_TREASURY.minus(FixedScalar.whole(3L)), paid.require(payer).balance());
+        assertThrows(IllegalArgumentException.class, () -> paid.transfer(insolvent, payer, FixedScalar.ONE));
+    }
 }
