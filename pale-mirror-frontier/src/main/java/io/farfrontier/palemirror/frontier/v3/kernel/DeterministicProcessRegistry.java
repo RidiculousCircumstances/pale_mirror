@@ -48,6 +48,7 @@ public final class DeterministicProcessRegistry {
             requireDeclaredCodecs(codecOwners, descriptor, descriptor.commandPayloadTypes(), "command payload");
             requireDeclaredCodecs(codecOwners, descriptor, descriptor.reducedEventTypes(), "reduced event payload");
             requireDeclaredCodecs(codecOwners, descriptor, descriptor.emittedPayloadTypes(), "emitted payload");
+            requireReducedOwners(events, descriptor, descriptor.emittedPayloadTypes());
         }
         commandOwners = Map.copyOf(commands);
         scheduledOwners = Map.copyOf(schedules);
@@ -95,6 +96,19 @@ public final class DeterministicProcessRegistry {
             if (!codecOwners.containsKey(type)) {
                 throw new IllegalArgumentException("process " + descriptor.id() + " declares " + role
                         + " without a stable codec: " + type);
+            }
+        }
+    }
+
+    private static void requireReducedOwners(Map<String, DeterministicProcessDescriptor> eventOwners,
+                                             DeterministicProcessDescriptor descriptor, Set<String> types) {
+        for (String type : types) {
+            // Kernel schedule effects are consumed by the kernel queue before the world reducer;
+            // all Frontier world facts must still name one world reducer owner below.
+            if (type.startsWith("kernel.")) continue;
+            if (!eventOwners.containsKey(type)) {
+                throw new IllegalArgumentException("process " + descriptor.id()
+                        + " emits payload without a deterministic reducer owner: " + type);
             }
         }
     }

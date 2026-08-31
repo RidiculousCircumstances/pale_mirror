@@ -4,8 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 
 import java.util.LinkedHashSet;
@@ -17,9 +20,8 @@ import java.util.Set;
  * Closed ownership catalog for the installed Frontier world processes.
  *
  * <p>This is intentionally an explicit finite composition rather than classpath discovery.
- * The next extraction steps move the corresponding planners/reducers out of the runtime root;
- * until then this catalog already makes a missing or duplicate durable payload fail before an
- * engine can be created.</p>
+ * Descriptor ownership, executable owner and scheduler routing are all checked at startup, so
+ * a newly declared durable payload cannot become a dead catalog entry.</p>
  */
 public final class FrontierWorldProcessCatalog {
     @FunctionalInterface
@@ -82,6 +84,16 @@ public final class FrontierWorldProcessCatalog {
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, STRATEGY);
+    private static final Map<String, FrontierWorldProcessModule> MODULES = Map.of(
+            "physical-observation", new FrontierPhysicalProcessModule(),
+            "ambient-actors", new FrontierAmbientProcessModule(),
+            "logistics-scenes", new FrontierLogisticsProcessModule(),
+            "population", new FrontierPopulationProcessModule(),
+            "economy", new FrontierEconomyProcessModule(),
+            "resource-sites", new FrontierResourceSiteProcessModule(),
+            "hive", new FrontierHiveProcessModule(),
+            "infrastructure", new FrontierInfrastructureProcessModule(),
+            "strategy", new FrontierStrategyProcessModule());
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
             Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
@@ -125,6 +137,15 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.settlement_assault.progress", (state, action, autonomous) -> HiveSettlementAssaultProcess.planProgress(state, action)),
             Map.entry("frontier.settlement_assault.combat", (state, action, autonomous) -> HiveSettlementAssaultProcess.planCombat(state, action)));
 
+    static {
+        Set<String> declared = descriptors().stream().map(DeterministicProcessDescriptor::id)
+                .filter(id -> !id.equals("kernel-schedule")).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!declared.equals(MODULES.keySet())) {
+            throw new IllegalStateException("Frontier executable modules differ from declared process ownership; declared="
+                    + declared + " modules=" + MODULES.keySet());
+        }
+    }
+
     private FrontierWorldProcessCatalog() { }
 
     public static List<DeterministicProcessDescriptor> descriptors() {
@@ -143,7 +164,20 @@ public final class FrontierWorldProcessCatalog {
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
 
+    /** Exposed only for deterministic composition tests; this is not a plugin registry. */
+    public static Set<String> executableModuleIds() { return MODULES.keySet(); }
+
     public static Set<String> scheduledKinds() { return SCHEDULED_PLANNERS.keySet(); }
+
+    /** Routes only through the module selected by the registry's exact command-type owner. */
+    public static CommandPlan planCommand(String processId, FrontierWorldState state, FrontierCommand command) {
+        return module(processId).planCommand(state, command);
+    }
+
+    /** Routes only through the module selected by the registry's exact event-type owner. */
+    public static FrontierWorldState reduce(String processId, FrontierWorldState state, FrontierEvent event) {
+        return module(processId).reduce(state, event);
+    }
 
     /** Bootstrap is data-only; this catalog owns the finite initial process schedule. */
     public static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
@@ -228,6 +262,11 @@ public final class FrontierWorldProcessCatalog {
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
     private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
+    private static FrontierWorldProcessModule module(String processId) {
+        FrontierWorldProcessModule module = MODULES.get(processId);
+        if (module == null) throw new IllegalArgumentException("no Frontier world process module for: " + processId);
+        return module;
+    }
     @SafeVarargs private static Set<String> emits(Set<String>... groups) { return union(withKernel(groups)); }
     @SafeVarargs private static Set<String>[] withKernel(Set<String>... groups) {
         @SuppressWarnings("unchecked") Set<String>[] result = new Set[groups.length + 1];

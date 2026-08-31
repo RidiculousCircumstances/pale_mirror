@@ -33,4 +33,13 @@ class FrontierWorldProcessCatalogTest {
             assertTrue(worldPayloads.stream().anyMatch(type -> !descriptor.emittedPayloadTypes().contains(type)), descriptor.id());
         }
     }
+
+    @Test
+    void everyNonKernelDescriptorHasExactlyOneExecutableModule() {
+        java.util.Set<String> declared = FrontierWorldProcessCatalog.descriptors().stream()
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor::id)
+                .filter(id -> !id.equals("kernel-schedule"))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        assertEquals(declared, FrontierWorldProcessCatalog.executableModuleIds());
+    }
 }
