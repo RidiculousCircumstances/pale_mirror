@@ -58,6 +58,11 @@ final class ProductionProcess {
         if (job == null) throw new IllegalStateException("production completion has no active job: " + action.subject().value());
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.FACILITY_UNAVAILABLE);
+        boolean marketBacked = state.companies().market().acceptedForJob(job.id()).isPresent();
+        if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
+                || (marketBacked && CompanyWorkPaymentProcess.contractFor(state, job).isEmpty())) {
+            return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.WORKER_UNAVAILABLE);
+        }
         if (job.inputHold() instanceof ProductionInputHold.Cold held) {
             ExactItemStack input = held.item();
             if (!(input.custody() instanceof InventoryCustody.ContainerSlot source) || !source.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
@@ -74,6 +79,24 @@ final class ProductionProcess {
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
                 fixed(state.actorLocations().get(job.workerId()).position()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
         return List.of(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
+    }
+
+    /**
+     * A death stops any work that has not crossed the executor's durable RUNNING barrier. A
+     * RUNNING intent remains an exact recovery question: Minecraft may already contain its
+     * irreversible effect, so its receipt—not a later death observation—decides settlement.
+     */
+    static List<ProposedEvent> failPreEffectWorkForDeath(FrontierWorldState state, SubjectId workerId) {
+        return state.productionJobs().values().stream().filter(job -> job.workerId().equals(workerId))
+                .sorted(Comparator.comparing(ProductionJob::id)).flatMap(job -> {
+                    boolean preEffect = state.physicalIntents().values().stream().filter(intent -> intent.causeSubjectId().equals(job.id()))
+                            .allMatch(intent -> intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION
+                                    && intent.status() == PhysicalIntentStatus.PREPARED);
+                    if (!preEffect) return java.util.stream.Stream.empty();
+                    Settlement settlement = settlement(state, job.settlementId());
+                    return failActiveJob(state, activeTask(state, settlement.id()), settlement, workshop(settlement), job,
+                            ProductionBlockReason.WORKER_UNAVAILABLE).stream();
+                }).toList();
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
@@ -106,6 +129,9 @@ final class ProductionProcess {
         if (!(job.inputHold() instanceof ProductionInputHold.Cold) || state.inventory().items().containsKey(job.consumedItemId())) {
             throw new IllegalArgumentException("materialized production output requires a physical transformation receipt");
         }
+        if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("cold production cannot complete after its worker has died");
+        }
         StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
         FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
         java.util.Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
@@ -137,6 +163,14 @@ final class ProductionProcess {
                 if (state.structureConditions().get(workshop.id()) == StructureCondition.INTACT) throw new IllegalArgumentException("production facility block precondition does not hold");
             }
             case WORKER_UNAVAILABLE -> {
+                ProductionJob job = state.productionJobs().get(blocked.workId());
+                if (job != null) {
+                    if (!job.settlementId().equals(settlement.id()) || (state.actorLocations().get(job.workerId()).condition().status() == ActorLifeStatus.ALIVE
+                            && (!state.companies().market().acceptedForJob(job.id()).isPresent() || CompanyWorkPaymentProcess.contractFor(state, job).isPresent()))) {
+                        throw new IllegalArgumentException("active production worker block precondition does not hold");
+                    }
+                    break;
+                }
                 if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentRole.CRAFTER).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");

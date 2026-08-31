@@ -19,7 +19,11 @@ public final class AmbientActorProcess {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, death.actorId()), death)));
+        java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(new ProposedEvent(owner(state, death.actorId()), death));
+        CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
+        events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
 
     static CommandPlan plan(FrontierWorldState state, AmbientActorObserved observation) {

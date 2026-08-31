@@ -218,6 +218,19 @@ final class FrontierDevelopmentScenarios {
         return new MaterializedProductionFixture(state, SimInstant.ZERO, List.of(), order.id());
     }
 
+    /**
+     * Disposable player-combat fixture for the irreversible-worker boundary.  The exact worker
+     * is deliberately the sole ambient actor inside the ordinary scene-demand radius; this is
+     * test isolation only, not a second movement or materialization authority.
+     */
+    static MaterializedProductionFixture materializedProductionWorkerDeathFixture(WorldId worldId, long seed) {
+        MaterializedProductionFixture base = materializedProductionInputTheftFixture(worldId, seed);
+        SubjectId jobId = new SubjectId("job:development-production-input-theft");
+        SubjectId worker = base.state().productionJobs().get(jobId).workerId();
+        FrontierWorldState isolated = base.state().withActorLocation(worker, new BlockPosition(-480, 64, -480));
+        return new MaterializedProductionFixture(isolated, base.instant(), base.schedules(), base.orderId());
+    }
+
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
             schedules = List.copyOf(schedules);

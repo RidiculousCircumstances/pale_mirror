@@ -134,6 +134,13 @@ public final class FrontierWorldRuntimeDefinition {
                 (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()),
                 FrontierWorldProjectionCompiler::compile, new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
+    /** Disposable-only ordinary-combat fixture; the one nearby Villager is the exact reserved worker. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentMaterializedProductionWorkerDeathConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()),
+                FrontierWorldProjectionCompiler::compile, new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
+    }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
@@ -266,6 +273,8 @@ public final class FrontierWorldRuntimeDefinition {
             if (operation == null) return rejected("actor death has no owning operation");
             List<ProposedEvent> events = new java.util.ArrayList<>();
             events.add(new ProposedEvent(operation.settlementId(), death));
+            CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
+            events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
             if (lease.status() == SceneLeaseStatus.HOT) {
                 events.add(new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
             }
@@ -432,6 +441,7 @@ public final class FrontierWorldRuntimeDefinition {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
             case CompanyRegistered registered -> CompanyFoundationProcess.reduce(state, event.subject(), registered);
             case EmploymentContractOpened opened -> CompanyFoundationProcess.reduceEmployment(state, event.subject(), opened);
+            case EmploymentContractTerminated terminated -> CompanyFoundationProcess.reduceEmploymentTermination(state, event.subject(), terminated);
             case MarketDemandOpened opened -> MarketClearingProcess.reduceOpened(state, event.subject(), opened);
             case MarketQuotePublished published -> MarketClearingProcess.reduceQuote(state, event.subject(), event.instant().ticks(), published);
             case MarketWorkOrderAccepted accepted -> MarketClearingProcess.reduceAccepted(state, event.subject(), event.instant().ticks(), accepted);

@@ -75,6 +75,110 @@ class ProductionProcessTest {
     }
 
     @Test
+    void deathRevokesNewWorkButSettlesAnAlreadyRunningPhysicalTransformationExactlyOnce() {
+        PreparedProduction prepared = activePhysicalProduction();
+        WorldId world = new WorldId("frontier:production-physical");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        assertInstanceOf(CommandResult.Accepted.class, submitTransition(engine, world, "worker-running-before-death", prepared.intent().id(),
+                PhysicalIntentStatus.RUNNING, Optional.empty()));
+        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        CommandId deathId = new CommandId("command:production-worker-died-after-effect-prepared");
+
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
+                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+        FrontierWorldState afterDeath = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        EmploymentContract terminated = afterDeath.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(prepared.settlementId()));
+        assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(prepared.job().workerId()).condition().status());
+        assertEquals(EmploymentContractStatus.TERMINATED, terminated.status());
+        assertTrue(afterDeath.productionJobs().containsKey(prepared.job().id()));
+        assertTrue(afterDeath.inventory().economics().reservations().containsKey(prepared.order().reservationId()));
+        assertEquals(PhysicalIntentStatus.RUNNING, afterDeath.physicalIntents().get(prepared.intent().id()).status());
+        assertTrue(CompanyWorkPaymentProcess.contractFor(afterDeath, prepared.job()).isEmpty());
+        assertTrue(CompanyWorkPaymentProcess.settlementContractFor(afterDeath, prepared.job()).isPresent());
+        assertFalse(CompanyFoundationProcess.plan(afterDeath, CompanyFoundationProcess.review(prepared.settlementId(), 2, 28_000L)).stream()
+                .map(ProposedEvent::payload).anyMatch(EmploymentContractOpened.class::isInstance));
+
+        ExactItemStack input = afterDeath.inventory().items().get(prepared.job().consumedItemId());
+        ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:production-dead-worker-confirmed"),
+                prepared.intent().id(), input.id(), prepared.job().outputItemId(), input.count(), prepared.job().outputCount());
+        assertInstanceOf(CommandResult.Accepted.class, submitTransition(engine, world, "dead-worker-confirmed", prepared.intent().id(),
+                PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+
+        FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(completed.productionJobs().isEmpty());
+        assertTrue(completed.inventory().economics().reservations().isEmpty());
+        assertEquals(1L, completed.companies().employmentContracts().get(terminated.id()).completedJobs());
+        assertEquals(EmploymentContractStatus.TERMINATED, completed.companies().employmentContracts().get(terminated.id()).status());
+        assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
+        assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().get(prepared.order().id()).status());
+    }
+
+    @Test
+    void deathBeforeColdCompletionCancelsMarketWorkAndReturnsItsExactInput() {
+        ColdMarketJob prepared = coldMarketJob();
+        WorldId world = new WorldId("frontier:production-cold-cancel");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        CommandId deathId = new CommandId("command:cold-production-worker-died");
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
+                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+        FrontierWorldState released = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+
+        assertEquals(EmploymentContractStatus.TERMINATED, released.companies().employmentContracts()
+                .get(CompanyFoundationProcess.employmentId(prepared.settlementId())).status());
+        assertFalse(released.productionJobs().containsKey(prepared.job().id()));
+        assertEquals(prepared.input(), released.inventory().items().get(prepared.input().id()));
+        assertTrue(released.inventory().economics().reservations().isEmpty());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, released.companies().market().workOrders().get(prepared.order().id()).status());
+    }
+
+    @Test
+    void deathBeforeMaterializedTransformRemovesPreparedIntentAndReturnsTheExactInput() {
+        PreparedProduction prepared = activePhysicalProduction();
+        WorldId world = new WorldId("frontier:production-physical");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        CommandId deathId = new CommandId("command:prepared-production-worker-died");
+
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
+                new AmbientActorDied(prepared.job().workerId(), position, "entity:test-explosion"))));
+        FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+
+        assertEquals(EmploymentContractStatus.TERMINATED, cancelled.companies().employmentContracts()
+                .get(CompanyFoundationProcess.employmentId(prepared.settlementId())).status());
+        assertTrue(cancelled.productionJobs().isEmpty());
+        assertFalse(cancelled.physicalIntents().containsKey(prepared.intent().id()));
+        assertEquals(prepared.state().inventory().items().get(prepared.job().consumedItemId()),
+                cancelled.inventory().items().get(prepared.job().consumedItemId()));
+        assertTrue(cancelled.inventory().economics().reservations().isEmpty());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, cancelled.strategicPlans().tasks().get(prepared.taskId()).status());
+    }
+
+    @Test
+    void workerDeathDisposableFixtureKeepsTheExactCrafterAsTheOnlyNearbyAmbientActor() {
+        FrontierWorldState state = FrontierWorldRuntimeDefinition.developmentMaterializedProductionWorkerDeathConfiguration(
+                new WorldId("frontier:production-worker-death-fixture"), 41L).initialState();
+        SubjectId worker = state.productionJobs().get(new SubjectId("job:development-production-input-theft")).workerId();
+        BlockPosition target = new BlockPosition(-480, 64, -480);
+
+        assertEquals(new SubjectId("resident:1-15"), worker);
+        assertEquals(target, state.actorLocations().get(worker).position());
+        assertTrue(state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(worker))
+                .noneMatch(entry -> Math.max(Math.abs(entry.getValue().position().x() - target.x()),
+                        Math.abs(entry.getValue().position().z() - target.z())) <= 96));
+    }
+
+    @Test
     void coldOrderCancelledBeforeAnEffectReturnsTheSameInputAndReleasesItsExactReservation() {
         ColdMarketJob prepared = coldMarketJob();
         FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);

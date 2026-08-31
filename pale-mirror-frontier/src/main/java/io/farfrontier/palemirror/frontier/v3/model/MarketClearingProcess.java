@@ -118,13 +118,19 @@ final class MarketClearingProcess {
         StrategicTask task = demand == null ? null : state.strategicPlans().tasks().get(demand.reasonId());
         if (demand == null || !subject.equals(demand.buyerId()) || task == null || task.status() != StrategicTaskStatus.ACTIVE
                 || !order.taskId().equals(task.id()) || !job.settlementId().equals(subject)
-                || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))) {
+                || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id())
+                && (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION
+                || intent.status() != PhysicalIntentStatus.PREPARED))
+                || (cancelled.reason() != ProductionBlockReason.WORKER_UNAVAILABLE && state.physicalIntents().values().stream()
+                .anyMatch(intent -> intent.causeSubjectId().equals(job.id())))) {
             throw new IllegalArgumentException("market cancellation may only release work before any physical production intent");
         }
         boolean allowed = switch (cancelled.reason()) {
             case FACILITY_UNAVAILABLE -> state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT;
             case INPUT_UNAVAILABLE -> job.inputHold() instanceof ProductionInputHold.Materialized
                     && !materializedInputMatches(state, job);
+            case WORKER_UNAVAILABLE -> state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
+                    || CompanyWorkPaymentProcess.contractFor(state, job).isEmpty();
             default -> false;
         };
         if (!allowed) throw new IllegalArgumentException("market cancellation reason no longer holds");

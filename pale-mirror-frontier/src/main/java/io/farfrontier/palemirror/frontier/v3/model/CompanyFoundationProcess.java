@@ -33,7 +33,8 @@ final class CompanyFoundationProcess {
             company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
             events.add(new ProposedEvent(settlement.id(), new CompanyRegistered(company)));
         }
-        if (company.status() == CompanyStatus.ACTIVE && state.companies().activeEmployment(company.id(), company.founderId()).isEmpty()) {
+        if (company.status() == CompanyStatus.ACTIVE && !state.companies().employmentContracts().containsKey(employmentId(settlement.id()))
+                && state.actorLocations().get(company.founderId()).condition().status() == ActorLifeStatus.ALIVE) {
             events.add(new ProposedEvent(settlement.id(), new EmploymentContractOpened(employment(company, action.dueAt().ticks()))));
         }
         events.add(new ProposedEvent(settlement.id(), new ScheduleEffect.Created(review(settlement.id(), nextOrdinal(action),
@@ -64,6 +65,25 @@ final class CompanyFoundationProcess {
         EmploymentContract expected = employment(company, contract.openedAtTick());
         if (!expected.equals(contract)) throw new IllegalArgumentException("works employment must use canonical exact terms");
         return state.openEmployment(contract);
+    }
+
+    static java.util.Optional<ProposedEvent> terminationForDeath(FrontierWorldState state, SubjectId residentId) {
+        return state.companies().employmentContracts().values().stream()
+                .filter(contract -> contract.residentId().equals(residentId) && contract.status() == EmploymentContractStatus.ACTIVE)
+                .reduce((left, right) -> { throw new IllegalStateException("resident has ambiguous active employment"); })
+                .map(contract -> new ProposedEvent(state.companies().companies().get(contract.companyId()).settlementId(),
+                        new EmploymentContractTerminated(contract.id(), residentId, EmploymentTerminationReason.DEATH)));
+    }
+
+    static FrontierWorldState reduceEmploymentTermination(FrontierWorldState state, SubjectId subject, EmploymentContractTerminated terminated) {
+        EmploymentContract contract = state.companies().employmentContracts().get(terminated.contractId());
+        Company company = contract == null ? null : state.companies().companies().get(contract.companyId());
+        ActorLocation actor = state.actorLocations().get(terminated.residentId());
+        if (contract == null || company == null || !subject.equals(company.settlementId()) || !contract.residentId().equals(terminated.residentId())
+                || terminated.reason() != EmploymentTerminationReason.DEATH || actor == null || actor.condition().status() != ActorLifeStatus.DEAD) {
+            throw new IllegalArgumentException("employment termination lacks the resident's confirmed death");
+        }
+        return state.withCompanies(state.companies().terminate(contract.id()));
     }
 
     static SubjectId companyId(SubjectId settlementId) { return new SubjectId("company:" + suffix(settlementId) + "-works"); }

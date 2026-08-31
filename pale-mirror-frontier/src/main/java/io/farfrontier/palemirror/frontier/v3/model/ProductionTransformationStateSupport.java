@@ -31,12 +31,17 @@ public final class ProductionTransformationStateSupport {
         }
         StrategicTask task = activeTask(state, job);
         if (task.status() != StrategicTaskStatus.ACTIVE) throw new IllegalArgumentException("production transformation task is not active");
-        CompanyWorkPaymentProcess.contractFor(state, job).ifPresent(contract -> {
-            FinancialReservation expected = CompanyWorkPaymentProcess.reservation(job, contract);
+        java.util.Optional<EmploymentContract> contract = intent.status() == PhysicalIntentStatus.RUNNING
+                ? CompanyWorkPaymentProcess.settlementContractFor(state, job) : CompanyWorkPaymentProcess.contractFor(state, job);
+        contract.ifPresent(value -> {
+            FinancialReservation expected = CompanyWorkPaymentProcess.reservation(job, value);
             if (!state.inventory().economics().reservations().containsKey(expected.id())) {
                 throw new IllegalArgumentException("production transformation has no held company finance");
             }
         });
+        if (intent.status() == PhysicalIntentStatus.PREPARED && contract.isEmpty()) {
+            throw new IllegalArgumentException("prepared production transformation has no living exact worker");
+        }
     }
 
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,
@@ -49,7 +54,7 @@ public final class ProductionTransformationStateSupport {
                 || job.outputCount() != observation.outputCount()) {
             throw new IllegalArgumentException("production transformation receipt does not match its durable job");
         }
-        FrontierWorldState paidState = CompanyWorkPaymentProcess.settle(state, job);
+        FrontierWorldState paidState = CompanyWorkPaymentProcess.settleCommittedPhysicalWork(state, job);
         java.util.Optional<MarketWorkOrder> order = paidState.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) {
             paidState = paidState.withCompanies(paidState.companies().withMarket(paidState.companies().market().complete(order.orElseThrow().id())));

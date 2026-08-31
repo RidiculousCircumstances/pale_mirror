@@ -225,6 +225,9 @@ public final class FrontierV3ServerLifecycle {
         if (profile.equals("production-input-theft") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
             return FrontierWorldRuntimeDefinition.developmentMaterializedProductionInputTheftConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
         }
+        if (profile.equals("production-worker-death") && !System.getProperty(PILOT_RUN_ID_PROPERTY, "").isBlank()) {
+            return FrontierWorldRuntimeDefinition.developmentMaterializedProductionWorkerDeathConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
+        }
         throw new IllegalStateException("Frontier v3 pilot profile is unavailable outside an identified disposable runner: " + profile);
     }
 

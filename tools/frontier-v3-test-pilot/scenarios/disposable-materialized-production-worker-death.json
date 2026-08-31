@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "disposable_materialized_production_worker_death",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-worker-death" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/item replace entity PMTestPilot weapon.mainhand with minecraft:diamond_sword" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -480, "y": 65, "z": -480 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "CRAFTER" } },
+      { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "attack_nearest_entity", "entityType": "minecraft:villager", "maxDistance": 8, "maxAttacks": 20, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "DEAD" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "DEAD" }, "timeoutMs": 30000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -480, "y": 65, "z": -480 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 3, "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "DEAD" } },
+    { "after": 4, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } },
+    { "after": 5, "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "DEAD" } }
+  ]
+}

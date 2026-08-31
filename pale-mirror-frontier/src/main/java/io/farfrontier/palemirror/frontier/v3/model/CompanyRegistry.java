@@ -68,7 +68,14 @@ public record CompanyRegistry(Map<SubjectId, Company> companies, Map<SubjectId, 
     CompanyRegistry settle(SubjectId contractId) {
         EmploymentContract contract = employmentContracts.get(Objects.requireNonNull(contractId, "employment contract id"));
         if (contract == null) throw new IllegalArgumentException("unknown employment contract");
-        Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.settleOneCompletedJob());
+        Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.settleOneCommittedJob());
+        return new CompanyRegistry(companies, next, market);
+    }
+
+    CompanyRegistry terminate(SubjectId contractId) {
+        EmploymentContract contract = employmentContracts.get(Objects.requireNonNull(contractId, "employment contract id"));
+        if (contract == null) throw new IllegalArgumentException("unknown employment contract");
+        Map<SubjectId, EmploymentContract> next = new LinkedHashMap<>(employmentContracts); next.put(contractId, contract.terminate());
         return new CompanyRegistry(companies, next, market);
     }
 

@@ -82,6 +82,7 @@ test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-provision' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'resident-transit' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'production-worker-death' } }));
   assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
 });
 

@@ -26,9 +26,23 @@ public record EmploymentContract(SubjectId id, SubjectId companyId, SubjectId re
         if (!totalWagesPaid.equals(wagePerCompletedJob.multiply(completedJobs))) throw new IllegalArgumentException("employment wage total must equal settled completed work");
     }
 
-    EmploymentContract settleOneCompletedJob() {
-        if (status != EmploymentContractStatus.ACTIVE) throw new IllegalArgumentException("only active employment may settle work");
+    /**
+     * Records an invoice whose physical work was already irreversibly committed.  A terminated
+     * agreement cannot authorize another job, but it retains this narrow historical settlement
+     * authority so death between a Minecraft effect and its observed receipt cannot erase a
+     * wage or strand its matching reservation.
+     */
+    EmploymentContract settleOneCommittedJob() {
+        if (status != EmploymentContractStatus.ACTIVE && status != EmploymentContractStatus.TERMINATED) {
+            throw new IllegalArgumentException("only current or terminated employment may settle committed work");
+        }
         return new EmploymentContract(id, companyId, residentId, invoicePerCompletedJob, wagePerCompletedJob, status, openedAtTick,
                 Math.addExact(completedJobs, 1L), totalWagesPaid.plus(wagePerCompletedJob));
+    }
+
+    EmploymentContract terminate() {
+        if (status != EmploymentContractStatus.ACTIVE) throw new IllegalArgumentException("only active employment may terminate");
+        return new EmploymentContract(id, companyId, residentId, invoicePerCompletedJob, wagePerCompletedJob,
+                EmploymentContractStatus.TERMINATED, openedAtTick, completedJobs, totalWagesPaid);
     }
 }

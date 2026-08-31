@@ -75,7 +75,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             if (contract.status() == EmploymentContractStatus.ACTIVE
                     && (company.status() != CompanyStatus.ACTIVE || !resident.settlementId().equals(company.settlementId())
-                    || humanPopulation.migrations().containsKey(resident.id()))) {
+                    || humanPopulation.migrations().containsKey(resident.id())
+                    || actorLocations.get(resident.id()).condition().status() != ActorLifeStatus.ALIVE)) {
                 throw new IllegalArgumentException("active employment requires a settled resident in an active local company");
             }
         }
@@ -378,7 +379,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (depth != 0) DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
         }
     }
-
     /**
      * Pre-WAL dependency-aware audit for the one high-frequency sparse-field transition.
      * Everything outside the infection field remains the exact same immutable object, therefore
@@ -633,7 +633,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    /** Releases a job only before a physical transformation intent exists. A COLD hold returns its same exact stack to its original slot. */
     FrontierWorldState cancelProductionJob(SubjectId jobId) {
         ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
@@ -646,14 +645,18 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 }
                 yield inventory.store(held);
             }
-            // The real stack remains under its observed physical custody. The caller must
-            // prove its current mismatch before cancelling a materialized job, so this
-            // branch deliberately neither restores nor deletes it.
+            // The real stack remains under observed custody; cancellation neither restores nor deletes it.
             case ProductionInputHold.Materialized ignored -> inventory;
         };
+        Map<PhysicalIntentId, PhysicalIntent> nextIntents = new LinkedHashMap<>(physicalIntents);
+        for (PhysicalIntent intent : physicalIntents.values()) if (intent.causeSubjectId().equals(job.id())) {
+            if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION || intent.status() != PhysicalIntentStatus.PREPARED)
+                throw new IllegalArgumentException("production job with a running or terminal physical transformation cannot be cancelled");
+            nextIntents.remove(intent.id());
+        }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(job.id());
         return next(actorLocations, structureConditions, infection, nextInventory, next, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+                nextIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState createSupplyContract(SupplyContract contract) {
         if (contracts.containsKey(contract.id())) throw new IllegalArgumentException("supply contract identity already exists");

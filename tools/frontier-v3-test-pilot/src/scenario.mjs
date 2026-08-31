@@ -32,8 +32,8 @@ export function validateScenario(scenario) {
   if (!scenario.server || typeof scenario.server.host !== 'string' || !Number.isInteger(scenario.server.port)) {
     throw new Error('scenario server must contain host and integer port');
   }
-  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft'].includes(scenario.server.profile)) {
-    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, settlement-provision, scene-return, operation-assembly, health-quarantine, resident-transit or production-input-theft');
+  if (scenario.server.profile !== undefined && !['world', 'hot-scene-strike', 'hive-growth', 'settlement-provision', 'scene-return', 'operation-assembly', 'health-quarantine', 'resident-transit', 'production-input-theft', 'production-worker-death'].includes(scenario.server.profile)) {
+    throw new Error('scenario server profile must be world, hot-scene-strike, hive-growth, settlement-provision, scene-return, operation-assembly, health-quarantine, resident-transit, production-input-theft or production-worker-death');
   }
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');

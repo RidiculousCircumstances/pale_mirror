@@ -40,6 +40,9 @@ class CompanyFoundationProcessTest {
         EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(state.bootstrap().settlements().getFirst().id()));
         assertEquals(new EmploymentContractOpened(contract), FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.employment_contract_opened",
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new EmploymentContractOpened(contract))));
+        EmploymentContractTerminated terminated = new EmploymentContractTerminated(contract.id(), contract.residentId(), EmploymentTerminationReason.DEATH);
+        assertEquals(terminated, FrontierWorldRuntimeDefinition.payloadCodecs().decode(terminated.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(terminated)));
     }
 
     @Test

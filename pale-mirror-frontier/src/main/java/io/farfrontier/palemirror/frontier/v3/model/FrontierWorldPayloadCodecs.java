@@ -10,7 +10,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static PayloadCodecs create() {
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
-                new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(),
+                new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
                 MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled(),
                 new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
@@ -71,6 +71,18 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (status >= EmploymentContractStatus.values().length) throw new IllegalArgumentException("invalid employment contract status");
             return new EmploymentContractOpened(new EmploymentContract(id, company, resident, new FixedScalar(invoice), new FixedScalar(wage),
                     EmploymentContractStatus.values()[status], openedAt, completed, new FixedScalar(totalWages)));
+        }); }
+    }
+    private static final class EmploymentContractTerminatedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.employment_contract_terminated"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            EmploymentContractTerminated terminated = (EmploymentContractTerminated) payload;
+            writeSubject(output, terminated.contractId()); writeSubject(output, terminated.residentId()); output.writeByte(terminated.reason().ordinal());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId contract = readSubject(input).value(); SubjectId resident = readSubject(input).value(); int reason = input.readUnsignedByte();
+            if (reason >= EmploymentTerminationReason.values().length) throw new IllegalArgumentException("invalid employment termination reason");
+            return new EmploymentContractTerminated(contract, resident, EmploymentTerminationReason.values()[reason]);
         }); }
     }
     private static final class ResourceDepositedCodec implements PayloadCodec {
