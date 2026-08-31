@@ -51,12 +51,25 @@ final class StrategicPlanStateCodec {
             writePosition(output, engagement.intercept()); output.writeByte(engagement.status().ordinal()); output.writeInt(engagement.nextStrikeEpoch());
             output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().ordinal());
         }
+        writeCount(output, plans.infectionKnowledge().entries().size());
+        for (Map.Entry<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> settlement : plans.infectionKnowledge().entries().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, settlement.getKey()); writeCount(output, settlement.getValue().size());
+            for (SettlementInfectionKnowledge.KnownInfection known : settlement.getValue().values().stream().sorted(Comparator.comparingInt((SettlementInfectionKnowledge.KnownInfection value) -> value.cell().x())
+                    .thenComparingInt(value -> value.cell().z())).toList()) {
+                writeTarget(output, Optional.of(known.cell())); output.writeLong(known.intensity().value().raw()); output.writeLong(known.observedAt());
+            }
+        }
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false); }
+    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true); }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
+        return read(input, migrateLegacyProductionSlotRequirement, true);
+    }
+
+    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge) throws IOException {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
@@ -108,7 +121,18 @@ final class StrategicPlanStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
             }
         }
-        return new StrategicPlanState(objectives, tasks, patrols, engagements);
+        Map<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> knowledge = new LinkedHashMap<>();
+        if (hasInfectionKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId settlement = readSubject(input); Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection> cells = new LinkedHashMap<>();
+            for (int cellIndex = 0, cellCount = readCount(input); cellIndex < cellCount; cellIndex++) {
+                InfectionCell cell = readTarget(input).orElseThrow(() -> new IllegalArgumentException("known infection must retain a cell"));
+                SettlementInfectionKnowledge.KnownInfection known = new SettlementInfectionKnowledge.KnownInfection(cell,
+                        new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())), input.readLong());
+                if (cells.put(cell, known) != null) throw new IllegalArgumentException("duplicate known infection cell");
+            }
+            if (knowledge.put(settlement, cells) != null) throw new IllegalArgumentException("duplicate settlement infection knowledge");
+        }
+        return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge));
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {

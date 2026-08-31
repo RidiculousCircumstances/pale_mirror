@@ -35,6 +35,15 @@ final class StrategicPlanPayloadCodecs {
             return new StrategicTaskTransition(task, StrategicTaskStatus.values()[status]);
         }); }
     }; }
+    static PayloadCodec infectionObserved() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.settlement_infection_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            SettlementInfectionObserved observed = (SettlementInfectionObserved) payload; subject(output, observed.settlementId());
+            output.writeInt(observed.cell().x()); output.writeInt(observed.cell().z()); output.writeLong(observed.intensity().value().raw()); output.writeLong(observed.observedAt());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new SettlementInfectionObserved(subject(input),
+                new InfectionCell(input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())), input.readLong())); }
+    }; }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
         subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
         optionalSubject(output, value.resourceSiteTarget());

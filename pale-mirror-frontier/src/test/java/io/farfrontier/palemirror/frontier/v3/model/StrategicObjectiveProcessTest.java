@@ -224,46 +224,39 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
-    void operationInterruptPreemptsHiveWorkWithoutForkingItsPeriodicReviewCadence() {
+    void cargoLoadingDoesNotGrantTheHiveHiddenKnowledgeOfAnOperation() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
                 new WorldId("frontier:strategic-interrupt"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()); SubjectId hive = state.bootstrap().hive().id();
-        InfectionCell infection = InfectionCell.at(state.bootstrap().hive().seedNests().getFirst().anchor());
-        StrategicObjective active = new StrategicObjective(new SubjectId("objective:hive-active-infection"), hive,
-                StrategicObjectiveKind.HIVE_EXPAND_INFECTION, java.util.Optional.of(infection), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask activeTask = new StrategicTask(new SubjectId("task:hive-active-infection"), active.id(), hive,
-                StrategicTaskKind.SPREAD_INFECTION_CELL, active.infectionTarget(), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.ACTIVE);
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(active).addTask(activeTask));
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.planOpportunity(state, StrategicObjectiveProcess.interceptOpportunity(hive, operation, 100L));
 
-        StrategicTaskTransition preempted = assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload());
-        assertEquals(activeTask.id(), preempted.taskId()); assertEquals(StrategicTaskStatus.BLOCKED, preempted.status());
-        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.get(1).payload());
-        assertEquals(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, selected.objective().kind());
-        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
-                && created.action().kind().equals("frontier.objective.review")));
+        assertEquals(1, planned.size());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class, planned.getFirst().payload());
+        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected));
     }
 
     @Test
-    void pendingInterceptionIsTheDurableHiveLaneClaimUntilItsStartRuns() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentRouteSceneReturnConfiguration(
-                new WorldId("frontier:strategic-intercept-pending"), 91L));
-        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId hive = state.bootstrap().hive().id();
-        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+    void localInfectionObservationPersistsBeforeContainmentSelectionAndClearsWhenAbsent() {
+        FrontierWorldState state = initial("frontier:strategic-perception", 491L); Settlement settlement = state.bootstrap().settlements().getFirst();
+        InfectionCell nearby = InfectionCell.at(settlement.anchor());
+        state = state.withInfection(nearby, new FixedRatio(new FixedScalar(750_000L)));
 
-        List<ProposedEvent> first = StrategicObjectiveProcess.planOpportunity(state,
-                StrategicObjectiveProcess.interceptOpportunity(hive, operation, 100L));
-        StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, first.getFirst().payload());
-        StrategicTaskPlanned plannedTask = assertInstanceOf(StrategicTaskPlanned.class, first.get(1).payload());
-        state = StrategicObjectiveProcess.reduceObjective(state, hive, selected);
-        state = StrategicObjectiveProcess.reduceTask(state, hive, plannedTask);
+        SettlementPerceptionProcess.Refresh refreshed = SettlementPerceptionProcess.refreshLocalInfection(state, settlement, 40L);
+        assertEquals(1, refreshed.events().size());
+        SettlementInfectionObserved observed = assertInstanceOf(SettlementInfectionObserved.class, refreshed.events().getFirst().payload());
+        state = SettlementPerceptionProcess.reduce(state, settlement.id(), observed);
+        assertEquals(nearby, state.strategicPlans().infectionKnowledge().known(settlement.id()).get(nearby).cell());
+        assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
 
-        List<ProposedEvent> repeated = StrategicObjectiveProcess.planOpportunity(state,
-                StrategicObjectiveProcess.interceptOpportunity(hive, operation, 120L));
-        assertTrue(repeated.isEmpty(), "a second opportunity must not schedule a duplicate start for the retained task");
+        FrontierWorldState clear = state.withInfection(nearby, new FixedRatio(FixedScalar.ZERO));
+        SettlementPerceptionProcess.Refresh cleared = SettlementPerceptionProcess.refreshLocalInfection(clear, settlement, 80L);
+        SettlementInfectionObserved withdrawn = assertInstanceOf(SettlementInfectionObserved.class, cleared.events().getFirst().payload());
+        assertEquals(FixedScalar.ZERO, withdrawn.intensity().value());
+        clear = SettlementPerceptionProcess.reduce(clear, settlement.id(), withdrawn);
+        assertTrue(clear.strategicPlans().infectionKnowledge().known(settlement.id()).isEmpty());
     }
 
     private static FrontierWorldState initial(String world, long seed) {

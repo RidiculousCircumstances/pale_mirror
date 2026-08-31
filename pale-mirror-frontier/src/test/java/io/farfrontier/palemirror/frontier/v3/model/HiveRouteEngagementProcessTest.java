@@ -50,7 +50,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(task.id(), retry.action().subject());
     }
 
-    @Test void hiveReviewPersistsTheExactOperationTargetBeforeSchedulingAnInterception() {
+    @Test void hiveReviewDoesNotInspectAnUnobservedHumanOperation() {
         FrontierWorldState state = enRouteState().withStrategicPlans(StrategicPlanState.empty());
         SubjectId hive = state.bootstrap().hive().id();
 
@@ -59,8 +59,8 @@ class HiveRouteEngagementProcessTest {
 
         StrategicTask task = ((StrategicTaskPlanned) events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(StrategicTaskPlanned.class::isInstance).findFirst().orElseThrow()).task();
-        assertEquals(StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, task.kind());
-        assertEquals(HiveRouteEngagementProcess.targetOperation(state), task.operationTarget());
+        assertTrue(task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM || task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL);
+        assertTrue(task.operationTarget().isEmpty());
         assertTrue(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScheduleEffect.Created.class::isInstance));
     }
 
@@ -348,27 +348,18 @@ class HiveRouteEngagementProcessTest {
         assertEquals(3_060L, ((ScheduleEffect.Created) hotDeferred.getFirst().payload()).action().dueAt().ticks());
     }
 
-    @Test void autonomousSupplyProfileHoldsARealCaravanUntilHiveGuardsReachItsCurrentPosition() {
+    @Test void autonomousSupplyProfileDoesNotInventAnUnscoutedHiveInterception() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.developmentAutonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
-        boolean heldAtCurrentIntercept = false;
-        boolean reachedColdCombat = false;
         FrontierWorldState latest = null;
 
         for (long tick = 20L; tick <= 10_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             latest = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-            for (RouteEngagement engagement : latest.strategicPlans().routeEngagements().values()) {
-                RouteOperation operation = latest.operations().get(engagement.operationId());
-                if (operation == null || operation.stage() != OperationStage.EN_ROUTE) continue;
-                if (operation.route().get(operation.routeIndex()).equals(engagement.intercept())) heldAtCurrentIntercept = true;
-                if (engagement.status() == RouteEngagementStatus.COLD_COMBAT) reachedColdCombat = true;
-            }
         }
 
         FrontierWorldState finalState = latest;
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
-        assertTrue(heldAtCurrentIntercept, () -> "autonomous supply profile never held an EN_ROUTE caravan at its intercept: " + finalState.strategicPlans().routeEngagements());
-        assertTrue(reachedColdCombat, () -> "autonomous supply profile never reached COLD combat: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(finalState.strategicPlans().routeEngagements().isEmpty(), () -> "unscouted route unexpectedly received a hive engagement: " + finalState.strategicPlans().routeEngagements());
     }
 
     private static FrontierWorldState enRouteState() {

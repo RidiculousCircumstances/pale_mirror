@@ -98,7 +98,8 @@ final class SupplyOperationProcess {
         events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
                 new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
-        if (autonomousInterception) events.add(schedule(StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), operation, now + 20L)));
+        // Cargo loading is a settlement fact. It is not an observation by the hive; an
+        // explicit scout/perception slice must create any future intercept opportunity.
         events.add(schedule(operationAssembly(operation, now + 20L)));
         return List.copyOf(events);
     }
