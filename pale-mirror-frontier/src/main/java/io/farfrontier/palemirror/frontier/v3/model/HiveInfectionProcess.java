@@ -66,7 +66,9 @@ final class HiveInfectionProcess {
         if (!hasOperationalHeart(state)) return Optional.empty();
         Map<InfectionCell, FixedRatio> perceived = state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now);
         if (perceived.isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
-        return FrontierWorldStateSupport.infectionFrontier(perceived, state.bootstrap().bounds()).best(perceived);
+        FrontierInfectionFrontier frontier = FrontierWorldStateSupport.infectionFrontier(perceived, state.bootstrap().bounds());
+        return state.strategicPlans().hiveSettlementKnowledge().freshest(now).flatMap(sighting -> frontier.bestToward(perceived, sighting.settlementAnchor()))
+                .or(() -> frontier.best(perceived));
     }
 
     static boolean hasOperationalHeart(FrontierWorldState state) { return !roots(state).isEmpty(); }

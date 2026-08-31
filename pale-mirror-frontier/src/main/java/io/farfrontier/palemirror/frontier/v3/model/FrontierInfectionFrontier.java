@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -61,6 +62,17 @@ final class FrontierInfectionFrontier {
         return Optional.empty();
     }
 
+    /**
+     * Chooses an already sensed frontier toward one locally observed destination.  The target is
+     * not allowed to manufacture an unseen infection cell: every candidate still has to border
+     * the supplied exact infection map and remain inside the world bounds.
+     */
+    Optional<InfectionCell> bestToward(java.util.Map<InfectionCell, FixedRatio> infection, BlockPosition destination) {
+        return infection.keySet().stream().flatMap(cell -> adjacent(cell).stream()).distinct().filter(cell -> inside(bounds, cell))
+                .filter(cell -> hasInfectedNeighbor(infection, cell)).sorted(Comparator.comparingLong((InfectionCell cell) -> distanceSquared(cell, destination))
+                        .thenComparingLong(cell -> raw(infection, cell)).thenComparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst();
+    }
+
     Optional<InfectionChange> change() { return Optional.ofNullable(change); }
 
     private FrontierInfectionFrontier withChange(InfectionChange replacement) {
@@ -79,6 +91,11 @@ final class FrontierInfectionFrontier {
 
     private static long raw(java.util.Map<InfectionCell, FixedRatio> infection, InfectionCell cell) {
         return infection.getOrDefault(cell, new FixedRatio(FixedScalar.ZERO)).value().raw();
+    }
+
+    private static long distanceSquared(InfectionCell cell, BlockPosition destination) {
+        BlockPosition position = cell.originAtY(destination.y()); long x = (long) position.x() - destination.x(), z = (long) position.z() - destination.z();
+        return x * x + z * z;
     }
 
     private static java.util.List<InfectionCell> adjacent(InfectionCell cell) {

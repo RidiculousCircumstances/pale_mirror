@@ -91,6 +91,28 @@ class HiveInfectionProcessTest {
     }
 
     @Test
+    void freshScoutSettlementSightingTurnsLocalExpansionIntoTerritorialPressure() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-pressure"), 110L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        List<Bioform> scouts = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).toList();
+        Bioform observer = scouts.getFirst(), territorySensor = scouts.get(1);
+        state = state.withActorLocation(observer.id(), settlement.anchor());
+        HiveSettlementObserved observation = new HiveSettlementObserved(new HiveSettlementKnowledge.Sighting(settlement.id(), observer.id(), settlement.anchor(), 0L));
+        state = HiveSettlementPerceptionProcess.reduce(state, state.bootstrap().hive().id(), observation)
+                .withActorLocation(observer.id(), state.bootstrap().hive().seedNests().getFirst().anchor());
+        Map<InfectionCell, FixedRatio> local = Map.of(new InfectionCell(-12, -8), new FixedRatio(new FixedScalar(750_000L)),
+                new InfectionCell(-11, -8), new FixedRatio(new FixedScalar(125_000L)), new InfectionCell(-10, -8), new FixedRatio(new FixedScalar(500_000L)));
+        Map<InfectionCell, HiveTerritoryKnowledge.Belief> beliefs = new LinkedHashMap<>();
+        BlockPosition sensorPosition = new BlockPosition(-44, 64, -32);
+        local.forEach((cell, intensity) -> beliefs.put(cell, new HiveTerritoryKnowledge.Belief(cell, intensity, territorySensor.id(), sensorPosition, 0L)));
+        state = state.withActorLocation(territorySensor.id(), sensorPosition).withStrategicPlans(state.strategicPlans()
+                .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(beliefs)));
+
+        assertEquals(new InfectionCell(-13, -8), HiveInfectionProcess.expansionTarget(state, 0L).orElseThrow(),
+                "the next sensed frontier cell must reduce distance to the scout-observed settlement, not use global geometry");
+    }
+
+    @Test
     void persistentFrontierMatchesTheCompleteReferenceAcrossGrowthAndRetreat() {
         WorldBounds bounds = new WorldBounds(-64, -64, 128, 128);
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();

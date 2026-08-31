@@ -572,6 +572,7 @@ public final class FrontierWorldRuntimeDefinition {
             case SettlementInfectionObserved observed -> SettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
             case HiveTerritoryObserved observed -> HiveTerritoryPerceptionProcess.reduce(state, event.subject(), observed);
+            case HiveSettlementObserved observed -> HiveSettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveDoctrineSelected selected -> HiveDoctrineProcess.reduce(state, event.subject(), selected);
             case HotScoutOperationObserved observed -> HivePerceptionProcess.reduceHot(state, event.subject(), observed);
             case ScoutPatrolAdvanced advanced -> HiveScoutPatrolProcess.reduce(state, event.subject(), advanced);

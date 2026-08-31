@@ -35,7 +35,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 RouteConstructionPayloadCodecs.started(), RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(), RoutePatrolPayloadCodecs.advanced(),
                 RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(),
                 StrategicPlanPayloadCodecs.selected(), StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved(),
-                StrategicPlanPayloadCodecs.hiveOperationObserved(), StrategicPlanPayloadCodecs.hiveTerritoryObserved(),
+                StrategicPlanPayloadCodecs.hiveOperationObserved(), StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
                 StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(),
                 StrategicPlanPayloadCodecs.scoutPatrolAdvanced()))); }
     private static final class InfectionCodec implements PayloadCodec {

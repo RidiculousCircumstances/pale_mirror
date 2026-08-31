@@ -124,14 +124,19 @@ final class StrategicObjectiveProcess {
                 : new HivePerceptionProcess.Refresh(state.strategicPlans().hiveOperationKnowledge(), List.of());
         HiveTerritoryPerceptionProcess.Refresh territoryPerception = hive ? HiveTerritoryPerceptionProcess.refresh(state, action.dueAt().ticks())
                 : new HiveTerritoryPerceptionProcess.Refresh(state.strategicPlans().hiveTerritoryKnowledge(), List.of());
+        HiveSettlementPerceptionProcess.Refresh settlementPerception = hive ? HiveSettlementPerceptionProcess.refresh(state, action.dueAt().ticks())
+                : new HiveSettlementPerceptionProcess.Refresh(state.strategicPlans().hiveSettlementKnowledge(), List.of());
         HiveDoctrineState doctrine = hive ? HiveDoctrineProcess.select(state.withStrategicPlans(state.strategicPlans()
-                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge())), action.dueAt().ticks(), allowHiveInterception)
+                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge())
+                .withHiveSettlementKnowledge(settlementPerception.knowledge())), action.dueAt().ticks(), allowHiveInterception)
                 : state.strategicPlans().hiveDoctrine();
         FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge())
-                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge()).withHiveDoctrine(doctrine));
+                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge())
+                .withHiveSettlementKnowledge(settlementPerception.knowledge()).withHiveDoctrine(doctrine));
         List<ProposedEvent> doctrineEvent = hive && !doctrine.equals(state.strategicPlans().hiveDoctrine())
                 ? List.of(new ProposedEvent(owner, new HiveDoctrineSelected(doctrine))) : List.of();
-        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()), territoryPerception.events()), doctrineEvent), health);
+        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()),
+                territoryPerception.events()), settlementPerception.events()), doctrineEvent), health);
         Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {

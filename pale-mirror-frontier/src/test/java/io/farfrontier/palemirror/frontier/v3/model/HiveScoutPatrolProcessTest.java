@@ -3,8 +3,10 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -56,6 +58,33 @@ class HiveScoutPatrolProcessTest {
         assertTrue(patrols.stream().allMatch(action -> action.dueAt().ticks() < 3_200L));
     }
 
+    @Test void expandedScoutingCircuitCanNaturallyReachTheNearestSettlementSensorRange() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-discovery"), 92L));
+        Bioform scout = scout(state); Settlement nearest = state.bootstrap().settlements().stream()
+                .min(java.util.Comparator.comparingLong(value -> distanceSquared(state.actorLocations().get(scout.id()).position(), value.anchor()))).orElseThrow();
+        BlockPosition position = state.actorLocations().get(scout.id()).position(); boolean reached = false;
+        for (int step = 0; step < 96; step++) {
+            position = HiveScoutPatrolProcess.nextPosition(state, scout, position);
+            if (distanceSquared(position, nearest.anchor()) <= (long) HiveSettlementPerceptionProcess.SIGHT_RADIUS_BLOCKS * HiveSettlementPerceptionProcess.SIGHT_RADIUS_BLOCKS) {
+                reached = true; break;
+            }
+        }
+        assertTrue(reached, "the bounded circuit must make a settlement sighting possible without a hidden target route");
+    }
+
+    @Test void ordinaryCausalSchedulesEventuallyPersistASettlementSighting() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scout-patrol-planner"), 93L));
+        FrontierWorldState state = null;
+        for (long tick = 1L; tick <= 12_000L; tick++) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            if (tick % 100L != 0L) continue;
+            state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            if (!state.strategicPlans().hiveSettlementKnowledge().entries().isEmpty()) break;
+        }
+        assertTrue(state != null && !state.strategicPlans().hiveSettlementKnowledge().entries().isEmpty(),
+                "a production schedule must be able to create the scout fact without a test reposition");
+    }
+
     @Test void aHotScoutAdvancesTheSameCursorAndRetargetsOnlyItsExactNextStep() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-cursor"), 91L));
         Bioform scout = scout(state); BlockPosition prior = state.actorLocations().get(scout.id()).position();
@@ -96,5 +125,8 @@ class HiveScoutPatrolProcessTest {
 
     private static Bioform scout(FrontierWorldState state) {
         return state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+    }
+    private static long distanceSquared(BlockPosition left, BlockPosition right) {
+        long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z;
     }
 }

@@ -10,12 +10,13 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import java.util.List;
 
 /**
- * COLD patrol for exact Scouts. The route is a bounded perimeter of the Scout's own seed nest;
- * it neither queries human routes nor target operations, and pauses while the same body is HOT.
+ * COLD patrol for exact Scouts. The route is a bounded scouting circuit around the Scout's own
+ * seed nest; it neither queries human routes nor target operations, and pauses while the same body is HOT.
  */
 final class HiveScoutPatrolProcess {
-    static final long INTERVAL = 400L;
-    private static final int RADIUS = 48, STEP = 12;
+    static final long INTERVAL = 100L;
+    private static final int RADIUS = 128, STEP = 16;
+    private static final int LEGACY_RADIUS = 48, LEGACY_STEP = 12;
 
     private HiveScoutPatrolProcess() { }
 
@@ -63,8 +64,8 @@ final class HiveScoutPatrolProcess {
         if (advanced.priorPosition().isPresent() && !nextPosition(state, scout, current).equals(advanced.position())) {
             throw new IllegalArgumentException("COLD scout patrol advance skips its exact next cursor");
         }
-        if (advanced.priorPosition().isEmpty() && !perimeter(state, scout).contains(advanced.position())) {
-            throw new IllegalArgumentException("legacy scout patrol advance is outside its own perimeter");
+        if (advanced.priorPosition().isEmpty() && !legacyPerimeter(state, scout).contains(advanced.position())) {
+            throw new IllegalArgumentException("legacy scout patrol advance is outside its own recorded perimeter");
         }
         return state.withActorLocation(scout.id(), advanced.position());
     }
@@ -83,13 +84,36 @@ final class HiveScoutPatrolProcess {
     private static List<BlockPosition> perimeter(FrontierWorldState state, Bioform scout) {
         HiveNest nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(scout.nestId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("scout has no seed nest"));
+        int radius = circuitRadius(state.bootstrap().bounds(), nest);
         List<BlockPosition> positions = new java.util.ArrayList<>();
-        for (int z = 0; z <= RADIUS; z += STEP) positions.add(nest.anchor().offset(RADIUS, 0, z));
-        for (int x = RADIUS - STEP; x >= -RADIUS; x -= STEP) positions.add(nest.anchor().offset(x, 0, RADIUS));
-        for (int z = RADIUS - STEP; z >= -RADIUS; z -= STEP) positions.add(nest.anchor().offset(-RADIUS, 0, z));
-        for (int x = -RADIUS + STEP; x <= RADIUS; x += STEP) positions.add(nest.anchor().offset(x, 0, -RADIUS));
-        for (int z = -RADIUS + STEP; z < 0; z += STEP) positions.add(nest.anchor().offset(RADIUS, 0, z));
+        for (int z = 0; z <= radius; z += STEP) positions.add(nest.anchor().offset(radius, 0, z));
+        for (int x = radius - STEP; x >= -radius; x -= STEP) positions.add(nest.anchor().offset(x, 0, radius));
+        for (int z = radius - STEP; z >= -radius; z -= STEP) positions.add(nest.anchor().offset(-radius, 0, z));
+        for (int x = -radius + STEP; x <= radius; x += STEP) positions.add(nest.anchor().offset(x, 0, -radius));
+        for (int z = -radius + STEP; z < 0; z += STEP) positions.add(nest.anchor().offset(radius, 0, z));
         positions.forEach(position -> FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position));
+        return List.copyOf(positions);
+    }
+
+    private static int circuitRadius(WorldBounds bounds, HiveNest nest) {
+        BlockPosition anchor = nest.anchor();
+        int boundary = Math.min(Math.min(anchor.x() - bounds.minX(), bounds.maxXExclusive() - 1 - anchor.x()),
+                Math.min(anchor.z() - bounds.minZ(), bounds.maxZExclusive() - 1 - anchor.z()));
+        int radius = Math.min(RADIUS, Math.floorDiv(boundary, STEP) * STEP);
+        if (radius < STEP) throw new IllegalStateException("hive seed nest has no bounded scout circuit");
+        return radius;
+    }
+
+    /** The predecessor-less deployed payload is constrained to its former smaller circuit. */
+    private static List<BlockPosition> legacyPerimeter(FrontierWorldState state, Bioform scout) {
+        HiveNest nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(scout.nestId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("scout has no seed nest"));
+        List<BlockPosition> positions = new java.util.ArrayList<>();
+        for (int z = 0; z <= LEGACY_RADIUS; z += LEGACY_STEP) positions.add(nest.anchor().offset(LEGACY_RADIUS, 0, z));
+        for (int x = LEGACY_RADIUS - LEGACY_STEP; x >= -LEGACY_RADIUS; x -= LEGACY_STEP) positions.add(nest.anchor().offset(x, 0, LEGACY_RADIUS));
+        for (int z = LEGACY_RADIUS - LEGACY_STEP; z >= -LEGACY_RADIUS; z -= LEGACY_STEP) positions.add(nest.anchor().offset(-LEGACY_RADIUS, 0, z));
+        for (int x = -LEGACY_RADIUS + LEGACY_STEP; x <= LEGACY_RADIUS; x += LEGACY_STEP) positions.add(nest.anchor().offset(x, 0, -LEGACY_RADIUS));
+        for (int z = -LEGACY_RADIUS + LEGACY_STEP; z < 0; z += LEGACY_STEP) positions.add(nest.anchor().offset(LEGACY_RADIUS, 0, z));
         return List.copyOf(positions);
     }
 
