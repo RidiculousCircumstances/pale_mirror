@@ -101,6 +101,23 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void makesTheExactAcceptedMarketWorkReadableAtItsOwnedWorkshop() {
+        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(
+                new WorldId("frontier:board-market-work"), 94L);
+        FrontierWorldState state = fixture.state();
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId workshop = state.productionJobs().get(new SubjectId("job:development-production-input-theft")).facilityId();
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(workshop);
+
+        assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, board.tone());
+        assertTrue(board.text().contains("WORKSHOP"));
+        assertTrue(board.text().contains("ORDER · 64 BREAD"));
+        assertTrue(board.text().contains("FOR " + settlement.displayName()));
+        assertTrue(board.text().contains("2 CREDITS"));
+        assertTrue(!board.text().contains(fixture.orderId().value()));
+    }
+
+    @Test
     void makesAKnownRouteSurfaceLossLocallyVisibleAsAPatrolWarning() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-board-conflict"), 91L));
         BlockPosition lost = FrontierRouteNetwork.surfaceCells(state.bootstrap()).iterator().next();

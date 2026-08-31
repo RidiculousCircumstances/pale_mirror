@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
@@ -169,6 +170,7 @@ public final class FrontierReadabilityPlan {
             return "QUARANTINE · " + state.humanPopulation().activeCases(settlement.id()) + " ACTIVE CASES";
         }
         if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id());
+        if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();
@@ -192,6 +194,50 @@ public final class FrontierReadabilityPlan {
     private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
         SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
         return status == SettlementProvisionStatus.RATIONED || status == SettlementProvisionStatus.SHORTAGE || status == SettlementProvisionStatus.CONFLICT;
+    }
+
+    /**
+     * A workshop never invents a production state for presentation: it may describe only the
+     * exact accepted market order currently bound to that workshop's durable job.  The company,
+     * demand, price and buyer all remain canonical elsewhere; this is their compact local view.
+     */
+    private static String workshopText(FrontierWorldState state, Settlement settlement, StructureCondition condition) {
+        if (condition != StructureCondition.INTACT) return conditionText(condition);
+        MarketWorkOrder order = state.companies().market().workOrders().values().stream()
+                .filter(candidate -> candidate.status() == MarketWorkOrderStatus.ACCEPTED)
+                .filter(candidate -> state.productionJobs().containsKey(candidate.jobId()))
+                .filter(candidate -> state.productionJobs().get(candidate.jobId()).facilityId().equals(workshopId(settlement)))
+                .sorted(Comparator.comparing(MarketWorkOrder::id)).findFirst().orElse(null);
+        if (order == null) return "OPERATIONAL";
+        MarketDemand demand = state.companies().market().demands().get(order.demandId());
+        if (demand == null) throw new IllegalStateException("accepted workshop order has no buyer demand");
+        return "ORDER · " + demand.itemCount() + " " + itemName(demand.itemKind())
+                + "\nFOR " + buyerName(state, demand.buyerId()) + " · " + credits(order.acceptedTotalPrice());
+    }
+
+    private static SubjectId workshopId(Settlement settlement) {
+        return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP)
+                .map(SettlementStructure::id).sorted().findFirst().orElseThrow(() -> new IllegalStateException("settlement has no workshop"));
+    }
+
+    private static String buyerName(FrontierWorldState state, SubjectId buyerId) {
+        return state.bootstrap().settlements().stream().filter(settlement -> settlement.id().equals(buyerId)).map(Settlement::displayName)
+                .findFirst().orElse("BUYER DEPOT");
+    }
+
+    private static String itemName(String itemKind) {
+        return switch (itemKind) {
+            case "minecraft:bread" -> "BREAD";
+            case "minecraft:wheat" -> "WHEAT";
+            default -> "GOODS";
+        };
+    }
+
+    private static String credits(FixedScalar amount) {
+        long raw = amount.raw(); long whole = raw / FixedScalar.SCALE; long fraction = Math.abs(raw % FixedScalar.SCALE);
+        if (fraction == 0L) return whole + " CREDITS";
+        String decimal = String.format(java.util.Locale.ROOT, "%06d", fraction).replaceFirst("0+$", "");
+        return whole + "." + decimal + " CREDITS";
     }
 
     private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board) {

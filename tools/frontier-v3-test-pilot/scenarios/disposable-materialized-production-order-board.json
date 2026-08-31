@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "disposable_materialized_production_order_board",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-input-theft" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -380, "y": 65, "z": -334 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "walk", "position": { "x": -380, "y": 65, "z": -334 }, "radius": 2, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -380, "y": 67, "z": -330 } },
+    { "type": "assert_visible_board", "text": "ORDER · 64 BREAD", "position": { "x": -380, "y": 67, "z": -330 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 }
+  ],
+  "assertions": [
+    { "after": 3, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
+  ],
+  "frames": [
+    { "after": 3, "name": "workshop-market-order", "presentation": "clean" }
+  ]
+}
