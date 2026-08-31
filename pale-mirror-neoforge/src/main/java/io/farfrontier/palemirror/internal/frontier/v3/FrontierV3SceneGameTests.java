@@ -485,9 +485,14 @@ public final class FrontierV3SceneGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-explosion-live", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void hotBomberBlastUsesRealTntEventAndRetainsPostImpactInspection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(56, 8, 0));
+        // The dedicated server runs fixture cells in parallel.  Scene-body UUIDs deliberately
+        // derive from WorldId + actor, so a fixed fixture WorldId would collide with another
+        // concurrent test using the same bootstrap actors.  The physical cell is stable for
+        // this run and makes the fixture identity isolated without changing production IDs.
+        String fixture = "scene-real-explosion-game-test-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:scene-real-explosion-game-test"), 91L), new EphemeralStore(), 20_000);
-        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:scene-real-explosion-game-test");
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.developmentHotSceneStrikeConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst(); SceneLeaseId leaseId = new SceneLeaseId("lease:" + fixture);
         var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the real-blast fixture runtime must remain active"));
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-real-explosion-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));

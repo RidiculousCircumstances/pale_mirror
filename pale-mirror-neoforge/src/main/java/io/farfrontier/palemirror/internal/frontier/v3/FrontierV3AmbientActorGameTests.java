@@ -26,6 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
@@ -138,6 +139,39 @@ public final class FrontierV3AmbientActorGameTests {
                         .distanceToSqr(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
                 "a durable ambient work lease must produce a continuing cycle rather than one static target");
         farmerBody.discard(); scoutBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scout-patrol-cursor", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotScoutFollowsItsLeasedCanonicalPatrolStepRatherThanASeparateLocalCircle(GameTestHelper helper) {
+        // Keep this footprint inside the stock template's isolated test cell: the full suite
+        // runs many templates in parallel, whereas this proof needs only one four-block step.
+        ServerLevel level = helper.getLevel(); BlockPos feet = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, feet, 6);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hot-scout-cursor"), 91L), new EphemeralStore(), 10_000);
+        FrontierWorldState state = state(runtime); SubjectId scout = new SubjectId("bioform:west-1");
+        BlockPosition handoff = new BlockPosition(feet.getX(), feet.getY() - 1, feet.getZ());
+        BlockPosition target = handoff.offset(4, 0, 0);
+        AmbientActorLease lease = new AmbientActorLease(scout, handoff, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.SCOUT_PATROL, target);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, scout, handoff), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the exact scout body must materialize at its current patrol cursor");
+        // Entity insertion is visible only on the following server tick in a full parallel
+        // GameTest run.  Do not inspect/move the pre-index body object as if that were a
+        // materialization acknowledgement.
+        helper.runAfterDelay(1L, () -> {
+            try {
+                Entity entity = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, scout));
+                helper.assertTrue(entity instanceof Zombie, "the exact Scout must be indexed before its HOT patrol step");
+                Zombie body = (Zombie) entity;
+                for (int tick = 0; tick < 100; tick++) FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, scout, body, lease);
+                BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, target);
+                helper.assertTrue(physicalTarget != null && body.isNoAi()
+                                && body.distanceToSqr(physicalTarget.getX() + 0.5D, physicalTarget.getY(), physicalTarget.getZ() + 0.5D) < 2.25D,
+                        "the HOT scout must approach its one canonical next cursor without vanilla AI or a local substitute; body="
+                                + body.position() + " target=" + target);
+                body.discard(); helper.succeed();
+            } finally { FrontierV3AmbientActorExecutor.forget(runtime); }
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-assembly-headroom", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

@@ -23,6 +23,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
@@ -387,6 +388,18 @@ final class FrontierV3AmbientActorExecutor {
                 return false;
             }
         }
+        if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalPosition().equals(state.actorLocations().get(actorId).position())) {
+            // The command reducer owns the cursor transition; movement may only approach the
+            // exact next lease target, never choose a local substitute after COLD hand-off.
+            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
+            if (physicalTarget == null) {
+                body.getNavigation().stop();
+                return false;
+            }
+            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
+                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            return false;
+        }
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, lease);
             if (member == null) {
@@ -481,6 +494,10 @@ final class FrontierV3AmbientActorExecutor {
             if (member == null || !sameColumn(position, member.currentPosition())) return false;
             position = member.currentPosition();
         }
+        if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
+            if (!(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, current.position())) return false;
+            position = current.position();
+        }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
         submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
         submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
@@ -516,6 +533,7 @@ final class FrontierV3AmbientActorExecutor {
     private static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
@@ -539,8 +557,17 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
         return true;
     }
+    private static boolean observeScoutPatrolArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                                      SubjectId actorId, Mob body, AmbientActorLease lease) {
+        BlockPosition current = state.actorLocations().get(actorId).position();
+        if (!sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol", actorId.value(),
+                new ScoutPatrolAdvanced(actorId, runtime.checkpointImage().orElseThrow().instant().ticks(), lease.goalPosition(), java.util.Optional.of(current)));
+        FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
+        return true;
+    }
     private static boolean directedGoal(AmbientActorLease lease) {
-        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY;
+        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY || lease.goal() == AmbientGoalKind.SCOUT_PATROL;
     }
     private static RouteOperation assemblingOperation(FrontierWorldState state, SubjectId actorId) {
         return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
@@ -565,6 +592,12 @@ final class FrontierV3AmbientActorExecutor {
     private static boolean sameColumn(BlockPosition physicalBodyCell, BlockPosition canonicalFloorCell) {
         return physicalBodyCell.x() == canonicalFloorCell.x() && physicalBodyCell.y() == canonicalFloorCell.y()
                 && physicalBodyCell.z() == canonicalFloorCell.z();
+    }
+    /** A Scout cursor is a semantic floor anchor; a Minecraft body's feet must stand above it. */
+    private static boolean sameFloorAnchor(ServerLevel level, BlockPosition physicalBodyCell, BlockPosition canonicalFloorAnchor) {
+        BlockPos expected = FrontierV3StandingPosition.aboveFloor(level, canonicalFloorAnchor);
+        return expected != null && physicalBodyCell.x() == expected.getX() && physicalBodyCell.y() == expected.getY()
+                && physicalBodyCell.z() == expected.getZ();
     }
     private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
         Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.get(runtime);

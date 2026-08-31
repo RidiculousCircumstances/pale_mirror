@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveScoutPatrolProcessTest {
@@ -22,7 +23,8 @@ class HiveScoutPatrolProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveScoutPatrolProcess.plan(state, action);
         ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
-        assertEquals(HiveScoutPatrolProcess.positionAt(state, scout, advanced.phase()), advanced.position());
+        assertEquals(state.actorLocations().get(scout.id()).position(), advanced.priorPosition().orElseThrow());
+        assertEquals(HiveScoutPatrolProcess.nextPosition(state, scout), advanced.position());
         assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)));
 
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
@@ -52,6 +54,44 @@ class HiveScoutPatrolProcessTest {
         List<ScheduledAction> patrols = configuration.initialSchedules().stream().filter(action -> action.kind().equals("frontier.hive.scout.patrol")).toList();
         assertEquals(scouts, patrols.stream().map(ScheduledAction::subject).sorted().toList());
         assertTrue(patrols.stream().allMatch(action -> action.dueAt().ticks() < 3_200L));
+    }
+
+    @Test void aHotScoutAdvancesTheSameCursorAndRetargetsOnlyItsExactNextStep() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-cursor"), 91L));
+        Bioform scout = scout(state); BlockPosition prior = state.actorLocations().get(scout.id()).position();
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
+        assertEquals(AmbientGoalKind.SCOUT_PATROL, lease.goal());
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
+        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(scout.id(), 1L, lease.goalPosition(), java.util.Optional.of(prior));
+
+        FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
+        assertEquals(lease.goalPosition(), moved.actorLocations().get(scout.id()).position());
+        assertEquals(AmbientGoalKind.SCOUT_PATROL, moved.ambientLeases().get(scout.id()).goal());
+        assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalPosition());
+    }
+
+    @Test void deployedLegacyPatrolPayloadStillDecodesWithoutGrantingHotMovement() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-legacy"), 91L));
+        Bioform scout = scout(state); BlockPosition legacyPosition = state.bootstrap().hive().seedNests().stream()
+                .filter(nest -> nest.id().equals(scout.nestId())).findFirst().orElseThrow().anchor().offset(48, 0, 0);
+        // This is the byte layout emitted by the deployed pre-cursor codec: it ends at
+        // position and therefore contains neither the later optional-present flag nor a
+        // predecessor. Do not construct this with the current encoder, which would hide
+        // a trailing compatibility-field regression.
+        byte[] deployedLegacyBytes = FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            FrontierWorldPayloadCodecs.writeSubject(output, scout.id()); output.writeLong(2_400L);
+            output.writeInt(legacyPosition.x()); output.writeInt(legacyPosition.y()); output.writeInt(legacyPosition.z());
+        });
+        ScoutPatrolAdvanced decoded = (ScoutPatrolAdvanced) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.scout_patrol_advanced",
+                deployedLegacyBytes);
+        assertEquals(java.util.Optional.empty(), decoded.priorPosition());
+        assertEquals(legacyPosition, HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), decoded).actorLocations().get(scout.id()).position());
+
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
+        FrontierWorldState hot = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduce(hot, hot.bootstrap().hive().id(), decoded),
+                "old WAL records have no predecessor proof and therefore cannot advance a HOT exact body");
     }
 
     private static Bioform scout(FrontierWorldState state) {

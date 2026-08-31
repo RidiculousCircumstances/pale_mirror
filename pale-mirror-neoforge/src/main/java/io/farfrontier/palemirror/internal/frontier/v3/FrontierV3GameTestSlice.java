@@ -19,7 +19,8 @@ public final class FrontierV3GameTestSlice {
         Objects.requireNonNull(batchName, "GameTest batch");
         if (configuredSlice.isBlank()) return true;
         return switch (configuredSlice) {
-            case SCENE -> batchName.startsWith("pm-frontier-v3-scene-") || batchName.startsWith("pm-frontier-v3-ambient-");
+            case SCENE -> batchName.startsWith("pm-frontier-v3-scene-") || batchName.startsWith("pm-frontier-v3-ambient-")
+                    || batchName.startsWith("pm-frontier-v3-scout-");
             case ECONOMY -> batchName.equals("pm-frontier-v3-exact-consumption") || batchName.equals("pm-frontier-v3-production")
                     || batchName.equals("pm-frontier-v3-cargo-loading") || batchName.equals("pm-frontier-v3-object-boards");
             default -> throw new IllegalArgumentException("unsupported Frontier v3 GameTest slice: " + configuredSlice);

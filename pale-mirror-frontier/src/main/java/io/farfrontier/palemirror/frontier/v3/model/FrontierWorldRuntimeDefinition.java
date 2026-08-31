@@ -161,6 +161,11 @@ public final class FrontierWorldRuntimeDefinition {
             try { PopulationMigrationProcess.reduceHotAdvance(state, advanced); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
+        if (command.payload() instanceof ScoutPatrolAdvanced advanced) {
+            try { HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), advanced)));
+        }
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());
             if (operation == null) return rejected("operation assembly observation has no active operation");
