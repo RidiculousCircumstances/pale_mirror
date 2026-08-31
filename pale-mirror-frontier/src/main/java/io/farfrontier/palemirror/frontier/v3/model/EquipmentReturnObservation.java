@@ -6,13 +6,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** Observed exact former-defender hand to active-depot-slot equipment return. */
-public record EquipmentReturnObservation(PhysicalObservationId id, PhysicalIntentId intentId, SubjectId assaultId,
+/** Observed exact named-human hand to active-depot-slot equipment return. */
+public record EquipmentReturnObservation(PhysicalObservationId id, PhysicalIntentId intentId, SubjectId ownerId,
                                          SubjectId residentId, SubjectId itemId, InventoryCustody.ContainerSlot targetSlot)
         implements PhysicalEffectObservation {
     public EquipmentReturnObservation {
         Objects.requireNonNull(id, "equipment return observation id"); Objects.requireNonNull(intentId, "equipment return intent");
-        Objects.requireNonNull(assaultId, "equipment return assault"); Objects.requireNonNull(residentId, "equipment return resident");
+        Objects.requireNonNull(ownerId, "equipment return owner"); Objects.requireNonNull(residentId, "equipment return resident");
         Objects.requireNonNull(itemId, "equipment return item"); Objects.requireNonNull(targetSlot, "equipment return target slot");
     }
+
+    /** Compatibility name for schema-82 defender receipts; owner identity is the stored wire value. */
+    public SubjectId assaultId() { return ownerId; }
 }
