@@ -385,8 +385,26 @@ not depend on a player or Narrator.
 ### Deliverables
 
 - Shared hive biomass/energy/nutrient economy and transfer through organ graph.
-- Nest/organ construction, maintenance, specialization, damage and regrowth.
-- Brood and exact bioform lifecycle, roles, wounds, consumption and recycling.
+- Distinct infection substrate and destructible hiveroot graph with independent
+  vascular/synaptic capacity, finite extraction, valves, severance and
+  resource-backed regrowth.
+- Replace provisional `HEART` with distributed Hivemind plus local `GANGLION`;
+  add `RELAY`, `DIGESTER`, `HIBERNACULUM`, `MORPHER`, `SPORULATOR` and `SENSOR`
+  through explicit stable wire tags and versioned recovery.
+- Brood and exact bioform lifecycle split into chassis, visible mutation,
+  assignment, cocoon/physical custody, controller, wounds, structural/reserve
+  biomass, consumption, carcass and recycling.
+- Purposeful territorial Sentinels and exact observation delivery; stationary
+  relay coverage inside the hive and a mandatory mobile Overseer for every
+  coordinated expedition outside that coverage.
+- Task/threat-driven cocoon waking, assembly, return and recovery; chunk load
+  never wakes a body or creates ambient wandering.
+- Synaptic signal memory and explicit degraded instincts after Relay/Overseer
+  loss, including later exact survivor reclamation by another controller.
+- The accepted alien mechanics and staging in
+  `frontier-v3-hive-physiology.md`, including reflex tissue, mucus lines,
+  biomass sacrifice, carcass recovery, evidence-backed adaptation, circulation
+  rerouting, premature waking, grafting, unstable payloads and live digestion.
 - Infection metabolism, growth/retreat, terrain affinity, settlement/building
   contamination, quarantine interaction and decontamination.
 - Perception, territorial beliefs, adaptations, doctrine and utility/HTN plans.
@@ -397,10 +415,13 @@ not depend on a player or Narrator.
 
 ### Verification matrix
 
-Require resource starvation, severed organ graph, blocked infection, destroyed
-seed nest, failed assault, missed bomber impact, adaptation invalidation,
-simultaneous fronts, full settlement loss and hive retreat/recovery. Prove that
-two seed nests remain one polity and cannot duplicate economy or actors.
+Require resource starvation, independently severed vascular/synaptic paths,
+blocked infection, destroyed Ganglion/Relay/cocoon, pre-report Sentinel death,
+remote assault rejection without an Overseer, Overseer-loss degradation,
+failed assault, missed or prematurely detonated payload, carcass denial,
+adaptation invalidation, simultaneous fronts, full settlement loss and hive
+retreat/recovery. Prove that two seed nests remain one polity and cannot
+duplicate economy, biomass, cocoons or actors.
 
 ### Exit gate
 
@@ -414,6 +435,9 @@ resource creation and stable deterministic replay.
 
 - General desired-state compiler for every functional building, organ, route,
   field object, actor, cargo and infection state.
+- Semantic projection for infection surface, raised hiveroot topology, its two
+  flow channels, junctions, severed/starved states, cocoons and attached organs;
+  baseline plus bounded deltas retain unrestricted physical aftermath.
 - Stable semantic block maps and object-local bright boards; one board per
   object, with geometry readable before text.
 - Role-aware Villager and bioform local brains, live work cycles, patrols,
@@ -425,7 +449,9 @@ resource creation and stable deterministic replay.
 - Incremental baseline/delta materialization that never force-loads or restores
   over an unknown/player change.
 - Readable distant hive silhouettes, continuous routes and infection contours;
-  later art can replace graybox assets without changing canonical contracts.
+  the player can visually separate alien biome, vascular/synaptic network,
+  organ function, dormant population and current mobilization. Later art can
+  replace graybox assets without changing canonical contracts.
 - Player UUID reputation, contracts, custody, decisions and history through
   ordinary typed commands and observations.
 

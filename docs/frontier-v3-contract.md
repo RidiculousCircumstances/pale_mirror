@@ -203,6 +203,17 @@ source, target, cargo identity, bounded continuation and terminal receipt.
 Growth and brood consume a local store input or that completed transfer, never
 an item silently located at another nest.
 
+The normative physiology, control and visual model is defined by
+`frontier-v3-hive-physiology.md`. Infection surface, destructible hiveroot and
+attached organs are three distinct layers. Hiveroot is one physical graph with
+independently degradable vascular and synaptic capacities. The whole
+distributed intelligence is the `HIVEMIND`; its local integration organ is a
+`GANGLION`, not a heart. Connected stationary `RELAY` organs coordinate the
+territory, while every coordinated expedition beyond their coverage requires
+an exact mobile `OVERSEER`. Exact mature bioforms remain in owned cocoon slots
+unless current work or a perceived threat mobilizes them; chunk loading never
+causes awakening or ambient wandering.
+
 Both sides use the same three-level decision boundary:
 
 1. deterministic utility selection chooses a strategic objective from facts
@@ -464,9 +475,12 @@ command.
 
 Graybox uses normal Villagers and Zombies, coloured cubes/rectangles, visible
 route corridors, storage containers, object-local boards and strongly distinct
-hive silhouettes. Bioform role markers use distinct colours and prevent only
-vanilla daylight ignition; actual fire and explosion effects remain physical
-events to observe and reconcile. One board belongs to one object. Geometry and motion must
+hive silhouettes. Infection surface, raised hiveroot trunks, vascular flow,
+synaptic pulses, severance and organ silhouettes remain visually distinct.
+Bioform markers expose chassis, important mutation and current assignment and
+prevent only vanilla daylight ignition; actual fire and explosion effects
+remain physical events to observe and reconcile. One board belongs to one
+object. Geometry and motion must
 communicate function before text; labels explain state, cause, risk and possible
 action without exposing opaque IDs to ordinary players.
 
