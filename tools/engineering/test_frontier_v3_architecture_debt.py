@@ -68,6 +68,18 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_new_command_planner_branch(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["command_planner_payload_type_tests"] += 1
+        with self.assertRaisesRegex(DebtError, "command planner dispatcher grew"):
+            validate(ROOT, self.policy, broken)
+
+    def test_rejects_a_new_event_reducer_case(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["event_reducer_cases"] += 1
+        with self.assertRaisesRegex(DebtError, "event reducer dispatcher grew"):
+            validate(ROOT, self.policy, broken)
+
 
 if __name__ == "__main__":
     unittest.main()

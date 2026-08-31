@@ -40,6 +40,8 @@ NEOFORGE_PILOT = Path(
     "pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3"
 )
 RUNTIME_DEFINITION = FRONTIER_MAIN / "model/FrontierWorldRuntimeDefinition.java"
+COMMAND_PLANNER = FRONTIER_MAIN / "model/FrontierWorldCommandPlanner.java"
+EVENT_REDUCER = FRONTIER_MAIN / "model/FrontierWorldEventReducer.java"
 SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 
@@ -102,6 +104,8 @@ def collect(root: Path) -> dict[str, Any]:
         if not Path(path).name.endswith("GameTests.java")
     }
     runtime = _text(root, RUNTIME_DEFINITION)
+    command_planner = _text(root, COMMAND_PLANNER)
+    event_reducer = _text(root, EVENT_REDUCER)
     lifecycle = _text(root, SERVER_LIFECYCLE)
     model_root = root / FRONTIER_MAIN / "model"
     forced_chunk_loads: dict[str, int] = {}
@@ -121,7 +125,11 @@ def collect(root: Path) -> dict[str, Any]:
         "runtime_command_payload_type_tests": len(
             COMMAND_PAYLOAD_TYPE_TEST.findall(runtime)
         ),
+        "command_planner_payload_type_tests": len(
+            COMMAND_PAYLOAD_TYPE_TEST.findall(command_planner)
+        ),
         "runtime_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(runtime)),
+        "event_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(event_reducer)),
         "production_development_configurations": len(
             DEVELOPMENT_CONFIGURATION.findall(runtime)
         ),
@@ -205,6 +213,15 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
             "runtime command dispatcher grew: "
             f"{metrics['runtime_command_payload_type_tests']}>{command_type_limit}"
         )
+    command_planner_type_limit = _positive_int(
+        policy.get("max_command_planner_payload_type_tests"),
+        "max_command_planner_payload_type_tests",
+    )
+    if metrics["command_planner_payload_type_tests"] > command_planner_type_limit:
+        raise DebtError(
+            "command planner dispatcher grew: "
+            f"{metrics['command_planner_payload_type_tests']}>{command_planner_type_limit}"
+        )
     reducer_case_limit = _positive_int(
         policy.get("max_runtime_reducer_cases"),
         "max_runtime_reducer_cases",
@@ -213,6 +230,14 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         raise DebtError(
             "runtime reducer dispatcher grew: "
             f"{metrics['runtime_reducer_cases']}>{reducer_case_limit}"
+        )
+    event_reducer_case_limit = _positive_int(
+        policy.get("max_event_reducer_cases"), "max_event_reducer_cases"
+    )
+    if metrics["event_reducer_cases"] > event_reducer_case_limit:
+        raise DebtError(
+            "event reducer dispatcher grew: "
+            f"{metrics['event_reducer_cases']}>{event_reducer_case_limit}"
         )
 
     fixture_configuration_limit = _positive_int(
