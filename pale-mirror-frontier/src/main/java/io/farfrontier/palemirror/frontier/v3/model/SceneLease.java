@@ -102,18 +102,6 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         return deterministicEntityId(worldId, actorId);
     }
 
-    /** Legacy logistics views are derived from the one typed cause; they are not stored twice. */
-    public SubjectId operationId() { return logisticsCause().operationId(); }
-    public SubjectId cargoId() { return logisticsCause().cargoId(); }
-    public Optional<SubjectId> engagementId() { return logisticsCause().engagementId(); }
-    public BlockPosition cargoPosition() { return logisticsCause().cargoPosition(); }
-    public LogisticsSceneCause logisticsCause() {
-        if (!(cause instanceof LogisticsSceneCause logistics)) {
-            throw new IllegalStateException("scene cause has no logistics operation/cargo binding: " + cause.getClass().getSimpleName());
-        }
-        return logistics;
-    }
-
     public SceneLease withStatus(SceneLeaseStatus nextStatus) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, nextStatus, members, memberPositions,
                 ambientHandoffActorIds, nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
@@ -131,13 +119,13 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
      */
     public SceneLease rebaseHotOperationTravel(OperationTravel prior, OperationTravel next) {
         Objects.requireNonNull(prior, "prior operation travel"); Objects.requireNonNull(next, "next operation travel");
-        LogisticsSceneCause logistics = logisticsCause();
+        LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(this);
         if (status != SceneLeaseStatus.HOT || logistics.engagementId().isPresent() || !memberPositions.equals(prior.formation())
                 || !logistics.cargoPosition().equals(prior.cargoAnchor()) || !next.isExactHotAdvanceFrom(prior)) {
             throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
         }
         return new SceneLease(id, worldId,
-                new LogisticsSceneCause(logisticsCause().operationId(), logisticsCause().cargoId(), logisticsCause().engagementId(), next.cargoAnchor()),
+                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor()),
                 next.currentPosition(), handoffInstant, revision, status, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
     }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {

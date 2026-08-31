@@ -335,7 +335,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static BlockPosition at(Entity entity) { return new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
     private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
-    private static boolean isAssault(SceneLease lease) { return lease.cause() instanceof SettlementAssaultSceneCause; }
+    private static boolean isAssault(SceneLease lease) { return io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease); }
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase,
                                         io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return FrontierV3CommandSubmission.submit(runtime, phase, "settlement-assault", payload);

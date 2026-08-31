@@ -23,9 +23,7 @@ final class FrontierSettlementAssaultSceneSupport {
     }
 
     static SubjectId owner(FrontierWorldState state, SceneLease lease) {
-        if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
-            throw new IllegalArgumentException("scene is not a settlement assault");
-        }
+        SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         return require(state, cause).hiveId();
     }
 
@@ -37,9 +35,7 @@ final class FrontierSettlementAssaultSceneSupport {
     }
 
     static void validatePrepared(FrontierWorldState state, SceneLease lease) {
-        if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
-            throw new IllegalArgumentException("assault scene requires its typed cause");
-        }
+        SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         SettlementAssault assault = require(state, cause);
         if (lease.status() != SceneLeaseStatus.PREPARED || assault.status() != SettlementAssaultStatus.COLD_COMBAT
                 || !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault)) {

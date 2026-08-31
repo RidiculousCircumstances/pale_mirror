@@ -614,7 +614,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);
         assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(legacyUniformLease), "a uniform handoff point must not relocate a formation");
         assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(wrongCargoLease), "a scene must retain the operation's exact cargo anchor");
-        assertEquals(cargoPosition, lease.cargoPosition());
+        assertEquals(cargoPosition, FrontierSceneBehaviors.logistics(lease).cargoPosition());
         WorldId foreignWorld = new WorldId("frontier:foreign-scene-world");
         List<SceneMember> foreignMembers = operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(foreignWorld, actor))).toList();
         SceneLease foreignLease = SceneLease.atExactPositions(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:foreign-scene-world"), foreignWorld,
@@ -646,13 +646,13 @@ class FrontierWorldRuntimeDefinitionTest {
                         new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT))));
         FrontierWorldState hotTravel = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         OperationTravel currentTravel = hotTravel.operations().get(operation.id()).activeTravel().orElseThrow();
-        assertEquals(1, hotTravel.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+        assertEquals(1, hotTravel.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).count());
         assertEquals(SceneLeaseStatus.HOT, hotTravel.sceneLeases().get(leaseId).status());
-        assertEquals(java.util.Optional.empty(), hotTravel.sceneLeases().get(leaseId).engagementId());
+        assertEquals(java.util.Optional.empty(), FrontierSceneBehaviors.logistics(hotTravel.sceneLeases().get(leaseId)).engagementId());
         assertEquals(currentTravel.formation(), hotTravel.sceneLeases().get(leaseId).memberPositions(),
                 "a prepared/HOT scene must retain the current exact operation formation before its first observation");
-        assertEquals(currentTravel.cargoAnchor(), hotTravel.sceneLeases().get(leaseId).cargoPosition(),
+        assertEquals(currentTravel.cargoAnchor(), FrontierSceneBehaviors.logistics(hotTravel.sceneLeases().get(leaseId)).cargoPosition(),
                 "a prepared/HOT scene must retain the current exact operation cargo before its first observation");
         OperationTravel oneHotCell = translateTravel(currentTravel, currentTravel.nextHotCursor());
         var hotAdvance = submit(engine, world, "scene-exact-hot-travel", new OperationTravelAdvanced(operation.id(), oneHotCell));
@@ -663,7 +663,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(oneHotCell, advancedHotTravel.operations().get(operation.id()).activeTravel().orElseThrow());
         assertEquals(oneHotCell.currentPosition(), advancedLease.handoffPosition());
         assertEquals(oneHotCell.formation(), advancedLease.memberPositions());
-        assertEquals(oneHotCell.cargoAnchor(), advancedLease.cargoPosition());
+        assertEquals(oneHotCell.cargoAnchor(), FrontierSceneBehaviors.logistics(advancedLease).cargoPosition());
         assertEquals(advancedHotTravel, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advancedHotTravel)));
         if (currentTravel.nextColdCursor() > currentTravel.nextHotCursor()) {
             assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,

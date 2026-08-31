@@ -8,7 +8,7 @@ public final class CargoCarrierIdentity {
     private CargoCarrierIdentity() { }
 
     public static UUID id(SceneLease lease) {
-        return UUID.nameUUIDFromBytes(("frontier-v3:cargo-carrier:" + lease.worldId().value() + ":" + lease.id().value() + ":" + lease.cargoId().value())
+        return UUID.nameUUIDFromBytes(("frontier-v3:cargo-carrier:" + lease.worldId().value() + ":" + lease.id().value() + ":" + FrontierSceneBehaviors.logistics(lease).cargoId().value())
                 .getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -10,4 +10,6 @@ public record SettlementAssaultSceneCause(SubjectId assaultId, SubjectId settlem
         Objects.requireNonNull(assaultId, "assault id");
         Objects.requireNonNull(settlementId, "assault settlement");
     }
+
+    @Override public SceneCauseKind kind() { return SceneCauseKind.SETTLEMENT_ASSAULT; }
 }

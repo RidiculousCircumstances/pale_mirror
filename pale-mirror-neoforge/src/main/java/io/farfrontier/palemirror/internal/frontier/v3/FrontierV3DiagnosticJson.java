@@ -366,8 +366,10 @@ final class FrontierV3DiagnosticJson {
         if (sceneSubject == null) return unavailable("scene", id, checkpoint, "not_found");
         var lease = currentLease(state, sceneSubject);
         if (lease == null) return unavailable("scene", id, checkpoint, "not_found");
-        LogisticsSceneCause logistics = lease.cause() instanceof LogisticsSceneCause value ? value : null;
-        SettlementAssaultSceneCause assault = lease.cause() instanceof SettlementAssaultSceneCause value ? value : null;
+        LogisticsSceneCause logistics = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isLogistics(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease) : null;
+        SettlementAssaultSceneCause assault = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.settlementAssault(lease) : null;
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
@@ -391,9 +393,7 @@ final class FrontierV3DiagnosticJson {
     /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */
     private static io.farfrontier.palemirror.frontier.v3.model.SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {
         return state.sceneLeases().values().stream()
-                .filter(lease -> (lease.cause() instanceof LogisticsSceneCause
-                        && (lease.operationId().equals(sceneSubject) || lease.engagementId().filter(sceneSubject::equals).isPresent()))
-                        || (lease.cause() instanceof SettlementAssaultSceneCause assault && assault.assaultId().equals(sceneSubject)))
+                .filter(lease -> io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.owns(lease, sceneSubject))
                 .max(java.util.Comparator.comparingInt((io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) ->
                                 lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? 0 : 1)
                         .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::handoffInstant)

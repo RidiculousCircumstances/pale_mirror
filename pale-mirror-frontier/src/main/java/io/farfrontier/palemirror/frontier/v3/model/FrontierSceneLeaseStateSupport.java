@@ -29,8 +29,7 @@ final class FrontierSceneLeaseStateSupport {
         if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position().equals(lease.memberPosition(member.actorId())))) {
             throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
         }
-        if (lease.cause() instanceof LogisticsSceneCause) validateLogisticsPreparation(state, lease);
-        else FrontierSettlementAssaultSceneSupport.validatePrepared(state, lease);
+        FrontierSceneBehaviors.validatePrepared(state, lease);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         int requiredCompaction = leases.size() - MAX_SCENE_LEASES + 1;
         if (requiredCompaction > 0) {
@@ -41,14 +40,6 @@ final class FrontierSceneLeaseStateSupport {
         }
         leases.put(lease.id(), lease);
         return leases;
-    }
-
-    private static void validateLogisticsPreparation(FrontierWorldState state, SceneLease lease) {
-        RouteOperation operation = state.operations().get(lease.operationId());
-        if (operation != null && operation.activeTravel().isPresent()
-                && !operation.activeTravel().orElseThrow().cargoAnchor().equals(lease.cargoPosition())) {
-            throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
-        }
     }
 
     static FrontierWorldState handoff(FrontierWorldState state, SceneLeaseHandoff handoff) {
@@ -79,29 +70,7 @@ final class FrontierSceneLeaseStateSupport {
     static FrontierWorldState transition(FrontierWorldState state, SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || !current.status().canTransitionTo(nextStatus)) throw new IllegalArgumentException("scene lease transition is not allowed");
-        StrategicPlanState plans = state.strategicPlans();
-        if (current.cause() instanceof SettlementAssaultSceneCause cause) {
-            SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause);
-            if (nextStatus == SceneLeaseStatus.HOT) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.HOT);
-            if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.UNKNOWN_AFTER_RESTART);
-            if (nextStatus == SceneLeaseStatus.CONFLICT) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.CONFLICT);
-        } else if (current.engagementId().isPresent()) {
-            SubjectId engagement = current.engagementId().orElseThrow();
-            RouteEngagement currentEngagement = plans.routeEngagements().get(engagement);
-            if (currentEngagement == null) throw new IllegalArgumentException("scene lease has no canonical engagement");
-            if (nextStatus == SceneLeaseStatus.HOT) {
-                if (currentEngagement.status() == RouteEngagementStatus.RESOLVED) {
-                    throw new IllegalArgumentException("an aborted engagement cannot reclaim a HOT scene");
-                }
-                plans = plans.transitionEngagement(engagement, RouteEngagementStatus.HOT);
-            }
-            if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && currentEngagement.status() != RouteEngagementStatus.RESOLVED) {
-                plans = plans.transitionEngagement(engagement, RouteEngagementStatus.UNKNOWN_AFTER_RESTART);
-            }
-            if (nextStatus == SceneLeaseStatus.CONFLICT && currentEngagement.status() != RouteEngagementStatus.RESOLVED) {
-                plans = plans.transitionEngagement(engagement, RouteEngagementStatus.CONFLICT);
-            }
-        }
+        StrategicPlanState plans = FrontierSceneBehaviors.transitionPlans(state, current, nextStatus);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(nextStatus));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans);
     }
@@ -134,9 +103,6 @@ final class FrontierSceneLeaseStateSupport {
                 .collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
         if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
-        RouteOperation operation = current.cause() instanceof LogisticsSceneCause ? state.operations().get(current.operationId()) : null;
-        boolean logisticsCheckpoint = current.cause() instanceof LogisticsSceneCause && current.engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE
-                && operation.activeTravel().isPresent();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (SceneMemberPosition position : positions) {
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position.position());
@@ -144,16 +110,10 @@ final class FrontierSceneLeaseStateSupport {
             // The operation cursor is the durable HOT/COLD hand-off.  A body may have been
             // halfway through ordinary Minecraft movement when its chunk vanished, but that
             // transient sub-cell location must not become a second strategic travel state.
-            BlockPosition canonical = logisticsCheckpoint ? operation.activeTravel().orElseThrow().formation().get(position.actorId()) : position.position();
+            BlockPosition canonical = FrontierSceneBehaviors.releasedPosition(state, current, position.actorId(), position.position());
             actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health())));
         }
-        StrategicPlanState plans = current.cause() instanceof SettlementAssaultSceneCause cause
-                ? state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause).id(), SettlementAssaultStatus.COLD_COMBAT)
-                : current.engagementId().map(id -> {
-            RouteEngagement engagement = state.strategicPlans().routeEngagements().get(id);
-            return engagement != null && engagement.status() != RouteEngagementStatus.RESOLVED
-                    ? state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT) : state.strategicPlans();
-        }).orElse(state.strategicPlans());
+        StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(state, actors, leases, state.ambientLeases(), plans);
     }

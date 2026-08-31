@@ -207,8 +207,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (operations.size() > MAX_OPERATIONS) throw new IllegalArgumentException("route operation retention limit exceeded");
-        Set<SubjectId> leaseHistoryOperations = sceneLeases.values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause)
-                .map(SceneLease::operationId).collect(java.util.stream.Collectors.toSet());
+        Set<SubjectId> leaseHistoryOperations = sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics)
+                .map(lease -> FrontierSceneBehaviors.logistics(lease).operationId()).collect(java.util.stream.Collectors.toSet());
         Map<SubjectId, Set<SubjectId>> residentsBySettlement = new LinkedHashMap<>();
         for (ResidentProfile resident : humanPopulation.residents().values()) {
             residentsBySettlement.computeIfAbsent(resident.settlementId(), ignored -> new HashSet<>()).add(resident.id());
@@ -693,7 +693,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position)));
         Map<SceneLeaseId, SceneLease> nextLeases = sceneLeases;
-        SceneLease activeScene = sceneLeases.values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause).filter(lease -> lease.operationId().equals(operation.id()))
+        SceneLease activeScene = sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id()))
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).findFirst().orElse(null);
         if (activeScene != null) {
             if (!travel.isExactHotAdvanceFrom(current)) {
@@ -909,7 +909,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }).orElseThrow(() -> new IllegalArgumentException("terminal logistics operation has no contract"));
         TerminalLogisticsReceipt.TerminalLogisticsOutcome outcome = terminalLogisticsOutcome(operation, contract);
         if (inventory.cargo().containsKey(operation.cargoId())) throw new IllegalArgumentException("terminal logistics cargo remains claimed");
-        if (sceneLeases.values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause).anyMatch(lease -> lease.operationId().equals(operation.id()))
+        if (sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics).anyMatch(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id()))
                 || strategicPlans.routeEngagements().values().stream().anyMatch(engagement -> engagement.operationId().equals(operation.id()))
                 || strategicPlans.tasks().values().stream().anyMatch(task -> task.operationTarget().equals(java.util.Optional.of(operation.id())))) {
             throw new IllegalArgumentException("terminal logistics operation retains a dependent scene or strategic claim");

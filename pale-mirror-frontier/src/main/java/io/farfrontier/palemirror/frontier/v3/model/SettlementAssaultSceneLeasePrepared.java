@@ -8,7 +8,7 @@ import java.util.Objects;
 public record SettlementAssaultSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
     public SettlementAssaultSceneLeasePrepared {
         Objects.requireNonNull(lease, "assault scene lease");
-        if (!(lease.cause() instanceof SettlementAssaultSceneCause)) {
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) {
             throw new IllegalArgumentException("assault scene preparation requires an assault cause");
         }
     }

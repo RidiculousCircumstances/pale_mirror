@@ -28,6 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
@@ -99,7 +100,8 @@ public final class FrontierV3SceneGameTests {
     public static void logisticsSceneNeverAcquiresCombatAuthorityWithoutAnEngagement(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
         SceneLease logistics = lease(origin);
-        SceneLease engagement = new SceneLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(), logistics.operationId(), logistics.cargoId(),
+        SceneLease engagement = new SceneLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(),
+                FrontierSceneBehaviors.logistics(logistics).operationId(), FrontierSceneBehaviors.logistics(logistics).cargoId(),
                 logistics.handoffPosition(), logistics.handoffInstant(), logistics.revision(), logistics.status(), Optional.of(new SubjectId("engagement:scene-combat-authority-game-test")), logistics.members());
         helper.assertFalse(FrontierV3SceneExecutor.combatEnabled(logistics),
                 "a HOT route carrier may move exact cargo but must not invent combat against its own escort");
@@ -691,7 +693,7 @@ public final class FrontierV3SceneGameTests {
     }
     private static PhysicalIntent pendingStrike(FrontierWorldState state, SceneLease lease) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.causeSubjectId().equals(lease.operationId()) && intent.status() == PhysicalIntentStatus.PREPARED).findFirst()
+                && intent.causeSubjectId().equals(FrontierSceneBehaviors.logistics(lease).operationId()) && intent.status() == PhysicalIntentStatus.PREPARED).findFirst()
                 .orElseThrow(() -> new IllegalStateException("the HOT scene did not prepare its exact next strike"));
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

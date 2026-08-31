@@ -77,7 +77,9 @@ class CargoCarrierReleaseStateTest {
                 candidate.handoffPosition(), new SimInstant(2_600L), 1L, Optional.of(candidate.engagementId()),
                 candidate.actorIds());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
-        FrontierWorldState interrupted = hot.releaseCargoCarrier(new CargoCarrierReleased(leaseId, lease.cargoId(), CargoCarrierIdentity.id(lease), Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000052"))));
+        CargoCarrierReleased released = new CargoCarrierReleased(leaseId, FrontierSceneBehaviors.logistics(lease).cargoId(),
+                CargoCarrierIdentity.id(lease), Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000052")));
+        FrontierWorldState interrupted = hot.releaseCargoCarrier(released);
 
         assertEquals(RouteEngagementStatus.RESOLVED, interrupted.strategicPlans().routeEngagements().get(candidate.engagementId()).status());
         assertEquals(RouteEngagementOutcome.ABORTED, interrupted.strategicPlans().routeEngagements().get(candidate.engagementId()).outcome().orElseThrow());
@@ -105,7 +107,7 @@ class CargoCarrierReleaseStateTest {
 
         submit(engine, world, "prepare", new SceneLeasePrepared(lease));
         submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        submit(engine, world, "cargo-loss", new CargoCarrierReleased(leaseId, lease.cargoId(), CargoCarrierIdentity.id(lease),
+        submit(engine, world, "cargo-loss", new CargoCarrierReleased(leaseId, FrontierSceneBehaviors.logistics(lease).cargoId(), CargoCarrierIdentity.id(lease),
                 Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000055"))));
         FrontierWorldState interrupted = state(engine);
         assertEquals(OperationStage.INTERRUPTED, interrupted.operations().get(candidate.operationId()).stage());

@@ -34,7 +34,7 @@ class HotScoutOperationObservationTest {
 
         // A test fixture may only capture the ordinary unleased actor position first; the next
         // two commands are the production PREPARED -> HOT hand-off, not a test-only lease edit.
-        submit(engine, world, new AmbientActorObserved(scout, lease.cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
+        submit(engine, world, new AmbientActorObserved(scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
         AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
         submit(engine, world, new AmbientLeasePrepared(scoutLease));
         submit(engine, world, new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
@@ -42,17 +42,17 @@ class HotScoutOperationObservationTest {
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
 
         HotScoutOperationObserved forged = new HotScoutOperationObserved(lease.id(), operation.id(), scout,
-                lease.cargoPosition().offset(1, 0, 0), engine.checkpoint().instant().ticks());
+                FrontierSceneBehaviors.logistics(lease).cargoPosition().offset(1, 0, 0), engine.checkpoint().instant().ticks());
         assertInstanceOf(CommandResult.Rejected.class, submitResult(engine, world, forged),
                 "a tagged operation and Scout cannot claim an unobserved carrier coordinate");
         assertTrue(state(engine).strategicPlans().hiveOperationKnowledge().entries().isEmpty(),
                 "a rejected physical observation must not leak strategic knowledge");
 
         HotScoutOperationObserved observed = new HotScoutOperationObserved(lease.id(), operation.id(), scout,
-                lease.cargoPosition(), engine.checkpoint().instant().ticks());
+                FrontierSceneBehaviors.logistics(lease).cargoPosition(), engine.checkpoint().instant().ticks());
         submit(engine, world, observed);
         HiveOperationKnowledge.Sighting sighting = state(engine).strategicPlans().hiveOperationKnowledge().entries().get(operation.id());
-        assertEquals(lease.cargoPosition(), sighting.position(), "the durable knowledge must retain the actually seen carrier anchor");
+        assertEquals(FrontierSceneBehaviors.logistics(lease).cargoPosition(), sighting.position(), "the durable knowledge must retain the actually seen carrier anchor");
         assertEquals(scout, sighting.scoutId(), "one exact HOT Scout owns its own sighting");
         assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)), "the WAL codec must retain the HOT provenance fields");
@@ -122,12 +122,12 @@ class HotScoutOperationObservationTest {
         RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation-negative"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
-        submit(engine, world, new AmbientActorObserved(scout, lease.cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
+        submit(engine, world, new AmbientActorObserved(scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
         submit(engine, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant())));
         submit(engine, world, new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
         submit(engine, world, new SceneLeasePrepared(lease));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        return new Fixture(world, engine, scout, new HotScoutOperationObserved(lease.id(), operation.id(), scout, lease.cargoPosition(), engine.checkpoint().instant().ticks()));
+        return new Fixture(world, engine, scout, new HotScoutOperationObserved(lease.id(), operation.id(), scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), engine.checkpoint().instant().ticks()));
     }
 
     private static void submit(FrontierEngine<FrontierWorldProjection> engine, WorldId world, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {

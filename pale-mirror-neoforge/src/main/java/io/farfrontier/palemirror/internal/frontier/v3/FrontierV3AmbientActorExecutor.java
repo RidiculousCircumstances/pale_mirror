@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
@@ -588,15 +589,16 @@ final class FrontierV3AmbientActorExecutor {
                 .stream().map(entity -> FrontierV3CargoCarrierExecutor.activeLease(state, entity)
                         .map(lease -> new SightedCarrier(entity, lease))).flatMap(java.util.Optional::stream)
                 .filter(value -> sameFloorAnchor(level, new BlockPosition(value.carrier().getBlockX(), value.carrier().getBlockY(), value.carrier().getBlockZ()),
-                        value.lease().cargoPosition()))
+                        FrontierSceneBehaviors.logistics(value.lease()).cargoPosition()))
                 .filter(value -> body.distanceToSqr(value.carrier()) <= 9_216.0D)
                 .sorted(Comparator.comparingDouble((SightedCarrier value) -> body.distanceToSqr(value.carrier()))
                         .thenComparing(value -> value.lease().id())).findFirst().orElse(null);
-        if (candidate == null || !HivePerceptionProcess.shouldRefresh(state, candidate.lease().operationId(),
-                actorId, candidate.lease().cargoPosition(), now)) return false;
+        if (candidate == null) return false;
+        var logistics = FrontierSceneBehaviors.logistics(candidate.lease());
+        if (!HivePerceptionProcess.shouldRefresh(state, logistics.operationId(), actorId, logistics.cargoPosition(), now)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-sighting",
                 actorId.value() + "-" + candidate.lease().id().value(), new HotScoutOperationObserved(candidate.lease().id(),
-                        candidate.lease().operationId(), actorId, candidate.lease().cargoPosition(), now));
+                        logistics.operationId(), actorId, logistics.cargoPosition(), now));
         FrontierV3DiagnosticTrace.recordScoutSighting(level.getServer(), "hot-scout-sighting:" + actorId.value(), candidate.lease(), actorId, result);
         return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }

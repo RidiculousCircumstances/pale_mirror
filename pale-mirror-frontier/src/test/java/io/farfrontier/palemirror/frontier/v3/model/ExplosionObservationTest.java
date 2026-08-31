@@ -28,7 +28,7 @@ class ExplosionObservationTest {
     @Test
     void onlyALivingBomberMayDurablyPrepareAnExplosion() {
         FrontierWorldState state = hotBomberState(new WorldId("frontier:explosion-planning"));
-        SubjectId engagement = state.sceneLeases().values().stream().findFirst().orElseThrow().engagementId().orElseThrow();
+        SubjectId engagement = FrontierSceneBehaviors.logistics(state.sceneLeases().values().stream().findFirst().orElseThrow()).engagementId().orElseThrow();
         Bioform bomber = bomber(state, engagement);
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-planning"), PhysicalIntentKind.EXPLOSION,
                 PhysicalIntentStatus.PREPARED, bomber.id(), List.of(bomber.id(), engagement), position(state, bomber.id()), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
@@ -48,7 +48,7 @@ class ExplosionObservationTest {
     @Test
     void durableExplosionReceiptBindsExactGeometryAndRoundTrips() {
         FrontierWorldState state = hotBomberState(new WorldId("frontier:explosion-receipt"));
-        SubjectId engagement = state.sceneLeases().values().stream().findFirst().orElseThrow().engagementId().orElseThrow();
+        SubjectId engagement = FrontierSceneBehaviors.logistics(state.sceneLeases().values().stream().findFirst().orElseThrow()).engagementId().orElseThrow();
         SubjectId bomber = bomber(state, engagement).id();
         FixedPosition origin = new FixedPosition(FixedScalar.whole(-400), FixedScalar.whole(64), FixedScalar.whole(400));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-test"), PhysicalIntentKind.EXPLOSION,

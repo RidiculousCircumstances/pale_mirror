@@ -28,7 +28,7 @@ class SceneCausePersistenceTest {
         LogisticsSceneCause cause = assertInstanceOf(LogisticsSceneCause.class, retained.cause());
         assertEquals(operation.id(), cause.operationId());
         assertEquals(operation.cargoId(), cause.cargoId());
-        assertEquals(lease.cargoPosition(), cause.cargoPosition());
+        assertEquals(FrontierSceneBehaviors.logistics(lease).cargoPosition(), cause.cargoPosition());
     }
 
     @Test void legacyLeasePayloadRefusesAnAssaultCause() {

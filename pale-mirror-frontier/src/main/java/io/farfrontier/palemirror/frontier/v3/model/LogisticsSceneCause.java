@@ -14,4 +14,6 @@ public record LogisticsSceneCause(SubjectId operationId, SubjectId cargoId, Opti
         engagementId = Objects.requireNonNull(engagementId, "scene engagement");
         Objects.requireNonNull(cargoPosition, "scene cargo position");
     }
+
+    @Override public SceneCauseKind kind() { return SceneCauseKind.LOGISTICS; }
 }

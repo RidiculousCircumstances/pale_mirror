@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -54,7 +55,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-test");
         prepareFloor(level, cargoPosition(origin, lease));
-        var expected = state.inventory().cargo().get(lease.cargoId()).itemIds().stream().map(state.inventory().items()::get)
+        var expected = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().stream().map(state.inventory().items()::get)
                 .sorted(java.util.Comparator.comparing(value -> value.id())).toList();
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a prepared loaded scene must create one exact cargo carrier");
@@ -179,14 +180,14 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(!FrontierV3CargoCarrierPresentation.attached(cart, lease),
                         "a released player-opened cart must lose its caravan caption before it can become ordinary world custody");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-release", lease.id().value(),
-                        new CargoCarrierReleased(lease.id(), lease.cargoId(), cart.getUUID(), java.util.Optional.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000061"))));
+                        new CargoCarrierReleased(lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId(), cart.getUUID(), java.util.Optional.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000061"))));
                 FrontierWorldState released = state(runtime);
-                var itemId = initial.inventory().cargo().get(lease.cargoId()).itemIds().getFirst();
+                var itemId = initial.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().getFirst();
                 helper.assertValueEqual(released.inventory().items().get(itemId).custody(), new InventoryCustody.WorldCarrier(cart.getUUID()),
                         "a released shipment becomes the exact cart's physical custody, never an untracked aggregate");
-                helper.assertValueEqual(released.contracts().values().stream().filter(contract -> contract.cargoId().equals(lease.cargoId())).findFirst().orElseThrow().status(), ContractStatus.INTERRUPTED,
+                helper.assertValueEqual(released.contracts().values().stream().filter(contract -> contract.cargoId().equals(FrontierSceneBehaviors.logistics(lease).cargoId())).findFirst().orElseThrow().status(), ContractStatus.INTERRUPTED,
                         "opening the cart interrupts the canonical supply contract");
-                helper.assertValueEqual(released.operations().get(lease.operationId()).stage(), OperationStage.INTERRUPTED,
+                helper.assertValueEqual(released.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()).stage(), OperationStage.INTERRUPTED,
                         "the interrupted route cannot continue COLD progression");
                 helper.assertValueEqual(released.sceneLeases().get(lease.id()).status(), SceneLeaseStatus.DRAINING,
                         "the HOT bodies must drain rather than keep escorting a released cart");
@@ -219,8 +220,8 @@ public final class FrontierV3CargoCarrierGameTests {
                 cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); BlockPos cartPosition = cargoPosition(origin, lease);
                 cart.setPos(cartPosition.getX() + 0.5D, cartPosition.getY(), cartPosition.getZ() + 0.5D);
                 cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, lease.cargoId().value());
-                var cargo = state(runtime).inventory().cargo().get(lease.cargoId());
+                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
+                var cargo = state(runtime).inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
                 for (int slot = 0; slot < cargo.itemIds().size(); slot++) cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state(runtime).inventory().items().get(cargo.itemIds().get(slot))));
                 helper.assertTrue(level.addFreshEntity(cart), "the exact cargo cart fixture must enter the loaded world");
                 FrontierV3CargoCarrierImpactLedger ledger = FrontierV3CargoCarrierImpactLedger.get(level);
@@ -231,7 +232,7 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.markReleasedCarrier(state(runtime), lease, cart),
                         "every exact cart stack must retain its old carrier identity before impact");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-release", lease.id().value(),
-                        new CargoCarrierReleased(lease.id(), lease.cargoId(), cart.getUUID(), Optional.empty()));
+                        new CargoCarrierReleased(lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId(), cart.getUUID(), Optional.empty()));
                 FrontierWorldState released = state(runtime); ledger.capture(level.getGameTime(), cart, released);
                 FrontierV3CargoCarrierImpactLedger restored = FrontierV3CargoCarrierImpactLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
                 BlockPos impactPosition = cart.blockPosition(); java.util.List<net.minecraft.world.item.ItemStack> releasedStacks = new java.util.ArrayList<>();
@@ -288,8 +289,8 @@ public final class FrontierV3CargoCarrierGameTests {
                 cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); BlockPos cartPosition = cargoPosition(origin, lease);
                 cart.setPos(cartPosition.getX() + 0.5D, cartPosition.getY(), cartPosition.getZ() + 0.5D);
                 cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, lease.cargoId().value());
-                var cargo = state(runtime).inventory().cargo().get(lease.cargoId());
+                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
+                var cargo = state(runtime).inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
                 for (int slot = 0; slot < cargo.itemIds().size(); slot++) cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state(runtime).inventory().items().get(cargo.itemIds().get(slot))));
                 helper.assertTrue(level.addFreshEntity(cart), "the terminal-damage cargo cart fixture must enter the loaded world");
                 FrontierV3CargoCarrierImpactLedger ledger = FrontierV3CargoCarrierImpactLedger.get(level);

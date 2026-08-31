@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import com.mojang.math.Transformation;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.ChatFormatting;
@@ -40,12 +41,12 @@ final class FrontierV3CargoCarrierPresentation {
     static void ensure(ServerLevel level, FrontierWorldState state, SceneLease lease, MinecartChest carrier) {
         UUID id = id(lease); Entity existing = level.getEntity(id);
         if (existing != null) return;
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return;
         Display.TextDisplay caption = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level);
         caption.setUUID(id); caption.setPos(carrier.position()); configure(caption, FrontierSceneLabels.cargo(state, cargo));
         caption.getPersistentData().putString(LEASE_KEY, lease.id().value());
-        caption.getPersistentData().putString(CARGO_KEY, lease.cargoId().value());
+        caption.getPersistentData().putString(CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
         // A failed visual admission never changes the carrier's canonical/physical ownership.
         if (level.addFreshEntity(caption)) caption.startRiding(carrier, true);
     }
@@ -65,7 +66,7 @@ final class FrontierV3CargoCarrierPresentation {
     private static boolean owned(Entity entity, SceneLease lease) {
         return entity instanceof Display.TextDisplay && !entity.isRemoved() && entity.getUUID().equals(id(lease))
                 && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
-                && lease.cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY));
+                && FrontierSceneBehaviors.logistics(lease).cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY));
     }
 
     private static UUID id(SceneLease lease) {

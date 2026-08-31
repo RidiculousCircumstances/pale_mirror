@@ -54,10 +54,10 @@ public final class HivePerceptionProcess {
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.activeTravel().isEmpty()
                 || scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
                 || scoutLease == null || scoutLease.status() != AmbientLeaseStatus.HOT || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL
-                || scene == null || !(scene.cause() instanceof LogisticsSceneCause) || scene.status() != SceneLeaseStatus.HOT || scene.engagementId().isPresent()
-                || !scene.operationId().equals(operation.id()) || !scene.cargoId().equals(operation.cargoId())
-                || !scene.cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
-                || !scene.cargoPosition().equals(observed.seenCarrierPosition())
+                || scene == null || !FrontierSceneBehaviors.isLogistics(scene) || scene.status() != SceneLeaseStatus.HOT || FrontierSceneBehaviors.logistics(scene).engagementId().isPresent()
+                || !FrontierSceneBehaviors.logistics(scene).operationId().equals(operation.id()) || !FrontierSceneBehaviors.logistics(scene).cargoId().equals(operation.cargoId())
+                || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
+                || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(observed.seenCarrierPosition())
                 || !nearby(state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
             throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
         }

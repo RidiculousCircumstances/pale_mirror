@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -33,7 +34,7 @@ final class FrontierV3CargoCarrierExecutor {
     private FrontierV3CargoCarrierExecutor() { }
 
     static FrontierV3SceneExecutor.BodyMaterialization materialize(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         List<ExactItemStack> items = items(state, cargo);
         if (items.size() != cargo.itemIds().size()) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
@@ -57,14 +58,14 @@ final class FrontierV3CargoCarrierExecutor {
         cart.setCustomNameVisible(false); cart.setNoGravity(true);
         for (int index = 0; index < items.size(); index++) cart.setItem(index, FrontierV3CargoHandoffExecutor.materializedStack(items.get(index)));
         cart.getPersistentData().putString(LEASE_KEY, lease.id().value());
-        cart.getPersistentData().putString(CARGO_KEY, lease.cargoId().value());
+        cart.getPersistentData().putString(CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
         if (!level.addFreshEntity(cart)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         FrontierV3CargoCarrierPresentation.ensure(level, state, lease, cart);
         return FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
     }
 
     static boolean move(ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPosition destination) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return false;
         Entity entity = carrier(level, lease);
         if (!owned(entity, lease, items(state, cargo))) return false;
@@ -79,7 +80,7 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static boolean atDestination(ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPosition destination) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         Entity entity = carrier(level, lease);
         if (cargo == null || !owned(entity, lease, items(state, cargo))) return false;
         Vec3 delta = entity.position().subtract(destination.x() + 0.5D, entity.getY(), destination.z() + 0.5D);
@@ -87,12 +88,12 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static boolean intact(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         return cargo != null && cargo.itemIds().size() == items(state, cargo).size() && owned(carrier(level, lease), lease, items(state, cargo));
     }
 
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return Readiness.CONFLICT;
         List<ExactItemStack> items = items(state, cargo);
         if (items.size() != cargo.itemIds().size()) return Readiness.CONFLICT;
@@ -121,7 +122,7 @@ final class FrontierV3CargoCarrierExecutor {
 
     /** Applies stable world-carrier provenance before the durable release permits container use. */
     static boolean markReleasedCarrier(FrontierWorldState state, SceneLease lease, Entity entity) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return false;
         List<ExactItemStack> items = items(state, cargo);
         if (!owned(entity, lease, items)) return false;
@@ -139,7 +140,7 @@ final class FrontierV3CargoCarrierExecutor {
     static boolean owned(Entity entity, SceneLease lease, List<ExactItemStack> items) {
         if (!(entity instanceof MinecartChest cart) || entity.isRemoved() || !id(lease).equals(entity.getUUID())
                 || !lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
-                || !lease.cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY)) || cart.getContainerSize() < items.size()) return false;
+                || !FrontierSceneBehaviors.logistics(lease).cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY)) || cart.getContainerSize() < items.size()) return false;
         for (int index = 0; index < items.size(); index++) if (!FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(index), items.get(index))) return false;
         for (int index = items.size(); index < cart.getContainerSize(); index++) if (!cart.getItem(index).isEmpty()) return false;
         return true;
@@ -150,7 +151,7 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     private static boolean intactEntity(FrontierWorldState state, Entity entity, SceneLease lease) {
-        CargoBatch cargo = state.inventory().cargo().get(lease.cargoId());
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         return cargo != null && cargo.itemIds().size() == items(state, cargo).size() && owned(entity, lease, items(state, cargo));
     }
 
@@ -167,7 +168,8 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     private static BlockPos spawnCandidate(SceneLease lease) {
-        return new BlockPos(lease.cargoPosition().x(), lease.cargoPosition().y(), lease.cargoPosition().z());
+        BlockPosition cargoPosition = FrontierSceneBehaviors.logistics(lease).cargoPosition();
+        return new BlockPos(cargoPosition.x(), cargoPosition.y(), cargoPosition.z());
     }
 
 }

@@ -17,9 +17,9 @@ final class SceneStrikeStateSupport {
     static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                Map<SubjectId, ActorLocation> actors, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return;
-        SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> owns(value, intent.causeSubjectId()))
+        SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> FrontierSceneBehaviors.owns(value, intent.causeSubjectId()))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("scene strike requires one HOT owned lease"));
-        if (lease.cause() instanceof LogisticsSceneCause) {
+        if (FrontierSceneBehaviors.isLogistics(lease)) {
             RouteOperation operation = operations.get(intent.causeSubjectId());
             if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
                 throw new IllegalArgumentException("logistics scene strike must retain one en-route operation");
@@ -40,7 +40,7 @@ final class SceneStrikeStateSupport {
 
     static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                     PhysicalIntent intent, SceneStrikeObservation observation) {
-        if (leases.values().stream().filter(lease -> owns(lease, intent.causeSubjectId())).noneMatch(lease -> lease.members().stream()
+        if (leases.values().stream().filter(lease -> FrontierSceneBehaviors.owns(lease, intent.causeSubjectId())).noneMatch(lease -> lease.members().stream()
                 .map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds()))) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
@@ -49,14 +49,9 @@ final class SceneStrikeStateSupport {
 
     static SubjectId owner(FrontierWorldState state, PhysicalIntent intent) {
         SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
-                .filter(value -> owns(value, intent.causeSubjectId())).findFirst()
+                .filter(value -> FrontierSceneBehaviors.owns(value, intent.causeSubjectId())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("scene strike has no HOT owned lease"));
         return FrontierSceneOwnerSupport.owner(state, lease);
-    }
-
-    private static boolean owns(SceneLease lease, SubjectId causeId) {
-        return (lease.cause() instanceof LogisticsSceneCause && lease.operationId().equals(causeId))
-                || (lease.cause() instanceof SettlementAssaultSceneCause assault && assault.assaultId().equals(causeId));
     }
 
     private static void validateMembers(PhysicalIntent intent, SceneStrikeObservation observation) {

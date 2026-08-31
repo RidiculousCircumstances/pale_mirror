@@ -7,11 +7,8 @@ final class FrontierSceneOwnerSupport {
     private FrontierSceneOwnerSupport() { }
 
     static SubjectId owner(FrontierWorldState state, SceneLease lease) {
-        if (lease.cause() instanceof SettlementAssaultSceneCause) return FrontierSettlementAssaultSceneSupport.owner(state, lease);
-        RouteOperation operation = state.operations().get(lease.operationId());
-        if (operation == null) throw new IllegalArgumentException("scene lease has no owning operation");
-        return operation.settlementId();
+        return FrontierSceneBehaviors.owner(state, lease);
     }
 
-    static boolean isAssault(SceneLease lease) { return lease.cause() instanceof SettlementAssaultSceneCause; }
+    static boolean isAssault(SceneLease lease) { return FrontierSceneBehaviors.isSettlementAssault(lease); }
 }

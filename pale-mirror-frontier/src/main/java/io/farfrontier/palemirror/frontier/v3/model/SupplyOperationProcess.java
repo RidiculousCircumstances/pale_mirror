@@ -156,14 +156,14 @@ final class SupplyOperationProcess {
                         && operation.activeTravel().map(travel -> travel.cargoAnchor().equals(engagement.intercept()))
                         .orElseGet(() -> operation.currentPosition().equals(engagement.intercept())));
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
-        Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+        Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
         if (unknownLease.isPresent()) {
             return unknownLease.orElseThrow().recoveryEvidence().isPresent()
                     ? failed(state, operation, "scene-recovery-unresolved")
                     : List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
         }
-        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(value -> value.operationId().equals(operation.id())
+        Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");

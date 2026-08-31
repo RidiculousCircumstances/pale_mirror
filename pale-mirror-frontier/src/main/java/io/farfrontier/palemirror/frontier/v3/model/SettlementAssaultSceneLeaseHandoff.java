@@ -10,7 +10,7 @@ public record SettlementAssaultSceneLeaseHandoff(SceneLease lease, List<SceneMem
     public SettlementAssaultSceneLeaseHandoff {
         Objects.requireNonNull(lease, "assault scene lease");
         ambientMembers = List.copyOf(ambientMembers);
-        if (!(lease.cause() instanceof SettlementAssaultSceneCause)) {
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) {
             throw new IllegalArgumentException("assault scene hand-off requires an assault cause");
         }
     }

@@ -63,26 +63,7 @@ persisted_enum_position_tags:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/StrategicPlanStateCodec.java: 23
 
 scene_cause_type_branches:
-  max_total: 47
+  max_total: 4
   allowed_files:
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoCarrierReleaseStateSupport.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ExplosionStateSupport.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierOperationStateSupport.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneAdmission.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneLeaseStateSupport.java: 5
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneLeaseValidationSupport.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneOwnerSupport.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSettlementAssaultSceneSupport.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 2
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldRuntimeDefinition.java: 4
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldPayloadCodecs.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldStateCodec.java: 3
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HivePerceptionProcess.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SceneLease.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SceneStrikeStateSupport.java: 3
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultSceneLeaseHandoff.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementAssaultSceneLeasePrepared.java: 1
-    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DiagnosticJson.java: 4
-    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DiagnosticTrace.java: 1
-    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java: 7
-    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SettlementAssaultSceneExecutor.java: 1

@@ -161,17 +161,18 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierWorldState initial = state(runtime); SubjectId scout = new SubjectId("bioform:west-1");
         RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = sceneLease(initial, runtime, operation, "lease:hot-scout-physical-sighting");
-        BlockPos carrierFloor = new BlockPos(lease.cargoPosition().x(), lease.cargoPosition().y(), lease.cargoPosition().z());
+        var logistics = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease);
+        BlockPos carrierFloor = new BlockPos(logistics.cargoPosition().x(), logistics.cargoPosition().y(), logistics.cargoPosition().z());
         // This is an isolated GameTest fixture chunk, not a production materializer ticket.
         helper.getLevel().getChunkAt(carrierFloor); prepareCanonicalFloor(helper.getLevel(), carrierFloor);
         FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-position", scout.value(),
-                new AmbientActorObserved(scout, lease.cargoPosition(), initial.actorLocations().get(scout).condition().health()));
+                new AmbientActorObserved(scout, logistics.cargoPosition(), initial.actorLocations().get(scout).condition().health()));
         FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-prepare", scout.value(),
                 new AmbientLeasePrepared(AmbientActorProcess.nextLease(state(runtime), scout, runtime.checkpointImage().orElseThrow().instant())));
         FrontierV3CommandSubmission.submit(runtime, "hot-scout-sighting-hot", scout.value(), new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
         FrontierV3CommandSubmission.submit(runtime, "hot-scout-scene-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "hot-scout-scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), state(runtime), scout, lease.cargoPosition()),
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), state(runtime), scout, logistics.cargoPosition()),
                 FrontierV3AmbientActorExecutor.Result.APPLIED, "the exact HOT Scout must have one real loaded-world body");
 
         // An ordinary nearby chest minecart is intentionally not a V3 carrier and may not
@@ -194,11 +195,11 @@ public final class FrontierV3AmbientActorGameTests {
                 helper.assertTrue(FrontierV3AmbientActorExecutor.observeHotScoutSighting(helper.getLevel(), runtime, state(runtime), scout, body,
                                 state(runtime).ambientLeases().get(scout)),
                         "the Scout must create one durable sighting only after seeing the real exact carrier");
-                helper.assertValueEqual(HivePerceptionProcess.observedCarrierPosition(state(runtime), operation.id()).orElseThrow(), lease.cargoPosition(),
+                helper.assertValueEqual(HivePerceptionProcess.observedCarrierPosition(state(runtime), operation.id()).orElseThrow(), logistics.cargoPosition(),
                         "the retained strategic fact must use the materialized carrier's canonical anchor");
                 helper.assertTrue(runtime.advance(1, new WorkBudget(64, 512)).isPresent(),
                         "the durable sighting wake-up must execute through the ordinary server-tick lane");
-                helper.assertValueEqual(HivePerceptionProcess.interceptTask(state(runtime), operation.id()).orElseThrow().position(), lease.cargoPosition(),
+                helper.assertValueEqual(HivePerceptionProcess.interceptTask(state(runtime), operation.id()).orElseThrow().position(), logistics.cargoPosition(),
                         "the resulting intercept task must retain the physically seen carrier anchor rather than re-querying the caravan");
                 ordinary.discard(); Entity carrier = helper.getLevel().getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 if (carrier != null) carrier.discard(); body.discard(); helper.succeed();

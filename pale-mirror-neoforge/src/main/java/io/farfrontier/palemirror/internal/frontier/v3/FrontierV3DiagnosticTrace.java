@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import net.minecraft.server.MinecraftServer;
@@ -49,14 +50,16 @@ final class FrontierV3DiagnosticTrace {
     /** Records the bounded operation → lease → cargo/actor chain for one scene transition. */
     static void recordScene(MinecraftServer server, String kind, SceneLease lease, CommandResult result) {
         Objects.requireNonNull(lease, "scene lease");
-        if (lease.cause() instanceof SettlementAssaultSceneCause assault) {
+        if (FrontierSceneBehaviors.isSettlementAssault(lease)) {
+            SettlementAssaultSceneCause assault = FrontierSceneBehaviors.settlementAssault(lease);
             record(server, "assault:" + assault.assaultId().value(), kind, assault.assaultId(), result,
                     new Context(assault.assaultId().value(), lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
             return;
         }
-        record(server, "operation:" + lease.operationId().value(), kind, lease.operationId(), result,
-                new Context(lease.operationId().value(), lease.id().value(), lease.cargoId().value(),
+        var logistics = FrontierSceneBehaviors.logistics(lease);
+        record(server, "operation:" + logistics.operationId().value(), kind, logistics.operationId(), result,
+                new Context(logistics.operationId().value(), lease.id().value(), logistics.cargoId().value(),
                         lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
     }
 
@@ -70,7 +73,7 @@ final class FrontierV3DiagnosticTrace {
         List<String> actors = java.util.stream.Stream.concat(lease.members().stream().map(member -> member.actorId().value()),
                         java.util.stream.Stream.of(scoutId.value())).distinct().sorted().toList();
         record(server, correlation, "hot_scout_operation_observed", scoutId, result,
-                new Context(lease.operationId().value(), lease.id().value(), lease.cargoId().value(), actors));
+                new Context(FrontierSceneBehaviors.logistics(lease).operationId().value(), lease.id().value(), FrontierSceneBehaviors.logistics(lease).cargoId().value(), actors));
     }
 
     private static void record(MinecraftServer server, String correlation, String kind, SubjectId subject, CommandResult result, Context context) {

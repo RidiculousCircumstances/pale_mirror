@@ -438,7 +438,7 @@ public final class FrontierV3ServerLifecycle {
         CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
-                new CargoCarrierReleased(lease.orElseThrow().id(), lease.orElseThrow().cargoId(), entity.getUUID(), observerPlayerId)))
+                new CargoCarrierReleased(lease.orElseThrow().id(), io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease.orElseThrow()).cargoId(), entity.getUUID(), observerPlayerId)))
                 .orElse(null);
         return result instanceof CommandResult.Accepted ? CargoCarrierInteraction.RELEASED : CargoCarrierInteraction.REJECTED;
     }
