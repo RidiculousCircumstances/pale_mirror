@@ -53,6 +53,18 @@ final class StrategicPlanPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new HiveOperationObserved(new HiveOperationKnowledge.Sighting(
                 subject(input), subject(input), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong()))); }
     }; }
+    static PayloadCodec hiveTerritoryObserved() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.hive_territory_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            HiveTerritoryKnowledge.Belief belief = ((HiveTerritoryObserved) payload).belief();
+            output.writeInt(belief.cell().x()); output.writeInt(belief.cell().z()); output.writeLong(belief.intensity().value().raw());
+            subject(output, belief.observerId()); output.writeInt(belief.sensorPosition().x()); output.writeInt(belief.sensorPosition().y()); output.writeInt(belief.sensorPosition().z()); output.writeLong(belief.observedAt());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new HiveTerritoryObserved(
+                new HiveTerritoryKnowledge.Belief(new InfectionCell(input.readInt(), input.readInt()),
+                        new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())),
+                        subject(input), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong()))); }
+    }; }
     static PayloadCodec hotScoutOperationObserved() { return new PayloadCodec() {
         @Override public String type() { return "frontier.hot_scout_operation_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {

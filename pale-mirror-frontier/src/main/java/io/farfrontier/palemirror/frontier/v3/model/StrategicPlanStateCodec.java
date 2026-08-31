@@ -64,17 +64,28 @@ final class StrategicPlanStateCodec {
         for (HiveOperationKnowledge.Sighting sighting : plans.hiveOperationKnowledge().entries().values().stream().sorted(Comparator.comparing(HiveOperationKnowledge.Sighting::operationId)).toList()) {
             writeSubject(output, sighting.operationId()); writeSubject(output, sighting.scoutId()); writePosition(output, sighting.position()); output.writeLong(sighting.observedAt());
         }
+        writeCount(output, plans.hiveTerritoryKnowledge().entries().size());
+        for (HiveTerritoryKnowledge.Belief belief : plans.hiveTerritoryKnowledge().entries().values().stream()
+                .sorted(Comparator.comparingInt((HiveTerritoryKnowledge.Belief value) -> value.cell().x()).thenComparingInt(value -> value.cell().z())).toList()) {
+            writeTarget(output, Optional.of(belief.cell())); output.writeLong(belief.intensity().value().raw()); writeSubject(output, belief.observerId());
+            writePosition(output, belief.sensorPosition()); output.writeLong(belief.observedAt());
+        }
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true); }
+    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false, true, true, true, true); }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, true, true, true);
+        return read(input, migrateLegacyProductionSlotRequirement, true, true, true, true);
     }
 
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition) throws IOException {
+        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition, true);
+    }
+
+    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
+                                   boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition, boolean hasHiveTerritoryKnowledge) throws IOException {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
@@ -143,7 +154,15 @@ final class StrategicPlanStateCodec {
             SubjectId operation = readSubject(input), scout = readSubject(input); HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation, scout, readPosition(input), input.readLong());
             if (hiveKnowledge.put(operation, sighting) != null) throw new IllegalArgumentException("duplicate hive operation sighting");
         }
-        return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge));
+        Map<InfectionCell, HiveTerritoryKnowledge.Belief> territory = new LinkedHashMap<>();
+        if (hasHiveTerritoryKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
+            InfectionCell cell = readTarget(input).orElseThrow(() -> new IllegalArgumentException("hive territory belief must retain a cell"));
+            HiveTerritoryKnowledge.Belief belief = new HiveTerritoryKnowledge.Belief(cell,
+                    new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())), readSubject(input), readPosition(input), input.readLong());
+            if (territory.put(cell, belief) != null) throw new IllegalArgumentException("duplicate hive territory belief");
+        }
+        return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
+                new HiveTerritoryKnowledge(territory));
     }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {

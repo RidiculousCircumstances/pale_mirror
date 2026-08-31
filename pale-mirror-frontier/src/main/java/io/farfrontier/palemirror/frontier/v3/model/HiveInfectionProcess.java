@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Executes one durable hive infection-expansion task, never an ownerless metabolism pulse. */
@@ -61,10 +62,11 @@ final class HiveInfectionProcess {
         return List.copyOf(events);
     }
 
-    static Optional<InfectionCell> expansionTarget(FrontierWorldState state) {
+    static Optional<InfectionCell> expansionTarget(FrontierWorldState state, long now) {
         if (!hasOperationalHeart(state)) return Optional.empty();
-        if (state.infection().isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
-        return FrontierWorldStateSupport.infectionFrontier(state.infection(), state.bootstrap().bounds()).best(state.infection());
+        Map<InfectionCell, FixedRatio> perceived = state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now);
+        if (perceived.isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
+        return FrontierWorldStateSupport.infectionFrontier(perceived, state.bootstrap().bounds()).best(perceived);
     }
 
     static boolean hasOperationalHeart(FrontierWorldState state) { return !roots(state).isEmpty(); }

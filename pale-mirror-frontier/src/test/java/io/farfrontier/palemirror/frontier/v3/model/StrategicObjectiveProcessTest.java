@@ -26,7 +26,7 @@ class StrategicObjectiveProcessTest {
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
 
-        assertEquals(4, planned.size());
+        assertEquals(8, planned.size(), "one bounded perception batch accompanies the durable plan");
         StrategicObjectiveSelected selected = assertInstanceOf(StrategicObjectiveSelected.class, planned.getFirst().payload());
         StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
         assertEquals(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, selected.objective().kind());
@@ -34,7 +34,11 @@ class StrategicObjectiveProcessTest {
         assertEquals(List.of(StrategicTaskRequirement.OPERATIONAL_HEART), task.task().requirements());
         state = StrategicObjectiveProcess.reduceObjective(state, hive, selected);
         state = StrategicObjectiveProcess.reduceTask(state, hive, task);
+        for (ProposedEvent event : planned.stream().filter(event -> event.payload() instanceof HiveTerritoryObserved).toList()) {
+            state = HiveTerritoryPerceptionProcess.reduce(state, hive, (HiveTerritoryObserved) event.payload());
+        }
         assertEquals(1, state.strategicPlans().objectives().size()); assertEquals(1, state.strategicPlans().tasks().size());
+        assertTrue(!state.strategicPlans().hiveTerritoryKnowledge().entries().isEmpty());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         assertEquals(selected, FrontierWorldRuntimeDefinition.payloadCodecs().decode(selected.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(selected)));
         assertEquals(task, FrontierWorldRuntimeDefinition.payloadCodecs().decode(task.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(task)));

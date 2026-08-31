@@ -122,8 +122,11 @@ final class StrategicObjectiveProcess {
                 : SettlementPerceptionProcess.refreshLocalInfection(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         HivePerceptionProcess.Refresh hivePerception = hive ? HivePerceptionProcess.refresh(state, action.dueAt().ticks())
                 : new HivePerceptionProcess.Refresh(state.strategicPlans().hiveOperationKnowledge(), List.of());
-        FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge()).withHiveOperationKnowledge(hivePerception.knowledge()));
-        List<ProposedEvent> observedAndHealth = concatenate(concatenate(perception.events(), hivePerception.events()), health);
+        HiveTerritoryPerceptionProcess.Refresh territoryPerception = hive ? HiveTerritoryPerceptionProcess.refresh(state, action.dueAt().ticks())
+                : new HiveTerritoryPerceptionProcess.Refresh(state.strategicPlans().hiveTerritoryKnowledge(), List.of());
+        FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge())
+                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge()));
+        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(perception.events(), hivePerception.events()), territoryPerception.events()), health);
         Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
@@ -266,7 +269,7 @@ final class StrategicObjectiveProcess {
                     Optional.of(observation.operationId()), Optional.of(observation.position()), Long.MAX_VALUE));
         }
         Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
-        return HiveInfectionProcess.expansionTarget(state).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
+        return HiveInfectionProcess.expansionTarget(state, now).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
                 Math.subtractExact(FixedScalar.SCALE, state.infection().getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
     }
     private static Optional<Candidate> hiveGrowthCandidate(FrontierWorldState state) {

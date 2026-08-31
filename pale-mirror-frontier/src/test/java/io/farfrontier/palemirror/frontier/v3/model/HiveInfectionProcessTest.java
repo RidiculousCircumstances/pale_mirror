@@ -26,7 +26,7 @@ class HiveInfectionProcessTest {
     void liveHeartReseedsThroughItsDurableExpansionTaskAfterExactDecontamination() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection"), 105L));
         for (InfectionCell cell : List.copyOf(state.infection().keySet())) state = state.withInfection(cell, new FixedRatio(FixedScalar.ZERO));
-        InfectionCell target = HiveInfectionProcess.expansionTarget(state).orElseThrow();
+        InfectionCell target = HiveInfectionProcess.expansionTarget(state, 0L).orElseThrow();
         state = withTask(state, target);
 
         List<ProposedEvent> planned = HiveInfectionProcess.plan(state, HiveInfectionProcess.task(onlyTask(state), 1, 100L));
@@ -43,7 +43,7 @@ class HiveInfectionProcessTest {
     @Test
     void destroyedHeartsBlockTheOwnedTaskInsteadOfContinuingOwnerlessMetabolism() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-destroyed"), 106L));
-        InfectionCell target = HiveInfectionProcess.expansionTarget(state).orElseThrow();
+        InfectionCell target = HiveInfectionProcess.expansionTarget(state, 0L).orElseThrow();
         for (HiveOrgan heart : state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.HEART).toList()) {
             int threshold = (FrontierGrayboxPlan.intactOrganCellCount(heart) + 2) / 3;
             List<GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells().values().stream().filter(cell -> cell.ownerId().equals(heart.id()))
@@ -74,7 +74,7 @@ class HiveInfectionProcessTest {
     }
 
     @Test
-    void expansionTargetRetainsTheFormerCompleteFrontierOrderingWithoutSortingIt() {
+    void expansionTargetUsesOnlyFreshLocalTerritoryBeliefs() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-order"), 108L));
         for (InfectionCell cell : List.copyOf(state.infection().keySet())) state = state.withInfection(cell, new FixedRatio(FixedScalar.ZERO));
         state = state.withInfection(new InfectionCell(-12, -8), new FixedRatio(new FixedScalar(750_000L)));
@@ -82,7 +82,12 @@ class HiveInfectionProcessTest {
         state = state.withInfection(new InfectionCell(-10, -8), new FixedRatio(new FixedScalar(500_000L)));
         state = state.withInfection(new InfectionCell(30, 14), new FixedRatio(new FixedScalar(250_000L)));
 
-        assertEquals(sortedReferenceTarget(state), HiveInfectionProcess.expansionTarget(state));
+        Map<InfectionCell, FixedRatio> local = Map.of(new InfectionCell(-12, -8), new FixedRatio(new FixedScalar(750_000L)),
+                new InfectionCell(-11, -8), new FixedRatio(new FixedScalar(125_000L)), new InfectionCell(-10, -8), new FixedRatio(new FixedScalar(500_000L)));
+        state = withTerritoryKnowledge(state, local, new BlockPosition(-44, 64, -32), 0L);
+
+        assertEquals(sortedReferenceTarget(state.bootstrap().bounds(), local), HiveInfectionProcess.expansionTarget(state, 0L),
+                "a remote canonical cell must not participate until a hive sensor has observed it");
     }
 
     @Test
@@ -132,7 +137,7 @@ class HiveInfectionProcessTest {
     @Test
     void oneInfectionPulseAndItsTaskTransitionShareTheDependencyAwarePreWalAudit() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-combined-audit"), 109L));
-        InfectionCell target = HiveInfectionProcess.expansionTarget(initial).orElseThrow();
+        InfectionCell target = HiveInfectionProcess.expansionTarget(initial, 0L).orElseThrow();
         FrontierWorldState previous = withTask(initial, target);
         StrategicTask task = onlyTask(previous);
         FrontierWorldState next = previous.withInfection(target, new FixedRatio(new FixedScalar(250_000L)))
@@ -151,6 +156,14 @@ class HiveInfectionProcessTest {
     }
 
     private static StrategicTask onlyTask(FrontierWorldState state) { return state.strategicPlans().tasks().values().stream().findFirst().orElseThrow(); }
+
+    private static FrontierWorldState withTerritoryKnowledge(FrontierWorldState state, Map<InfectionCell, FixedRatio> cells, BlockPosition scoutPosition, long observedAt) {
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Map<InfectionCell, HiveTerritoryKnowledge.Belief> beliefs = new LinkedHashMap<>();
+        cells.forEach((cell, intensity) -> beliefs.put(cell, new HiveTerritoryKnowledge.Belief(cell, intensity, scout.id(), scoutPosition, observedAt)));
+        return state.withActorLocation(scout.id(), scoutPosition).withStrategicPlans(state.strategicPlans()
+                .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(beliefs)));
+    }
 
     private static Optional<InfectionCell> sortedReferenceTarget(FrontierWorldState state) {
         return sortedReferenceTarget(state.bootstrap().bounds(), state.infection());
