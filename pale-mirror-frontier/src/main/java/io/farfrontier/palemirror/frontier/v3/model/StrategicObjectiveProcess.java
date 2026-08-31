@@ -124,9 +124,14 @@ final class StrategicObjectiveProcess {
                 : new HivePerceptionProcess.Refresh(state.strategicPlans().hiveOperationKnowledge(), List.of());
         HiveTerritoryPerceptionProcess.Refresh territoryPerception = hive ? HiveTerritoryPerceptionProcess.refresh(state, action.dueAt().ticks())
                 : new HiveTerritoryPerceptionProcess.Refresh(state.strategicPlans().hiveTerritoryKnowledge(), List.of());
+        HiveDoctrineState doctrine = hive ? HiveDoctrineProcess.select(state.withStrategicPlans(state.strategicPlans()
+                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge())), action.dueAt().ticks(), allowHiveInterception)
+                : state.strategicPlans().hiveDoctrine();
         FrontierWorldState decisionState = state.withStrategicPlans(state.strategicPlans().withInfectionKnowledge(perception.knowledge())
-                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge()));
-        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(perception.events(), hivePerception.events()), territoryPerception.events()), health);
+                .withHiveOperationKnowledge(hivePerception.knowledge()).withHiveTerritoryKnowledge(territoryPerception.knowledge()).withHiveDoctrine(doctrine));
+        List<ProposedEvent> doctrineEvent = hive && !doctrine.equals(state.strategicPlans().hiveDoctrine())
+                ? List.of(new ProposedEvent(owner, new HiveDoctrineSelected(doctrine))) : List.of();
+        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()), territoryPerception.events()), doctrineEvent), health);
         Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
@@ -263,14 +268,16 @@ final class StrategicObjectiveProcess {
                                                       Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
         Optional<HiveOperationKnowledge.Sighting> sighted = allowInterception
                 ? interceptSighting.or(() -> state.strategicPlans().hiveOperationKnowledge().freshest(now, HivePerceptionProcess.REFRESH_INTERVAL)) : Optional.empty();
-        if (sighted.isPresent()) {
+        if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.INTERDICT && sighted.isPresent()) {
             HiveOperationKnowledge.Sighting observation = sighted.orElseThrow();
             return Optional.of(new Candidate(StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.empty(),
                     Optional.of(observation.operationId()), Optional.of(observation.position()), Long.MAX_VALUE));
         }
-        Optional<Candidate> growth = hiveGrowthCandidate(state); if (growth.isPresent()) return growth;
+        if (state.strategicPlans().hiveDoctrine().doctrine() == HiveDoctrine.CONSOLIDATE) return hiveGrowthCandidate(state);
+        if (state.strategicPlans().hiveDoctrine().doctrine() != HiveDoctrine.EXPAND) return Optional.empty();
         return HiveInfectionProcess.expansionTarget(state, now).map(target -> new Candidate(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, Optional.of(target),
-                Math.subtractExact(FixedScalar.SCALE, state.infection().getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
+                Math.subtractExact(FixedScalar.SCALE, state.strategicPlans().hiveTerritoryKnowledge().freshInfection(now)
+                        .getOrDefault(target, new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(FixedScalar.ZERO)).value().raw())));
     }
     private static Optional<Candidate> hiveGrowthCandidate(FrontierWorldState state) {
         boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS

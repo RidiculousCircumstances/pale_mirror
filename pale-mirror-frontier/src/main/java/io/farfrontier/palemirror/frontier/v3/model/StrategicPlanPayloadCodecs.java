@@ -65,6 +65,16 @@ final class StrategicPlanPayloadCodecs {
                         new io.farfrontier.palemirror.frontier.v3.api.FixedRatio(new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())),
                         subject(input), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong()))); }
     }; }
+    static PayloadCodec hiveDoctrineSelected() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.hive_doctrine_selected"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            HiveDoctrineState state = ((HiveDoctrineSelected) payload).state(); output.writeByte(state.doctrine().ordinal()); output.writeLong(state.selectedAt());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+            int doctrine = input.readUnsignedByte(); if (doctrine >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
+            return new HiveDoctrineSelected(new HiveDoctrineState(HiveDoctrine.values()[doctrine], input.readLong()));
+        }); }
+    }; }
     static PayloadCodec hotScoutOperationObserved() { return new PayloadCodec() {
         @Override public String type() { return "frontier.hot_scout_operation_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
