@@ -20,6 +20,16 @@ public final class RouteEngagementCombatRules {
         };
         ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
+        var defenderAssault = SettlementDefenderReadinessProjection.owningActiveAssault(state, resident.id());
+        if (defenderAssault.isPresent()) {
+            SettlementDefenderReadinessProjection readiness = SettlementDefenderReadinessProjection.derive(state, defenderAssault.orElseThrow());
+            if (!readiness.livingAssignedMembers().contains(resident.id())) {
+                throw new IllegalArgumentException("unavailable defender cannot deal COLD combat damage");
+            }
+            return readiness.status() == SettlementDefenderReadinessStatus.READY
+                    && readiness.armedLivingAssignedMembers().contains(resident.id())
+                    ? combat.residentGuardDamage() : combat.residentWorkerDamage();
+        }
         return resident.profession() == ResidentProfession.SECURITY_WORKER || HumanTacticalFunctionProjection.hasWeapon(state, resident.id())
                 ? combat.residentGuardDamage() : combat.residentWorkerDamage();
     }

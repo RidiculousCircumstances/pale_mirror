@@ -16,7 +16,7 @@
     { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "itemKind": "minecraft:iron_sword", "count": 1, "custody": { "kind": "ACTOR" } }, "timeoutMs": 90000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "defender-equipment:item:development-defender-sword", "expect": { "status": "ok", "eventKind": "defender_equipment_issued", "subject": "assault:development-settlement-assault" }, "timeoutMs": 30000 },
     { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "ARMED DEFENDER", "maxDistance": 64, "timeoutMs": 30000 },
-    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "ARMED DEFENDER", "maxDistance": 64, "maxAngleDeg": 80, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "UNIT READY", "maxDistance": 64, "maxAngleDeg": 80, "timeoutMs": 30000 },
     { "type": "inspect", "view": "item", "id": "item:development-defender-sword" }
   ],
   "restart": {

@@ -83,6 +83,21 @@
   sword in player custody on one `:0` client. Focused pure/Node tests, the
   14-test economy GameTest slice and the full critical gate (251/251
   GameTests, guardrails/check, build and packaged-JAR verification) pass.
+- First defender readiness is now an explicit pure projection, never a second
+  persisted unit record: active exact assignment, actor vitality and exact
+  actor-held weapons yield `UNAVAILABLE`, `IMPROVISED`, `DEGRADED` or `READY`.
+  COLD settlement assault damage grants guard output only to armed members of a
+  `READY` unit; individual weapon loss and leader loss reduce the same retained
+  survivors to militia output without replacement. The ordinary HOT label has a
+  second `UNIT …` line from that projection. Focused pure/NeoForge/Node tests,
+  economy GameTests 14/14 and the complete critical gate pass (251/251,
+  guardrails/check, build and packaged-JAR verification). The updated
+  `disposable-defender-equipment-restart` pilot passed after a graceful restart:
+  `item:development-defender-sword` remained `ACTOR` custody and the visible
+  client semantic check found `UNIT READY`; its clean frame is
+  `build/frontier-v3-scenarios/disposable_defender_equipment_restart-e621effd-8f36-449d-ac44-fa63bab7352b-armed-defender-after-restart.png`.
+  This is correctness evidence only: the vanilla-scale text remains too small
+  for the accepted large bright tactical grammar.
 - `3fa281b` establishes the first exact human-capability foundation in source schema 81: `ResidentProfile` now keeps provisional bootstrap affinity, separate persisted `ResidentProfession` and an eight-family bounded `HumanCapability` vector. Production, farming, logistics, patrol, assault defence, combat validation and actor labels select the profession/capability path rather than `ResidentRole`; pre-schema-81 snapshots deterministically derive the new fields. `HumanAssignmentProjection` derives one exclusive current assignment from persisted jobs, harvests, operations, patrols, active assault defender units and Transit without a second mutable ledger, rejecting collisions. An assault now owns one ordered exact defender unit with a stable leader; admission excludes dead, starving or civilian-claimed people, and snapshot/WAL recovery retains that unit without a second roster. A fresh Scout-rooted defence may now atomically interrupt one exact COLD market-backed production job: the original input returns, the reservation/order release and production blocks before that same person derives defence assignment. Materialized/prepared/running work remains unavailable. The harvest completion path now retains the exact claimed farmer instead of wrongly demanding a second free worker. Focused normal/negative/recovery tests and the complete critical gate pass: `guardrails`, `check`, packaged JAR and 248/248 GameTests. Equipment issue/recovery, other typed interruption owners, readiness and return remain the next human slice.
 - Exact actor equipment custody is now available without a second inventory: one exact stack may retain `InventoryCustody.Actor(resident|bioform)`, snapshot and observed-transfer WAL retain it, actor existence is validated against canonical locations, and item loss may name an actor physical surface. Focused normal/negative/recovery tests pass. Issuing/recovering equipment under a unit lifecycle remains next.
 - V3-AUD-003 is closed: the registry resolves an exact command/event owner and dispatches it only to the corresponding closed executable domain module. The command and reducer facades are now 33 and 16 lines; physical, ambient, logistics, population, economy, resource-site, hive, infrastructure and strategy transition policy live with their owning modules. Catalog startup rejects a declared non-kernel process without one executable owner, while the debt ratchet makes both former global-branch ceilings zero. The complete critical gate passes: `guardrails`, `check`, build/package and 248/248 GameTests.
@@ -134,7 +149,7 @@
 - The approved Frontier v3 durable goal is active.
 - The accepted hive physiology/infection refinement is now normative in the dedicated contract, main v3 contract, Wave 5/6 plan and architecture map. Implementation has not yet replaced `HEART`, split bioform chassis/mutation/assignment/lifecycle, added hiveroot segments/cocoons or implemented Relay/Overseer/Sentinel mobilization; these are goal scope, not completed claims.
 - The future Create orientation is now normative in its dedicated document, the v3 contract, Wave 6/post-graybox plan and architecture map. No Create-backed v3 mechanism or train is claimed implemented; the current goal adds only the provider-neutral seams needed before the separate post-graybox goal.
-- The human capability/unit model is now normative in its dedicated document, the v3 contract, Wave 4 plan and architecture map. Source schema 81 separates profession/capabilities from provisional `ResidentRole`; active settlement assaults now own an exact defender unit and its exclusive derived defence assignment. The first typed civilian interruption is limited to pre-effect COLD market production. Exact issue/return and the first physical death/drop/pickup boundary exist; automatic admission, broader recovery/readiness and HOT/COLD mobilization proofs remain current-goal scope.
+- The human capability/unit model is now normative in its dedicated document, the v3 contract, Wave 4 plan and architecture map. Source schema 81 separates profession/capabilities from provisional `ResidentRole`; active settlement assaults now own an exact defender unit and its exclusive derived defence assignment. The first typed civilian interruption is limited to pre-effect COLD market production. Exact issue/return, physical death/drop/pickup and first exact defender readiness now exist; automatic admission, broader recovery, role expansion and HOT/COLD mobilization proofs remain current-goal scope.
 - Static architecture audit `docs/frontier-v3-architecture-audit.md` at `5ca5291` records four confirmed defects, six structural debts and two unmeasured scale risks. Its remediation table is the active closure register. `architecture.yml` and `AGENTS.md` own the prevention rules; `tools/engineering/frontier_v3_architecture_debt.yml` plus its fast validator prevent ceiling growth.
 - H0.1 is closed in `e9bc0d0`: `SceneLease` no longer exposes logistics-only accessors; complete pure and NeoForge `SceneBehavior` registries own generic scene lifecycle policy. Duplicate/missing registration fails before mutation; the scene-branch ceiling fell from 47 to 4 sealed-codec compatibility branches. Focused registry tests, scene GameTests 30/30 and the complete critical gate (250/250) pass.
 - H0.2 is closed in `9281ab5`: every fixture builder and the sole profile catalog live in test-fixtures/pilot sources; production startup always creates only the normal world configuration and ignores fixture-profile JVM properties. The pilot bootstrap is absent from the production JAR and may pass only an explicit prebuilt configuration. Java/Gradle/Node derive or validate the same catalog; unknown/duplicate profiles and any production JAR fixture symbol fail. Catalog/lifecycle negative tests, Node 26/26, a disposable pilot smoke and the complete critical gate (250/250) pass.
@@ -259,7 +274,9 @@
   claiming broader human-combat comprehension.
 ## Working set
 - `AGENTS.md`, `CONTINUITY.md`, `architecture.yml`, the v3 docs/plan, archived ledger; test-pilot now has a minimal current-source NeoForge profile, unique seeded disposable worlds, terminal domain waits, settlement-work reasons, read-only fixture preconditions, ordinary chunk visits, camera-semantic frames, graceful/abrupt recovery splitting, bounded PMV3 JSONL/client-log diagnostics, ordinary exact player/container ingress and withdrawal, a quiet pilot-only system-message policy, bounded contextual-card presentation, and scope-based physical V3 board grammar.
-- The exact issue/return and first managed-death loss/drop/pickup boundaries
-  are closed at schema 82. Next is readiness; it must preserve one canonical
-  item claim, account for the physical result and never compensate a loss by
-  reconstructing a stack or actor inventory.
+- The exact issue/return, first managed-death loss/drop/pickup and first
+  defender-readiness boundaries are closed at schema 82. Next is role expansion
+  through real patrol/escort, engineering/recovery and medical/evacuation
+  operation/equipment owners; it must preserve one canonical item claim,
+  account for physical results and never compensate a loss by reconstructing a
+  stack or actor inventory.

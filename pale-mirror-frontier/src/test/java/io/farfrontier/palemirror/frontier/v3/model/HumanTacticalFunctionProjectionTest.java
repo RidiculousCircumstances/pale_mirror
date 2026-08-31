@@ -41,7 +41,7 @@ class HumanTacticalFunctionProjectionTest {
 
         SubjectId leader = assault.defenderUnit().leaderId();
         assertEquals(HumanTacticalFunction.SQUAD_LEADER, HumanTacticalFunctionProjection.derive(state, leader));
-        assertEquals("Northwatch SQUAD LEADER", FrontierSceneLabels.actor(state, leader, false));
+        assertEquals("Northwatch SQUAD LEADER\nUNIT IMPROVISED", FrontierSceneLabels.actor(state, leader, false));
 
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
         int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
@@ -65,7 +65,7 @@ class HumanTacticalFunctionProjectionTest {
         state = state.transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertEquals(HumanTacticalFunction.ARMED_DEFENDER, HumanTacticalFunctionProjection.derive(state, militia));
-        assertEquals("Northwatch ARMED DEFENDER", FrontierSceneLabels.actor(state, militia, false));
+        assertEquals("Northwatch ARMED DEFENDER\nUNIT READY", FrontierSceneLabels.actor(state, militia, false));
         assertEquals(receipt, ((PhysicalIntentTransition) FrontierWorldRuntimeDefinition.payloadCodecs().decode(
                 new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)).type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentTransition(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)))))
@@ -89,6 +89,46 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withInventory(stored.moveObservedItem(sword, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(resident.id())));
 
         assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, resident.id()));
+    }
+
+    @Test
+    void exactEquipmentAndLeaderLossDeriveReadinessAndChangeTheSameSurvivorsColdCapability() {
+        Fixture fixture = fixture();
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload()));
+        SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
+        SubjectId leader = assault.defenderUnit().leaderId();
+        SubjectId fighter = assault.defenderIds().stream().filter(id -> !id.equals(leader)).findFirst().orElseThrow();
+        SubjectId support = assault.defenderIds().stream().filter(id -> !id.equals(leader) && !id.equals(fighter)).findFirst().orElseThrow();
+
+        assertEquals(SettlementDefenderReadinessStatus.IMPROVISED,
+                SettlementDefenderReadinessProjection.derive(state, assault).status());
+        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter));
+        state = arm(state, assault, leader, "leader");
+        state = arm(state, assault, fighter, "fighter");
+        state = arm(state, assault, support, "support");
+        assertEquals(SettlementDefenderReadinessStatus.READY, SettlementDefenderReadinessProjection.derive(state, assault).status());
+        assertEquals(FixedScalar.whole(3), RouteEngagementCombatRules.damage(state, fighter));
+
+        SubjectId fighterSword = state.inventory().actorItems(fighter).getFirst().id();
+        state = state.withInventory(state.inventory().destroyObservedItem(fighterSword, new InventoryCustody.Actor(fighter)));
+        assertEquals(SettlementDefenderReadinessStatus.READY, SettlementDefenderReadinessProjection.derive(state, assault).status());
+        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "weapon loss changes the same exact defender");
+
+        SubjectId leaderSword = state.inventory().actorItems(leader).getFirst().id();
+        state = state.withInventory(state.inventory().destroyObservedItem(leaderSword, new InventoryCustody.Actor(leader)));
+        ActorLocation leaderLocation = state.actorLocations().get(leader);
+        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(leader, new ActorLocation(leaderLocation.position(), ActorCondition.dead()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        assertEquals(SettlementDefenderReadinessStatus.DEGRADED, SettlementDefenderReadinessProjection.derive(state, assault).status());
+        assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");
+        assertEquals("Northwatch MILITIA\nUNIT DEGRADED", FrontierSceneLabels.actor(state, fighter, false));
+        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
     }
 
     @Test
@@ -157,6 +197,20 @@ class HumanTacticalFunctionProjectionTest {
                 .withHiveTerritoryKnowledge(territory).withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L))
                 .addObjective(objective).addTask(task);
         return new Fixture(state.withStrategicPlans(plans), hive, task, sighting);
+    }
+
+    private static FrontierWorldState arm(FrontierWorldState state, SettlementAssault assault, SubjectId resident, String suffix) {
+        SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
+        int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
+        SubjectId item = new SubjectId("item:tactical-readiness-" + suffix);
+        ExactInventory source = state.inventory();
+        if (source.surfaces().get(depot).status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+            source = source.withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE);
+        }
+        ExactInventory inventory = source
+                .store(new ExactItemStack(item, assault.settlementId(), "minecraft:iron_sword", 1, new InventoryCustody.ContainerSlot(depot, slot)))
+                .moveObservedItem(item, new InventoryCustody.ContainerSlot(depot, slot), new InventoryCustody.Actor(resident));
+        return state.withInventory(inventory);
     }
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }

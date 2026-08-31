@@ -64,7 +64,7 @@ class FrontierV3ScenePresentationTest {
         var defender = assault.defenderIds().stream().filter(id -> !id.equals(assault.defenderUnit().leaderId())).findFirst().orElseThrow();
 
         assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, defender));
-        assertEquals("Northwatch MILITIA", FrontierSceneLabels.actor(state, defender, false));
+        assertEquals("Northwatch MILITIA\nUNIT IMPROVISED", FrontierSceneLabels.actor(state, defender, false));
         assertEquals(true, FrontierSceneLabels.ambientActorNameVisible(state, defender, false));
 
         var civilian = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())

@@ -193,7 +193,7 @@ A work crew or tactical unit retains:
 - one owning task/operation and bounded objective;
 - exact equipment and supply claims;
 - formation or work positions where spatial execution requires them;
-- readiness, casualties and explicit release or recovery state.
+- derived readiness, casualties and explicit release or recovery state.
 
 Membership never duplicates individual ownership. A resident remains owned by
 their population register while the unit holds an exclusive assignment claim.
@@ -252,7 +252,7 @@ sighting as the assault; before the unit can claim them, the interruption
 returns the original wheat stack to its original depot slot, releases its exact
 invoice reservation, cancels its exact market order and blocks that production
 task. Materialized input, a prepared/running physical transform, every other
-civilian process, equipment/supply claims, morale/readiness and return remain
+civilian process, equipment/supply claims and morale remain
 separate Wave-4 work. A lost leader stays the retained leader ID and therefore
 visibly degrades the unit instead of being silently replaced.
 
@@ -269,14 +269,19 @@ stack; it creates a durable `EQUIPMENT_ISSUE` request binding the assault,
 resident, source slot, item and expected body. The loaded executor performs
 the outbound hand-off only after that request is `RUNNING`, and confirms only
 the exact empty-source/held-item observation. The normal actor projection then
-refreshes the resident to a visible `MILITIA`/`ARMED DEFENDER` nameplate without
-turning presentation into a roster. The first native scenario proves the
+refreshes the resident to a visible `MILITIA`/`ARMED DEFENDER` nameplate with a
+second `UNIT …` readiness line, without turning presentation into a roster. The first native scenario proves the
 outbound custody and graceful-restart inspection. The separate inverse-return
 flow is also implemented: after a resolved assault it reserves one named empty
 active-depot slot, moves the same tagged hand stack only through a durable
 request, and confirms the inverse receipt. Its native scenario proves terminal
 slot custody, correlation trace, player-opened depot and graceful restart.
-Observed loss, drop and destruction remain separate work.
+Observed loss, drop and destruction now retain the actual item custody or
+destruction first. The first managed-death executor moves a matching tagged
+hand stack from `Actor` to its exact `WorldCarrier` before vanilla creates the
+ordinary drop, or records exact destruction when the hand no longer contains
+that identity; later player pickup remains the ordinary `WorldCarrier` to
+`Player` observation.
 
 The implemented first read model is intentionally narrower than the full
 future roster. It derives `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`, `GUARD` and
@@ -289,6 +294,32 @@ recovery of the same item changes the next projection rather than requiring a
 role migration. Scout, sapper, medic, heavy-weapon and fixed-weapon functions
 must wait for their real operation and equipment owners; they are not labels
 invented ahead of those systems.
+
+### First exact defender readiness
+
+The initial settlement-defence readiness is a pure projection, not a second
+unit record or a mutable morale counter. It compiles only the retained assault
+unit, the same current `SETTLEMENT_DEFENCE` assignment, current actor vitality
+and exact actor-held graybox weapons:
+
+- `UNAVAILABLE`: no living member still holds the unit's exclusive assignment;
+- `IMPROVISED`: living assigned people remain, but none currently carries an
+  exact weapon;
+- `DEGRADED`: armed living people remain but the retained leader is dead or no
+  longer operational;
+- `READY`: the retained leader and at least one armed living member are
+  operational.
+
+The status is recomputed from the exact facts after every custody or casualty
+observation and survives restart because those facts survive restart; it is
+never serialized independently. COLD settlement-assault damage consumes the
+same projection: only an armed member of a `READY` unit receives the configured
+guard output. An unarmed member, an `IMPROVISED` unit, or all survivors after
+leader loss use the configured militia output. Thus a stolen/destroyed weapon
+reduces that same person's capability immediately, while leader loss degrades
+the surviving exact unit without replacing, deleting or freezing it. HOT
+Minecraft combat stays physics-authoritative; this rule governs only the COLD
+continuation after the same HOT lease releases.
 
 ## Work, mobilization and opportunity cost
 

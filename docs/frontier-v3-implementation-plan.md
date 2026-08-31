@@ -384,7 +384,8 @@ remains present because breadth, balance and product comprehension are not done.
   held input and releases the matched market/invoice commitment before the same
   resident becomes a defender. Restart retains the same people. It deliberately
   does not yet interrupt
-  committed civilian work or model equipment/readiness/leader replacement.
+  committed civilian work or model every future equipment/supply role or leader
+  replacement.
 - The first pure tactical read model now makes the retained unit legible without
   adding a second roster: exact assignment, leader identity, profession and
   actor-held equipment derive only `CIVILIAN`, `MILITIA`, `ARMED_DEFENDER`,
@@ -398,8 +399,15 @@ remains present because breadth, balance and product comprehension are not done.
   including recovery, remains visible conflict/`UNKNOWN_AFTER_RESTART` rather
   than a direct inventory rewrite or replacement. Native restart scenarios
   prove both custody directions, and the return scenario has the player open
-  the exact recovered depot slot. The next slice is observed
-  loss/drop/destruction, then readiness and role expansion.
+  the exact recovered depot slot. Observed loss/drop/destruction and exact
+  first defender readiness are now complete; role expansion is next.
+- First readiness is a pure exact projection rather than a second retained unit
+  ledger: current assignment, actor vitality and exact actor-held weapon custody
+  compile `UNAVAILABLE`, `IMPROVISED`, `DEGRADED` or `READY`. COLD settlement
+  combat consumes that same fact, so a lost weapon reduces the same person's
+  output and a lost leader degrades surviving members without a replacement.
+  Remaining role expansion must add real operation and equipment owners before
+  it introduces scout, sapper, medic or crew labels.
 
 ### Verification matrix
 

@@ -50,22 +50,25 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         helper.assertTrue(released.custody() instanceof InventoryCustody.WorldCarrier, "the same canonical stack must become one world carrier");
         helper.assertTrue(firstBody.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(), "the durable release clears the physical hand before vanilla death");
         InventoryCustody.WorldCarrier firstCarrier = (InventoryCustody.WorldCarrier) released.custody();
-        helper.assertTrue(level.getEntity(firstCarrier.carrierId()) instanceof ItemEntity drop && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), first),
-                "one tagged physical drop proves the matching hand was released instead of recreated");
         helper.assertValueEqual(state(runtime), new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state(runtime))),
                 "the released world-carrier custody survives snapshot hydration without a second stack");
-
-        runtime.shutdown();
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =
-                fixtureRuntime("frontier:actor-equipment-death-changed-hand-game-test");
-        ExactItemStack second = exactWeapon(changedRuntime); SubjectId secondActor = ((InventoryCustody.Actor) second.custody()).actorId();
-        Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(40, 8, 0)));
-        secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
-        helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody), "a changed physical hand is still an accounted equipment outcome");
-        helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
-        helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), second)).isEmpty(),
-                "a changed hand cannot manufacture an exact physical drop");
-        changedRuntime.shutdown(); helper.succeed();
+        // addFreshEntity becomes visible through the level UUID index on the following tick;
+        // the causal boundary is already durable above, so wait only for that vanilla observation.
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(level.getEntity(firstCarrier.carrierId()) instanceof ItemEntity drop && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), first),
+                    "one tagged physical drop proves the matching hand was released instead of recreated");
+            runtime.shutdown();
+            FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =
+                    fixtureRuntime("frontier:actor-equipment-death-changed-hand-game-test");
+            ExactItemStack second = exactWeapon(changedRuntime); SubjectId secondActor = ((InventoryCustody.Actor) second.custody()).actorId();
+            Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(40, 8, 0)));
+            secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
+            helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody), "a changed physical hand is still an accounted equipment outcome");
+            helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
+            helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), second)).isEmpty(),
+                    "a changed hand cannot manufacture an exact physical drop");
+            changedRuntime.shutdown(); helper.succeed();
+        });
     }
 
     private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> fixtureRuntime(String world) {
