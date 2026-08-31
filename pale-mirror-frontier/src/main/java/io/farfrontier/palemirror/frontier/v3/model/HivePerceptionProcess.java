@@ -54,7 +54,7 @@ public final class HivePerceptionProcess {
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.activeTravel().isEmpty()
                 || scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
                 || scoutLease == null || scoutLease.status() != AmbientLeaseStatus.HOT || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL
-                || scene == null || scene.status() != SceneLeaseStatus.HOT || scene.engagementId().isPresent()
+                || scene == null || !(scene.cause() instanceof LogisticsSceneCause) || scene.status() != SceneLeaseStatus.HOT || scene.engagementId().isPresent()
                 || !scene.operationId().equals(operation.id()) || !scene.cargoId().equals(operation.cargoId())
                 || !scene.cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
                 || !scene.cargoPosition().equals(observed.seenCarrierPosition())

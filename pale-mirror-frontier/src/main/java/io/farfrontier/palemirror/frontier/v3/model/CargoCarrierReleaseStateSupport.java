@@ -14,7 +14,7 @@ final class CargoCarrierReleaseStateSupport {
     static FrontierWorldState release(FrontierWorldState state, CargoCarrierReleased released) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(released, "cargo carrier release");
         SceneLease lease = state.sceneLeases().get(released.leaseId());
-        if (lease == null || lease.status() != SceneLeaseStatus.HOT || !lease.cargoId().equals(released.cargoId())) {
+        if (lease == null || !(lease.cause() instanceof LogisticsSceneCause) || lease.status() != SceneLeaseStatus.HOT || !lease.cargoId().equals(released.cargoId())) {
             throw new IllegalArgumentException("cargo carrier release lacks one HOT matching scene lease");
         }
         if (!CargoCarrierIdentity.id(lease).equals(released.carrierId())) throw new IllegalArgumentException("cargo carrier identity is not canonical for its scene");

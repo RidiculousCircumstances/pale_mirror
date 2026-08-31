@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 78, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 79, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -73,7 +73,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
                     && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != VERSION) {
+                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75 && version != 76 && version != 77 && version != 78 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -657,9 +657,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, leases.size());
         for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
             writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSceneCauseKind(output, lease.cause());
-            writeString(output, lease.operationId().value()); writeString(output, lease.cargoId().value());
-            output.writeBoolean(lease.engagementId().isPresent()); if (lease.engagementId().isPresent()) writeString(output, lease.engagementId().orElseThrow().value());
-            writePosition(output, lease.handoffPosition()); writePosition(output, lease.cargoPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
+            if (lease.cause() instanceof LogisticsSceneCause logistics) {
+                writeString(output, logistics.operationId().value()); writeString(output, logistics.cargoId().value());
+                output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeString(output, logistics.engagementId().orElseThrow().value());
+                writePosition(output, logistics.cargoPosition());
+            }
+            writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal());
             writeCount(output, lease.members().size());
             for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); writePosition(output, lease.memberPosition(member.actorId())); }
             writeCount(output, lease.ambientHandoffActorIds().size());
@@ -680,9 +683,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0; index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input));
             SceneCauseKind causeKind = version >= 77 ? readSceneCauseKind(input) : SceneCauseKind.LOGISTICS;
-            SubjectId operation = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
-            java.util.Optional<SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-            BlockPosition handoff = readPosition(input); BlockPosition cargoPosition = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
+            SubjectId operation; SubjectId cargo; java.util.Optional<SubjectId> engagement; BlockPosition cargoPosition;
+            if (version < 79 || causeKind instanceof SceneCauseKind.Logistics) {
+                operation = new SubjectId(readString(input)); cargo = new SubjectId(readString(input));
+                engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
+                cargoPosition = version < 79 ? null : readPosition(input);
+            } else {
+                operation = null; cargo = null; engagement = java.util.Optional.empty(); cargoPosition = null;
+            }
+            BlockPosition handoff = readPosition(input);
+            if (version < 79) cargoPosition = readPosition(input);
+            long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
             java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); Map<SubjectId, BlockPosition> memberPositions = new LinkedHashMap<>();
             for (int member = 0, memberCount = readCount(input); member < memberCount; member++) {

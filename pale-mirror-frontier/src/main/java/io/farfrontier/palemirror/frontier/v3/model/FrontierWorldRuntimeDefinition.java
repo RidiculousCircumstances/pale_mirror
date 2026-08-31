@@ -256,18 +256,32 @@ public final class FrontierWorldRuntimeDefinition {
             RouteOperation operation = state.operations().get(prepared.lease().operationId()); if (operation == null) return rejected("scene lease has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), prepared)));
         }
+        if (command.payload() instanceof SettlementAssaultSceneLeasePrepared prepared) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSettlementAssaultSceneSupport.owner(state, prepared.lease()), prepared))); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof SceneLeaseHandoff handoff) {
             RouteOperation operation = state.operations().get(handoff.lease().operationId()); if (operation == null) return rejected("scene hand-off has no owning operation");
             return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), handoff)));
         }
+        if (command.payload() instanceof SettlementAssaultSceneLeaseHandoff handoff) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSettlementAssaultSceneSupport.owner(state, handoff.lease()), handoff))); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof SceneLeaseTransition transition) {
             SceneLease lease = state.sceneLeases().get(transition.leaseId()); if (lease == null) return rejected("scene lease is unknown");
-            RouteOperation operation = state.operations().get(lease.operationId());
-            if (operation == null) return rejected("scene lease has no owning operation");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), transition)));
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), transition))); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof SceneLeaseReleased released) {
             SceneLease lease = state.sceneLeases().get(released.leaseId()); if (lease == null) return rejected("scene lease is unknown");
+            if (FrontierSceneOwnerSupport.isAssault(lease)) {
+                try {
+                    SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, (SettlementAssaultSceneCause) lease.cause());
+                    return new CommandPlan.Accepted(List.of(new ProposedEvent(assault.hiveId(), released), new ProposedEvent(assault.hiveId(),
+                            new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(HiveSettlementAssaultProcess.combat(assault, command.submittedAt().ticks() + 20L)))));
+                } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null) return rejected("scene lease has no owning operation");
             if (lease.engagementId().isPresent()) {
@@ -300,6 +314,10 @@ public final class FrontierWorldRuntimeDefinition {
             if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent()) {
                 return rejected("scene recovery evidence does not bind one unresolved restart lease");
             }
+            if (FrontierSceneOwnerSupport.isAssault(lease)) {
+                try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
+                catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
+            }
             if (lease.engagementId().isPresent()) return rejected("engagement scene recovery needs its own outcome policy");
             RouteOperation operation = state.operations().get(lease.operationId());
             if (operation == null || operation.stage() != OperationStage.EN_ROUTE) return rejected("scene recovery evidence has no active route operation");
@@ -316,14 +334,14 @@ public final class FrontierWorldRuntimeDefinition {
                     || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
                 return rejected("actor death is not evidence for an active scene member");
             }
-            RouteOperation operation = state.operations().get(lease.operationId());
-            if (operation == null) return rejected("actor death has no owning operation");
+            SubjectId owner;
+            try { owner = FrontierSceneOwnerSupport.owner(state, lease); } catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
             List<ProposedEvent> events = new java.util.ArrayList<>();
-            events.add(new ProposedEvent(operation.settlementId(), death));
+            events.add(new ProposedEvent(owner, death));
             CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
             events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
             if (lease.status() == SceneLeaseStatus.HOT) {
-                events.add(new ProposedEvent(operation.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
+                events.add(new ProposedEvent(owner, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
             }
             return new CommandPlan.Accepted(List.copyOf(events));
         }
@@ -358,7 +376,7 @@ public final class FrontierWorldRuntimeDefinition {
         }
         if (command.payload() instanceof CargoCarrierReleased released) {
             SceneLease lease = state.sceneLeases().get(released.leaseId());
-            if (lease == null || !lease.cargoId().equals(released.cargoId()) || lease.status() != SceneLeaseStatus.HOT) {
+            if (lease == null || !(lease.cause() instanceof LogisticsSceneCause) || !lease.cargoId().equals(released.cargoId()) || lease.status() != SceneLeaseStatus.HOT) {
                 return rejected("cargo carrier release lacks one HOT matching scene lease");
             }
             if (!CargoCarrierIdentity.id(lease).equals(released.carrierId())) return rejected("cargo carrier identity is not canonical for its scene");
@@ -520,6 +538,8 @@ public final class FrontierWorldRuntimeDefinition {
             case PhysicalIntentTransition transition -> reducePhysicalIntentTransition(state, event.subject(), transition);
             case SceneLeasePrepared prepared -> reduceSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
             case SceneLeaseHandoff handoff -> reduceSceneLeaseHandoff(state, event.subject(), event.instant(), handoff);
+            case SettlementAssaultSceneLeasePrepared prepared -> reduceAssaultSceneLeasePrepared(state, event.subject(), event.instant(), prepared);
+            case SettlementAssaultSceneLeaseHandoff handoff -> reduceAssaultSceneLeaseHandoff(state, event.subject(), event.instant(), handoff);
             case SceneLeaseTransition transition -> reduceSceneLeaseTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneLeaseReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceSceneLeaseRecoveryUnresolved(state, event.subject(), unresolved);
@@ -697,7 +717,7 @@ public final class FrontierWorldRuntimeDefinition {
     private static FrontierWorldState reduceOperationColdSuspended(FrontierWorldState state, SubjectId subject, OperationColdSuspended suspended) {
         RouteOperation operation = state.operations().get(suspended.operationId());
         SceneLease lease = state.sceneLeases().get(suspended.leaseId());
-        if (operation == null || !subject.equals(operation.settlementId()) || lease == null || !lease.operationId().equals(operation.id())
+        if (operation == null || !subject.equals(operation.settlementId()) || lease == null || !(lease.cause() instanceof LogisticsSceneCause) || !lease.operationId().equals(operation.id())
                 || lease.status() == SceneLeaseStatus.CLOSED || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART) {
             throw new IllegalArgumentException("cold operation suspension lacks an active matching scene lease");
         }
@@ -826,22 +846,35 @@ public final class FrontierWorldRuntimeDefinition {
         }
         return state.handoffAmbientScene(handoff);
     }
+    private static FrontierWorldState reduceAssaultSceneLeasePrepared(FrontierWorldState state, SubjectId subject, SimInstant instant,
+                                                                       SettlementAssaultSceneLeasePrepared prepared) {
+        SceneLease lease = prepared.lease();
+        if (!subject.equals(FrontierSettlementAssaultSceneSupport.owner(state, lease)) || !lease.handoffInstant().equals(instant)) {
+            throw new IllegalArgumentException("assault scene lease does not match its retained battle hand-off");
+        }
+        return state.prepareSceneLease(lease);
+    }
+    private static FrontierWorldState reduceAssaultSceneLeaseHandoff(FrontierWorldState state, SubjectId subject, SimInstant instant,
+                                                                       SettlementAssaultSceneLeaseHandoff handoff) {
+        SceneLease lease = handoff.lease();
+        if (!subject.equals(FrontierSettlementAssaultSceneSupport.owner(state, lease)) || !lease.handoffInstant().equals(instant)) {
+            throw new IllegalArgumentException("assault scene hand-off does not match its retained battle");
+        }
+        return state.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
+    }
     private static FrontierWorldState reduceSceneLeaseTransition(FrontierWorldState state, SubjectId subject, SceneLeaseTransition transition) {
         SceneLease lease = state.sceneLeases().get(transition.leaseId());
-        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene lease transition lacks its owning operation");
+        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("scene lease transition lacks its owning scene");
         return state.transitionSceneLease(transition.leaseId(), transition.status());
     }
     private static FrontierWorldState reduceSceneLeaseReleased(FrontierWorldState state, SubjectId subject, SceneLeaseReleased released) {
         SceneLease lease = state.sceneLeases().get(released.leaseId());
-        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene release lacks its owning operation");
+        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("scene release lacks its owning scene");
         return state.releaseSceneLease(released.leaseId(), released.members());
     }
     private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, ActorDied death) {
         SceneLease lease = state.sceneLeases().get(death.leaseId());
-        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("actor death lacks its owning operation");
+        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("actor death lacks its owning scene");
         return state.recordActorDeath(death);
     }
     private static FrontierWorldState reduceStructureDamaged(FrontierWorldState state, SubjectId subject, StructureDamaged damage) {
@@ -856,7 +889,7 @@ public final class FrontierWorldRuntimeDefinition {
         boolean death = operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD);
         boolean obstruction = "route-obstructed".equals(failed.reason())
                 && !FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas());
-        boolean recoveryUnresolved = "scene-recovery-unresolved".equals(failed.reason()) && state.sceneLeases().values().stream()
+        boolean recoveryUnresolved = "scene-recovery-unresolved".equals(failed.reason()) && state.sceneLeases().values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause)
                 .anyMatch(lease -> lease.operationId().equals(operation.id()) && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
                         && lease.recoveryEvidence().isPresent());
         if (!death && !obstruction && !recoveryUnresolved) {
@@ -874,8 +907,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static FrontierWorldState reduceSceneLeaseRecoveryUnresolved(FrontierWorldState state, SubjectId subject, SceneLeaseRecoveryUnresolved unresolved) {
         SceneLease lease = state.sceneLeases().get(unresolved.leaseId());
-        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("scene recovery evidence lacks its owning operation");
+        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("scene recovery evidence lacks its owning scene");
         return FrontierSceneLeaseStateSupport.recoveryUnresolved(state, unresolved);
     }
     private static FrontierWorldState reduceExactItemCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
@@ -892,7 +924,7 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static FrontierWorldState reduceCargoCarrierReleased(FrontierWorldState state, SubjectId subject, CargoCarrierReleased released) {
         SceneLease lease = state.sceneLeases().get(released.leaseId());
-        RouteOperation operation = lease == null ? null : state.operations().get(lease.operationId());
+        RouteOperation operation = lease == null || !(lease.cause() instanceof LogisticsSceneCause) ? null : state.operations().get(lease.operationId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("cargo carrier release lacks its owning settlement");
         return state.releaseCargoCarrier(released);
     }

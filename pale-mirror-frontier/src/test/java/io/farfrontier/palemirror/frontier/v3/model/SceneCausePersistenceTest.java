@@ -31,7 +31,7 @@ class SceneCausePersistenceTest {
         assertEquals(lease.cargoPosition(), cause.cargoPosition());
     }
 
-    @Test void legacyLeasePayloadRefusesAnUnimplementedAssaultCause() {
+    @Test void legacyLeasePayloadRefusesAnAssaultCause() {
         WorldId world = new WorldId("frontier:scene-cause-wal");
         SubjectId actor = new SubjectId("bioform:scene-cause-wal");
         SceneLease assault = SceneLease.forCause(new SceneLeaseId("lease:assault-wal"), world,
@@ -41,6 +41,8 @@ class SceneCausePersistenceTest {
                 Map.of(actor, new BlockPosition(8, 64, 8)), Set.of(), Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().encode(new SceneLeasePrepared(assault)));
+        SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(assault);
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
     }
 
     @Test void currentStateRejectsATypeWhoseOwnerValidatorDoesNotExistYet() {

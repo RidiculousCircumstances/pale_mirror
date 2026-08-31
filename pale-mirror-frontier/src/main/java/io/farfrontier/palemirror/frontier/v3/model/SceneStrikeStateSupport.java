@@ -37,7 +37,7 @@ final class SceneStrikeStateSupport {
     static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                     PhysicalIntent intent, SceneStrikeObservation observation) {
         RouteOperation operation = operations.get(intent.causeSubjectId());
-        if (operation == null || leases.values().stream().noneMatch(lease -> lease.operationId().equals(operation.id())
+        if (operation == null || leases.values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause).noneMatch(lease -> lease.operationId().equals(operation.id())
                 && lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds()))) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }

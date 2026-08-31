@@ -23,20 +23,14 @@ final class FrontierSceneLeaseStateSupport {
         Objects.requireNonNull(lease, "scene lease");
         if (state.sceneLeases().containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
         if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
-        if (!(lease.cause() instanceof LogisticsSceneCause)) {
-            throw new IllegalArgumentException("scene cause has no owning state-machine validator yet");
-        }
         if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
         }
         if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position().equals(lease.memberPosition(member.actorId())))) {
             throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
         }
-        RouteOperation operation = state.operations().get(lease.operationId());
-        if (operation != null && operation.activeTravel().isPresent()
-                && !operation.activeTravel().orElseThrow().cargoAnchor().equals(lease.cargoPosition())) {
-            throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
-        }
+        if (lease.cause() instanceof LogisticsSceneCause) validateLogisticsPreparation(state, lease);
+        else FrontierSettlementAssaultSceneSupport.validatePrepared(state, lease);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         int requiredCompaction = leases.size() - MAX_SCENE_LEASES + 1;
         if (requiredCompaction > 0) {
@@ -47,6 +41,14 @@ final class FrontierSceneLeaseStateSupport {
         }
         leases.put(lease.id(), lease);
         return leases;
+    }
+
+    private static void validateLogisticsPreparation(FrontierWorldState state, SceneLease lease) {
+        RouteOperation operation = state.operations().get(lease.operationId());
+        if (operation != null && operation.activeTravel().isPresent()
+                && !operation.activeTravel().orElseThrow().cargoAnchor().equals(lease.cargoPosition())) {
+            throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
+        }
     }
 
     static FrontierWorldState handoff(FrontierWorldState state, SceneLeaseHandoff handoff) {
@@ -78,7 +80,12 @@ final class FrontierSceneLeaseStateSupport {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || !current.status().canTransitionTo(nextStatus)) throw new IllegalArgumentException("scene lease transition is not allowed");
         StrategicPlanState plans = state.strategicPlans();
-        if (current.engagementId().isPresent()) {
+        if (current.cause() instanceof SettlementAssaultSceneCause cause) {
+            SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause);
+            if (nextStatus == SceneLeaseStatus.HOT) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.HOT);
+            if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.UNKNOWN_AFTER_RESTART);
+            if (nextStatus == SceneLeaseStatus.CONFLICT) plans = plans.transitionSettlementAssault(assault.id(), SettlementAssaultStatus.CONFLICT);
+        } else if (current.engagementId().isPresent()) {
             SubjectId engagement = current.engagementId().orElseThrow();
             RouteEngagement currentEngagement = plans.routeEngagements().get(engagement);
             if (currentEngagement == null) throw new IllegalArgumentException("scene lease has no canonical engagement");
@@ -127,8 +134,8 @@ final class FrontierSceneLeaseStateSupport {
                 .collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
         if (!expected.equals(observed) || observed.size() != positions.size()) throw new IllegalArgumentException("scene release must capture exactly its leased actors");
-        RouteOperation operation = state.operations().get(current.operationId());
-        boolean logisticsCheckpoint = current.engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE
+        RouteOperation operation = current.cause() instanceof LogisticsSceneCause ? state.operations().get(current.operationId()) : null;
+        boolean logisticsCheckpoint = current.cause() instanceof LogisticsSceneCause && current.engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE
                 && operation.activeTravel().isPresent();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         for (SceneMemberPosition position : positions) {
@@ -140,7 +147,9 @@ final class FrontierSceneLeaseStateSupport {
             BlockPosition canonical = logisticsCheckpoint ? operation.activeTravel().orElseThrow().formation().get(position.actorId()) : position.position();
             actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health())));
         }
-        StrategicPlanState plans = current.engagementId().map(id -> {
+        StrategicPlanState plans = current.cause() instanceof SettlementAssaultSceneCause cause
+                ? state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause).id(), SettlementAssaultStatus.COLD_COMBAT)
+                : current.engagementId().map(id -> {
             RouteEngagement engagement = state.strategicPlans().routeEngagements().get(id);
             return engagement != null && engagement.status() != RouteEngagementStatus.RESOLVED
                     ? state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT) : state.strategicPlans();

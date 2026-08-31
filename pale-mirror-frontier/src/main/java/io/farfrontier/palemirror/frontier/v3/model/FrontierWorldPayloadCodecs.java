@@ -16,7 +16,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
                 new OperationColdSuspendedCodec(), new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(),
-                new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
+                new SceneLeasePreparedCodec(), new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(),
+                new SettlementAssaultSceneLeaseHandoffCodec(), new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(),
                 new SceneRecoveryPayloadCodec(),
                 new AmbientActorDiedCodec(), new AmbientActorObservedCodec(), new StructureDamagedCodec(), new OperationFailedCodec(), new CargoCarrierReleasedPayloadCodec(),
                 new TerminalLogisticsCompactedCodec(),
@@ -302,6 +303,21 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             }
             return new SceneLeaseHandoff(lease, members);
         }); }
+    }
+    private static final class SettlementAssaultSceneLeasePreparedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.settlement_assault_scene_lease_prepared"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeAssaultSceneLease(output, ((SettlementAssaultSceneLeasePrepared) payload).lease())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes,
+                input -> new SettlementAssaultSceneLeasePrepared(readAssaultSceneLease(input))); }
+    }
+    private static final class SettlementAssaultSceneLeaseHandoffCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.settlement_assault_scene_lease_handoff"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            SettlementAssaultSceneLeaseHandoff handoff = (SettlementAssaultSceneLeaseHandoff) payload;
+            writeAssaultSceneLease(output, handoff.lease()); writeMemberPositions(output, handoff.ambientMembers());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes,
+                input -> new SettlementAssaultSceneLeaseHandoff(readAssaultSceneLease(input), readMemberPositions(input))); }
     }
     private static final class SceneLeaseTransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.scene_lease_transition"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { SceneLeaseTransition transition = (SceneLeaseTransition) payload;
@@ -755,6 +771,45 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
                 SceneLeaseStatus.values()[status], engagement, members, memberPositions, handoffActors,
                 java.util.Optional.empty());
+    }
+    private static void writeAssaultSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
+        if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
+            throw new IllegalArgumentException("assault scene WAL payload requires its typed cause");
+        }
+        writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, cause.assaultId()); writeSubject(output, cause.settlementId());
+        output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
+        output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().ordinal()); output.writeByte(lease.members().size());
+        for (SceneMember member : lease.members()) {
+            writeSubject(output, member.actorId()); writeString(output, member.entityId().toString());
+            BlockPosition position = lease.memberPosition(member.actorId()); output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
+        }
+        output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
+    }
+    private static SceneLease readAssaultSceneLease(DataInputStream input) throws IOException {
+        var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input));
+        var cause = new SettlementAssaultSceneCause(readSubject(input).value(), readSubject(input).value());
+        BlockPosition handoff = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
+        if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
+        java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> positions = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            var actor = readSubject(input).value(); members.add(new SceneMember(actor, java.util.UUID.fromString(readString(input))));
+            positions.put(actor, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        }
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> ambient = new java.util.LinkedHashSet<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(readSubject(input).value());
+        return SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
+                SceneLeaseStatus.values()[status], members, positions, ambient, java.util.Optional.empty());
+    }
+    private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException {
+        output.writeByte(values.size()); for (SceneMemberPosition member : values) {
+            writeSubject(output, member.actorId()); output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z()); output.writeLong(member.health().raw());
+        }
+    }
+    private static java.util.List<SceneMemberPosition> readMemberPositions(DataInputStream input) throws IOException {
+        java.util.ArrayList<SceneMemberPosition> values = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) values.add(new SceneMemberPosition(readSubject(input).value(),
+                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
+        return values;
     }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }

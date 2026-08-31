@@ -28,7 +28,7 @@ final class ExplosionStateSupport {
         if (bomber.role() != BioformRole.BOMBER || state.actorLocations().get(bomber.id()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("explosion cause must be one living bomber bioform");
         }
-        SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
+        SceneLease lease = state.sceneLeases().values().stream().filter(value -> value.cause() instanceof LogisticsSceneCause).filter(value -> value.status() == SceneLeaseStatus.HOT)
                 .filter(value -> value.engagementId().isPresent()).filter(value -> value.members().stream().anyMatch(member -> member.actorId().equals(bomber.id())))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("explosion requires one HOT bomber scene"));
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(lease.engagementId().orElseThrow());

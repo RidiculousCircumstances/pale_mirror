@@ -97,6 +97,51 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void typedHotSceneRetainsAnExactCargoFreeAssaultAcrossSnapshotAndRelease() {
+        Fixture fixture = fixture(true); FrontierWorldState state = fixture.state();
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
+        ScheduledAction next = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        for (int step = 0; step < 256; step++) {
+            List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
+            for (ProposedEvent event : events) {
+                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
+                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, fixture.hive(), transition);
+            }
+            next = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+            if (state.strategicPlans().settlementAssaults().values().stream().anyMatch(value -> value.status() == SettlementAssaultStatus.COLD_COMBAT)) break;
+        }
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        java.util.Map<SubjectId, BlockPosition> positions = new java.util.LinkedHashMap<>(); int index = 0;
+        for (SubjectId actor : java.util.stream.Stream.concat(assault.attackerIds().stream(), assault.defenderIds().stream()).toList()) {
+            BlockPosition floor = new BlockPosition(assault.settlementAnchor().x() - 8 + index % 8 * 2, assault.settlementAnchor().y(),
+                    assault.settlementAnchor().z() - 4 + index / 8 * 2);
+            state = state.withActorLocation(actor, floor); positions.put(actor, floor); index++;
+        }
+        FrontierWorldState positioned = state;
+        List<SceneMember> members = positions.keySet().stream().map(actor -> new SceneMember(actor,
+                SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();
+        SceneLease lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:assault-hot"), state.bootstrap().worldId(),
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), assault.settlementAnchor(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(400L),
+                7L, SceneLeaseStatus.PREPARED, members, positions, java.util.Set.of(), java.util.Optional.empty());
+        SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(lease);
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
+        FrontierWorldState unknown = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknown = FrontierSceneLeaseStateSupport.recoveryUnresolved(unknown, new SceneLeaseRecoveryUnresolved(lease.id(), java.util.Set.of(members.getFirst().actorId()), false));
+        assertEquals(SettlementAssaultStatus.UNKNOWN_AFTER_RESTART, unknown.strategicPlans().settlementAssaults().get(assault.id()).status());
+        assertEquals(unknown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown)));
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        FrontierWorldState draining = state;
+        List<SceneMemberPosition> captured = members.stream().map(member -> {
+            ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), actor.position(), actor.condition().health());
+        }).toList();
+        state = state.releaseSceneLease(lease.id(), captured);
+        assertEquals(SettlementAssaultStatus.COLD_COMBAT, state.strategicPlans().settlementAssaults().get(assault.id()).status());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
     private static Fixture fixture(boolean territory) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assault-process-" + territory), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

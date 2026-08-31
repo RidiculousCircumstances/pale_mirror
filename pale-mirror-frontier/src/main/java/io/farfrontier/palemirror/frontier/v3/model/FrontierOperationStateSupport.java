@@ -12,7 +12,7 @@ final class FrontierOperationStateSupport {
     static FrontierWorldState fail(FrontierWorldState state, SubjectId operationId) {
         RouteOperation current = state.operations().get(Objects.requireNonNull(operationId, "operation id"));
         if (current == null || current.stage() != OperationStage.EN_ROUTE) throw new IllegalArgumentException("only an en-route operation can fail");
-        if (state.sceneLeases().values().stream().anyMatch(lease -> lease.operationId().equals(operationId) && lease.status() != SceneLeaseStatus.CLOSED
+        if (state.sceneLeases().values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause).anyMatch(lease -> lease.operationId().equals(operationId) && lease.status() != SceneLeaseStatus.CLOSED
                 && !(lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isPresent()))) {
             throw new IllegalArgumentException("operation cannot fail before its active scene lease closes");
         }

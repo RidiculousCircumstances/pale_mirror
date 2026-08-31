@@ -26,7 +26,7 @@ public final class FrontierSceneAdmission {
      */
     public static boolean hasActiveSceneLease(FrontierWorldState state, SubjectId operationId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
-        return state.sceneLeases().values().stream().anyMatch(lease -> lease.operationId().equals(operationId)
+        return state.sceneLeases().values().stream().filter(lease -> lease.cause() instanceof LogisticsSceneCause).anyMatch(lease -> lease.operationId().equals(operationId)
                 && lease.status() != SceneLeaseStatus.CLOSED);
     }
 

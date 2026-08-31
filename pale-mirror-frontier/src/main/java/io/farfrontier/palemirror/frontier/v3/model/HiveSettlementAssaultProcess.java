@@ -227,7 +227,7 @@ final class HiveSettlementAssaultProcess {
     private static int interpolate(int start, long delta, int index, int steps) { return Math.toIntExact(Math.addExact(start, Math.floorDiv(Math.multiplyExact(delta, index), steps))); }
     private static long distanceSquared(BlockPosition left, BlockPosition right) { long x = (long) left.x() - right.x(), y = (long) left.y() - right.y(), z = (long) left.z() - right.z(); return x * x + y * y + z * z; }
     private static ScheduledAction progress(SettlementAssault assault, long dueAt) { return action("progress", assault.id(), dueAt); }
-    private static ScheduledAction combat(SettlementAssault assault, long dueAt) { return action("combat", assault.id(), dueAt); }
+    static ScheduledAction combat(SettlementAssault assault, long dueAt) { return action("combat", assault.id(), dueAt); }
     private static ScheduledAction action(String phase, SubjectId assaultId, long dueAt) {
         return new ScheduledAction(new ScheduleId("schedule:settlement-assault-" + phase + "-" + assaultId.value().substring("assault:".length())), new SimInstant(dueAt), 0,
                 assaultId, "frontier.settlement_assault." + phase, 1);

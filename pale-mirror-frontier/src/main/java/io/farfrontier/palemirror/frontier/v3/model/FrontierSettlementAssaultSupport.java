@@ -35,9 +35,7 @@ final class FrontierSettlementAssaultSupport {
                     throw new IllegalArgumentException("settlement assault attacker must be one canonical hive bioform");
                 }
                 boolean approachOwnsPosition = assault.status() == SettlementAssaultStatus.APPROACHING
-                        || assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE
-                        || assault.status() == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART
-                        || assault.status() == SettlementAssaultStatus.CONFLICT;
+                        || assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE;
                 if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
                         && !location.position().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD assault attacker must retain its exact approach position");
