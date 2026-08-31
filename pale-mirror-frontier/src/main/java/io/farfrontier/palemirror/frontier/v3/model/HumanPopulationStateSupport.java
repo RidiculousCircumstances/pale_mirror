@@ -122,9 +122,7 @@ final class HumanPopulationStateSupport {
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, java.util.Map<SubjectId, ActorLocation> actors, HumanPopulation population) {
-        return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), population, state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).humanPopulation(population));
     }
 
     private static ResidentMigrationJourney requireJourney(FrontierWorldState state, SubjectId residentId) {

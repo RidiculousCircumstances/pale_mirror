@@ -66,10 +66,8 @@ public final class ProductionTransformationStateSupport {
         nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.COMPLETED);
-        return new FrontierWorldState(paidState.bootstrap(), paidState.actorLocations(), paidState.structureConditions(), paidState.infection(),
-                paidState.inventory().withoutItem(input.id()).store(output), jobs, paidState.contracts(), paidState.operations(), paidState.logisticsHistory(), nextIntents, observations,
-                paidState.sceneLeases(), paidState.hiveColony(), paidState.structureDamage(), paidState.physicalDeltas(), paidState.ambientLeases(), paidState.routeConstructions(),
-                paidState.routeTopology(), plans, paidState.humanPopulation(), paidState.companies(), paidState.resourceSites());
+        return paidState.withChanges(FrontierWorldStateUpdate.begin().inventory(paidState.inventory().withoutItem(input.id()).store(output))
+                .productionJobs(jobs).physicalIntents(nextIntents).physicalObservations(observations).strategicPlans(plans));
     }
 
     static void validateReceipt(PhysicalIntent intent, ProductionTransformationObservation observation) {
@@ -85,10 +83,7 @@ public final class ProductionTransformationStateSupport {
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         if (job == null) throw new IllegalArgumentException("production failure has no active job");
         StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.BLOCKED);
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), plans,
-                state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).strategicPlans(plans));
     }
 
     public static Target target(FrontierWorldState state, PhysicalIntent intent) {

@@ -257,10 +257,7 @@ final class HiveSettlementAssaultProcess {
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, StrategicPlanState plans) {
-        return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(),
-                state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), plans,
-                state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).strategicPlans(plans));
     }
 
     private static boolean nearby(BlockPosition left, BlockPosition right, int radius) {

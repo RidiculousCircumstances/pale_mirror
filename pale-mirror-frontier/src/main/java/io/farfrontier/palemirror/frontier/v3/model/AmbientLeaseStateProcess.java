@@ -81,8 +81,6 @@ final class AmbientLeaseStateProcess {
     }
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, Map<SubjectId, AmbientActorLease> leases,
                                            HumanPopulation population) {
-        return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), leases, state.routeConstructions(), state.routeTopology(), state.strategicPlans(), population, state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(leases).humanPopulation(population));
     }
 }

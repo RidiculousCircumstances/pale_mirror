@@ -121,8 +121,7 @@ final class FrontierSceneLeaseStateSupport {
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors,
                                            Map<SceneLeaseId, SceneLease> leases, Map<SubjectId, AmbientActorLease> ambient,
                                            StrategicPlanState plans) {
-        return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), leases, state.hiveColony(), state.structureDamage(),
-                state.physicalDeltas(), ambient, state.routeConstructions(), state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
+                .ambientLeases(ambient).strategicPlans(plans));
     }
 }

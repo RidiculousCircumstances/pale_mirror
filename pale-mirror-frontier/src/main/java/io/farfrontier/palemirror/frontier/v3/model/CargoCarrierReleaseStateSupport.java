@@ -33,8 +33,7 @@ final class CargoCarrierReleaseStateSupport {
                 operation.participantIds(), operation.route(), operation.routeIndex(), OperationStage.INTERRUPTED));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
         StrategicPlanState plans = state.strategicPlans().interruptRouteOperation(operation.id(), operation.settlementId());
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), contracts, operations,
-                state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), leases, state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(),
-                state.routeConstructions(), state.routeTopology(), plans, state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)
+                .sceneLeases(leases).strategicPlans(plans));
     }
 }

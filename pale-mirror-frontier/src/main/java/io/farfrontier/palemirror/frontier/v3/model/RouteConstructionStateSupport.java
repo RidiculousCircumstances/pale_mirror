@@ -38,9 +38,7 @@ final class RouteConstructionStateSupport {
             throw new IllegalArgumentException("route construction is already active for this identity or settlement");
         }
         Map<SubjectId, RouteConstruction> next = new LinkedHashMap<>(state.routeConstructions()); next.put(project.id(), project);
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), next, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(next));
     }
 
     static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
@@ -161,9 +159,8 @@ final class RouteConstructionStateSupport {
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.put(observation.id(), observation);
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()),
-                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()))
+                .physicalIntents(intents).physicalObservations(observations).routeConstructions(projects));
     }
 
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
@@ -173,9 +170,7 @@ final class RouteConstructionStateSupport {
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
-                state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeConstructions(projects));
     }
 
     static FrontierWorldState cutover(FrontierWorldState state, SubjectId projectId) {
@@ -190,10 +185,8 @@ final class RouteConstructionStateSupport {
         retired.forEach(intents::remove);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.entrySet().removeIf(entry -> retired.contains(entry.getValue().intentId()));
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
-                state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects,
-                state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints()), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).physicalObservations(observations)
+                .routeConstructions(projects).routeTopology(state.routeTopology().replaceSupplyRoute(state.bootstrap(), project.settlementId(), project.waypoints())));
     }
 
     static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteConstructionStarted started) {
@@ -216,10 +209,8 @@ final class RouteConstructionStateSupport {
             throw new IllegalArgumentException("route construction material cargo differs from its observed pickup");
         }
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions()); projects.put(project.id(), project.withCargo(loaded.cargo().id()));
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory()
-                .extractOneToCargo(observation.sourceItemId(), loaded.cargo(), observation.cargoItemId()),
-                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), projects, state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory()
+                .extractOneToCargo(observation.sourceItemId(), loaded.cargo(), observation.cargoItemId())).routeConstructions(projects));
     }
 
     static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {

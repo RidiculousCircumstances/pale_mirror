@@ -42,9 +42,8 @@ final class DecontaminationStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>(state.infection());
         if (remaining == 0L) infection.remove(cell); else infection.put(cell, new FixedRatio(new FixedScalar(remaining)));
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), infection, state.inventory().consumeOne(observation.itemId()),
-                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), intents, observations, state.sceneLeases(), state.hiveColony(),
-                state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
+        return state.withChanges(FrontierWorldStateUpdate.begin().infection(infection).inventory(state.inventory().consumeOne(observation.itemId()))
+                .physicalIntents(intents).physicalObservations(observations));
     }
 
     static void validateReceipt(FrontierBootstrap bootstrap, Map<InfectionCell, FixedRatio> infection, PhysicalIntent intent,
