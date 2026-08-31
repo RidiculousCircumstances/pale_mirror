@@ -125,6 +125,8 @@ public final class FrontierWorldRuntimeDefinition {
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
         actions.add(TerminalLogisticsProcess.review(1, 8_100L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
+        bootstrap.hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).sorted(java.util.Comparator.comparing(Bioform::id))
+                .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1, 1_600L + actions.size() * 20L)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
     }
     /** Disposable-only exact player-withdrawal fixture; production never selects this bootstrap. */
@@ -373,6 +375,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.hive_route_engagement.progress" -> HiveRouteEngagementProcess.planProgress(state, action);
             case "frontier.hive_route_engagement.readiness" -> HiveRouteEngagementProcess.planReadiness(state, action);
             case "frontier.hive_route_engagement.combat" -> HiveRouteEngagementProcess.planCombat(state, action);
+            case "frontier.hive.scout.patrol" -> HiveScoutPatrolProcess.plan(state, action);
             case "frontier.decontamination.scan" -> DecontaminationProcess.plan(state, action);
             case "frontier.objective.review" -> StrategicObjectiveProcess.plan(state, action, autonomousInterception);
             case "frontier.objective.reconsider" -> StrategicObjectiveProcess.planReconsideration(state, action);
@@ -517,6 +520,7 @@ public final class FrontierWorldRuntimeDefinition {
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
             case SettlementInfectionObserved observed -> SettlementPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
+            case ScoutPatrolAdvanced advanced -> HiveScoutPatrolProcess.reduce(state, event.subject(), advanced);
             case RouteEngagementStarted started -> HiveRouteEngagementProcess.reduceStarted(state, event.subject(), started);
             case RouteEngagementAttackerAdvanced advanced -> HiveRouteEngagementProcess.reduceAdvanced(state, event.subject(), advanced);
             case RouteEngagementTransition transition -> HiveRouteEngagementProcess.reduceTransition(state, event.subject(), transition);

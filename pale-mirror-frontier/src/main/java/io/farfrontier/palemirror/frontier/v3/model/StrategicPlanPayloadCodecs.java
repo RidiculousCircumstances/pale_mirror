@@ -53,6 +53,15 @@ final class StrategicPlanPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new HiveOperationObserved(new HiveOperationKnowledge.Sighting(
                 subject(input), subject(input), new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readLong()))); }
     }; }
+    static PayloadCodec scoutPatrolAdvanced() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.scout_patrol_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) payload; subject(output, advanced.scoutId()); output.writeLong(advanced.phase());
+            output.writeInt(advanced.position().x()); output.writeInt(advanced.position().y()); output.writeInt(advanced.position().z());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ScoutPatrolAdvanced(
+                subject(input), input.readLong(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()))); }
+    }; }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
         subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().ordinal()); target(output, value.infectionTarget());
         optionalSubject(output, value.resourceSiteTarget());
