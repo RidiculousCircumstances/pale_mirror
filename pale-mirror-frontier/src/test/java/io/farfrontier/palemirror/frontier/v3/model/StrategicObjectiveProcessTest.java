@@ -104,10 +104,10 @@ class StrategicObjectiveProcessTest {
         StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
         assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, selected.objective().kind());
         assertEquals(StrategicTaskKind.PRODUCE_BREAD, task.task().kind());
-        assertEquals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
-                StrategicTaskRequirement.FREE_DEPOT_SLOT), task.task().requirements());
+        assertEquals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), task.task().requirements());
+        assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(MarketDemandOpened.class::isInstance));
         assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
-                && created.action().kind().equals("frontier.settlement.production.task.start")));
+                && created.action().kind().equals("frontier.market.clear")));
     }
 
     @Test
@@ -153,8 +153,7 @@ class StrategicObjectiveProcessTest {
         StrategicObjective production = new StrategicObjective(new SubjectId("objective:source"), owner,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
         StrategicTask produced = new StrategicTask(new SubjectId("task:source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
-                StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.COMPLETED);
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.COMPLETED);
         StrategicObjective delivery = new StrategicObjective(new SubjectId("objective:delivery"), owner,
                 StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), 2, StrategicObjectiveStatus.COMPLETED);
         StrategicTask prepared = new StrategicTask(new SubjectId("task:delivery-prepare"), delivery.id(), owner, StrategicTaskKind.PREPARE_BREAD_CARGO,
@@ -186,8 +185,7 @@ class StrategicObjectiveProcessTest {
         StrategicObjective production = new StrategicObjective(new SubjectId("objective:future-source"), owner,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.COMPLETED);
         StrategicTask produced = new StrategicTask(new SubjectId("task:future-source"), production.id(), owner, StrategicTaskKind.PRODUCE_BREAD,
-                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
-                StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), StrategicTaskStatus.COMPLETED);
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.COMPLETED);
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>(); objectives.put(production.id(), production);
         InfectionCell target = new InfectionCell(0, 0);
         for (int ordinal = 2; ordinal <= StrategicPlanState.MAX_OBJECTIVES; ordinal++) {

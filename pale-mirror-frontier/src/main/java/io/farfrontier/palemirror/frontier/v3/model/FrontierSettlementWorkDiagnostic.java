@@ -57,7 +57,7 @@ public record FrontierSettlementWorkDiagnostic(
         var surface = state.inventory().surfaces().get(FrontierWorldState.depotId(settlementId));
         String depotSurface = surface == null ? "MISSING" : surface.status().name();
         boolean depotHasFreeSlot = surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE
-                && state.inventory().firstFreeSlot(surface.containerId()).isPresent();
+                && state.firstFreeContainerSlot(surface.containerId()).isPresent();
         String admission = harvestAdmission(readySites, facility, farmStatus, livingFarmers, workCapableFarmer, availableFarmer, depotSurface, depotHasFreeSlot, pendingSchedules);
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
                 livingFarmers, availableFarmer, farmStatus, depotSurface, depotHasFreeSlot));

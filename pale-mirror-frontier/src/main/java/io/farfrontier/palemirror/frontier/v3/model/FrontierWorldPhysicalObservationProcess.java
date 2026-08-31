@@ -69,7 +69,7 @@ final class FrontierWorldPhysicalObservationProcess {
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("resource deposit needs an active owned container surface");
         }
-        if (state.inventory().itemAt(slot.containerId(), slot.slot()).isPresent()) {
+        if (!state.containerSlotAvailable(slot)) {
             throw new IllegalArgumentException("resource deposit targets an occupied canonical slot");
         }
         return state.withInventory(state.inventory().store(deposited.item()));

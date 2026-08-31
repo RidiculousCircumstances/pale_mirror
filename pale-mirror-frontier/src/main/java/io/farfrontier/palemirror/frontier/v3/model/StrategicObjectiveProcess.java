@@ -129,8 +129,10 @@ final class StrategicObjectiveProcess {
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveRouteEngagementProcess.start(task, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
+            MarketDemand demand = MarketClearingProcess.foodDemand(task, action.dueAt().ticks());
             return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                    new ProposedEvent(owner, new ScheduleEffect.Created(ProductionProcess.start(task, action.dueAt().ticks() + 100L))));
+                    new ProposedEvent(owner, new MarketDemandOpened(demand)),
+                    new ProposedEvent(demand.id(), new ScheduleEffect.Created(MarketClearingProcess.clear(demand, 1, action.dueAt().ticks() + 100L))));
         }
         if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
             return withPreemption(preempted, concatenate(health, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
@@ -210,7 +212,7 @@ final class StrategicObjectiveProcess {
         }
         // Food may preempt a pending containment task that is waiting for an infirmary reagent,
         // but never a physical effect already under execution.
-        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent() && reserveShort) {
+        if (workshop && wheat && reserveShort) {
             return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), Long.MAX_VALUE - 1L));
         }
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
@@ -222,7 +224,7 @@ final class StrategicObjectiveProcess {
                     .sorted(Candidate.HIGHEST_UTILITY).findFirst();
             if (containment.isPresent()) return containment;
         }
-        if (workshop && wheat && state.inventory().firstFreeSlot(depot).isPresent()) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
+        if (workshop && wheat) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
         return SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent() && !state.humanPopulation().quarantined(settlement.id())
                 ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
@@ -259,7 +261,10 @@ final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> List.of(StrategicTaskRequirement.OPERATIONAL_HEART);
             case HIVE_GROW_ORGANISM -> List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS);
             case HIVE_INTERCEPT_ROUTE_OPERATION -> List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD, StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER);
-            case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
+            // Wheat-to-bread is an exact one-for-one replacement in the same owned
+            // slot. Requiring a second vacant depot slot would incorrectly block a
+            // full warehouse despite a completely safe transformation path.
+            case SETTLEMENT_PRODUCE_BREAD -> List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT);
             case SETTLEMENT_DELIVER_BREAD_TO_HIVE -> throw new IllegalArgumentException("delivery objective requires its two-task decomposition");
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> List.of(StrategicTaskRequirement.AVAILABLE_GUARD);
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION, StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL);

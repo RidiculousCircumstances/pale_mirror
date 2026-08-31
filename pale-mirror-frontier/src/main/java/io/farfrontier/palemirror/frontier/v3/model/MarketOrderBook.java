@@ -4,9 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Bounded legal market state. Financial balances and physical custody remain in
@@ -17,6 +19,7 @@ final class MarketOrderBook {
     static final int MAX_DEMANDS = 1_024;
     static final int MAX_QUOTES = 2_048;
     static final int MAX_WORK_ORDERS = 1_024;
+    static final int RETAINED_TERMINAL_DEMANDS = 256;
     private final Map<SubjectId, MarketDemand> demands;
     private final Map<SubjectId, CompanyQuote> quotes;
     private final Map<SubjectId, MarketWorkOrder> workOrders;
@@ -25,7 +28,10 @@ final class MarketOrderBook {
                     Map<SubjectId, MarketWorkOrder> workOrders) {
         this.demands = Map.copyOf(demands); this.quotes = Map.copyOf(quotes); this.workOrders = Map.copyOf(workOrders);
         if (this.demands.size() > MAX_DEMANDS || this.quotes.size() > MAX_QUOTES || this.workOrders.size() > MAX_WORK_ORDERS) {
-            throw new IllegalArgumentException("market order-book retention limit exceeded");
+            throw new IllegalArgumentException("market order-book retention limit exceeded: demands=" + this.demands.size()
+                    + " terminal=" + this.demands.values().stream().filter(this::terminal).count()
+                    + ", quotes=" + this.quotes.size() + ", workOrders=" + this.workOrders.size()
+                    + " terminal=" + this.workOrders.values().stream().filter(order -> order.status() != MarketWorkOrderStatus.ACCEPTED).count());
         }
         this.demands.forEach((id, demand) -> {
             if (!id.equals(demand.id())) throw new IllegalArgumentException("market demand key must match identity");
@@ -41,6 +47,10 @@ final class MarketOrderBook {
         this.workOrders.values().stream().filter(order -> order.status() == MarketWorkOrderStatus.ACCEPTED)
                 .collect(java.util.stream.Collectors.groupingBy(MarketWorkOrder::demandId)).values().forEach(active -> {
                     if (active.size() != 1) throw new IllegalArgumentException("market demand may retain only one accepted work order");
+                });
+        this.workOrders.values().stream().filter(order -> order.status() == MarketWorkOrderStatus.ACCEPTED)
+                .collect(java.util.stream.Collectors.groupingBy(MarketWorkOrder::jobId)).values().forEach(active -> {
+                    if (active.size() != 1) throw new IllegalArgumentException("production job may retain only one accepted work order");
                 });
     }
 
@@ -103,11 +113,43 @@ final class MarketOrderBook {
         return changed ? new MarketOrderBook(next, quotes, workOrders) : this;
     }
 
+    MarketOrderBook cancelOpen(SubjectId demandId) {
+        MarketDemand demand = demands.get(Objects.requireNonNull(demandId, "market demand id"));
+        if (demand == null || demand.status() != MarketDemandStatus.OPEN) {
+            throw new IllegalArgumentException("only an open market demand may be cancelled");
+        }
+        Map<SubjectId, MarketDemand> next = new LinkedHashMap<>(demands);
+        next.put(demand.id(), demand.withStatus(MarketDemandStatus.CANCELLED));
+        return new MarketOrderBook(next, quotes, workOrders);
+    }
+
+    /**
+     * Retains a compact recent audit tail only after the caller proves no live
+     * job, money hold or physical intent refers to the commercial record.
+     */
+    MarketOrderBook compactTerminal(Set<SubjectId> protectedIds) {
+        Objects.requireNonNull(protectedIds, "market protected references");
+        List<MarketDemand> removable = demands.values().stream().filter(this::terminal).filter(demand -> safeToDrop(demand, protectedIds))
+                .sorted(Comparator.comparingLong(MarketDemand::openedAtTick).thenComparing(MarketDemand::id)).toList();
+        int drop = Math.max(0, removable.size() - RETAINED_TERMINAL_DEMANDS);
+        if (drop == 0) return this;
+        Set<SubjectId> discarded = removable.subList(0, drop).stream().map(MarketDemand::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Map<SubjectId, MarketDemand> nextDemands = new LinkedHashMap<>(demands); discarded.forEach(nextDemands::remove);
+        Map<SubjectId, CompanyQuote> nextQuotes = new LinkedHashMap<>(quotes); nextQuotes.values().removeIf(quote -> discarded.contains(quote.demandId()));
+        Map<SubjectId, MarketWorkOrder> nextOrders = new LinkedHashMap<>(workOrders); nextOrders.values().removeIf(order -> discarded.contains(order.demandId()));
+        return new MarketOrderBook(nextDemands, nextQuotes, nextOrders);
+    }
+
     Optional<CompanyQuote> bestCurrentQuote(SubjectId demandId, long now) {
         MarketDemand demand = demands.get(Objects.requireNonNull(demandId, "market demand id"));
         if (demand == null || demand.status() != MarketDemandStatus.OPEN || now > demand.expiresAtTick()) return Optional.empty();
         return quotes.values().stream().filter(quote -> quote.demandId().equals(demandId) && now <= quote.expiresAtTick())
                 .min(Comparator.comparing(CompanyQuote::totalPrice).thenComparing(CompanyQuote::id));
+    }
+
+    Optional<MarketWorkOrder> acceptedForJob(SubjectId jobId) {
+        return workOrders.values().stream().filter(order -> order.jobId().equals(Objects.requireNonNull(jobId, "production job id"))
+                && order.status() == MarketWorkOrderStatus.ACCEPTED).findFirst();
     }
 
     @Override public boolean equals(Object other) {
@@ -124,6 +166,15 @@ final class MarketOrderBook {
         Map<SubjectId, MarketDemand> nextDemands = new LinkedHashMap<>(demands); nextDemands.put(demand.id(), demand.withStatus(demandStatus));
         Map<SubjectId, MarketWorkOrder> nextOrders = new LinkedHashMap<>(workOrders); nextOrders.put(order.id(), order.withStatus(orderStatus));
         return new MarketOrderBook(nextDemands, quotes, nextOrders);
+    }
+
+    private boolean terminal(MarketDemand demand) {
+        return demand.status() == MarketDemandStatus.FULFILLED || demand.status() == MarketDemandStatus.CANCELLED || demand.status() == MarketDemandStatus.EXPIRED;
+    }
+    private boolean safeToDrop(MarketDemand demand, Set<SubjectId> protectedIds) {
+        if (protectedIds.contains(demand.id())) return false;
+        return workOrders.values().stream().filter(order -> order.demandId().equals(demand.id())).allMatch(order -> order.status() != MarketWorkOrderStatus.ACCEPTED
+                && !protectedIds.contains(order.id()) && !protectedIds.contains(order.jobId()) && !protectedIds.contains(order.reservationId()));
     }
 
     private void validateOrder(SubjectId id, MarketWorkOrder order) {

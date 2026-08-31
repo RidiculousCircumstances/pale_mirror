@@ -61,7 +61,7 @@ final class StrategicPlanState {
             }
             if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD
                     && (task.kind() != StrategicTaskKind.PRODUCE_BREAD || !task.requirements().equals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
-                    StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT)))) {
+                    StrategicTaskRequirement.EXACT_WHEAT_INPUT)))) {
                 throw new IllegalArgumentException("settlement production task has an invalid decomposition");
             }
             if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE && task.kind() == StrategicTaskKind.PREPARE_BREAD_CARGO

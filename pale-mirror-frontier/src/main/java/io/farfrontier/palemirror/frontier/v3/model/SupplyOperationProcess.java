@@ -275,7 +275,8 @@ final class SupplyOperationProcess {
         if (cargo == null) throw new IllegalStateException("arrived operation has no exact cargo");
         java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>(); int nextSlot = 0;
         for (SubjectId itemId : cargo.itemIds().stream().sorted().toList()) {
-            while (state.inventory().itemAt(receiver, nextSlot).isPresent()) nextSlot++;
+            while (nextSlot < state.inventory().containers().get(receiver).slotCount()
+                    && !state.containerSlotAvailable(new InventoryCustody.ContainerSlot(receiver, nextSlot))) nextSlot++;
             if (nextSlot >= state.inventory().containers().get(receiver).slotCount()) return null;
             placements.add(new CargoHandoffPlacement(itemId, new InventoryCustody.ContainerSlot(receiver, nextSlot++)));
         }

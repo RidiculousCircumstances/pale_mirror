@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
@@ -81,6 +82,7 @@ final class FrontierV3DiagnosticJson {
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state);
+            case "market_order" -> marketOrder(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> routeConstruction(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
@@ -242,6 +244,16 @@ final class FrontierV3DiagnosticJson {
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + "}";
+    }
+
+    private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        FrontierMarketOrderDiagnostic order = subject == null ? null : FrontierMarketOrderDiagnostic.inspect(state, subject).orElse(null);
+        if (order == null) return unavailable("market_order", id, checkpoint, "not_found");
+        return base("market_order", id, checkpoint) + ",\"status\":\"ok\",\"orderStatus\":\"" + quote(order.status())
+                + "\",\"job\":\"" + quote(order.jobId().value()) + "\",\"jobActive\":" + order.jobActive()
+                + ",\"reservation\":\"" + quote(order.reservationId().value()) + "\",\"reservationActive\":" + order.reservationActive()
+                + ",\"taskStatus\":\"" + quote(order.taskStatus()) + "\"}";
     }
 
     private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state,

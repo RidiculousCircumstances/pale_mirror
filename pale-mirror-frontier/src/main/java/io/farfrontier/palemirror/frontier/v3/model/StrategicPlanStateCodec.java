@@ -53,7 +53,10 @@ final class StrategicPlanStateCodec {
         }
     }
 
-    static StrategicPlanState read(DataInputStream input) throws IOException {
+    static StrategicPlanState read(DataInputStream input) throws IOException { return read(input, false); }
+
+    /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
+    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
@@ -69,6 +72,12 @@ final class StrategicPlanStateCodec {
             SubjectId id = readSubject(input), objective = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
             Optional<SubjectId> operationTarget = readOptionalSubject(input); Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
+            if (migrateLegacyProductionSlotRequirement && kind < StrategicTaskKind.values().length
+                    && StrategicTaskKind.values()[kind] == StrategicTaskKind.PRODUCE_BREAD) {
+                List<StrategicTaskRequirement> legacy = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
+                        StrategicTaskRequirement.EXACT_WHEAT_INPUT, StrategicTaskRequirement.FREE_DEPOT_SLOT);
+                if (requirements.equals(legacy)) requirements = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT);
+            }
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
                     || tasks.put(id, new StrategicTask(id, objective, owner, StrategicTaskKind.values()[kind], target, operationTarget, resourceSiteTarget,
                     requirements, dependencies, StrategicTaskStatus.values()[status])) != null) {

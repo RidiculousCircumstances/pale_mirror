@@ -43,7 +43,7 @@ final class ResourceSiteHarvestProcess {
         ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
         if (farmer == null) return blocked(task);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        OptionalInt slot = state.inventory().firstFreeSlot(depot); if (slot.isEmpty()) return blocked(task);
+        OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
         ResourceSiteHarvestJob job = job(lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
         ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), "minecraft:wheat", 64, job.outputSlot());
         ResourceSiteLifecycle harvested = lifecycle.harvesting(job).harvested();
@@ -131,7 +131,7 @@ final class ResourceSiteHarvestProcess {
         ResidentProfile worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentRole.FARMER).orElse(null);
         if (worker == null || !worker.id().equals(job.workerId())) throw new IllegalArgumentException("resource-site harvest worker is unavailable");
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (!job.outputSlot().containerId().equals(depot) || state.inventory().itemAt(depot, job.outputSlot().slot()).isPresent()) {
+        if (!job.outputSlot().containerId().equals(depot) || !state.containerSlotAvailable(job.outputSlot())) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");

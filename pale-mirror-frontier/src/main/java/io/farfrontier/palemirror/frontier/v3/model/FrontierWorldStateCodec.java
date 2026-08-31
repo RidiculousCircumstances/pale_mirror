@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 64, MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42, VERSION = 67, MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
 
     /** Generic codec for independent snapshots and cross-world test fixtures. */
@@ -71,7 +71,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
                     && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
                     && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63 && version != VERSION) {
+                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63 && version != 64 && version != 65 && version != 66 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             FrontierBootstrap bootstrap = bootstrapFor(new WorldId(readString(input)), input.readLong());
@@ -80,13 +80,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
-            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64) : CompanyRegistry.empty();
-            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input),
+            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64, version >= 65) : CompanyRegistry.empty();
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input, version >= 66),
                     readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55),
                     version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
                     readPhysicalIntents(input), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
                     AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45), RouteTopologyStateCodec.read(input, bootstrap),
-                    StrategicPlanStateCodec.read(input), HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58),
+                    StrategicPlanStateCodec.read(input, version < VERSION), HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58),
                     companies,
                     ResourceSiteStateCodec.read(input));
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
@@ -309,7 +309,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeMarketOrderBook(output, registry.market());
     }
-    private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment, boolean hasMarket) throws IOException {
+    private static CompanyRegistry readCompanyRegistry(DataInputStream input, boolean hasEmployment, boolean hasMarket, boolean hasMarketOrderJob) throws IOException {
         Map<SubjectId, Company> companies = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId founder = new SubjectId(readString(input));
@@ -329,7 +329,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate employment contract registry entry");
             }
         }
-        return new CompanyRegistry(companies, contracts, hasMarket ? readMarketOrderBook(input) : MarketOrderBook.empty());
+        return new CompanyRegistry(companies, contracts, hasMarket ? readMarketOrderBook(input, hasMarketOrderJob) : MarketOrderBook.empty());
     }
     private static void writeMarketOrderBook(DataOutputStream output, MarketOrderBook market) throws IOException {
         writeCount(output, market.demands().size());
@@ -346,13 +346,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, market.workOrders().size());
         for (MarketWorkOrder order : market.workOrders().values().stream().sorted(Comparator.comparing(MarketWorkOrder::id)).toList()) {
             writeString(output, order.id().value()); writeString(output, order.demandId().value()); writeString(output, order.quoteId().value());
-            writeString(output, order.sellerId().value()); writeString(output, order.taskId().value()); writeString(output, order.reservationId().value());
+            writeString(output, order.sellerId().value()); writeString(output, order.taskId().value()); writeString(output, order.jobId().value()); writeString(output, order.reservationId().value());
             output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().ordinal());
         }
     }
-    private static MarketOrderBook readMarketOrderBook(DataInputStream input) throws IOException {
+    private static MarketOrderBook readMarketOrderBook(DataInputStream input, boolean hasMarketOrderJob) throws IOException {
         Map<SubjectId, MarketDemand> demands = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
+        int orderCount = readCount(input);
+        if (!hasMarketOrderJob && orderCount != 0) throw new IllegalArgumentException("v64 market work order requires explicit migration");
+        for (int index = 0; index < orderCount; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId buyer = new SubjectId(readString(input)); SubjectId reason = new SubjectId(readString(input));
             String itemKind = readString(input); int itemCount = input.readInt(); FixedScalar maximum = new FixedScalar(input.readLong());
             long openedAt = input.readLong(), expiresAt = input.readLong(); int status = input.readUnsignedByte();
@@ -368,9 +370,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, MarketWorkOrder> orders = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId demand = new SubjectId(readString(input)); SubjectId quote = new SubjectId(readString(input));
-            SubjectId seller = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId reservation = new SubjectId(readString(input));
+            SubjectId seller = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId job = new SubjectId(readString(input)); SubjectId reservation = new SubjectId(readString(input));
             FixedScalar total = new FixedScalar(input.readLong()); int status = input.readUnsignedByte();
-            if (status >= MarketWorkOrderStatus.values().length || orders.put(id, new MarketWorkOrder(id, demand, quote, seller, task, reservation,
+            if (status >= MarketWorkOrderStatus.values().length || orders.put(id, new MarketWorkOrder(id, demand, quote, seller, task, job, reservation,
                     total, MarketWorkOrderStatus.values()[status])) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
         }
         return new MarketOrderBook(demands, quotes, orders);
@@ -459,20 +461,34 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, jobs.size());
         for (ProductionJob job : jobs.values().stream().sorted(java.util.Comparator.comparing(ProductionJob::id)).toList()) {
             writeString(output, job.id().value()); writeString(output, job.settlementId().value()); writeString(output, job.facilityId().value());
-            writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeString(output, job.outputItemId().value());
+            writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeProductionInputHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
             writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
         }
     }
-    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input) throws IOException {
+    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input, boolean hasInputHold) throws IOException {
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
-            ProductionJob job = new ProductionJob(id, new SubjectId(readString(input)), new SubjectId(readString(input)),
-                    new SubjectId(readString(input)), new SubjectId(readString(input)), new SubjectId(readString(input)), readString(input), input.readUnsignedByte());
+            SubjectId settlement = new SubjectId(readString(input)), facility = new SubjectId(readString(input)), worker = new SubjectId(readString(input));
+            SubjectId consumed = new SubjectId(readString(input)); ProductionInputHold hold = hasInputHold ? readProductionInputHold(input, consumed) : new ProductionInputHold.Materialized(consumed);
+            ProductionJob job = new ProductionJob(id, settlement, facility, worker, consumed, hold, new SubjectId(readString(input)), readString(input), input.readUnsignedByte());
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
-    } private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
+    }
+    private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
+        if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
+        ExactItemStack item = ((ProductionInputHold.Cold) hold).item();
+        output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
+    }
+    private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new ProductionInputHold.Materialized(itemId);
+            case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input)));
+            default -> throw new IllegalArgumentException("unknown production input hold");
+        };
+    }
+    private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
         writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {
             writeString(output, contract.id().value()); writeString(output, contract.settlementId().value()); writeString(output, contract.recipientId().value());
             writeString(output, contract.cargoId().value()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().ordinal());

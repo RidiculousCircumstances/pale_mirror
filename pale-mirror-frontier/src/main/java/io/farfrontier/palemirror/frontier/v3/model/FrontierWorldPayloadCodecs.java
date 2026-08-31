@@ -11,6 +11,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return PayloadCodecs.merge(KernelPayloadCodecs.scheduleEffects(), RouteEngagementPayloadCodecs.codecs(), new PayloadCodecs(List.of(
                 new InfectionCodec(), new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(),
                 new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(),
+                MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled(),
                 new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(), new OperationAdvancedCodec(),
                 new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(), new OperationTravelAdvancedCodec(),
                 new OperationTravelSegmentCompletedCodec(),
@@ -96,11 +97,12 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static final class ProductionStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_started"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionStarted started = (ProductionStarted) payload;
-            return encodeProduction(output -> { writeJob(output, started.job()); writeSubject(output, started.inputItemId()); });
+            return encodeProduction(output -> { writeJob(output, started.job()); writeSubject(output, started.inputItemId()); writeProductionInputHold(output, started.job().inputHold()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 ProductionJob job = readJob(input); SubjectIdHolder item = readSubject(input);
+                if (input.available() != 0) job = job.withInputHold(readProductionInputHold(input, job.consumedItemId()));
                 return new ProductionStarted(job, item.value());
             });
         }
@@ -491,6 +493,21 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static ProductionJob readJob(DataInputStream input) throws IOException {
         return new ProductionJob(readSubject(input).value(), readSubject(input).value(), readSubject(input).value(), readSubject(input).value(),
                 readSubject(input).value(), readSubject(input).value(), readString(input), input.readUnsignedByte());
+    }
+    private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
+        if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
+        ExactItemStack item = ((ProductionInputHold.Cold) hold).item();
+        output.writeByte(1); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
+        if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
+        writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+    }
+    private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new ProductionInputHold.Materialized(itemId);
+            case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, readSubject(input).value(), readString(input), input.readUnsignedByte(),
+                    new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte())));
+            default -> throw new IllegalArgumentException("unknown production input hold");
+        };
     }
     private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
         writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId()); writeString(output, job.consumptionIntentId().value());

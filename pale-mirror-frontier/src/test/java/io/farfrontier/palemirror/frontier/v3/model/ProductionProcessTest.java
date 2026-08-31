@@ -26,9 +26,12 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessTest {
@@ -44,6 +47,12 @@ class ProductionProcessTest {
         assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), bread.custody());
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+        MarketDemand demand = completed.companies().market().demands().values().stream().filter(value -> value.buyerId().equals(new SubjectId("settlement:1")))
+                .findFirst().orElseThrow();
+        assertEquals(MarketDemandStatus.FULFILLED, demand.status());
+        assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().values().stream()
+                .filter(order -> order.demandId().equals(demand.id())).findFirst().orElseThrow().status());
+        assertTrue(completed.inventory().economics().reservations().isEmpty());
     }
 
     @Test
@@ -61,6 +70,105 @@ class ProductionProcessTest {
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(CompanyFoundationProcess.companyId(prepared.job().settlementId())).balance());
+        assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().values().stream()
+                .filter(order -> order.jobId().equals(prepared.job().id())).findFirst().orElseThrow().status());
+    }
+
+    @Test
+    void coldOrderCancelledBeforeAnEffectReturnsTheSameInputAndReleasesItsExactReservation() {
+        ColdMarketJob prepared = coldMarketJob();
+        FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);
+
+        List<ProposedEvent> planned = ProductionProcess.planCompletion(unavailable, new ScheduledAction(
+                new ScheduleId("schedule:test-cold-cancel"), new SimInstant(100L), 0, prepared.job().id(), "frontier.settlement.production.task.complete", 1));
+
+        ProductionBlocked blocked = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
+        MarketWorkOrderCancelled cancelled = assertInstanceOf(MarketWorkOrderCancelled.class, planned.get(1).payload());
+        assertEquals(ProductionBlockReason.FACILITY_UNAVAILABLE, blocked.reason());
+        assertEquals(prepared.order().id(), cancelled.orderId());
+        FrontierWorldState blockedState = ProductionProcess.reduceBlocked(unavailable, prepared.settlementId(), blocked);
+        FrontierWorldState released = MarketClearingProcess.reduceWorkOrderCancelled(blockedState, prepared.settlementId(), cancelled);
+
+        assertFalse(released.productionJobs().containsKey(prepared.job().id()));
+        assertEquals(prepared.input(), released.inventory().items().get(prepared.input().id()));
+        assertTrue(released.inventory().economics().reservations().isEmpty());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, released.companies().market().workOrders().get(prepared.order().id()).status());
+        assertEquals(MarketDemandStatus.CANCELLED, released.companies().market().demands().get(prepared.order().demandId()).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, released.strategicPlans().tasks().get(prepared.order().taskId()).status());
+        assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
+        ProductionStarted started = new ProductionStarted(prepared.job(), prepared.input().id());
+        assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+    }
+
+    @Test
+    void marketOrderWithAPreparedPhysicalTransformationCannotBeCancelledToFreeFunds() {
+        PreparedProduction prepared = activePhysicalProduction();
+        FrontierWorldState unavailable = prepared.state().withStructureCondition(prepared.job().facilityId(), StructureCondition.DESTROYED);
+        MarketWorkOrder order = unavailable.companies().market().workOrders().values().stream()
+                .filter(value -> value.jobId().equals(prepared.job().id())).findFirst().orElseThrow();
+
+        assertThrows(IllegalArgumentException.class, () -> MarketClearingProcess.reduceWorkOrderCancelled(unavailable, prepared.job().settlementId(),
+                new MarketWorkOrderCancelled(order.id(), prepared.job().id(), ProductionBlockReason.FACILITY_UNAVAILABLE)));
+        assertTrue(unavailable.inventory().economics().reservations().containsKey(order.reservationId()));
+    }
+
+    @Test
+    void playerTakingMaterializedInputBeforeIntentAtomicallyCancelsTheExactMarketWork() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        WorldId world = new WorldId("frontier:production-physical");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        ExactItemStack input = prepared.state().inventory().items().get(prepared.job().consumedItemId());
+        ExactItemCustodyChanged departure = new ExactItemCustodyChanged(input.id(), input.custody(), new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000064")));
+
+        var checkpoint = engine.checkpoint();
+        CommandResult result = engine.submit(new FrontierCommand(1, new CommandId("command:production-player-takes-input"), world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(new CommandId("command:production-player-takes-input")), departure));
+
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(cancelled.productionJobs().isEmpty());
+        assertEquals(new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000064")), cancelled.inventory().items().get(input.id()).custody());
+        assertTrue(cancelled.inventory().economics().reservations().isEmpty());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, cancelled.strategicPlans().tasks().get(prepared.taskId()).status());
+    }
+
+    @Test
+    void playerTakingMaterializedInputAfterPreparedIntentRetainsUnresolvedPhysicalWork() {
+        PreparedProduction prepared = activePhysicalProduction();
+        WorldId world = new WorldId("frontier:production-physical");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        ExactItemStack input = prepared.state().inventory().items().get(prepared.job().consumedItemId());
+        ExactItemCustodyChanged departure = new ExactItemCustodyChanged(input.id(), input.custody(), new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000065")));
+
+        var checkpoint = engine.checkpoint();
+        CommandResult result = engine.submit(new FrontierCommand(1, new CommandId("command:production-player-takes-prepared-input"), world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(new CommandId("command:production-player-takes-prepared-input")), departure));
+
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        FrontierWorldState unresolved = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(unresolved.productionJobs().containsKey(prepared.job().id()));
+        assertEquals(new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000065")), unresolved.inventory().items().get(input.id()).custody());
+        assertTrue(unresolved.inventory().economics().reservations().containsKey(prepared.order().reservationId()));
+        assertEquals(PhysicalIntentStatus.PREPARED, unresolved.physicalIntents().get(prepared.intent().id()).status());
+    }
+
+    @Test
+    void coldInputHoldReservesItsOriginalSlotFromOtherCanonicalOutput() {
+        ColdMarketJob prepared = coldMarketJob();
+        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) prepared.input().custody();
+        SubjectId intruderId = new SubjectId("item:must-not-overwrite-cold-hold");
+        ExactItemStack intruder = new ExactItemStack(intruderId, prepared.settlementId(), "minecraft:wheat", 64, source);
+
+        assertTrue(prepared.state().productionHoldReserves(source));
+        assertFalse(prepared.state().containerSlotAvailable(source));
+        assertEquals(1, prepared.state().firstFreeContainerSlot(source.containerId()).orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> prepared.state().withInventory(prepared.state().inventory().store(intruder)));
     }
 
     @Test
@@ -165,12 +273,19 @@ class ProductionProcessTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:test-production"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:test-production"), objective.id(), settlement, StrategicTaskKind.PRODUCE_BREAD,
-                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT,
-                StrategicTaskRequirement.FREE_DEPOT_SLOT), List.of(), status);
+                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), status);
         return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
     }
 
     private static PreparedProduction activePhysicalProduction() {
+        MaterializedProduction materialized = activeMaterializedProduction();
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-1-physical"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, materialized.job().id(), List.of(materialized.job().id(), materialized.job().consumedItemId(), materialized.job().outputItemId()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+        return new PreparedProduction(materialized.state().preparePhysicalIntent(intent), materialized.job(), intent, materialized.order(), materialized.settlementId(), materialized.taskId());
+    }
+
+    private static MaterializedProduction activeMaterializedProduction() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-physical"), 91L));
         SubjectId settlement = new SubjectId("settlement:1"), depot = new SubjectId("container:1-depot");
         for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
@@ -183,10 +298,41 @@ class ProductionProcessTest {
         ProductionJob job = new ProductionJob(new SubjectId("job:production-1-physical"), settlement, new SubjectId("structure:1-workshop"),
                 worker, new SubjectId("item:bootstrap-1-wheat"), new SubjectId("item:production-1-physical-bread"), "minecraft:bread", 64);
         state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-1-physical"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
-                PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
-        return new PreparedProduction(state.preparePhysicalIntent(intent), job, intent);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next(); EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+        MarketDemand demand = new MarketDemand(new SubjectId("demand:production-1-physical"), settlement, task.id(), "minecraft:bread", 64,
+                FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:production-1-physical"), demand.id(), contract.companyId(), 64, contract.invoicePerCompletedJob(), 0L, 1_000L);
+        MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:production-1-physical"), demand.id(), quote.id(), contract.companyId(), task.id(), job.id(),
+                reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
+        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand).publish(quote, 0L).accept(order, 0L)));
+        return new MaterializedProduction(state, job, order, settlement, task.id());
+    }
+
+    private static ColdMarketJob coldMarketJob() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-cold-cancel"), 91L));
+        SubjectId settlement = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
+        }
+        state = productionTask(state, StrategicTaskStatus.ACTIVE);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
+        SubjectId company = CompanyFoundationProcess.companyId(settlement);
+        SubjectId worker = state.companies().companies().get(company).founderId();
+        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-cold-cancel"), settlement, new SubjectId("structure:1-workshop"), worker,
+                input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:production-1-cold-cancel-bread"), "minecraft:bread", input.count());
+        state = CompanyWorkPaymentProcess.reserve(state.startProductionJob(job, input.id()), job);
+        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+        MarketDemand demand = new MarketDemand(new SubjectId("demand:production-1-cold-cancel"), settlement, task.id(), "minecraft:bread", input.count(),
+                FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:production-1-cold-cancel"), demand.id(), company, input.count(), contract.invoicePerCompletedJob(), 0L, 1_000L);
+        MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:production-1-cold-cancel"), demand.id(), quote.id(), company, task.id(), job.id(),
+                reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
+        MarketOrderBook market = MarketOrderBook.empty().open(demand).publish(quote, 0L).accept(order, 0L);
+        return new ColdMarketJob(state.withCompanies(state.companies().withMarket(market)), settlement, job, input, order);
     }
 
     private static CommandResult submitTransition(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
@@ -197,5 +343,7 @@ class ProductionProcessTest {
                 CauseChain.root(command), new PhysicalIntentTransition(intent, status, observation)));
     }
 
-    private record PreparedProduction(FrontierWorldState state, ProductionJob job, PhysicalIntent intent) { }
+    private record PreparedProduction(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, MarketWorkOrder order, SubjectId settlementId, SubjectId taskId) { }
+    private record MaterializedProduction(FrontierWorldState state, ProductionJob job, MarketWorkOrder order, SubjectId settlementId, SubjectId taskId) { }
+    private record ColdMarketJob(FrontierWorldState state, SubjectId settlementId, ProductionJob job, ExactItemStack input, MarketWorkOrder order) { }
 }

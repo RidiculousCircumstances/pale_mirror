@@ -178,6 +178,46 @@ final class FrontierDevelopmentScenarios {
         return new ResidentTransitFixture(state, SimInstant.ZERO, List.of(), started.journey());
     }
 
+    /**
+     * Disposable player-causality fixture: the exact Northwatch wheat is already committed to
+     * one job whose input becomes materialized through the normal owned-container lifecycle,
+     * but no transform intent exists.  The only valid way through the scenario is an ordinary
+     * player withdrawal followed by the production cancellation boundary; the fixture itself
+     * grants neither an item nor a canonical mutation API.
+     */
+    static MaterializedProductionFixture materializedProductionInputTheftFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        SubjectId settlementId = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlementId, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlementId, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlementId, opened);
+        }
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-production-input-theft"), settlementId,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-production-input-theft"), objective.id(), settlementId,
+                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                List.of(), StrategicTaskStatus.ACTIVE);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        SubjectId company = CompanyFoundationProcess.companyId(settlementId);
+        SubjectId worker = state.companies().companies().get(company).founderId();
+        ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
+        ProductionJob job = new ProductionJob(new SubjectId("job:development-production-input-theft"), settlementId,
+                settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), worker,
+                input.id(), new ProductionInputHold.Materialized(input.id()), new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count());
+        state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
+        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
+        FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
+        MarketDemand demand = new MarketDemand(new SubjectId("demand:development-production-input-theft"), settlementId, task.id(), "minecraft:bread", input.count(),
+                FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:development-production-input-theft"), demand.id(), company, input.count(),
+                contract.invoicePerCompletedJob(), 0L, 1_000L);
+        MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:development-production-input-theft"), demand.id(), quote.id(), company, task.id(), job.id(),
+                reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
+        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand).publish(quote, 0L).accept(order, 0L)));
+        return new MaterializedProductionFixture(state, SimInstant.ZERO, List.of(), order.id());
+    }
+
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         HiveGrowthFixture {
             schedules = List.copyOf(schedules);
@@ -206,6 +246,12 @@ final class FrontierDevelopmentScenarios {
     record ResidentTransitFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                   ResidentMigrationJourney journey) {
         ResidentTransitFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record MaterializedProductionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId orderId) {
+        MaterializedProductionFixture {
             schedules = List.copyOf(schedules);
         }
     }

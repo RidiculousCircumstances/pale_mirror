@@ -693,7 +693,7 @@ class FrontierWorldRuntimeDefinitionTest {
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), before.structureConditions(), before.infection(),
                 before.inventory(), before.productionJobs(), before.contracts(), before.operations(), before.logisticsHistory(), before.physicalIntents(), before.physicalObservations(), retained,
                 before.hiveColony(), before.structureDamage(), before.physicalDeltas(), before.ambientLeases(), before.routeConstructions(),
-                before.routeTopology(), before.strategicPlans(), before.humanPopulation(), before.resourceSites());
+                before.routeTopology(), before.strategicPlans(), before.humanPopulation(), before.companies(), before.resourceSites());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
         SceneLease nextLease = SceneLease.atExactPositions(nextLeaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, new SimInstant(551L),
                 2_000L, SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);

@@ -84,15 +84,19 @@ class FrontierWorldStateTest {
         FrontierWorldState baseline = initial();
         SubjectId container = new SubjectId("container:1-depot");
         SubjectId item = new SubjectId("item:codec");
+        SubjectId wheat = new SubjectId("item:bootstrap-1-wheat");
+        ExactItemStack heldWheat = new ExactItemStack(wheat, new SubjectId("settlement:1"), "minecraft:wheat", 64,
+                new InventoryCustody.ContainerSlot(container, 1));
         ExactInventory inventory = new ExactInventory(baseline.inventory().containers(), Map.of(item,
-                new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0))), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
+                new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0)),
+                wheat, heldWheat), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         inventory = inventory.recordConflict(new InventoryConflict(new SubjectId("conflict:codec-item"), item, container, 0, InventoryConflictKind.MISSING));
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
-                new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), new SubjectId("item:bootstrap-1-wheat"),
+                new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), wheat, new ProductionInputHold.Cold(heldWheat),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
         FrontierWorldState source = baseline.withInventory(inventory).withActorLocation(new SubjectId("bioform:west-0"), new BlockPosition(-400, 64, 400))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
-                .withInfection(new InfectionCell(-100, 100), HALF).withProductionJob(activeJob);
+                .withInfection(new InfectionCell(-100, 100), HALF).startProductionJob(activeJob, wheat);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] encoded = codec.encode(source);
         assertEquals(source, codec.decode(encoded));
@@ -108,7 +112,7 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(source.bootstrap(), missingActor,
                 source.structureConditions(), source.infection(), source.inventory(), source.productionJobs(), source.contracts(), source.operations(), source.logisticsHistory(), source.physicalIntents(),
                 source.physicalObservations(), source.sceneLeases(), source.hiveColony(), source.structureDamage(), source.physicalDeltas(),
-                source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.resourceSites()));
+                source.ambientLeases(), source.routeConstructions(), source.routeTopology(), source.strategicPlans(), source.humanPopulation(), source.companies(), source.resourceSites()));
     }
 
     @Test
@@ -231,7 +235,7 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
                 state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), Map.of(intent.id(), intent), state.physicalObservations(),
                 state.sceneLeases(), state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(),
-                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites()));
+                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites()));
     }
 
     @Test

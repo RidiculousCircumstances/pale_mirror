@@ -20,6 +20,9 @@ public final class ProductionTransformationStateSupport {
         if (job == null || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId(), job.outputItemId()))) {
             throw new IllegalArgumentException("production transformation must bind its active job, input and output");
         }
+        if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
+            throw new IllegalArgumentException("only a materialized production input may receive a physical transformation");
+        }
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !input.economicOwnerId().equals(job.settlementId()) || !"minecraft:wheat".equals(input.itemKind())
                 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
@@ -47,6 +50,10 @@ public final class ProductionTransformationStateSupport {
             throw new IllegalArgumentException("production transformation receipt does not match its durable job");
         }
         FrontierWorldState paidState = CompanyWorkPaymentProcess.settle(state, job);
+        java.util.Optional<MarketWorkOrder> order = paidState.companies().market().acceptedForJob(job.id());
+        if (order.isPresent()) {
+            paidState = paidState.withCompanies(paidState.companies().withMarket(paidState.companies().market().complete(order.orElseThrow().id())));
+        }
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) input.custody();
         ExactItemStack output = new ExactItemStack(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(), source);
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.remove(job.id());

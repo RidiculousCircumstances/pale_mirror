@@ -47,6 +47,7 @@ final class PaleMirrorCommandRegistrar {
         inspect.then(diagnosticObject("actor"));
         inspect.then(diagnosticObject("item"));
         inspect.then(diagnosticObject("container"));
+        inspect.then(diagnosticObject("market_order"));
         inspect.then(diagnosticObject("operation"));
         inspect.then(diagnosticObject("route_construction"));
         inspect.then(diagnosticObject("physical_delta"));

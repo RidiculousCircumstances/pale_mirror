@@ -159,13 +159,31 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
             if (!worker.settlementId().equals(settlement.id()) || worker.role() != ResidentRole.CRAFTER) throw new IllegalArgumentException("production job worker must be a settlement crafter");
-            ExactItemStack input = inventory.items().get(job.consumedItemId());
             if (inventory.items().containsKey(job.outputItemId())) {
                 throw new IllegalArgumentException("active production job must not retain its output stack");
             }
-            if (input != null && (!(input.custody() instanceof InventoryCustody.ContainerSlot slot)
-                    || !slot.containerId().equals(depotId(settlement.id())) || input.count() != job.outputCount())) {
-                throw new IllegalArgumentException("active production job input must remain in its exact settlement depot slot");
+            switch (job.inputHold()) {
+                case ProductionInputHold.Cold held -> {
+                    ExactItemStack input = held.item();
+                    if (inventory.items().containsKey(input.id()) || !input.id().equals(job.consumedItemId())
+                            || !input.economicOwnerId().equals(settlement.id()) || !"minecraft:wheat".equals(input.itemKind())
+                            || input.count() != job.outputCount() || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
+                            || !slot.containerId().equals(depotId(settlement.id())) || inventory.itemAt(slot.containerId(), slot.slot()).isPresent()) {
+                        throw new IllegalArgumentException("cold production job must be the sole exact holder of its depot wheat input");
+                    }
+                }
+                case ProductionInputHold.Materialized ignored -> {
+                    ExactItemStack input = inventory.items().get(job.consumedItemId());
+                    boolean inOwnedDepot = input != null && input.custody() instanceof InventoryCustody.ContainerSlot slot
+                            && slot.containerId().equals(depotId(settlement.id()));
+                    boolean awaitingPhysicalReconciliation = physicalIntents.values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id())
+                            && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION
+                            && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED);
+                    boolean exactInputMissingOrAltered = input == null || input.count() != job.outputCount();
+                    if ((exactInputMissingOrAltered || !inOwnedDepot) && !awaitingPhysicalReconciliation) {
+                        throw new IllegalArgumentException("materialized production job input must remain in its exact settlement depot slot");
+                    }
+                }
             }
         }
         Map<SubjectId, SupplyContract> contractsByCargo = new LinkedHashMap<>();
@@ -554,8 +572,29 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, nextInventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
+    /** A COLD job reserves its former source slot even though its exact stack is held by the job. */
+    boolean productionHoldReserves(InventoryCustody.ContainerSlot slot) {
+        Objects.requireNonNull(slot, "container slot");
+        return productionJobs.values().stream().map(ProductionJob::inputHold).filter(ProductionInputHold.Cold.class::isInstance)
+                .map(ProductionInputHold.Cold.class::cast).map(ProductionInputHold.Cold::item)
+                .anyMatch(item -> item.custody().equals(slot));
+    }
+    boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
+        return inventory.itemAt(slot.containerId(), slot.slot()).isEmpty() && !productionHoldReserves(slot);
+    }
+    java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
+        ContainerRecord container = inventory.containers().get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
+        for (int slot = 0; slot < container.slotCount(); slot++) {
+            if (containerSlotAvailable(new InventoryCustody.ContainerSlot(containerId, slot))) return java.util.OptionalInt.of(slot);
+        }
+        return java.util.OptionalInt.empty();
+    }
     public FrontierWorldState withProductionJob(ProductionJob job) {
         Objects.requireNonNull(job, "production job");
+        if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
+            throw new IllegalArgumentException("only a materialized production input may remain in exact inventory");
+        }
         if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
         if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
@@ -570,6 +609,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!job.consumedItemId().equals(inputItemId)) throw new IllegalArgumentException("production job input identity differs");
         ExactItemStack input = inventory.items().get(inputItemId);
         if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("production input is unavailable");
+        if (!(job.inputHold() instanceof ProductionInputHold.Cold held) || !held.item().equals(input)) {
+            throw new IllegalArgumentException("cold production job must retain its exact removed input");
+        }
         if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
         if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
             throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
@@ -584,10 +626,33 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
             throw new IllegalArgumentException("production output does not match durable job result");
         }
-        ExactItemStack input = inventory.items().get(job.consumedItemId());
-        if (input != null) throw new IllegalArgumentException("materialized production must confirm its physical transformation rather than emit a direct completion");
+        if (!(job.inputHold() instanceof ProductionInputHold.Cold) || inventory.items().containsKey(job.consumedItemId())) {
+            throw new IllegalArgumentException("materialized production must confirm its physical transformation rather than emit a direct completion");
+        }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(jobId);
         return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    /** Releases a job only before a physical transformation intent exists. A COLD hold returns its same exact stack to its original slot. */
+    FrontierWorldState cancelProductionJob(SubjectId jobId) {
+        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
+        if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
+        ExactInventory nextInventory = switch (job.inputHold()) {
+            case ProductionInputHold.Cold cold -> {
+                ExactItemStack held = cold.item();
+                if (inventory.items().containsKey(held.id()) || !(held.custody() instanceof InventoryCustody.ContainerSlot source)
+                        || inventory.itemAt(source.containerId(), source.slot()).isPresent()) {
+                    throw new IllegalArgumentException("cold production hold cannot return to its original exact slot");
+                }
+                yield inventory.store(held);
+            }
+            // The real stack remains under its observed physical custody. The caller must
+            // prove its current mismatch before cancelling a materialized job, so this
+            // branch deliberately neither restores nor deletes it.
+            case ProductionInputHold.Materialized ignored -> inventory;
+        };
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(job.id());
+        return next(actorLocations, structureConditions, infection, nextInventory, next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState createSupplyContract(SupplyContract contract) {

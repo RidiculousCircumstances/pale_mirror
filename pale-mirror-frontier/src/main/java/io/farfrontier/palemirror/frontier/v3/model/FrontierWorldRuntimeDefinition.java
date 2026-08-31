@@ -120,12 +120,19 @@ public final class FrontierWorldRuntimeDefinition {
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1, 6_000L + index * 100L));
             actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
                     SettlementProvisionProcess.INITIAL_REVIEW_TICK + index * 100L));
-            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1, 4_000L + index * 100L));
+            actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1, 1_000L + index * 100L));
         }
         actions.add(PopulationMigrationProcess.review(1, 8_000L));
         actions.add(TerminalLogisticsProcess.review(1, 8_100L));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted().forEach(site -> actions.add(ResourceSiteProcess.preparation(site, ResourceSiteProcess.INITIAL_PREPARATION_TICK)));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, 3_200L)); return List.copyOf(actions);
+    }
+    /** Disposable-only exact player-withdrawal fixture; production never selects this bootstrap. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> developmentMaterializedProductionInputTheftConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(worldId, seed);
+        return new FrontierEngineConfiguration<>(worldId, fixture.state(), fixture.instant(), FrontierWorldRuntimeDefinition::planCommand,
+                (state, action) -> planScheduled(state, action, false), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(fixture.state().bootstrap()),
+                FrontierWorldProjectionCompiler::compile, new EngineLimits(4_096, 1_200L, 4_096), fixture.schedules(), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
     public static PayloadCodecs payloadCodecs() { return FrontierWorldPayloadCodecs.create(); } static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         if (!PHYSICAL_EXECUTOR.equals(command.actor())) {
@@ -282,12 +289,16 @@ public final class FrontierWorldRuntimeDefinition {
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
             if (item == null || !item.custody().equals(changed.from())) return rejected("observed item source differs from canonical custody");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, changed), changed)));
+            ProposedEvent observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, changed), changed);
+            try { return new CommandPlan.Accepted(ProductionProcess.planMaterializedInputDeparture(state, changed.itemId(), observation)); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ExactItemDestroyed destroyed) {
             ExactItemStack item = state.inventory().items().get(destroyed.itemId());
             if (item == null || !item.custody().equals(destroyed.source())) return rejected("destroyed item source differs from canonical custody");
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, destroyed), destroyed)));
+            ProposedEvent observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, destroyed), destroyed);
+            try { return new CommandPlan.Accepted(ProductionProcess.planMaterializedInputDeparture(state, destroyed.itemId(), observation)); }
+            catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof CargoCarrierReleased released) {
             SceneLease lease = state.sceneLeases().get(released.leaseId());
@@ -339,6 +350,7 @@ public final class FrontierWorldRuntimeDefinition {
             case "frontier.settlement.provision.review" -> SettlementProvisionProcess.planReview(state, action);
             case "frontier.settlement.provision.progress" -> SettlementProvisionProcess.planProgress(state, action);
             case "frontier.company.foundation.review" -> CompanyFoundationProcess.plan(state, action);
+            case "frontier.market.clear" -> MarketClearingProcess.plan(state, action);
             case "frontier.resource_site.growth" -> ResourceSiteProcess.planGrowth(state, action);
             case "frontier.resource_site.prepare" -> ResourceSiteProcess.planPreparation(state, action);
             case "frontier.resource_site.harvest" -> ResourceSiteHarvestProcess.plan(state, action);
@@ -420,6 +432,12 @@ public final class FrontierWorldRuntimeDefinition {
             case InfectionChanged changed -> state.withInfection(changed.cell(), changed.intensity());
             case CompanyRegistered registered -> CompanyFoundationProcess.reduce(state, event.subject(), registered);
             case EmploymentContractOpened opened -> CompanyFoundationProcess.reduceEmployment(state, event.subject(), opened);
+            case MarketDemandOpened opened -> MarketClearingProcess.reduceOpened(state, event.subject(), opened);
+            case MarketQuotePublished published -> MarketClearingProcess.reduceQuote(state, event.subject(), event.instant().ticks(), published);
+            case MarketWorkOrderAccepted accepted -> MarketClearingProcess.reduceAccepted(state, event.subject(), event.instant().ticks(), accepted);
+            case MarketWorkOrderCancelled cancelled -> MarketClearingProcess.reduceWorkOrderCancelled(state, event.subject(), cancelled);
+            case MarketDemandExpired expired -> MarketClearingProcess.reduceExpired(state, event.subject(), event.instant().ticks(), expired);
+            case MarketDemandCancelled cancelled -> MarketClearingProcess.reduceCancelled(state, event.subject(), cancelled);
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionBlocked blocked -> ProductionProcess.reduceBlocked(state, event.subject(), blocked);

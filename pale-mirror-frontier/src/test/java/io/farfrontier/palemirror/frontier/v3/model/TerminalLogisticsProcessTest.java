@@ -96,7 +96,7 @@ class TerminalLogisticsProcessTest {
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory,
                 state.productionJobs(), contracts, operations, state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
                 state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(),
-                state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+                state.strategicPlans(), state.humanPopulation(), state.companies(), state.resourceSites());
     }
 
     private static TerminalLogisticsReceipt receipt(int index, long atTick) {
