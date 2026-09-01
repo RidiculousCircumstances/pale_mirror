@@ -54,7 +54,7 @@ final class FrontierV3GrayboxExecutor {
         FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !input.equals(cursor.input())) {
-            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compileStructuralBaseline(state);
             cursor = Cursor.from(input, plan, cursor);
             CURSORS.put(runtime, cursor);
         }
@@ -63,6 +63,13 @@ final class FrontierV3GrayboxExecutor {
         for (int count = 0; count < MAX_CELLS_PER_TICK; count++) {
             GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> level.hasChunkAt(toMinecraft(candidate))).orElse(null);
             if (cell == null) return;
+            // A loss is an exact canonical mask over the retained immutable baseline.  Keeping
+            // it out of StructuralInput prevents one player break (or one explosion cell) from
+            // rebuilding and re-sorting the complete 1024×1024-world plan.  A later confirmed
+            // repair simply removes this mask; the repair executor owns its physical write and
+            // provenance transition, while this ordinary projector may subsequently see it as
+            // CURRENT.  We never use the cached baseline to recreate a lost cell.
+            if (state.physicalDeltas().containsKey(cell.position())) continue;
             project(level, ledger, cell);
         }
     }

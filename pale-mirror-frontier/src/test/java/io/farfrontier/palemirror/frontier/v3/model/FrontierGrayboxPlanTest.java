@@ -64,6 +64,23 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void physicalLossIsAnExactDynamicMaskOverTheRetainedStructuralBaseline() {
+        FrontierWorldState state = initial();
+        GrayboxCell lost = FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().value().equals("organ:west-heart")).findFirst().orElseThrow();
+        BlockPosition broken = lost.position();
+        FrontierWorldState afterLoss = state.recordPhysicalDelta(new PhysicalDelta(broken, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(lost.ownerId()), java.util.Optional.of(lost.semanticPart()), "player:test"));
+
+        assertEquals(FrontierGrayboxPlan.structuralInput(state), FrontierGrayboxPlan.structuralInput(afterLoss),
+                "one exact observed loss must not invalidate the immutable world-wide structural baseline");
+        assertEquals(FrontierGrayboxPlan.compileStructuralBaseline(state).cells(), FrontierGrayboxPlan.compileStructuralBaseline(afterLoss).cells(),
+                "the cached baseline retains only geometry; the canonical loss is applied as a per-cell projection mask");
+        assertEquals(null, FrontierGrayboxPlan.compile(afterLoss).cells().get(broken),
+                "the player-facing desired projection still excludes the exact lost cell");
+    }
+
+    @Test
     void destroyedStructureHasNoDesiredCellsButOtherOwnersRemain() {
         FrontierWorldState state = initial().withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"), StructureCondition.DESTROYED);
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

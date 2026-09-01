@@ -28,6 +28,21 @@ public final class FrontierGrayboxPlan {
     }
 
     public static FrontierGrayboxPlan compile(FrontierWorldState state) {
+        return compile(state, true);
+    }
+
+    /**
+     * Compiles the immutable structural baseline without applying the current physical-loss
+     * mask.  The NeoForge projector retains this large plan across individual broken/repaired
+     * cells and consults the exact canonical loss map immediately before projection.  This is
+     * deliberately not a second desired-state authority: callers that present the plan to a
+     * player must use {@link #compile(FrontierWorldState)}, which includes those losses.
+     */
+    public static FrontierGrayboxPlan compileStructuralBaseline(FrontierWorldState state) {
+        return compile(state, false);
+    }
+
+    private static FrontierGrayboxPlan compile(FrontierWorldState state, boolean applyPhysicalLossMask) {
         Objects.requireNonNull(state, "state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
@@ -39,7 +54,7 @@ public final class FrontierGrayboxPlan {
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
         // observed cell is gone, desired-state projection must not ask a later loaded chunk to
         // recreate it, including after the SavedData ledger has been compacted or lost.
-        state.physicalDeltas().keySet().forEach(cells::remove);
+        if (applyPhysicalLossMask) state.physicalDeltas().keySet().forEach(cells::remove);
         Map<InfectionCell, FixedRatio> infection = state.infection().entrySet().stream()
                 .filter(entry -> entry.getValue().value().raw() > 0L)
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -51,16 +66,17 @@ public final class FrontierGrayboxPlan {
     public Map<InfectionCell, FixedRatio> infection() { return infection; }
 
     /**
-     * Exact immutable inputs for the static structural projection, deliberately excluding moving
-     * actors, inventory, active operations and infection.  Those domains have independent
-     * executors and must not make an unchanged settlement/hive/route silhouette allocate a new
-     * full graybox plan.  The inputs are already immutable canonical values; this value object
-     * retains references only for read-only equality at the NeoForge projection boundary.
+     * Exact immutable inputs for the static structural baseline, deliberately excluding moving
+     * actors, inventory, active operations, infection and individual physical losses. Those
+     * domains have independent executors (or, for loss, a per-cell canonical mask) and must not
+     * make an unchanged settlement/hive/route silhouette allocate a new full graybox plan. The
+     * inputs are already immutable canonical values; this value object retains references only
+     * for read-only equality at the NeoForge projection boundary.
      */
     public static StructuralInput structuralInput(FrontierWorldState state) {
         Objects.requireNonNull(state, "structural projection state");
         return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
-                state.routeTopology(), state.physicalDeltas(), activeWorksiteStaging(state));
+                state.routeTopology(), activeWorksiteStaging(state));
     }
 
     public static final class StructuralInput {
@@ -68,18 +84,15 @@ public final class FrontierGrayboxPlan {
         private final Map<SubjectId, StructureCondition> structureConditions;
         private final Map<SubjectId, HiveOrgan> addedOrgans;
         private final RouteTopology routeTopology;
-        private final Map<BlockPosition, PhysicalDelta> physicalDeltas;
         private final Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging;
 
         private StructuralInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
                                 Map<SubjectId, HiveOrgan> addedOrgans, RouteTopology routeTopology,
-                                Map<BlockPosition, PhysicalDelta> physicalDeltas,
                                 Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging) {
             this.bootstrap = bootstrap;
             this.structureConditions = structureConditions;
             this.addedOrgans = addedOrgans;
             this.routeTopology = routeTopology;
-            this.physicalDeltas = physicalDeltas;
             this.activeWorksiteStaging = activeWorksiteStaging;
         }
 
@@ -88,11 +101,11 @@ public final class FrontierGrayboxPlan {
             if (!(other instanceof StructuralInput input)) return false;
             return bootstrap.equals(input.bootstrap) && structureConditions.equals(input.structureConditions)
                     && addedOrgans.equals(input.addedOrgans) && routeTopology.equals(input.routeTopology)
-                    && physicalDeltas.equals(input.physicalDeltas) && activeWorksiteStaging.equals(input.activeWorksiteStaging);
+                    && activeWorksiteStaging.equals(input.activeWorksiteStaging);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, physicalDeltas, activeWorksiteStaging);
+            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, activeWorksiteStaging);
         }
     }
 
