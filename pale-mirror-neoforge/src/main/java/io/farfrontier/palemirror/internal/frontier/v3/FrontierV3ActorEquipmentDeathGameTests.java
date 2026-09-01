@@ -25,6 +25,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -43,7 +44,8 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         ServerLevel level = helper.getLevel(); FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 fixtureRuntime("frontier:actor-equipment-death-game-test");
         ExactItemStack first = exactWeapon(runtime); SubjectId firstActor = ((InventoryCustody.Actor) first.custody()).actorId();
-        Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(36, 8, 0)));
+        helper.setBlock(new BlockPos(2, 7, 0), Blocks.STONE.defaultBlockState());
+        Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(2, 8, 0)));
         firstBody.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(first)); level.addFreshEntity(firstBody);
         helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, firstBody), "the exact actor-held stack must be accounted before the managed body dies");
         ExactItemStack released = state(runtime).inventory().items().get(first.id());
@@ -62,7 +64,8 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
             FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =
                     fixtureRuntime("frontier:actor-equipment-death-changed-hand-game-test");
             ExactItemStack second = exactWeapon(changedRuntime); SubjectId secondActor = ((InventoryCustody.Actor) second.custody()).actorId();
-            Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(40, 8, 0)));
+            helper.setBlock(new BlockPos(6, 7, 0), Blocks.STONE.defaultBlockState());
+            Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(6, 8, 0)));
             secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
             helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody), "a changed physical hand is still an accounted equipment outcome");
             helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
@@ -95,6 +98,9 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
     private static Villager body(ServerLevel level, FrontierWorldState state, SubjectId actorId, BlockPos position) {
         Villager body = EntityType.VILLAGER.create(level); if (body == null) throw new IllegalStateException("GameTest could not create Villager");
         body.setUUID(FrontierV3AmbientActorExecutor.entityId(state, actorId)); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
+        // This fixture proves custody, not ambient behaviour. Keep the witnessed hand and its
+        // physical drop at the declared fixture location while the postcondition is observed.
+        body.setNoAi(true);
         body.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, actorId.value()); body.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         return body;
     }

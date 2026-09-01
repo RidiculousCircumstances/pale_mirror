@@ -85,6 +85,15 @@ nearest-route lookup. It neither loads nor projects cells; it merely makes a
 naturally visited facility's terminal proof practical while keeping foreign
 world changes visible as errors.
 
+For every scoped runtime pass the diagnostic also reports the derived count of
+`OPEN`, `BLOCKED` and `UNVERIFIED` semantic ports, plus the corresponding
+declared topology-edge counts. A port is `OPEN` only when both of its declared
+throat body cells are loaded and clear; one occupied cell is `BLOCKED`, while a
+missing loaded-world observation is `UNVERIFIED`. An edge is `BLOCKED` only by
+observed support drift, not by initial projection `PENDING` work or an unloaded
+chunk. These are read-only Foundry conclusions: the operation/physical-observation
+owners remain responsible for any canonical availability transition.
+
 ## Operator commands
 
 All commands require permission level 4. A settlement object ID or region ID

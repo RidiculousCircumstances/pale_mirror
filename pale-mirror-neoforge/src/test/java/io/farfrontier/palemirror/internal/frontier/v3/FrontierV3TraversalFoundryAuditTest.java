@@ -11,7 +11,10 @@ import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3TraversalFoundryAuditTest {
@@ -48,6 +51,44 @@ class FrontierV3TraversalFoundryAuditTest {
                 "a previously conflicted claim remains a conflict even if a later block happens to look right");
         assertEquals(FrontierV3TraversalFoundryAudit.RuntimeSupportStatus.CURRENT,
                 FrontierV3TraversalFoundryAudit.classifyRuntimeSupport(route, claimed, FrontierV3TraversalFoundryAudit.ObservedSupport.EXPECTED));
+    }
+
+    @Test void runtimePortAvailabilityNeedsBothDeclaredHeadroomCellsAndNeverTurnsAWorldChangeIntoAnAlternateEntrance() {
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimePortAvailability.OPEN,
+                FrontierV3TraversalFoundryAudit.classifyPortAvailability(List.of(
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.CLEAR,
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.CLEAR)));
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimePortAvailability.BLOCKED,
+                FrontierV3TraversalFoundryAudit.classifyPortAvailability(List.of(
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.BLOCKED,
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.CLEAR)),
+                "one occupied body cell blocks the one declared semantic port rather than permitting a hidden sidestep");
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimePortAvailability.UNVERIFIED,
+                FrontierV3TraversalFoundryAudit.classifyPortAvailability(List.of(
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.CLEAR,
+                        FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.UNVERIFIED)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TraversalFoundryAudit.classifyPortAvailability(List.of(
+                FrontierV3TraversalFoundryAudit.ObservedPortHeadroom.CLEAR)));
+    }
+
+    @Test void runtimeEdgeAvailabilityIsBlockedByObservedDriftButNotByUnmaterializedOrUnloadedProviderWork() {
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimeEdgeAvailability.OPEN,
+                FrontierV3TraversalFoundryAudit.classifyEdgeAvailability(
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.CURRENT,
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.CURRENT));
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimeEdgeAvailability.PENDING,
+                FrontierV3TraversalFoundryAudit.classifyEdgeAvailability(
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.CURRENT,
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.PENDING));
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimeEdgeAvailability.UNVERIFIED,
+                FrontierV3TraversalFoundryAudit.classifyEdgeAvailability(
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.CURRENT,
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.UNVERIFIED));
+        assertEquals(FrontierV3TraversalFoundryAudit.RuntimeEdgeAvailability.BLOCKED,
+                FrontierV3TraversalFoundryAudit.classifyEdgeAvailability(
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.MISMATCH,
+                        FrontierV3TraversalFoundryAudit.RuntimeSurfaceStatus.CURRENT),
+                "one conflicting owned support makes only its existing edge unavailable; it cannot authorize a detour");
     }
 
     private static double metric(io.farfrontier.palemirror.api.FoundryAuditReport report, String id) {

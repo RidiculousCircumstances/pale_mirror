@@ -69,6 +69,12 @@ final class FrontierV3TraversalFoundryDiagnostic {
                         + ",\"runtimePending\":" + runtimePending
                         + ",\"runtimeMismatch\":" + metric(report, "frontier.traversal.runtime_mismatch")
                         + ",\"blockedThroats\":" + metric(report, "frontier.port.runtime_blocked")
+                        + ",\"openPorts\":" + metric(report, "frontier.port.runtime_open")
+                        + ",\"blockedPorts\":" + metric(report, "frontier.port.runtime_blocked_ports")
+                        + ",\"unverifiedPorts\":" + metric(report, "frontier.port.runtime_unverified")
+                        + ",\"openEdges\":" + metric(report, "frontier.traversal.edge.runtime_open")
+                        + ",\"blockedEdges\":" + metric(report, "frontier.traversal.edge.runtime_blocked")
+                        + ",\"unverifiedEdges\":" + metric(report, "frontier.traversal.edge.runtime_unverified")
                         + ",\"firstFailure\":" + firstFailure(report) + "}");
     }
 

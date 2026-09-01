@@ -22,6 +22,7 @@ import net.minecraft.world.level.block.Blocks;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,11 @@ final class FrontierV3TraversalFoundryAudit {
     enum RuntimeSupportStatus { CURRENT, PENDING, MISMATCH }
     /** Minecraft adapter input kept deliberately small so the causal classification is JVM-testable. */
     enum ObservedSupport { AIR, EXPECTED, OTHER }
+    /** One semantic port is open only when both declared throat cells are physically clear. */
+    enum RuntimePortAvailability { OPEN, BLOCKED, UNVERIFIED }
+    /** One declared topology edge is read-only availability evidence, never a replan request. */
+    enum RuntimeEdgeAvailability { OPEN, PENDING, BLOCKED, UNVERIFIED }
+    enum RuntimeSurfaceStatus { CURRENT, PENDING, MISMATCH, UNVERIFIED }
 
     private FrontierV3TraversalFoundryAudit() { }
 
@@ -135,10 +141,15 @@ final class FrontierV3TraversalFoundryAudit {
         Set<SurfaceAnchor> surfaces = scope.surfaces();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         int checked = 0, unloaded = 0, pending = 0, mismatch = 0;
+        Map<SurfaceAnchor, RuntimeSurfaceStatus> support = new LinkedHashMap<>();
         for (SurfaceAnchor surface : surfaces) {
             if (checked + unloaded >= MAX_RUNTIME_SURFACES) break;
             BlockPos position = minecraft(surface.support());
-            if (!level.hasChunkAt(position)) { unloaded++; continue; }
+            if (!level.hasChunkAt(position)) {
+                unloaded++;
+                support.put(surface, RuntimeSurfaceStatus.UNVERIFIED);
+                continue;
+            }
             checked++;
             GrayboxCell expected = graybox.cells().get(surface.support());
             var actual = level.getBlockState(position);
@@ -146,6 +157,7 @@ final class FrontierV3TraversalFoundryAudit {
             RuntimeSupportStatus status = classifyRuntimeSupport(expected, claim, observedSupport(expected, actual));
             if (status == RuntimeSupportStatus.PENDING) {
                 pending++;
+                support.put(surface, RuntimeSurfaceStatus.PENDING);
                 add(findings, "frontier.traversal.support.pending", FoundrySeverity.WARNING, phase, "traversal_surface",
                         expected.ownerId().value(), level, surface.support(),
                         "Loaded traversal support is still pending initial materialization (expected "
@@ -155,6 +167,7 @@ final class FrontierV3TraversalFoundryAudit {
             }
             if (status == RuntimeSupportStatus.MISMATCH) {
                 mismatch++;
+                support.put(surface, RuntimeSurfaceStatus.MISMATCH);
                 String expectedBlock = expected == null ? "<no-owned-cell>" : expectedMaterial(expected);
                 String actualBlock = BuiltInRegistries.BLOCK.getKey(actual.getBlock()).toString();
                 add(findings, "frontier.traversal.support.runtime", FoundrySeverity.ERROR, phase, "traversal_surface",
@@ -162,19 +175,56 @@ final class FrontierV3TraversalFoundryAudit {
                         "Loaded traversal support differs from the immutable materialization plan (expected "
                                 + expectedBlock + ", observed " + actualBlock + ").",
                         "Treat it as observed damage/conflict; do not repair or choose a hidden bypass.");
+            } else if (status == RuntimeSupportStatus.CURRENT) {
+                support.put(surface, RuntimeSurfaceStatus.CURRENT);
             }
         }
-        int blockedThroats = 0;
+        int blockedThroats = 0, openPorts = 0, blockedPorts = 0, unverifiedPorts = 0;
         for (FrontierTraversalPlan.FacilityBinding binding : scope.facilities()) {
+            List<ObservedPortHeadroom> headroom = new ArrayList<>();
             for (BlockPosition air : binding.port().thresholdHeadroomCells()) {
                 BlockPos position = minecraft(air);
-                if (!level.hasChunkAt(position)) { unloaded++; continue; }
+                if (!level.hasChunkAt(position)) {
+                    unloaded++;
+                    headroom.add(ObservedPortHeadroom.UNVERIFIED);
+                    continue;
+                }
+                headroom.add(level.getBlockState(position).isAir() ? ObservedPortHeadroom.CLEAR : ObservedPortHeadroom.BLOCKED);
                 if (level.getBlockState(position).isAir()) continue;
                 blockedThroats++;
-                add(findings, "frontier.port.throat.runtime", FoundrySeverity.ERROR, phase, "facility_port",
-                        binding.port().facilityId().value(), level, air,
-                        "Loaded facility throat lacks required two-body headroom.",
-                        "Record the blocked port and reconcile its availability; Foundry will not clear the block.");
+            }
+            RuntimePortAvailability availability = classifyPortAvailability(headroom);
+            switch (availability) {
+                case OPEN -> openPorts++;
+                case BLOCKED -> {
+                    blockedPorts++;
+                    BlockPosition throat = binding.port().thresholdSurface().support();
+                    add(findings, "frontier.port.availability.blocked", FoundrySeverity.ERROR, phase, "facility_port",
+                            binding.port().facilityId().value(), level, throat,
+                            "Loaded facility port is BLOCKED: its declared two-body throat no longer has complete headroom.",
+                            "Reconcile this exact semantic port as unavailable; Foundry will not clear the block or choose another entrance.");
+                }
+                case UNVERIFIED -> unverifiedPorts++;
+            }
+        }
+        int openEdges = 0, pendingEdges = 0, blockedEdges = 0, unverifiedEdges = 0;
+        for (TraversalTopology topology : scope.topologies()) {
+            for (TraversalTopology.Edge edge : topology.edges()) {
+                RuntimeEdgeAvailability availability = classifyEdgeAvailability(
+                        support.getOrDefault(topology.nodes().get(edge.from()), RuntimeSurfaceStatus.UNVERIFIED),
+                        support.getOrDefault(topology.nodes().get(edge.to()), RuntimeSurfaceStatus.UNVERIFIED));
+                switch (availability) {
+                    case OPEN -> openEdges++;
+                    case PENDING -> pendingEdges++;
+                    case UNVERIFIED -> unverifiedEdges++;
+                    case BLOCKED -> {
+                        blockedEdges++;
+                        add(findings, "frontier.traversal.edge.runtime.blocked", FoundrySeverity.ERROR, phase, "traversal_edge",
+                                topology.id().value() + "/" + edge.id().value(), level, topology.nodes().get(edge.from()).support(),
+                                "Loaded declared traversal edge is BLOCKED by observed support drift.",
+                                "Reconcile the retained edge availability; Foundry will not select or materialize a bypass.");
+                    }
+                }
             }
         }
         if (unloaded > 0) add(findings, "frontier.traversal.unverified", FoundrySeverity.WARNING, phase, "region", REGION_ID,
@@ -185,6 +235,13 @@ final class FrontierV3TraversalFoundryAudit {
         metrics.add(new FoundryMetric("frontier.traversal.runtime_pending", pending, "surfaces"));
         metrics.add(new FoundryMetric("frontier.traversal.runtime_mismatch", mismatch, "surfaces"));
         metrics.add(new FoundryMetric("frontier.port.runtime_blocked", blockedThroats, "ports"));
+        metrics.add(new FoundryMetric("frontier.port.runtime_open", openPorts, "ports"));
+        metrics.add(new FoundryMetric("frontier.port.runtime_blocked_ports", blockedPorts, "ports"));
+        metrics.add(new FoundryMetric("frontier.port.runtime_unverified", unverifiedPorts, "ports"));
+        metrics.add(new FoundryMetric("frontier.traversal.edge.runtime_open", openEdges, "edges"));
+        metrics.add(new FoundryMetric("frontier.traversal.edge.runtime_pending", pendingEdges, "edges"));
+        metrics.add(new FoundryMetric("frontier.traversal.edge.runtime_blocked", blockedEdges, "edges"));
+        metrics.add(new FoundryMetric("frontier.traversal.edge.runtime_unverified", unverifiedEdges, "edges"));
     }
 
     private static RuntimeScope runtimeScope(FrontierTraversalPlan plan,
@@ -192,13 +249,16 @@ final class FrontierV3TraversalFoundryAudit {
         if (facilityScope.isEmpty()) {
             Set<SurfaceAnchor> surfaces = new LinkedHashSet<>();
             plan.topologies().values().forEach(topology -> surfaces.addAll(topology.nodes().values()));
-            return new RuntimeScope(surfaces, List.copyOf(plan.facilities().values()));
+            return new RuntimeScope(surfaces, List.copyOf(plan.facilities().values()), List.copyOf(plan.topologies().values()));
         }
         FrontierTraversalPlan.FacilityBinding binding = plan.facilities().get(facilityScope.orElseThrow());
         if (binding == null) throw new IllegalArgumentException("frontier Foundry has no facility scope: " + facilityScope.orElseThrow());
         Set<SurfaceAnchor> surfaces = new LinkedHashSet<>(plan.publicTopologyFor(binding.port().facilityId()).nodes().values());
         surfaces.addAll(binding.port().ingressSurfaces());
-        return new RuntimeScope(surfaces, List.of(binding));
+        List<TraversalTopology> topologies = plan.topologies().values().stream()
+                .filter(topology -> topology.id().equals(binding.publicTopologyId()) || topology.provenance().equals(binding.port().facilityId()))
+                .toList();
+        return new RuntimeScope(surfaces, List.of(binding), topologies);
     }
 
     private static boolean matchesOwnedExpected(FrontierV3GrayboxLedger.Claim claim, GrayboxCell expected,
@@ -217,6 +277,21 @@ final class FrontierV3TraversalFoundryAudit {
         return matchesOwnedExpected(claim, expected, observed) ? RuntimeSupportStatus.CURRENT : RuntimeSupportStatus.MISMATCH;
     }
 
+    static RuntimePortAvailability classifyPortAvailability(List<ObservedPortHeadroom> cells) {
+        cells = List.copyOf(Objects.requireNonNull(cells, "port headroom observations"));
+        if (cells.size() != 2) throw new IllegalArgumentException("facility port requires exactly two headroom observations");
+        if (cells.contains(ObservedPortHeadroom.BLOCKED)) return RuntimePortAvailability.BLOCKED;
+        return cells.contains(ObservedPortHeadroom.UNVERIFIED) ? RuntimePortAvailability.UNVERIFIED : RuntimePortAvailability.OPEN;
+    }
+
+    static RuntimeEdgeAvailability classifyEdgeAvailability(RuntimeSurfaceStatus from, RuntimeSurfaceStatus to) {
+        from = Objects.requireNonNull(from, "edge from support status"); to = Objects.requireNonNull(to, "edge to support status");
+        if (from == RuntimeSurfaceStatus.MISMATCH || to == RuntimeSurfaceStatus.MISMATCH) return RuntimeEdgeAvailability.BLOCKED;
+        if (from == RuntimeSurfaceStatus.UNVERIFIED || to == RuntimeSurfaceStatus.UNVERIFIED) return RuntimeEdgeAvailability.UNVERIFIED;
+        if (from == RuntimeSurfaceStatus.PENDING || to == RuntimeSurfaceStatus.PENDING) return RuntimeEdgeAvailability.PENDING;
+        return RuntimeEdgeAvailability.OPEN;
+    }
+
     private static ObservedSupport observedSupport(GrayboxCell expected, net.minecraft.world.level.block.state.BlockState actual) {
         if (actual.isAir()) return ObservedSupport.AIR;
         return expected != null && actual.equals(FrontierV3GrayboxExecutor.material(expected.material()))
@@ -227,12 +302,16 @@ final class FrontierV3TraversalFoundryAudit {
         return BuiltInRegistries.BLOCK.getKey(FrontierV3GrayboxExecutor.material(expected.material()).getBlock()).toString();
     }
 
-    private record RuntimeScope(Set<SurfaceAnchor> surfaces, List<FrontierTraversalPlan.FacilityBinding> facilities) {
+    enum ObservedPortHeadroom { CLEAR, BLOCKED, UNVERIFIED }
+
+    private record RuntimeScope(Set<SurfaceAnchor> surfaces, List<FrontierTraversalPlan.FacilityBinding> facilities,
+                                List<TraversalTopology> topologies) {
         RuntimeScope {
             // The bounded global pass has a cap; preserve the compiler's deterministic scan
             // order rather than letting Set.copyOf randomize which locations make that cap.
             surfaces = Collections.unmodifiableSet(new LinkedHashSet<>(surfaces));
             facilities = List.copyOf(facilities);
+            topologies = List.copyOf(topologies);
         }
     }
 
