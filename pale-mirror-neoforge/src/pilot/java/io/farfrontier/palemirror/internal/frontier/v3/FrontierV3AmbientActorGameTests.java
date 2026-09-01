@@ -262,7 +262,7 @@ public final class FrontierV3AmbientActorGameTests {
     public static void hotScoutFollowsItsLeasedCanonicalPatrolStepRatherThanASeparateLocalCircle(GameTestHelper helper) {
         // Keep this footprint inside the stock template's isolated test cell: the full suite
         // runs many templates in parallel, whereas this proof needs only one four-block step.
-        ServerLevel level = helper.getLevel(); BlockPos feet = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, feet, 6);
+        ServerLevel level = helper.getLevel(); BlockPos feet = helper.absolutePos(new BlockPos(3, 8, 3)); prepareMotionArena(level, feet, 5, 3);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hot-scout-cursor"), 91L), new EphemeralStore(), 10_000);
         FrontierWorldState state = state(runtime); SubjectId scout = new SubjectId("bioform:west-1");
@@ -334,19 +334,19 @@ public final class FrontierV3AmbientActorGameTests {
 
     @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 260)
     public static void controlledMotionUsesTheClearLaneBesideRouteSurfaceButNeverPassesThroughAFullWall(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 12);
-        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 0), Blocks.GRAY_CARPET.defaultBlockState(), 3);
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(3, 8, 3)); prepareMotionArena(level, origin, 8, 5);
+        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 1), Blocks.GRAY_CARPET.defaultBlockState(), 3);
         Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("game test could not create resident body");
-        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 1.5D); body.setPersistenceRequired(); body.setNoAi(true);
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 2.5D); body.setPersistenceRequired(); body.setNoAi(true);
         helper.assertTrue(level.addFreshEntity(body), "the controlled-motion fixture must enter the loaded world");
         helper.runAfterDelay(1L, () -> driveMotion(helper, level, body,
-                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 1.5D), 120, () -> {
+                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 2.5D), 120, () -> {
             helper.assertTrue(body.getX() > origin.getX() + 4.0D,
                     "a resident must advance through the clear lane beside the materialized route surface");
-            body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 1.5D);
-            for (int z = -5; z <= 5; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
-            driveMotion(helper, level, body, new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 1.5D), 100, () -> {
+            body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 2.5D);
+            for (int z = 0; z <= 4; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+            driveMotion(helper, level, body, new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 2.5D), 100, () -> {
                 helper.assertTrue(body.getX() < origin.getX() + 3.0D,
                         "controlled motion may sidestep but must never cross a full materialized wall");
                 body.discard(); helper.succeed();
@@ -356,19 +356,19 @@ public final class FrontierV3AmbientActorGameTests {
 
     @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 320)
     public static void controlledMotionStepsOntoThinRouteSurfaceWithoutCrossingAFullWall(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, origin, 12);
-        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 0), Blocks.GRAY_CARPET.defaultBlockState(), 3);
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(3, 8, 3)); prepareMotionArena(level, origin, 8, 5);
+        for (int x = 1; x <= 6; x++) level.setBlock(origin.offset(x, 0, 2), Blocks.GRAY_CARPET.defaultBlockState(), 3);
         Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("game test could not create resident body");
-        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 2.5D); body.setPersistenceRequired(); body.setNoAi(true);
         helper.assertTrue(level.addFreshEntity(body), "the controlled-motion fixture must enter the loaded world");
         helper.runAfterDelay(1L, () -> driveMotion(helper, level, body,
-                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 0.5D), 160, () -> {
+                new Vec3(origin.getX() + 6.5D, origin.getY(), origin.getZ() + 2.5D), 160, () -> {
             helper.assertTrue(body.getX() > origin.getX() + 4.0D,
                     "a resident must step onto the visible route surface instead of stalling before it");
-            body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
-            for (int z = -1; z <= 1; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
-            driveMotion(helper, level, body, new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 0.5D), 120, () -> {
+            body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 2.5D);
+            for (int z = 0; z <= 4; z++) for (int y = 0; y <= 2; y++) level.setBlock(origin.offset(3, y, z), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+            driveMotion(helper, level, body, new Vec3(origin.getX() + 7.5D, origin.getY(), origin.getZ() + 2.5D), 120, () -> {
                 helper.assertTrue(body.getX() < origin.getX() + 3.0D,
                         "the low-step fallback must not climb or pass through a full graybox wall");
                 body.discard(); helper.succeed();
@@ -384,11 +384,22 @@ public final class FrontierV3AmbientActorGameTests {
     private static void prepareSquareFloor(ServerLevel level, BlockPos center, int radius) {
         for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) prepareFloor(level, center.offset(x, 0, z));
     }
+    /** Keeps a parallel GameTest fixture inside its own stock-template rectangle. */
+    private static void prepareMotionArena(ServerLevel level, BlockPos origin, int length, int width) {
+        for (int x = 0; x <= length; x++) for (int z = 0; z < width; z++) prepareFloor(level, origin.offset(x, 0, z));
+    }
     private static BodyPosition bodyAt(BlockPos feet) { return new BodyPosition(feet.getX(), feet.getY(), feet.getZ()); }
     private static void driveMotion(GameTestHelper helper, ServerLevel level, net.minecraft.world.entity.Mob body, Vec3 target, int remaining, Runnable complete) {
         if (remaining == 0) { complete.run(); return; }
         FrontierV3ControlledMobMotion.moveToward(level, body, target);
-        helper.runAfterDelay(1L, () -> driveMotion(helper, level, body, target, remaining - 1, complete));
+        helper.runAfterDelay(1L, () -> {
+            // GameTest callbacks are not ordered relative to EntityTickEvent.Pre. In production
+            // the event has normally consumed this one-tick intent; if it has not, consume the
+            // same registered actuator here rather than making this collision proof depend on
+            // callback ordering.
+            FrontierV3ControlledMobMotion.advance(body);
+            driveMotion(helper, level, body, target, remaining - 1, complete);
+        });
     }
     private static void driveContinuousPatrolSamples(GameTestHelper helper, ServerLevel level, Zombie body, BlockPos floor,
                                                       int remaining, List<Double> positions, Runnable complete) {
@@ -407,6 +418,7 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3ControlledMobMotion.followContinuously(level, body,
                 new Vec3(floor.getX() + 1.5D + sample * 0.02D, floor.getY(), floor.getZ() + 0.5D));
         helper.runAfterDelay(1L, () -> {
+            FrontierV3ControlledMobMotion.advance(body);
             positions.add(body.getX());
             driveContinuousPatrolSamples(helper, level, body, floor, remaining - 1, positions, complete);
         });
@@ -416,7 +428,10 @@ public final class FrontierV3AmbientActorGameTests {
                                      int remaining, Runnable complete) {
         if (remaining == 0) { complete.run(); return; }
         FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, actor, body, lease);
-        helper.runAfterDelay(1L, () -> drivePursuit(helper, level, runtime, state, actor, body, lease, remaining - 1, complete));
+        helper.runAfterDelay(1L, () -> {
+            FrontierV3ControlledMobMotion.advance(body);
+            drivePursuit(helper, level, runtime, state, actor, body, lease, remaining - 1, complete);
+        });
     }
     private static void driveLocalGoals(GameTestHelper helper, ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                         FrontierWorldState state, SubjectId farmer, Villager farmerBody, AmbientActorLease farmerLease,
