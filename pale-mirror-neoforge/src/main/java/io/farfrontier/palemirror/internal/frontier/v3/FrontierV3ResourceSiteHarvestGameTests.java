@@ -38,8 +38,10 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             ledger.reserve(site.id(), intent); helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "the harvest fixture must first materialize an exact active stage-zero field");
             ledger.activate(site.id());
-            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2)); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2));
+            level.setBlock(chestPosition, Blocks.AIR.defaultBlockState(), 3); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
             SubjectId depot = new SubjectId("container:resource-harvest-game-test"); ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, depot);
+            helper.assertTrue(chest != null, "the isolated harvest fixture must claim its fresh exact depot chest");
             ExactItemStack output = new ExactItemStack(new SubjectId("item:site-harvest-game-test-wheat"), new SubjectId("settlement:1"), "minecraft:wheat", 64,
                     new InventoryCustody.ContainerSlot(depot, 4));
             helper.assertValueEqual(FrontierV3ResourceSiteHarvestExecutor.precondition(level, site, ledger, chest, output),

@@ -45,6 +45,12 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 .filter(project -> project.status() != RouteConstructionStatus.CONFLICT)
                 .flatMap(project -> project.team().stream())
                 .forEach(team -> team.memberIds().forEach(id -> claim(values, id, HumanAssignmentKind.ENGINEERING_RECOVERY, team.ownerId())));
+        state.humanPopulation().medicalOperations().values().stream().sorted(Comparator.comparing(MedicalEvacuationOperation::id))
+                .filter(MedicalEvacuationOperation::active)
+                .forEach(operation -> {
+                    claim(values, operation.patientId(), HumanAssignmentKind.MEDICAL_EVACUATION, operation.id());
+                    operation.team().memberIds().forEach(id -> claim(values, id, HumanAssignmentKind.MEDICAL_EVACUATION, operation.id()));
+                });
         state.humanPopulation().migrations().values().stream().sorted(Comparator.comparing(ResidentMigrationJourney::residentId))
                 .forEach(journey -> claim(values, journey.residentId(), HumanAssignmentKind.TRANSIT, journey.residentId()));
         return new HumanAssignmentProjection(values);

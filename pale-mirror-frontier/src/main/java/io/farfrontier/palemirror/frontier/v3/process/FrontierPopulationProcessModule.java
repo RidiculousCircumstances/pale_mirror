@@ -28,6 +28,18 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
         }
+        if (command.payload() instanceof MedicalTreatmentSceneLeasePrepared prepared) {
+            try {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierMedicalTreatmentSceneSupport.owner(state,
+                        FrontierSceneBehaviors.medicalTreatment(prepared.lease())), prepared)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof MedicalTreatmentSceneLeaseHandoff handoff) {
+            try {
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierMedicalTreatmentSceneSupport.owner(state,
+                        FrontierSceneBehaviors.medicalTreatment(handoff.lease())), handoff)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         return FrontierWorldCommandPlanner.rejected("population process does not admit command: " + command.payload().type());
     }
 
@@ -48,6 +60,10 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case SettlementProvisionResolved resolved -> SettlementProvisionProcess.reduceResolved(state, event.subject(), resolved);
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
+            case MedicalTreatmentStarted started -> MedicalTreatmentProcess.reduceStarted(state, event.subject(), started);
+            case MedicalTreatmentTransition transition -> MedicalTreatmentProcess.reduceTransition(state, event.subject(), event.instant().ticks(), transition);
+            case MedicalTreatmentSceneLeasePrepared prepared -> reduceMedicalScenePrepared(state, event.subject(), event, prepared);
+            case MedicalTreatmentSceneLeaseHandoff handoff -> reduceMedicalSceneHandoff(state, event.subject(), event, handoff);
             default -> throw new IllegalArgumentException("population process does not own event: " + event.payload().type());
         };
     }
@@ -84,5 +100,25 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
         ResidentMigrationJourney journey = state.humanPopulation().migration(resumed.residentId());
         if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("migration resume lacks its origin settlement owner");
         return HumanPopulationStateSupport.resumeMigration(state, resumed);
+    }
+
+    private static FrontierWorldState reduceMedicalScenePrepared(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                                  MedicalTreatmentSceneLeasePrepared prepared) {
+        SceneLease lease = prepared.lease();
+        if (!subject.equals(FrontierMedicalTreatmentSceneSupport.owner(state, FrontierSceneBehaviors.medicalTreatment(lease)))
+                || !lease.handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("medical scene lease does not match its retained treatment");
+        }
+        return state.prepareSceneLease(lease);
+    }
+
+    private static FrontierWorldState reduceMedicalSceneHandoff(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                                 MedicalTreatmentSceneLeaseHandoff handoff) {
+        SceneLease lease = handoff.lease();
+        if (!subject.equals(FrontierMedicalTreatmentSceneSupport.owner(state, FrontierSceneBehaviors.medicalTreatment(lease)))
+                || !lease.handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("medical scene hand-off does not match its retained treatment");
+        }
+        return state.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
     }
 }

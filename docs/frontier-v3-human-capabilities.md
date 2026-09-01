@@ -227,6 +227,27 @@ current work only when its owner can name the people, equipment and objective.
   patients or an evacuation operation. It is not a combat-healing aura; its
   supplies, treatment and casualty outcomes are ordinary exact processes.
 
+### First medical owner
+
+The first treatment owner is one local `MedicalEvacuationOperation`: it retains
+one infected exact patient, one to three exact local medical workers, one
+intact local infirmary, one exact local-depot remedy stack and one durable
+physical-consumption intent. Its members derive the exclusive
+`MEDICAL_EVACUATION` assignment; the patient is also unavailable to every
+other current human owner. A settlement review admits no work if any of these
+facts is absent or another active care operation already claims the same
+person.
+
+The physical supply receipt is the causal boundary. Only an observed decrement
+of that exact owned stack may move the named patient to `RECOVERING`; a missing,
+altered or unresolved result is never turned into a free cure. An unknown
+restart result retains the same patient/team for recovery inspection. Completed
+receipts keep only a bounded recent audit tail, while active and unknown work
+is never compacted. The current implementation proves this durable COLD/exact
+receipt lifecycle. The next slice must give the same retained people one
+naturally loaded HOT infirmary scene; it may not introduce a separate mob team
+or claim a player-visible treatment before that scene exists.
+
 Larger formations are compositions of these units under a named operation, not
 a cohort abstraction. The numeric ranges are ruleset calibration, not Java
 constants: a small settlement may field fewer people, and a depleted or

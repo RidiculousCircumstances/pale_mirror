@@ -24,12 +24,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
             new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())),
             EngineeringWorkScenePayloadCodecs.codecs()); }
-    static PayloadCodecs populationCodecs() { return new PayloadCodecs(List.of(
+    static PayloadCodecs populationCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
             HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(), HumanPopulationPayloadCodecs.transitAdvanced(),
             HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(), SettlementProvisionPayloadCodecs.legacyStarted(),
             SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
-            HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition())); }
+            HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
+            MedicalTreatmentPayloadCodecs.started(), MedicalTreatmentPayloadCodecs.transition())),
+            MedicalTreatmentScenePayloadCodecs.codecs()); }
     static PayloadCodecs economyCodecs() { return new PayloadCodecs(List.of(new ProductionStartedCodec(), new ProductionCompletedCodec(),
             new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
             MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled())); }
@@ -41,7 +43,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(),
             new HiveNutrientTransferBlockedCodec(), new HiveNutrientTransferEndpointPreparedCodec(), StrategicPlanPayloadCodecs.hiveOperationObserved(),
             StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
-            StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(), StrategicPlanPayloadCodecs.scoutPatrolAdvanced()))); }
+            StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(), StrategicPlanPayloadCodecs.scoutPatrolAdvanced(),
+            StrategicPlanPayloadCodecs.scoutPatrolLeaseRecovered()))); }
     static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
             RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
             RouteConstructionPayloadCodecs.assemblyAdvanced(), RoutePatrolPayloadCodecs.started(),

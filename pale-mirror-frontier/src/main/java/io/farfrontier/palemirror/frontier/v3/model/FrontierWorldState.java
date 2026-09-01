@@ -41,7 +41,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans); Objects.requireNonNull(hiveColony, "hive colony");
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans);
+        MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents); Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
@@ -267,6 +268,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
+                    && !humanPopulation.medicalOperations().containsKey(intent.causeSubjectId())
                     && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
                     && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
@@ -287,7 +289,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
                         && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
-                        && !humanPopulation.provisions().containsKey(subject)
+                        && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)
                         && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
                         && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
@@ -309,7 +311,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
-        FrontierSceneLeaseValidationSupport.validate(bootstrap, actorLocations, structureConditions, operations, routeConstructions, strategicPlans, sceneLeases, activelyAmbientLeased);
+        FrontierSceneLeaseValidationSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, operations, routeConstructions, strategicPlans, sceneLeases, activelyAmbientLeased);
         }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
@@ -443,8 +445,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (patrolClaim) throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
         }
     }
-    private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); }
-    private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
+    private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); } private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
     FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures,
                             Map<InfectionCell, FixedRatio> nextInfection, ExactInventory nextInventory, Map<SubjectId, ProductionJob> jobs,
                             Map<SubjectId, SupplyContract> nextContracts, Map<SubjectId, RouteOperation> nextOperations,
@@ -754,7 +755,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
         if (current == null) throw new IllegalArgumentException("unknown physical intent: " + intentId.value());
         boolean allowed = current.status() == PhysicalIntentStatus.PREPARED && (nextStatus == PhysicalIntentStatus.RUNNING || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
-                || current.status() == PhysicalIntentStatus.RUNNING && (nextStatus == PhysicalIntentStatus.CONFIRMED || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART);
+                || current.status() == PhysicalIntentStatus.RUNNING && (nextStatus == PhysicalIntentStatus.CONFIRMED || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                || current.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && nextStatus == PhysicalIntentStatus.CONFIRMED;
         if (!allowed) throw new IllegalArgumentException("physical intent transition is not allowed");
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
@@ -872,7 +874,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     /** Atomically records loaded-body evidence, closes ambient authority and prepares one scene. */ public FrontierWorldState handoffAmbientScene(SceneLeaseHandoff handoff) { return FrontierSceneLeaseStateSupport.handoff(this, handoff); }
     public FrontierWorldState transitionSceneLease(SceneLeaseId leaseId, SceneLeaseStatus nextStatus) { return FrontierSceneLeaseStateSupport.transition(this, Objects.requireNonNull(leaseId, "scene lease id"), nextStatus); }
     public FrontierWorldState releaseSceneLease(SceneLeaseId leaseId, java.util.List<SceneMemberPosition> positions) { return FrontierSceneLeaseStateSupport.release(this, Objects.requireNonNull(leaseId, "scene lease id"), positions); }
-    public FrontierWorldState recordActorDeath(ActorDied death) {
+    public FrontierWorldState recordActorDeath(ActorDied death, long atTick) {
         Objects.requireNonNull(death, "actor death");
         SceneLease lease = sceneLeases.get(death.leaseId());
         if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
@@ -884,8 +886,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.position());
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         nextActors.put(death.actorId(), current.deadAt(death.position()));
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        HumanPopulation nextPopulation = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick); return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(nextPopulation));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
     public FrontierWorldState compactTerminalLogistics(SubjectId operationId, long terminalAtTick) {
@@ -948,8 +949,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.spawn(bioform), structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); }
-    public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
+    public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); } public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
     public FrontierWorldState consumeHiveGrowthBiomass(SubjectId jobId, SubjectId itemId) { return HiveGrowthStateSupport.consume(this, jobId, itemId); }
     public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
     public boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }

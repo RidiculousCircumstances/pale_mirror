@@ -17,7 +17,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                               Map<SubjectId, SettlementQuarantine> quarantines,
                               Map<SubjectId, ResidentMigrationJourney> migrations,
                               Map<SubjectId, SettlementProvision> provisions,
-                              Map<SubjectId, ResidentNutrition> nutrition) {
+                              Map<SubjectId, ResidentNutrition> nutrition,
+                              Map<SubjectId, MedicalEvacuationOperation> medicalOperations) {
     public static final int MAX_HOUSEHOLDS = 1_024;
     public static final int MAX_RESIDENTS = 4_096;
     public static final int MAX_BIRTH_JOBS = 1_024;
@@ -29,6 +30,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         households = immutable(households, "households"); residents = immutable(residents, "residents"); birthJobs = immutable(birthJobs, "resident birth jobs");
         health = immutable(health, "resident health"); quarantines = immutable(quarantines, "settlement quarantines"); migrations = immutable(migrations, "resident migrations");
         provisions = immutable(provisions, "settlement provisions"); nutrition = immutable(nutrition, "resident nutrition");
+        medicalOperations = immutable(medicalOperations, "medical operations");
         if (households.size() > MAX_HOUSEHOLDS || residents.size() > MAX_RESIDENTS || birthJobs.size() > MAX_BIRTH_JOBS
                 || migrations.size() > MAX_MIGRATIONS || provisions.size() > MAX_PROVISIONS) {
             throw new IllegalArgumentException("human population retention limit exceeded");
@@ -68,26 +70,39 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 throw new IllegalArgumentException("migration journey must bind one resident, origin and destination household");
             }
         }
+        if (medicalOperations.size() > MedicalEvacuationOperation.MAX_RETAINED) throw new IllegalArgumentException("medical operation retention limit exceeded");
+        for (Map.Entry<SubjectId, MedicalEvacuationOperation> entry : medicalOperations.entrySet()) {
+            MedicalEvacuationOperation operation = entry.getValue();
+            ResidentProfile patient = residents.get(operation.patientId());
+            boolean foreignMember = false;
+            for (SubjectId member : operation.team().memberIds()) {
+                ResidentProfile medic = residents.get(member);
+                if (medic == null || !medic.settlementId().equals(operation.settlementId())) { foreignMember = true; break; }
+            }
+            if (!entry.getKey().equals(operation.id()) || patient == null || !patient.settlementId().equals(operation.settlementId()) || foreignMember) {
+                throw new IllegalArgumentException("medical operation must retain local exact patient and team");
+            }
+        }
     }
 
     /** Compatibility constructor for population-only fixtures; all exact people start healthy and settlements normal. */
     public HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
                            Map<SubjectId, ResidentBirthJob> birthJobs) {
-        this(households, residents, birthJobs, healthy(residents), normalQuarantines(residents), Map.of(), initialProvisions(residents), nourished(residents));
+        this(households, residents, birthJobs, healthy(residents), normalQuarantines(residents), Map.of(), initialProvisions(residents), nourished(residents), Map.of());
     }
 
     /** Compatibility constructor for fixtures that explicitly provide health and quarantine state. */
     public HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
                            Map<SubjectId, ResidentBirthJob> birthJobs, Map<SubjectId, ResidentHealth> health,
                            Map<SubjectId, SettlementQuarantine> quarantines) {
-        this(households, residents, birthJobs, health, quarantines, Map.of(), initialProvisions(residents), nourished(residents));
+        this(households, residents, birthJobs, health, quarantines, Map.of(), initialProvisions(residents), nourished(residents), Map.of());
     }
 
     /** Compatibility constructor for a persisted population preceding provision tracking. */
     public HumanPopulation(Map<SubjectId, Household> households, Map<SubjectId, ResidentProfile> residents,
                            Map<SubjectId, ResidentBirthJob> birthJobs, Map<SubjectId, ResidentHealth> health,
                            Map<SubjectId, SettlementQuarantine> quarantines, Map<SubjectId, ResidentMigrationJourney> migrations) {
-        this(households, residents, birthJobs, health, quarantines, migrations, initialProvisions(residents), nourished(residents));
+        this(households, residents, birthJobs, health, quarantines, migrations, initialProvisions(residents), nourished(residents), Map.of());
     }
 
     public static HumanPopulation bootstrap(FrontierBootstrap bootstrap) {
@@ -104,7 +119,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal)));
             }
         }
-        return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents), Map.of(), initialProvisions(residents), nourished(residents));
+        return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents), Map.of(), initialProvisions(residents), nourished(residents), Map.of());
     }
 
     private static Map<ResidentSkill, Integer> skills(ResidentRole role, int ordinal) {
@@ -142,7 +157,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         if (!households.containsKey(resident.householdId())) throw new IllegalArgumentException("resident birth needs an existing household");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
         return new HumanPopulation(households, next, birthJobs, withHealthy(health, resident.id(), resident.birthTick()), quarantines, migrations, provisions,
-                withNourished(nutrition, resident.id()));
+                withNourished(nutrition, resident.id()), medicalOperations);
     }
 
     /** Replaces mutable social capability data without changing one person's identity or home membership. */
@@ -153,7 +168,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
             throw new IllegalArgumentException("resident profile replacement must preserve exact household and settlement membership");
         }
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(resident.id(), resident);
-        return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition);
+        return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation migrate(SubjectId residentId, SubjectId householdId, SubjectId settlementId) {
@@ -162,14 +177,14 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Household household = households.get(Objects.requireNonNull(householdId, "household id"));
         if (household == null || !household.settlementId().equals(settlementId)) throw new IllegalArgumentException("migration needs a household in its destination settlement");
         Map<SubjectId, ResidentProfile> next = new LinkedHashMap<>(residents); next.put(residentId, resident.relocated(settlementId, householdId));
-        return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition);
+        return new HumanPopulation(households, next, birthJobs, health, quarantines, migrations, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation startBirth(ResidentBirthJob job) {
         Objects.requireNonNull(job, "resident birth job");
         if (birthJobs.containsKey(job.id()) || residents.containsKey(job.resident().id())) throw new IllegalArgumentException("resident birth identity already exists");
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.put(job.id(), job);
-        return new HumanPopulation(households, residents, next, health, quarantines, migrations, provisions, nutrition);
+        return new HumanPopulation(households, residents, next, health, quarantines, migrations, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation completeBirth(SubjectId jobId) {
@@ -178,20 +193,20 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
         Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents); nextResidents.put(job.resident().id(), job.resident());
         return new HumanPopulation(households, nextResidents, next, withHealthy(health, job.resident().id(), job.resident().birthTick()), quarantines, migrations,
-                provisions, withNourished(nutrition, job.resident().id()));
+                provisions, withNourished(nutrition, job.resident().id()), medicalOperations);
     }
 
     public HumanPopulation cancelBirth(SubjectId jobId) {
         if (!birthJobs.containsKey(Objects.requireNonNull(jobId, "resident birth job id"))) throw new IllegalArgumentException("unknown resident birth job");
         Map<SubjectId, ResidentBirthJob> next = new LinkedHashMap<>(birthJobs); next.remove(jobId);
-        return new HumanPopulation(households, residents, next, health, quarantines, migrations, provisions, nutrition);
+        return new HumanPopulation(households, residents, next, health, quarantines, migrations, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation transitionHealth(SubjectId residentId, ResidentHealthStatus nextStatus, long tick) {
         ResidentHealth current = health.get(Objects.requireNonNull(residentId, "resident health resident"));
         if (current == null) throw new IllegalArgumentException("unknown resident health subject");
         Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(health); next.put(residentId, current.transition(nextStatus, tick));
-        return new HumanPopulation(households, residents, birthJobs, next, quarantines, migrations, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, next, quarantines, migrations, provisions, nutrition, medicalOperations);
     }
 
     /** Applies one exact food outcome once to one exact resident. */
@@ -199,14 +214,14 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         ResidentNutrition current = nutrition(residentId);
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
         next.put(residentId, fed ? current.fed(cycle) : current.missed(cycle));
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next, medicalOperations);
     }
 
     public HumanPopulation transitionQuarantine(SubjectId settlementId, SettlementQuarantineStatus nextStatus, long tick) {
         SettlementQuarantine current = quarantines.get(Objects.requireNonNull(settlementId, "quarantine settlement"));
         if (current == null) throw new IllegalArgumentException("unknown settlement quarantine");
         Map<SubjectId, SettlementQuarantine> next = new LinkedHashMap<>(quarantines); next.put(settlementId, current.transition(nextStatus, tick));
-        return new HumanPopulation(households, residents, birthJobs, health, next, migrations, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, next, migrations, provisions, nutrition, medicalOperations);
     }
 
     public ResidentMigrationJourney migration(SubjectId residentId) { return migrations.get(residentId); }
@@ -215,13 +230,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Objects.requireNonNull(journey, "migration journey");
         if (migrations.containsKey(journey.residentId())) throw new IllegalArgumentException("resident already has an active migration journey");
         Map<SubjectId, ResidentMigrationJourney> next = new LinkedHashMap<>(migrations); next.put(journey.residentId(), journey);
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation advanceMigration(SubjectId residentId, int nextRouteIndex) {
         ResidentMigrationJourney journey = requireMigration(residentId);
         Map<SubjectId, ResidentMigrationJourney> next = new LinkedHashMap<>(migrations); next.put(residentId, journey.advanceTo(nextRouteIndex));
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition, medicalOperations);
     }
 
     public long inboundHousingReservations(SubjectId settlementId) {
@@ -231,13 +246,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public HumanPopulation blockMigration(SubjectId residentId, ResidentMigrationBlockReason reason) {
         ResidentMigrationJourney journey = requireMigration(residentId);
         Map<SubjectId, ResidentMigrationJourney> next = new LinkedHashMap<>(migrations); next.put(residentId, journey.block(reason));
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation resumeMigration(SubjectId residentId) {
         ResidentMigrationJourney journey = requireMigration(residentId);
         Map<SubjectId, ResidentMigrationJourney> next = new LinkedHashMap<>(migrations); next.put(residentId, journey.resume());
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation completeMigration(SubjectId residentId, SubjectId householdId, SubjectId settlementId) {
@@ -248,13 +263,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents);
         nextResidents.put(residentId, residents.get(residentId).relocated(settlementId, householdId));
         Map<SubjectId, ResidentMigrationJourney> nextMigrations = new LinkedHashMap<>(migrations); nextMigrations.remove(residentId);
-        return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines, nextMigrations, provisions, nutrition);
+        return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines, nextMigrations, provisions, nutrition, medicalOperations);
     }
 
     public HumanPopulation cancelMigration(SubjectId residentId) {
         if (!migrations.containsKey(residentId)) return this;
         Map<SubjectId, ResidentMigrationJourney> next = new LinkedHashMap<>(migrations); next.remove(residentId);
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, next, provisions, nutrition, medicalOperations);
     }
 
     public int activeCases(SubjectId settlementId) {
@@ -272,7 +287,34 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         Objects.requireNonNull(provision, "settlement provision");
         if (!provisions.containsKey(provision.settlementId())) throw new IllegalArgumentException("unknown settlement provision");
         Map<SubjectId, SettlementProvision> next = new LinkedHashMap<>(provisions); next.put(provision.settlementId(), provision);
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, next, nutrition);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, next, nutrition, medicalOperations);
+    }
+
+    public HumanPopulation startMedicalOperation(MedicalEvacuationOperation operation) {
+        Objects.requireNonNull(operation, "medical operation");
+        if (medicalOperations.containsKey(operation.id()) || medicalOperations.values().stream().anyMatch(active -> active.active()
+                && (active.patientId().equals(operation.patientId()) || active.team().memberIds().stream().anyMatch(operation.team().memberIds()::contains)))) {
+            throw new IllegalArgumentException("medical operation conflicts with an active exact patient or team");
+        }
+        Map<SubjectId, MedicalEvacuationOperation> next = compactCompletedMedicalOperations(); next.put(operation.id(), operation);
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, nutrition, next);
+    }
+
+    public HumanPopulation transitionMedicalOperation(SubjectId operationId, MedicalEvacuationStatus status, long atTick) {
+        MedicalEvacuationOperation operation = medicalOperations.get(Objects.requireNonNull(operationId, "medical operation"));
+        if (operation == null) throw new IllegalArgumentException("unknown medical operation");
+        Map<SubjectId, MedicalEvacuationOperation> next = new LinkedHashMap<>(medicalOperations); next.put(operationId, operation.withStatus(status, atTick));
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, nutrition, next);
+    }
+
+    private Map<SubjectId, MedicalEvacuationOperation> compactCompletedMedicalOperations() {
+        java.util.List<MedicalEvacuationOperation> removable = medicalOperations.values().stream().filter(MedicalEvacuationOperation::compactable)
+                .sorted(java.util.Comparator.comparingLong(MedicalEvacuationOperation::terminalAtTick).thenComparing(MedicalEvacuationOperation::id)).toList();
+        int discard = Math.max(0, removable.size() - MedicalEvacuationOperation.RETAINED_COMPLETED);
+        if (discard == 0) return new LinkedHashMap<>(medicalOperations);
+        Set<SubjectId> remove = removable.stream().limit(discard).map(MedicalEvacuationOperation::id).collect(java.util.stream.Collectors.toSet());
+        Map<SubjectId, MedicalEvacuationOperation> next = new LinkedHashMap<>(medicalOperations); remove.forEach(next::remove);
+        return next;
     }
 
     private static Map<SubjectId, ResidentHealth> healthy(Map<SubjectId, ResidentProfile> residents) {

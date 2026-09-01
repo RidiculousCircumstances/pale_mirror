@@ -70,8 +70,32 @@ public final class HiveScoutPatrolProcess {
         return state.withActorLocation(scout.id(), advanced.position());
     }
 
+    /**
+     * Reconciles one observed old HOT lease target without granting an unobserved patrol move.
+     * This is retained for deployed leases written before the exact next-cursor contract.
+     */
+    public static FrontierWorldState reduceLeaseRecovered(FrontierWorldState state, SubjectId subject, ScoutPatrolLeaseRecovered recovered) {
+        if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("scout patrol recovery has a foreign owner");
+        Bioform scout = scout(state, recovered.scoutId());
+        AmbientActorLease lease = state.ambientLeases().get(scout.id());
+        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        if (state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE || lease == null
+                || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.SCOUT_PATROL
+                || !recovered.priorCanonicalPosition().equals(current) || !recovered.observedLeasePosition().equals(lease.goalPosition())
+                || !nextPosition(state, scout, recovered.observedLeasePosition()).equals(recovered.nextGoalPosition())) {
+            throw new IllegalArgumentException("scout patrol recovery lacks one observed obsolete HOT lease cursor");
+        }
+        FrontierWorldState observed = state.withActorLocation(scout.id(), recovered.observedLeasePosition());
+        return AmbientLeaseStateProcess.retarget(observed, scout.id(), AmbientGoalKind.SCOUT_PATROL, recovered.nextGoalPosition());
+    }
+
     public static BlockPosition nextPosition(FrontierWorldState state, Bioform scout) {
         return nextPosition(state, scout, state.actorLocations().get(scout.id()).position());
+    }
+
+    /** Exact adapter-facing cursor lookup; it does not mutate state or inspect Minecraft. */
+    public static BlockPosition nextPosition(FrontierWorldState state, SubjectId scoutId, BlockPosition current) {
+        return nextPosition(state, scout(state, scoutId), current);
     }
 
     public static BlockPosition nextPosition(FrontierWorldState state, Bioform scout, BlockPosition current) {

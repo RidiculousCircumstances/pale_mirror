@@ -32,6 +32,17 @@ public final class ExactItemConsumptionStateSupport {
             }
             return claim;
         }
+        MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+        if (medical != null) {
+            if (!medical.consumptionIntentId().equals(intent.id()) || !intent.subjectIds().equals(List.of(medical.id(), medical.supplyItemId()))) {
+                throw new IllegalArgumentException("exact consumption does not bind its medical treatment");
+            }
+            Claim claim = ownedActiveClaim(state, medical.supplyItemId(), FrontierWorldState.depotId(medical.settlementId())::equals, "settlement depot", 1);
+            if (!claim.ownerId().equals(medical.settlementId()) || !MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(claim.item().itemKind())) {
+                throw new IllegalArgumentException("medical treatment has no exact local supply");
+            }
+            return claim;
+        }
         for (SettlementProvision provision : state.humanPopulation().provisions().values()) {
             if (provision.activeIntentId().filter(intent.id()::equals).isEmpty()) continue;
             SettlementRationAllocation allocation = provision.currentOrActiveAllocation();

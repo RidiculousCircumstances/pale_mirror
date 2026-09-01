@@ -26,6 +26,13 @@ final class RouteConstructionTeamStateSupport {
         plans.settlementAssaults().values().stream().filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> assigned.addAll(assault.defenderIds()));
         population.migrations().keySet().forEach(assigned::add);
+        population.medicalOperations().values().stream().filter(MedicalEvacuationOperation::active)
+                .forEach(operation -> {
+                    if (!assigned.add(operation.patientId())) throw new IllegalArgumentException("medical operation must retain an unassigned exact patient");
+                    operation.team().memberIds().forEach(member -> {
+                    if (!assigned.add(member)) throw new IllegalArgumentException("medical operation must retain distinct exact residents");
+                    });
+                });
         for (RouteConstruction project : constructions.values()) {
             if (project.team().isEmpty()) continue; // schema-83 historical autonomous work is preserved, never upgraded silently.
             EngineeringRecoveryTeam team = project.team().orElseThrow();

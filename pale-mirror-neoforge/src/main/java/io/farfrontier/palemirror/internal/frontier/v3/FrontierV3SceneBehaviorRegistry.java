@@ -26,6 +26,8 @@ final class FrontierV3SceneBehaviorRegistry {
                     lease -> FrontierSceneBehaviors.settlementAssault(lease).assaultId(), false),
             new Behavior(SceneCauseKind.ENGINEERING_WORKSITE, FrontierV3EngineeringWorkSceneExecutor::tick,
                     lease -> null, false),
+            new Behavior(SceneCauseKind.MEDICAL_TREATMENT, FrontierV3MedicalTreatmentSceneExecutor::tick,
+                    lease -> null, false),
             new Behavior(SceneCauseKind.LOGISTICS, FrontierV3SceneExecutor::tickLogistics,
                     lease -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true)));
 

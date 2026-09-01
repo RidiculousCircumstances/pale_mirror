@@ -246,7 +246,7 @@ class HiveRouteEngagementProcessTest {
                 FixedScalar.whole(20), FixedScalar.ZERO);
         FrontierWorldState struck = hot.preparePhysicalIntent(strikeIntent)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
-                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).position(), "scene-strike-test"))
+                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).position(), "scene-strike-test"), 0L)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
         assertEquals(strikeReceipt, struck.physicalObservations().get(strikeReceipt.id()));
@@ -262,7 +262,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
         SubjectId deadActor = candidate.actorIds().stream().filter(actor -> !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
-        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).position(), "restart-fixture"));
+        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).position(), "restart-fixture"), 0L);
         List<SceneMemberPosition> surviving = candidate.actorIds().stream().filter(actor -> !actor.equals(deadActor))
                 .map(actor -> new SceneMemberPosition(actor, afterRecordedDeath.actorLocations().get(actor).position(), afterRecordedDeath.actorLocations().get(actor).condition().health())).toList();
         FrontierWorldState drainedRecovery = afterRecordedDeath.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)

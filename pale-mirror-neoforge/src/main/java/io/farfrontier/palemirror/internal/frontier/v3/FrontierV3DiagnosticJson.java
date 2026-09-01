@@ -221,11 +221,15 @@ final class FrontierV3DiagnosticJson {
         String role = resident != null ? resident.role().name() : bioform != null ? bioform.role().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
+        var lease = state.ambientLeases().get(subject);
+        String ambientGoal = lease == null ? "NONE" : lease.goal().name();
+        String goalPosition = lease == null ? "null" : position(lease.goalPosition());
         return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
                 + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.position())
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
-                + quote(state.ambientLeases().containsKey(subject) ? state.ambientLeases().get(subject).status().name() : "NONE") + "\""
+                + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
+                + "\",\"goalPosition\":" + goalPosition
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
 

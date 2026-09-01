@@ -15,7 +15,7 @@ world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
 `hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-nutrient-transfer`,
-`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `health-quarantine`
+`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `hot-scout-patrol-recovery`, `health-quarantine`
 or `resident-transit`. These fail-closed development fixtures are available
 only to the named disposable pilot runner. `hot-scene-strike` selects a
 deterministic canonical HOT engagement. `hive-growth` stops the real

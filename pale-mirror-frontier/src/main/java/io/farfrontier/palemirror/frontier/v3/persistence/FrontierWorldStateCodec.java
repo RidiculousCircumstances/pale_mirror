@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 87; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 90; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -61,7 +61,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
                     && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75
                     && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81
-                    && version != 82 && version != 83 && version != 84 && version != 85 && version != VERSION) {
+                    && version != 82 && version != 83 && version != 84 && version != 85 && version != 86 && version != 87 && version != 88 && version != 89 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -83,7 +83,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
             StrategicPlanState plans = StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version);
-            HumanPopulation population = HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81);
+            HumanPopulation population = HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81, version >= 88, version >= 89);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, topology, plans, population, companies, sites);
@@ -733,6 +733,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         if (cause instanceof EngineeringWorkSceneCause engineering) {
             output.writeByte(2); writeString(output, engineering.projectId().value()); output.writeInt(engineering.workCellIndex()); return;
         }
+        if (cause instanceof MedicalTreatmentSceneCause medical) { output.writeByte(3); writeString(output, medical.operationId().value()); return; }
         throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
     }
     private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
@@ -740,10 +741,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             case 0 -> SceneCauseKind.LOGISTICS;
             case 1 -> new SceneCauseKind.Assault(new SubjectId(readString(input)), new SubjectId(readString(input)));
             case 2 -> new SceneCauseKind.Engineering(new SubjectId(readString(input)), input.readInt());
+            case 3 -> new SceneCauseKind.Medical(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown scene cause kind");
         };
     }
-    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering {
+    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering, SceneCauseKind.Medical {
         SceneCauseKind LOGISTICS = new Logistics();
         SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
         final class Logistics implements SceneCauseKind {
@@ -759,6 +761,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         record Engineering(SubjectId projectId, int workCellIndex) implements SceneCauseKind {
             @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
                 return new EngineeringWorkSceneCause(projectId, workCellIndex);
+            }
+        }
+        record Medical(SubjectId operationId) implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
+                return new MedicalTreatmentSceneCause(operationId);
             }
         }
     }

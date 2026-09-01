@@ -329,6 +329,26 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Test-only recovery precondition for a persisted pre-cursor ambient Scout lease.  The
+     * fixture owns no body and does not inject an event after startup: an ordinary visit must
+     * materialize the exact prepared Scout, and the production observer must durably rebase the
+     * obsolete same-floor target before normal patrol can resume.
+     */
+    static AmbientScoutPatrolFixture hotScoutPatrolRecoveryFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Bioform scout = state.bootstrap().hive().bioforms().stream()
+                .filter(value -> value.id().equals(new SubjectId("bioform:west-1"))).findFirst()
+                .orElseThrow(() -> new IllegalStateException("scout patrol recovery fixture requires west Scout"));
+        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        AmbientActorLease generated = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
+        AmbientActorLease legacyPrepared = new AmbientActorLease(scout.id(), generated.handoffPosition(), generated.handoffInstant(),
+                generated.revision(), AmbientLeaseStatus.PREPARED, AmbientGoalKind.SCOUT_PATROL, current);
+        state = AmbientLeaseStateProcess.prepare(state, legacyPrepared);
+        return new AmbientScoutPatrolFixture(state, SimInstant.ZERO, List.of(), scout.id(), current,
+                HiveScoutPatrolProcess.nextPosition(state, scout, current));
+    }
+
+    /**
      * Stops at the ordinary cargo-loaded assembly boundary before its first COLD step.  The
      * disposable native pilot must load the port and advance these exact people through normal
      * HOT movement; it cannot use the fixture to start travel or move a resident.
@@ -502,6 +522,13 @@ final class FrontierDevelopmentScenarios {
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         RouteSceneReturnFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record AmbientScoutPatrolFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                     SubjectId scoutId, BlockPosition priorPosition, BlockPosition nextGoalPosition) {
+        AmbientScoutPatrolFixture {
             schedules = List.copyOf(schedules);
         }
     }

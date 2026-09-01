@@ -156,6 +156,7 @@ public final class StrategicObjectiveProcess {
         List<ProposedEvent> health = state.bootstrap().hive().id().equals(owner) ? List.of()
                 : HumanHealthProcess.assess(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         boolean hive = state.bootstrap().hive().id().equals(owner);
+        List<ProposedEvent> medical = hive ? List.of() : MedicalTreatmentProcess.planStart(state, owner, ordinal);
         SettlementPerceptionProcess.Refresh perception = hive ? new SettlementPerceptionProcess.Refresh(state.strategicPlans().infectionKnowledge(), List.of())
                 : SettlementPerceptionProcess.refreshLocalInfection(state, FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.dueAt().ticks());
         HivePerceptionProcess.Refresh hivePerception = hive ? HivePerceptionProcess.refresh(state, action.dueAt().ticks())
@@ -173,8 +174,8 @@ public final class StrategicObjectiveProcess {
                 .withHiveSettlementKnowledge(settlementPerception.knowledge()).withHiveDoctrine(doctrine));
         List<ProposedEvent> doctrineEvent = hive && !doctrine.equals(state.strategicPlans().hiveDoctrine())
                 ? List.of(new ProposedEvent(owner, new HiveDoctrineSelected(doctrine))) : List.of();
-        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()),
-                territoryPerception.events()), settlementPerception.events()), doctrineEvent), health);
+        List<ProposedEvent> observedAndHealth = concatenate(concatenate(concatenate(concatenate(concatenate(concatenate(perception.events(), hivePerception.events()),
+                territoryPerception.events()), settlementPerception.events()), doctrineEvent), health), medical);
         Optional<Candidate> candidate = candidate(decisionState, owner, allowHiveInterception, action.dueAt().ticks(), interceptSighting);
         if (candidate.map(Candidate::kind).orElse(null) == StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && HiveRouteEngagementProcess.hasPendingOrActiveInterception(state)) {
@@ -191,7 +192,7 @@ public final class StrategicObjectiveProcess {
             events.addAll(List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(preparation)),
                     new ProposedEvent(owner, new StrategicTaskPlanned(delivery)), new ProposedEvent(owner,
                             new ScheduleEffect.Created(SupplyOperationProcess.start(preparation, action.dueAt().ticks() + 100L)))));
-            events.addAll(health); events.addAll(next); return List.copyOf(events);
+            events.addAll(health); events.addAll(medical); events.addAll(next); return List.copyOf(events);
         }
         StrategicTask task = task(state, objective, value.operationTarget(), value.operationObservationPosition());
         if (task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL) {

@@ -18,6 +18,11 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), advanced)));
         }
+        if (command.payload() instanceof ScoutPatrolLeaseRecovered recovered) {
+            try { HiveScoutPatrolProcess.reduceLeaseRecovered(state, state.bootstrap().hive().id(), recovered); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), recovered)));
+        }
         if (command.payload() instanceof HotScoutOperationObserved observed) {
             try { HivePerceptionProcess.reduceHot(state, state.bootstrap().hive().id(), observed); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -49,6 +54,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HiveDoctrineSelected selected -> HiveDoctrineProcess.reduce(state, event.subject(), selected);
             case HotScoutOperationObserved observed -> HivePerceptionProcess.reduceHot(state, event.subject(), observed);
             case ScoutPatrolAdvanced advanced -> HiveScoutPatrolProcess.reduce(state, event.subject(), advanced);
+            case ScoutPatrolLeaseRecovered recovered -> HiveScoutPatrolProcess.reduceLeaseRecovered(state, event.subject(), recovered);
             case RouteEngagementStarted started -> HiveRouteEngagementProcess.reduceStarted(state, event.subject(), started);
             case RouteEngagementAttackerAdvanced advanced -> HiveRouteEngagementProcess.reduceAdvanced(state, event.subject(), advanced);
             case RouteEngagementTransition transition -> HiveRouteEngagementProcess.reduceTransition(state, event.subject(), transition);

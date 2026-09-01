@@ -19,7 +19,7 @@ import java.util.Set;
  */
 public final class FrontierSceneBehaviors {
     private static final FrontierSceneBehaviors CURRENT = new FrontierSceneBehaviors(List.of(
-            new LogisticsBehavior(), new SettlementAssaultBehavior(), new EngineeringWorksiteBehavior()));
+            new LogisticsBehavior(), new SettlementAssaultBehavior(), new EngineeringWorksiteBehavior(), new MedicalTreatmentBehavior()));
 
     private final Map<SceneCauseKind, SceneBehavior<?>> behaviors;
 
@@ -80,17 +80,19 @@ public final class FrontierSceneBehaviors {
     public static EngineeringWorkSceneCause engineeringWorksite(SceneLease lease) {
         return behavior(lease).engineeringWorksite(lease);
     }
+    public static MedicalTreatmentSceneCause medicalTreatment(SceneLease lease) { return behavior(lease).medicalTreatment(lease); }
 
     public static boolean isLogistics(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.LOGISTICS; }
     public static boolean isSettlementAssault(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.SETTLEMENT_ASSAULT; }
     public static boolean isEngineeringWorksite(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.ENGINEERING_WORKSITE; }
+    public static boolean isMedicalTreatment(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.MEDICAL_TREATMENT; }
     public static boolean owns(SceneLease lease, SubjectId subjectId) { return behavior(lease).owns(lease, subjectId); }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) { behavior(lease).validatePrepared(state, lease); }
-    static Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+    static Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                           Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                           Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans, SceneLease lease, Set<SubjectId> leasedOperations) {
-        return behavior(lease).expectedMembers(bootstrap, actors, structures, operations, constructions, plans, lease, leasedOperations);
+        return behavior(lease).expectedMembers(bootstrap, population, actors, structures, operations, constructions, plans, lease, leasedOperations);
     }
     static StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
         return behavior(lease).transitionPlans(state, lease, nextStatus);
@@ -100,6 +102,10 @@ public final class FrontierSceneBehaviors {
     }
     static BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
         return behavior(lease).releasedPosition(state, lease, actorId, observed);
+    }
+    /** Cause-owned state that must transition atomically with a recorded scene death. */
+    static HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+        return behavior(lease).afterActorDeath(state, lease, actorId, atTick);
     }
 
     interface SceneBehavior<C extends SceneCause> {
@@ -122,15 +128,21 @@ public final class FrontierSceneBehaviors {
         default EngineeringWorkSceneCause engineeringWorksite(SceneLease lease) {
             throw new IllegalStateException("scene behavior has no engineering-worksite binding: " + kind());
         }
+        default MedicalTreatmentSceneCause medicalTreatment(SceneLease lease) {
+            throw new IllegalStateException("scene behavior has no medical-treatment binding: " + kind());
+        }
         boolean owns(SceneLease lease, SubjectId subjectId);
         SubjectId owner(FrontierWorldState state, SceneLease lease);
         void validatePrepared(FrontierWorldState state, SceneLease lease);
-        Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+        Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                        Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                        Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans, SceneLease lease, Set<SubjectId> leasedOperations);
         StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus);
         StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease);
         BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed);
+        default HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+            return state.humanPopulation();
+        }
     }
 
     private static final class LogisticsBehavior implements SceneBehavior<LogisticsSceneCause> {
@@ -154,7 +166,7 @@ public final class FrontierSceneBehaviors {
                 throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
             }
         }
-        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans, SceneLease lease, Set<SubjectId> leasedOperations) {
             LogisticsSceneCause cause = cause(lease);
@@ -216,7 +228,7 @@ public final class FrontierSceneBehaviors {
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).assaultId().equals(subjectId); }
         @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) { return FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).hiveId(); }
         @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) { FrontierSettlementAssaultSceneSupport.validatePrepared(state, lease); }
-        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans, SceneLease lease, Set<SubjectId> leasedOperations) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(plans, cause(lease));
@@ -254,7 +266,7 @@ public final class FrontierSceneBehaviors {
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).projectId().equals(subjectId); }
         @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) { return FrontierEngineeringWorkSceneSupport.owner(state, cause(lease)); }
         @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) { FrontierEngineeringWorkSceneSupport.validatePrepared(state, lease); }
-        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actors,
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans,
                                                          SceneLease lease, Set<SubjectId> leasedOperations) {
@@ -277,5 +289,47 @@ public final class FrontierSceneBehaviors {
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
         @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) { return observed; }
+    }
+
+    /** The care owner itself, rather than a synthetic medic mob, owns every treatment scene. */
+    private static final class MedicalTreatmentBehavior implements SceneBehavior<MedicalTreatmentSceneCause> {
+        @Override public SceneCauseKind kind() { return SceneCauseKind.MEDICAL_TREATMENT; }
+        @Override public Class<MedicalTreatmentSceneCause> causeType() { return MedicalTreatmentSceneCause.class; }
+        @Override public MedicalTreatmentSceneCause sampleCause() { return new MedicalTreatmentSceneCause(new SubjectId("medical:registry")); }
+        @Override public MedicalTreatmentSceneCause medicalTreatment(SceneLease lease) { return cause(lease); }
+        @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).operationId().equals(subjectId); }
+        @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) { return FrontierMedicalTreatmentSceneSupport.owner(state, cause(lease)); }
+        @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) { FrontierMedicalTreatmentSceneSupport.validatePrepared(state, lease); }
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
+                                                         Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
+                                                         Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans,
+                                                         SceneLease lease, Set<SubjectId> leasedOperations) {
+            MedicalEvacuationOperation operation = population.medicalOperations().get(cause(lease).operationId());
+            if (operation == null) throw new IllegalArgumentException("medical scene has no exact operation");
+            boolean valid = switch (lease.status()) {
+                case PREPARED -> operation.status() == MedicalEvacuationStatus.PREPARED;
+                case HOT, DRAINING -> operation.status() == MedicalEvacuationStatus.PREPARED || operation.status() == MedicalEvacuationStatus.TREATING
+                        || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART || operation.status() == MedicalEvacuationStatus.COMPLETED
+                        || operation.status() == MedicalEvacuationStatus.BLOCKED;
+                case UNKNOWN_AFTER_RESTART -> operation.status() == MedicalEvacuationStatus.PREPARED || operation.status() == MedicalEvacuationStatus.TREATING
+                        || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART;
+                case CONFLICT -> operation.active();
+                // A pre-effect scene may close when no player remains.  Its retained COLD
+                // operation is intentionally eligible for a later naturally loaded scene.
+                case CLOSED -> operation.status() == MedicalEvacuationStatus.PREPARED || operation.status() == MedicalEvacuationStatus.COMPLETED
+                        || operation.status() == MedicalEvacuationStatus.BLOCKED;
+            };
+            if (!valid) throw new IllegalArgumentException("medical scene and operation lifecycle disagree");
+            Set<SubjectId> members = new HashSet<>(operation.team().memberIds()); members.add(operation.patientId()); return Set.copyOf(members);
+        }
+        @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
+        @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
+        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) { return observed; }
+        @Override public HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+            MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));
+            return operation.active() && (operation.patientId().equals(actorId) || operation.team().memberIds().contains(actorId))
+                    ? state.humanPopulation().transitionMedicalOperation(operation.id(), MedicalEvacuationStatus.BLOCKED, atTick)
+                    : state.humanPopulation();
+        }
     }
 }

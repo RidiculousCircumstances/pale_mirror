@@ -11,7 +11,9 @@ public enum SceneLeaseStatus {
             case DRAINING -> next == UNKNOWN_AFTER_RESTART || next == CONFLICT;
             case CLOSED -> false;
             // Reclaim is observation-only: the adapter must find every already-owned body.
-            case UNKNOWN_AFTER_RESTART -> next == HOT || next == DRAINING;
+            // PREPARED is recovery of an already materialized pre-effect assembly: the same
+            // bodies were observed again, but no treatment effect had become eligible yet.
+            case UNKNOWN_AFTER_RESTART -> next == PREPARED || next == HOT || next == DRAINING;
             // A loaded-world obstruction is not restart evidence. It remains visible until a
             // future attributed conflict-resolution boundary has admitted fresh preparation.
             case CONFLICT -> next == PREPARED;

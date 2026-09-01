@@ -52,10 +52,11 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
         InventoryCustody.WorldCarrier firstCarrier = (InventoryCustody.WorldCarrier) released.custody();
         helper.assertValueEqual(state(runtime), new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state(runtime))),
                 "the released world-carrier custody survives snapshot hydration without a second stack");
-        // addFreshEntity becomes visible through the level UUID index on the following tick;
-        // the causal boundary is already durable above, so wait only for that vanilla observation.
+        // GameTest batches may delay the global UUID index even after the nearby entity is live.
+        // The physical postcondition is the one local, UUID-bound exact stack, not index timing.
         helper.runAfterDelay(5, () -> {
-            helper.assertTrue(level.getEntity(firstCarrier.carrierId()) instanceof ItemEntity drop && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), first),
+            helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, firstBody.getBoundingBox().inflate(2.0D),
+                            drop -> firstCarrier.carrierId().equals(drop.getUUID()) && FrontierV3CargoHandoffExecutor.exactMatch(drop.getItem(), first)).size() == 1,
                     "one tagged physical drop proves the matching hand was released instead of recreated");
             runtime.shutdown();
             FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =

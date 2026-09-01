@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumedObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
@@ -35,7 +36,10 @@ final class FrontierV3ExactItemConsumptionExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
                 .filter(intent -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION)
-                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
+                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
+                        || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                .filter(intent -> !state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())
+                        || FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent))
                 .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
     }
 
@@ -45,7 +49,9 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
-        if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(runtime, intent, target, chest); return; }
+        if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            inspectRunning(runtime, intent, target, chest); return;
+        }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!consume(chest, target)) { unknown(runtime, intent.id(), "precondition-conflict"); return; }
         confirm(runtime, intent, target);

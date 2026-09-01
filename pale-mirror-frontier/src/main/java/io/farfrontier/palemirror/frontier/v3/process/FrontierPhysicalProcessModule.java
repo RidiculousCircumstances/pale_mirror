@@ -131,6 +131,13 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
             if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
+            if (state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())) {
+                MedicalTreatmentProcess.operationForIntent(state, intent);
+                if (!subject.equals(state.humanPopulation().medicalOperations().get(intent.causeSubjectId()).settlementId())) {
+                    throw new IllegalArgumentException("medical treatment must be prepared by its settlement");
+                }
+                return state.preparePhysicalIntent(intent);
+            }
             if (state.humanPopulation().provisions().containsKey(intent.causeSubjectId())) return SettlementProvisionProcess.reducePrepared(state, subject, intent);
             throw new IllegalArgumentException("exact consumption has no supported owning process");
         }
@@ -208,6 +215,12 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
             if (birth != null) {
                 if (!subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
+                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            }
+            MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+            if (medical != null) {
+                MedicalTreatmentProcess.operationForIntent(state, intent);
+                if (!subject.equals(medical.settlementId())) throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
                 return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
             }
             if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {

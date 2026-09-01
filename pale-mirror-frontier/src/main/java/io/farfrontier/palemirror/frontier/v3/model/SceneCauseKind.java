@@ -9,5 +9,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public enum SceneCauseKind {
     LOGISTICS,
     SETTLEMENT_ASSAULT,
-    ENGINEERING_WORKSITE
+    ENGINEERING_WORKSITE,
+    MEDICAL_TREATMENT
 }

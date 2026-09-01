@@ -105,6 +105,31 @@ class HiveScoutPatrolProcessTest {
         assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalPosition());
     }
 
+    @Test void observedObsoleteHotLeaseTargetRebasesOnceWithoutForgingAnOrdinaryPatrolStep() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-recovery"), 91L));
+        Bioform scout = scout(state); BlockPosition prior = state.actorLocations().get(scout.id()).position();
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
+        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);
+        // The deployed r41 failure case: a pre-cursor HOT lease still points at the Scout's
+        // current canonical floor.  Minecraft has not moved the body, so recovery may only
+        // durably retarget that same owned body to the deterministic next perimeter cursor.
+        state = AmbientLeaseStateProcess.retarget(state, scout.id(), AmbientGoalKind.SCOUT_PATROL, prior);
+        ScoutPatrolLeaseRecovered recovered = new ScoutPatrolLeaseRecovered(scout.id(), prior, prior,
+                HiveScoutPatrolProcess.nextPosition(state, scout, prior));
+
+        FrontierWorldState rebased = HiveScoutPatrolProcess.reduceLeaseRecovered(state, state.bootstrap().hive().id(), recovered);
+        assertEquals(prior, rebased.actorLocations().get(scout.id()).position());
+        assertEquals(recovered.nextGoalPosition(), rebased.ambientLeases().get(scout.id()).goalPosition());
+        assertEquals(recovered, FrontierWorldRuntimeDefinition.payloadCodecs().decode(recovered.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(recovered)));
+        assertEquals(rebased, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(rebased)));
+        FrontierWorldState stale = state;
+        BlockPosition forgedObserved = HiveScoutPatrolProcess.nextPosition(stale, scout, prior);
+        assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduceLeaseRecovered(stale, stale.bootstrap().hive().id(),
+                new ScoutPatrolLeaseRecovered(scout.id(), prior, forgedObserved, lease.goalPosition())),
+                "a recovery must bind the observed old lease target and its one deterministic successor");
+    }
+
     @Test void deployedLegacyPatrolPayloadStillDecodesWithoutGrantingHotMovement() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-legacy"), 91L));
         Bioform scout = scout(state); BlockPosition legacyPosition = state.bootstrap().hive().seedNests().stream()

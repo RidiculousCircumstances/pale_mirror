@@ -55,7 +55,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled",
             "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2",
             "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
-            "frontier.resident_health_transition", "frontier.settlement_quarantine_transition");
+            "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
+            "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
+            "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
     private static final Set<String> ECONOMY = types(
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
@@ -71,7 +73,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.hive_nutrient_transfer_advanced", "frontier.hive_nutrient_transfer_completed",
             "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
             "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed",
-            "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced",
+            "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
             "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
             "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved",
             "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
@@ -244,7 +246,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> populationCommands() { return types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
-    private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced"); }
+    private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered"); }
     private static Set<String> strategyCommands() { return Set.of(); }
 
     private static Set<String> logisticsSchedules() { return types(
@@ -290,7 +292,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
                     "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
-                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.company_registered", "frontier.employment_contract_opened",
+                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started",
+                    "frontier.medical_treatment_transition", "frontier.company_registered", "frontier.employment_contract_opened",
                     "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
                     "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started",
                     "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
@@ -319,7 +322,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed", "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started",
                     "frontier.hive_nutrient_transfer_advanced", "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked",
                     "frontier.hive_nutrient_transfer_endpoint_prepared", "frontier.hive_operation_observed", "frontier.hive_territory_observed",
-                    "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced",
+                    "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
                     "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced", "frontier.route_engagement_transition", "frontier.route_engagement_strike",
                     "frontier.route_engagement_resolved", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
@@ -328,7 +331,9 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
-                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.physical_delta_observed",
+                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
+                    "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
+                    "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
                     "frontier.cargo_carrier_released");
@@ -355,7 +360,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",
                     "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
                     "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
-                    "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
+                    "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
                     "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.production_interrupted",
@@ -374,14 +379,14 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
                     "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
-                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.settlement_infection_observed",
+                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition", "frontier.settlement_infection_observed",
                     "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "strategy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
-                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
+                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.settlement_infection_observed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition",
                     "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed",
                     "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",

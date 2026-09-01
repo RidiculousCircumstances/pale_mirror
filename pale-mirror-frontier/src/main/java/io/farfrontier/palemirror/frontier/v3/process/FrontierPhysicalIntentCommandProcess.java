@@ -88,6 +88,14 @@ public final class FrontierPhysicalIntentCommandProcess {
         if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) {
             return new CommandPlan.Accepted(PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
         }
+        if (state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())) {
+            if ((transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
+                    || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED)
+                    && !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) {
+                return rejected("medical treatment consumption requires its current HOT infirmary scene");
+            }
+            return new CommandPlan.Accepted(MedicalTreatmentProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+        }
         if (state.humanPopulation().provisions().containsKey(intent.causeSubjectId())) {
             return new CommandPlan.Accepted(SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
         }

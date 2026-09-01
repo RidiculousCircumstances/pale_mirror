@@ -110,6 +110,22 @@ final class StrategicPlanPayloadCodecs {
                 subject(input), input.readLong(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()),
                 input.available() == 0 ? Optional.empty() : optionalPosition(input))); }
     }; }
+    static PayloadCodec scoutPatrolLeaseRecovered() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.scout_patrol_lease_recovered"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            ScoutPatrolLeaseRecovered recovered = (ScoutPatrolLeaseRecovered) payload;
+            subject(output, recovered.scoutId()); position(output, recovered.priorCanonicalPosition());
+            position(output, recovered.observedLeasePosition()); position(output, recovered.nextGoalPosition());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new ScoutPatrolLeaseRecovered(subject(input), position(input), position(input), position(input))); }
+    }; }
+    private static void position(DataOutputStream output, BlockPosition position) throws IOException {
+        output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
+    }
+    private static BlockPosition position(DataInputStream input) throws IOException {
+        return new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+    }
     private static void writeObjective(DataOutputStream output, StrategicObjective value) throws IOException {
         subject(output, value.id()); subject(output, value.ownerId()); output.writeByte(value.kind().wireTag()); target(output, value.infectionTarget());
         optionalSubject(output, value.resourceSiteTarget());

@@ -12,9 +12,11 @@ class FrontierV3SceneBehaviorRegistryTest {
     @Test
     void registryRejectsMissingAndDuplicatePhysicalSceneBehaviorsBeforeWorldMutation() {
         assertDoesNotThrow(() -> FrontierV3SceneBehaviorRegistration.requireCompleteKinds(List.of(
-                SceneCauseKind.SETTLEMENT_ASSAULT, SceneCauseKind.ENGINEERING_WORKSITE, SceneCauseKind.LOGISTICS)));
+                SceneCauseKind.SETTLEMENT_ASSAULT, SceneCauseKind.ENGINEERING_WORKSITE,
+                SceneCauseKind.MEDICAL_TREATMENT, SceneCauseKind.LOGISTICS)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3SceneBehaviorRegistration.requireCompleteKinds(List.of(SceneCauseKind.LOGISTICS)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3SceneBehaviorRegistration.requireCompleteKinds(List.of(
-                SceneCauseKind.LOGISTICS, SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT, SceneCauseKind.ENGINEERING_WORKSITE)));
+                SceneCauseKind.LOGISTICS, SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT,
+                SceneCauseKind.ENGINEERING_WORKSITE, SceneCauseKind.MEDICAL_TREATMENT)));
     }
 }

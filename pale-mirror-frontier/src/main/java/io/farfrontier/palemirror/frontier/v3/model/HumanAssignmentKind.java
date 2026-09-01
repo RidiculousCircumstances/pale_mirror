@@ -10,5 +10,6 @@ public enum HumanAssignmentKind {
     ROUTE_PATROL,
     SETTLEMENT_DEFENCE,
     ENGINEERING_RECOVERY,
+    MEDICAL_EVACUATION,
     TRANSIT
 }

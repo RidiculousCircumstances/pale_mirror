@@ -55,6 +55,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("routeSceneReturn", FrontierV3FixtureCatalog::routeSceneReturnConfiguration),
             Map.entry("hotScoutSighting", FrontierV3FixtureCatalog::hotScoutSightingConfiguration),
             Map.entry("hotScoutIntercept", FrontierV3FixtureCatalog::hotScoutInterceptConfiguration),
+            Map.entry("hotScoutPatrolRecovery", FrontierV3FixtureCatalog::hotScoutPatrolRecoveryConfiguration),
             Map.entry("operationAssembly", FrontierV3FixtureCatalog::operationAssemblyConfiguration),
             Map.entry("healthQuarantine", FrontierV3FixtureCatalog::healthQuarantineConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
@@ -167,6 +168,11 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutInterceptConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutInterceptFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false, true);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutPatrolRecoveryConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.AmbientScoutPatrolFixture fixture = FrontierDevelopmentScenarios.hotScoutPatrolRecoveryFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false, true);
     }
 

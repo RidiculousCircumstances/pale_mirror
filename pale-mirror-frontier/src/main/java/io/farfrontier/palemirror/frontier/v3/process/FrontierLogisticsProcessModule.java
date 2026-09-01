@@ -124,7 +124,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             case SceneLeaseTransition transition -> reduceSceneTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceRecoveryUnresolved(state, event.subject(), unresolved);
-            case ActorDied death -> reduceActorDied(state, event.subject(), death);
+            case ActorDied death -> reduceActorDied(state, event.subject(), event.instant().ticks(), death);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case TerminalLogisticsCompacted compacted -> reduceCompacted(state, event.subject(), event.instant().ticks(), compacted);
             default -> throw new IllegalArgumentException("logistics process does not own event: " + event.payload().type());
@@ -142,6 +142,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), released))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), released))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -182,6 +186,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -373,10 +381,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return FrontierSceneLeaseStateSupport.recoveryUnresolved(state, unresolved);
     }
 
-    private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, ActorDied death) {
+    private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, long atTick, ActorDied death) {
         SceneLease lease = state.sceneLeases().get(death.leaseId());
         if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("actor death lacks its owning scene");
-        return state.recordActorDeath(death);
+        return state.recordActorDeath(death, atTick);
     }
 
     private static FrontierWorldState reduceOperationFailed(FrontierWorldState state, SubjectId subject, OperationFailed failed) {

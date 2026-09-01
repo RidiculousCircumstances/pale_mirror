@@ -25,9 +25,11 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolLeaseRecovered;
 import io.farfrontier.palemirror.frontier.v3.model.HotScoutOperationObserved;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
@@ -597,6 +599,17 @@ final class FrontierV3AmbientActorExecutor {
                                                       SubjectId actorId, Mob body, AmbientActorLease lease) {
         BlockPosition current = state.actorLocations().get(actorId).position();
         if (!sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        BlockPosition expected = HiveScoutPatrolProcess.nextPosition(state, actorId, current);
+        if (!lease.goalPosition().equals(expected)) {
+            // A persisted pre-cursor lease may still name an old target.  The body has reached
+            // that exact owned target, so record the observed hand-off and establish the only
+            // following cursor; do not forge an ordinary advance to a non-next position.
+            io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol-recover", actorId.value(),
+                    new ScoutPatrolLeaseRecovered(actorId, current, lease.goalPosition(),
+                            HiveScoutPatrolProcess.nextPosition(state, actorId, lease.goalPosition())));
+            FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_lease_recovered", actorId, result);
+            return true;
+        }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol", actorId.value(),
                 new ScoutPatrolAdvanced(actorId, runtime.checkpointImage().orElseThrow().instant().ticks(), lease.goalPosition(), java.util.Optional.of(current)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
