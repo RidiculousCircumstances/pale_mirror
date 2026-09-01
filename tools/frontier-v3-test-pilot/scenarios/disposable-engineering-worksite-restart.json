@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "disposable_engineering_worksite_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "engineering-worksite" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": true, "confirmedCells": 0 } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -404, "y": 65, "z": 416 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "construction:route-reroute-settlement-1--366-64--304", "expect": { "status": "ok", "sceneKind": "ENGINEERING_WORKSITE", "leaseStatus": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--366-64--304", "expect": { "status": "ok", "eventKind": "route_construction_cell_built", "subject": "construction:route-reroute-settlement-1--366-64--304" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 }, "timeoutMs": 30000 }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 3,
+    "resumeSetup": [ { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -404, "y": 65, "z": 416 }, "settleMs": 1500 } ] },
+  "assertions": [
+    { "after": 2, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 } },
+    { "after": 3, "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--366-64--304", "expect": { "status": "ok", "eventKind": "route_construction_cell_built", "subject": "construction:route-reroute-settlement-1--366-64--304" } },
+    { "after": 4, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 } }
+  ],
+  "frames": [ { "after": 2, "name": "engineering-worksite-repair" } ]
+}

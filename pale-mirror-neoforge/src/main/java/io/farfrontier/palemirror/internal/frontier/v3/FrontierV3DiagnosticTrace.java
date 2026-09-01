@@ -69,6 +69,13 @@ final class FrontierV3DiagnosticTrace {
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
             return;
         }
+        if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
+            var engineering = FrontierSceneBehaviors.engineeringWorksite(lease);
+            record(server, "engineering:" + engineering.projectId().value(), kind, engineering.projectId(), result,
+                    new Context("", lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+            return;
+        }
         var logistics = FrontierSceneBehaviors.logistics(lease);
         record(server, "operation:" + logistics.operationId().value(), kind, logistics.operationId(), result,
                 new Context(logistics.operationId().value(), lease.id().value(), logistics.cargoId().value(),

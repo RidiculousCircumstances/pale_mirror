@@ -48,6 +48,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("defenderEquipment", FrontierV3FixtureCatalog::defenderEquipmentConfiguration),
             Map.entry("defenderEquipmentReturn", FrontierV3FixtureCatalog::defenderEquipmentReturnConfiguration),
             Map.entry("engineeringEquipment", FrontierV3FixtureCatalog::engineeringEquipmentConfiguration),
+            Map.entry("engineeringWorksite", FrontierV3FixtureCatalog::engineeringWorksiteConfiguration),
             Map.entry("hiveGrowth", FrontierV3FixtureCatalog::hiveGrowthConfiguration),
             Map.entry("hiveNutrientTransfer", FrontierV3FixtureCatalog::hiveNutrientTransferConfiguration),
             Map.entry("settlementProvision", FrontierV3FixtureCatalog::settlementProvisionConfiguration),
@@ -116,6 +117,11 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> engineeringEquipmentConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteConstructionFixture fixture = FrontierDevelopmentScenarios.engineeringEquipmentFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> engineeringWorksiteConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.RouteConstructionFixture fixture = FrontierDevelopmentScenarios.engineeringWorksiteFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
     }
 

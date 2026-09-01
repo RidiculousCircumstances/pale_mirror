@@ -141,6 +141,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                         new ScheduleEffect.Created(HiveSettlementAssaultProcess.combat(assault, command.submittedAt().ticks() + 20L)))));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), released))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
         RouteOperation operation = state.operations().get(logistics.operationId());
         if (operation == null) return FrontierWorldCommandPlanner.rejected("scene lease has no owning operation");
@@ -174,6 +178,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             return FrontierWorldCommandPlanner.rejected("scene recovery evidence does not bind one unresolved restart lease");
         }
         if (FrontierSceneBehaviors.isSettlementAssault(lease)) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }

@@ -42,7 +42,13 @@ public final class FrontierEngineeringWorkSceneSupport {
     }
 
     public static SubjectId owner(FrontierWorldState state, EngineeringWorkSceneCause cause) {
-        return require(state, cause).settlementId();
+        // A confirmed physical cell advances the construction cursor before its old HOT
+        // work-site lease drains.  Owner resolution is intentionally broader than admission:
+        // the old lease must still close or recover under the same project/settlement after
+        // that advance, rather than being misread as a logistics scene or becoming ownerless.
+        RouteConstruction project = state.routeConstructions().get(cause.projectId());
+        if (project == null) throw new IllegalArgumentException("engineering scene has no active construction project");
+        return project.settlementId();
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {

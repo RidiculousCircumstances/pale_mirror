@@ -168,6 +168,46 @@ final class FrontierDevelopmentScenarios {
         return new RouteConstructionFixture(state, new SimInstant(200L), List.of(RouteConstructionProcess.scan(1, 200L)), project.id());
     }
 
+    /**
+     * Test-only postcondition fixture for the physical work boundary. It retains the ordinary
+     * project/team identities, moves only their already-issued exact tools and creates the same
+     * one-unit cargo split used by the production receipt path. Minecraft remains untouched
+     * until an ordinary player visit admits the HOT work-site scene.
+     */
+    static RouteConstructionFixture engineeringWorksiteFixture(WorldId worldId, long seed) {
+        RouteConstructionFixture base = engineeringEquipmentFixture(worldId, seed);
+        FrontierWorldState state = base.state();
+        RouteConstruction project = state.routeConstructions().get(base.projectId());
+        EngineeringRecoveryTeam team = project.team().orElseThrow();
+        ExactInventory inventory = state.inventory();
+        for (SubjectId member : team.memberIds()) {
+            ExactItemStack tool = inventory.items().values().stream().filter(item -> item.economicOwnerId().equals(project.settlementId()))
+                    .filter(item -> EngineeringToolCustody.isTool(item.itemKind())).filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot)
+                    .findFirst().orElseThrow(() -> new IllegalStateException("engineering worksite fixture needs one exact depot tool per member"));
+            inventory = inventory.moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(member));
+        }
+        SubjectId maintenance = FrontierRouteNetwork.MAINTENANCE_CONTAINER;
+        SubjectId source = new SubjectId("item:fixture-engineering-worksite-concrete");
+        inventory = inventory.withSurfaceStatus(maintenance, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(maintenance, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(source, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
+                        new InventoryCustody.ContainerSlot(maintenance, inventory.firstFreeSlot(maintenance).orElseThrow())));
+        CargoBatch cargo = new CargoBatch(project.plannedCargoId(), FrontierRouteNetwork.OWNER, List.of(project.plannedCargoItemId()));
+        inventory = inventory.extractOneToCargo(source, cargo, project.plannedCargoItemId());
+        EngineeringWorkAssembly compiled = EngineeringWorksite.compile(state, project);
+        java.util.Map<SubjectId, EngineeringWorkAssembly.Member> completed = new java.util.LinkedHashMap<>();
+        java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
+        compiled.members().forEach((member, approach) -> {
+            EngineeringWorkAssembly.Member arrived = new EngineeringWorkAssembly.Member(approach.corridor(), approach.corridor().size() - 1);
+            completed.put(member, arrived);
+            locations.put(member, new ActorLocation(arrived.currentPosition(), locations.get(member).condition()));
+        });
+        RouteConstruction ready = new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
+                project.status(), java.util.Optional.of(cargo.id()), project.team(), java.util.Optional.of(new EngineeringWorkAssembly(completed)));
+        java.util.Map<SubjectId, RouteConstruction> projects = new java.util.LinkedHashMap<>(state.routeConstructions()); projects.put(ready.id(), ready);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).actorLocations(locations).routeConstructions(projects));
+        return new RouteConstructionFixture(state, base.instant(), List.of(), ready.id());
+    }
+
     private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
