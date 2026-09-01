@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -52,29 +51,24 @@ public record EngineeringWorkAssembly(Map<SubjectId, Member> members) {
         return safeAdvances().stream().findFirst();
     }
 
-    /** All currently safe moves in canonical actor order; callers may apply further ownership gates. */
+    /** All currently unoccupied next cursors in canonical actor order. */
     public List<SubjectId> safeAdvances() {
         java.util.LinkedHashSet<SubjectId> movable = new java.util.LinkedHashSet<>();
-        members.keySet().stream().sorted().forEach(actor -> advanceLeader(actor, new HashSet<>()).ifPresent(movable::add));
+        members.keySet().stream().sorted().forEach(actor -> {
+            Member member = members.get(actor);
+            if (!member.arrived() && members.entrySet().stream().noneMatch(entry -> !entry.getKey().equals(actor)
+                    && entry.getValue().currentPosition().equals(member.corridor().get(member.cursor() + 1)))) {
+                movable.add(actor);
+            }
+        });
         return movable.stream().sorted().toList();
-    }
-
-    /** Resolves a queue from its empty leading cell backwards; cycles and arrived blockers stay COLD. */
-    private Optional<SubjectId> advanceLeader(SubjectId actor, Set<SubjectId> visiting) {
-        Member member = members.get(actor);
-        if (member == null || member.arrived() || !visiting.add(actor)) return Optional.empty();
-        BlockPosition next = member.corridor().get(member.cursor() + 1);
-        SubjectId blocker = members.entrySet().stream().filter(entry -> !entry.getKey().equals(actor))
-                .filter(entry -> entry.getValue().currentPosition().equals(next)).map(Map.Entry::getKey).findFirst().orElse(null);
-        if (blocker == null) return Optional.of(actor);
-        return advanceLeader(blocker, visiting);
     }
 
     /** One ordered COLD turn advances exactly one retained person by one existing corridor cell. */
     public EngineeringWorkAssembly advance(SubjectId actorId) {
         SubjectId actor = Objects.requireNonNull(actorId, "engineering assembly advance actor");
         Member current = members.get(actor);
-        if (current == null || current.arrived()) throw new IllegalArgumentException("engineering assembly actor cannot advance");
+        if (current == null || current.arrived() || !safeAdvances().contains(actor)) throw new IllegalArgumentException("engineering assembly actor cannot safely advance");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
         next.put(actor, new Member(current.corridor(), current.cursor() + 1));
         return new EngineeringWorkAssembly(next);

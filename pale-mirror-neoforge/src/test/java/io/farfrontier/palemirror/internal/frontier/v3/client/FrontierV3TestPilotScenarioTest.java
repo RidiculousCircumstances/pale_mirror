@@ -232,4 +232,12 @@ class FrontierV3TestPilotScenarioTest {
                 {"view":"traversal_foundry","id":"compiled","expect":{"status":"ok","passed":true}}]}],"actions":[]}""");
         assertEquals(1, parsed.setupCount());
     }
+
+    @Test
+    void permitsTheReadOnlyDeclaredRouteTopologyFixtureGate() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"assert_fixture","timeoutMs":30000,"checks":[
+                {"view":"route_topology","id":"settlement:1","expect":{"status":"ok","gradedEdges":4}}]}],"actions":[]}""");
+        assertEquals(1, parsed.setupCount());
+    }
 }

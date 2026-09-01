@@ -182,6 +182,25 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesDeclaredGradeFactsWithoutSurveyingOrChangingTheRoute(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:diagnostic-stepped-route-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+
+        String topology = FrontierV3DiagnosticJson.render("route_topology", "settlement:1", checkpoint, state, Optional.empty());
+
+        assertTrue(topology.contains("\"status\":\"ok\"") && topology.contains("\"gradedEdges\":4")
+                        && topology.contains("\"maximumGrade\":1"),
+                "one bounded read-only diagnostic exposes the declared topology grade rather than a Minecraft height-map guess");
+        assertTrue(topology.contains("\"from\":{\"x\":-370,\"y\":64,\"z\":-343}")
+                        && topology.contains("\"to\":{\"x\":-371,\"y\":65,\"z\":-343}"));
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a route-topology diagnostic may not mutate canonical state");
+        runtime.shutdown();
+    }
+
+    @Test
     void exposesOneExactTransitCursorWithoutAdvancingTheJourney(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierV3FixtureCatalog.residentTransitConfiguration(new WorldId("frontier:diagnostic-transit-test"), 91L),

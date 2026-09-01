@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,7 +62,8 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("medicalTreatment", FrontierV3FixtureCatalog::medicalTreatmentConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
-            Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration));
+            Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
+            Map.entry("steppedRoute", FrontierV3FixtureCatalog::steppedRouteConfiguration));
     private static final Catalog CATALOG = loadCatalog();
     public static final String DEFAULT_PROFILE = CATALOG.defaultProfile();
     private static final Map<String, Profile> PROFILES = CATALOG.profiles();
@@ -205,6 +207,35 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkerDeathConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    /**
+     * Test-only surveyed rise on Northwatch's normal supply corridor.  It changes no runtime
+     * provider and does not manufacture terrain: the native pilot must place the four ordinary
+     * support blocks (including the one block required to build the high support) before the
+     * existing graybox executor may project the three raised route cells.
+     */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> steppedRouteConfiguration(WorldId worldId, long seed) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);
+        FrontierWorldState state = base.initialState();
+        SubjectId settlementId = state.bootstrap().settlements().getFirst().id();
+        List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), settlementId);
+        BlockPosition origin = baseline.getFirst();
+        List<BlockPosition> declared = new ArrayList<>();
+        declared.add(origin);
+        // Step out west before climbing. The grade stays clear of the retained local flat
+        // carriageway, so every new support remains an ordinary player-placeable block.
+        declared.add(origin.offset(0, 0, -3));
+        declared.add(origin.offset(-4, 0, -3));
+        declared.add(origin.offset(-6, 2, -3));
+        declared.add(origin.offset(-8, 0, -3));
+        declared.add(origin.offset(-8, 0, 36));
+        // Join at the trunk's westward continuation rather than turning back across the same
+        // surveyed cells to the lane point; a traversal topology may not encode a retraced
+        // centre-line under duplicate node identities.
+        declared.addAll(baseline.subList(2, baseline.size()));
+        RouteTopology topology = state.routeTopology().replaceSupplyRoute(state.bootstrap(), settlementId, declared);
+        return configured(worldId, state.withRouteTopology(topology), base.initialInstant(), base.initialSchedules(), false);
     }
 
     static Map<String, Profile> catalog(Profile... profiles) {

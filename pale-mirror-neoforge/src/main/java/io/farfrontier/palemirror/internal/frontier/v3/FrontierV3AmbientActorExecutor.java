@@ -489,6 +489,13 @@ final class FrontierV3AmbientActorExecutor {
                 body.getNavigation().stop();
                 return false;
             }
+            // A physical follower must not walk into a retained colleague's current cell just
+            // because that colleague may move later. The same immediate occupancy rule owns
+            // COLD and HOT assembly; the actor waits for the leading observed cursor instead.
+            if (!assembly.safeAdvances().contains(actorId)) {
+                body.getNavigation().stop();
+                return false;
+            }
             BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalPosition());
             if (obstruction != null) {
                 OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, new SurfaceAnchor(lease.goalPosition()), new SurfaceAnchor(obstruction),
@@ -693,10 +700,12 @@ final class FrontierV3AmbientActorExecutor {
         OperationAssembly.Member member = assemblyMember(state, actorId, lease);
         if (member == null || member.arrived() || !sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
         RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
-        Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(assembly.members());
-        members.put(actorId, new OperationAssembly.Member(member.topology(), member.cursor() + 1));
+        if (!assembly.safeAdvances().contains(actorId)) {
+            body.getNavigation().stop();
+            return false;
+        }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
-                new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(members, assembly.cargoCarrierId())));
+                new OperationAssemblyAdvanced(operation.id(), assembly.advance(actorId)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
         return true;
     }

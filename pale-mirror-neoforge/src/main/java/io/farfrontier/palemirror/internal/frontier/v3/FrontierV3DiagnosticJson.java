@@ -100,6 +100,7 @@ final class FrontierV3DiagnosticJson {
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             case "transit" -> transit(id, checkpoint, state);
+            case "route_topology" -> routeTopology(id, checkpoint, state);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
         };
         return bounded(kind, id, checkpoint, value);
@@ -336,6 +337,22 @@ final class FrontierV3DiagnosticJson {
                 + (settlementUnavailableEdges == 0L) + ",\"settlementUnavailableEdges\":" + settlementUnavailableEdges
                 + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept + hiveEngagement
                 + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
+    }
+
+    /** One declared supply topology, with grade facts only; diagnostics never survey or alter Minecraft terrain. */
+    private static String routeTopology(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId settlement = subject(id).orElse(null);
+        if (settlement == null || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlement))) {
+            return unavailable("route_topology", id, checkpoint, "not_found");
+        }
+        var topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
+        var grades = topology.edges().stream().filter(edge -> edge.grade() > 0).toList();
+        int maximumGrade = grades.stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.TraversalTopology.Edge::grade).max().orElse(0);
+        String firstGrade = grades.isEmpty() ? "null" : "{\"from\":" + position(topology.nodes().get(grades.getFirst().from()).support())
+                + ",\"to\":" + position(topology.nodes().get(grades.getFirst().to()).support()) + "}";
+        return base("route_topology", id, checkpoint) + ",\"status\":\"ok\",\"topology\":\"" + quote(topology.id().value())
+                + "\",\"revision\":" + topology.revision() + ",\"nodes\":" + topology.nodes().size() + ",\"edges\":" + topology.edges().size()
+                + ",\"gradedEdges\":" + grades.size() + ",\"maximumGrade\":" + maximumGrade + ",\"firstGrade\":" + firstGrade + "}";
     }
 
     /** Bounded exact cursors make a stalled ordinary HOT approach diagnosable without world mutation. */

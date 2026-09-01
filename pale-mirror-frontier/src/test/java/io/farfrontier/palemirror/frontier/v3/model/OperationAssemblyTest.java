@@ -24,6 +24,24 @@ class OperationAssemblyTest {
     }
 
     @Test
+    void queuesAFollowingMemberUntilTheCurrentOccupantLeavesTheSharedCursor() {
+        TraversalTopology follower = TraversalTopology.corridor(new TraversalTopologyId("topology:test-assembly-follower"), 0L, HAULER,
+                TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                List.of(SurfaceAnchor.at(0, 64, 0), SurfaceAnchor.at(1, 64, 0)));
+        TraversalTopology leader = TraversalTopology.corridor(new TraversalTopologyId("topology:test-assembly-leader"), 0L, GUARD,
+                TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                List.of(SurfaceAnchor.at(1, 64, 0), SurfaceAnchor.at(2, 64, 0)));
+        OperationAssembly initial = new OperationAssembly(Map.of(HAULER, new OperationAssembly.Member(follower, 0),
+                GUARD, new OperationAssembly.Member(leader, 0)), HAULER);
+
+        assertEquals(List.of(GUARD), initial.safeAdvances());
+        assertThrows(IllegalArgumentException.class, () -> initial.advance(HAULER));
+        OperationAssembly leaderAdvanced = initial.advance(GUARD);
+        assertEquals(List.of(HAULER), leaderAdvanced.safeAdvances());
+        assertEquals(SurfaceAnchor.at(1, 64, 0), leaderAdvanced.advance(HAULER).positions().get(HAULER));
+    }
+
+    @Test
     void routeOperationStartsTravelOnlyFromTheCompleteExactAssembly() {
         OperationAssembly complete = new OperationAssembly(Map.of(HAULER, member(1, 0), GUARD, member(1, 1)), HAULER);
         RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1"),

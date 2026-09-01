@@ -123,14 +123,9 @@ public final class SupplyOperationProcess {
         // one COLD member one adjacent cell per turn, retaining the same deterministic order;
         // this prevents two independently compiled approaches from passing through the same
         // canonical floor in one transaction. HOT members keep their durable observed cursor.
-        OperationAssembly next = assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry -> {
-            SubjectId actor = entry.getKey(); OperationAssembly.Member member = entry.getValue();
+        OperationAssembly next = assembly.safeAdvances().stream().map(actor -> {
             AmbientActorLease lease = state.ambientLeases().get(actor);
-            if (member.arrived() || lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return null;
-            java.util.Map<SubjectId, OperationAssembly.Member> advanced = new java.util.LinkedHashMap<>(assembly.members());
-            advanced.put(actor, new OperationAssembly.Member(member.topology(), member.cursor() + 1));
-            try { return new OperationAssembly(advanced, assembly.cargoCarrierId()); }
-            catch (IllegalArgumentException collision) { return null; }
+            return lease != null && lease.status() != AmbientLeaseStatus.CLOSED ? null : assembly.advance(actor);
         }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
         if (next == null) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {

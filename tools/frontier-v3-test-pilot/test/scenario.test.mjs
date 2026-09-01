@@ -44,6 +44,13 @@ test('native pilot recognizes the one read-only route-construction diagnostic vi
   assert.throws(() => validateScenario({ ...routeConstruction, actions: [{ ...routeConstruction.actions[0], id: '' }] }), /wait_until_diagnostic/);
 });
 
+test('native pilot recognizes the bounded declared-route diagnostic view', () => {
+  const routeTopology = { ...scenario, actions: [{ type: 'wait_until_diagnostic', view: 'route_topology', id: 'settlement:1',
+    expect: { status: 'ok', gradedEdges: 4, maximumGrade: 1 }, timeoutMs: 30_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(routeTopology));
+  assert.throws(() => validateScenario({ ...routeTopology, actions: [{ ...routeTopology.actions[0], id: '' }] }), /wait_until_diagnostic/);
+});
+
 test('native pilot has one domain wait for a confirmed exact harvest, not READY', () => {
   const harvest = { ...scenario, actions: [{ type: 'wait_until_harvest_result', siteId: 'site:1-wheat-field',
     intentId: 'intent:site-harvest-1-wheat-field-1', itemId: 'item:site-harvest-1-wheat-field-1-wheat', timeoutMs: 180_000 }], assertions: [], frames: [] };
@@ -90,6 +97,7 @@ test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'medical-treatment' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'resident-transit' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'production-worker-death' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'stepped-route' } }));
   assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
 });
 

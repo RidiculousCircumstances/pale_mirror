@@ -22,7 +22,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(22, profiles.size());
+        assertEquals(23, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -66,6 +66,17 @@ class FrontierV3FixtureCatalogTest {
         assertEquals("minecraft:honey_bottle", remedy.itemKind());
         assertTrue(state.humanPopulation().medicalOperations().isEmpty(), "the fixture must not fabricate an active treatment before its actual depot exists");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.objective.review") && action.dueAt().ticks() == 1_000L));
+    }
+
+    @Test
+    void steppedRouteFixtureDeclaresButDoesNotMaterializeOneBoundedTwoBlockRise() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:stepped-route-fixture"), 41L).initialState();
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id();
+        TraversalTopology topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
+
+        assertEquals(4L, topology.edges().stream().filter(edge -> edge.grade() == 1).count());
+        assertEquals(1, topology.edges().stream().mapToInt(TraversalTopology.Edge::grade).max().orElseThrow());
+        assertTrue(state.physicalDeltas().isEmpty(), "the fixture declares surveyed geometry but cannot pre-place a Minecraft support or surface");
     }
 
     @Test

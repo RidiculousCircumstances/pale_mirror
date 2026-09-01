@@ -1,7 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -31,6 +33,34 @@ public record OperationAssembly(Map<SubjectId, Member> members, SubjectId cargoC
     }
     public boolean complete() { return members.values().stream().allMatch(Member::arrived); }
     public Map<SubjectId, SurfaceAnchor> positions() { Map<SubjectId, SurfaceAnchor> result = new LinkedHashMap<>(); members.forEach((actor, member) -> result.put(actor, member.currentSurface())); return Map.copyOf(result); }
+
+    /**
+     * Returns only moves whose next retained cursor is unoccupied in the current canonical
+     * instant. A follower never treats a leader's possible later move as permission to enter
+     * that leader's cell: every accepted command moves one exact body and must itself preserve
+     * the distinct-position invariant.
+     */
+    public List<SubjectId> safeAdvances() {
+        List<SubjectId> result = new ArrayList<>();
+        members.keySet().stream().sorted().forEach(actor -> {
+            Member member = members.get(actor);
+            if (!member.arrived() && members.entrySet().stream().noneMatch(entry -> !entry.getKey().equals(actor)
+                    && entry.getValue().currentSurface().equals(member.nextSurface()))) {
+                result.add(actor);
+            }
+        });
+        return List.copyOf(result);
+    }
+
+    /** Applies one immediately collision-free retained cursor advance. */
+    public OperationAssembly advance(SubjectId actorId) {
+        SubjectId actor = Objects.requireNonNull(actorId, "assembly advance actor");
+        if (!safeAdvances().contains(actor)) throw new IllegalArgumentException("assembly actor next cursor is occupied");
+        Map<SubjectId, Member> next = new LinkedHashMap<>(members);
+        Member current = next.get(actor);
+        next.put(actor, new Member(current.topology(), current.cursor() + 1));
+        return advance(next);
+    }
 
     /**
      * The shipment is a separate physical object, never an invisible extension of its hauler.

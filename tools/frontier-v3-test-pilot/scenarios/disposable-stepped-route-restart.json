@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "id": "disposable_stepped_route_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "stepped-route", "viewDistance": 2 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:stone 4" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
+        "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -375, "y": 70, "z": -347 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "place", "position": { "x": -371, "y": 64, "z": -343 }, "item": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "place", "position": { "x": -372, "y": 64, "z": -343 }, "item": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "place", "position": { "x": -372, "y": 65, "z": -343 }, "item": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "place", "position": { "x": -373, "y": 64, "z": -343 }, "item": "minecraft:stone", "timeoutMs": 15000 },
+    { "type": "wait_until_block", "position": { "x": -371, "y": 65, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -372, "y": 66, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -373, "y": 65, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -372, "y": 66, "z": -343 } },
+    { "type": "assert_visible_block", "position": { "x": -372, "y": 66, "z": -343 }, "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -372, "y": 66, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
+      "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "route_topology", "id": "settlement:1" }
+  ],
+  "assertions": [
+    { "after": 11, "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
+      "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } } }
+  ],
+  "frames": [
+    { "after": 9, "name": "northwatch-declared-route-grade" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 9,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -375, "y": 70, "z": -347 }, "settleMs": 1500 }
+    ]
+  }
+}
