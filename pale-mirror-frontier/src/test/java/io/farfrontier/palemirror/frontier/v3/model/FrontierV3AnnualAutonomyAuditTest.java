@@ -73,6 +73,31 @@ class FrontierV3AnnualAutonomyAuditTest {
                 "the ordinary twelve-settlement bootstrap must feed every resident from its first scheduled ration onward");
     }
 
+    /**
+     * The dedicated server advances the canonical clock once for every Minecraft server tick;
+     * that cadence is deliberately not equivalent to jumping directly from one due action to
+     * the next.  Keep one ordinary day under the deployed seed as a regression boundary for
+     * event ordering between changing worker availability, market offers and exact production.
+     */
+    @Test
+    void deployedSeedStaysActiveForOneRealServerCadenceDay() {
+        WorldId world = new WorldId("frontier:server-cadence-day");
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
+                FrontierWorldRuntimeDefinition.configuration(world, 9_031_746_258_841_137_206L));
+        for (long tick = 1L; tick <= NOMINAL_DAY_TICKS; tick++) {
+            var result = engine.advanceTo(new SimInstant(tick), BUDGET);
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(),
+                    "server cadence quarantined at tick " + tick + ": " + result.status().failureDetail().orElse("no detail"));
+        }
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(NOMINAL_DAY_TICKS, engine.checkpoint().instant().ticks());
+        assertTrue(state.companies().market().workOrders().values().stream().allMatch(order -> {
+            var job = state.productionJobs().get(order.jobId());
+            return job == null || CompanyWorkPaymentProcess.contractFor(state, job).map(contract ->
+                    contract.companyId().equals(order.sellerId()) && contract.invoicePerCompletedJob().equals(order.acceptedTotalPrice())).orElse(false);
+        }), "every active order must remain bound to the exact worker contract that priced it");
+    }
+
     /** Allows one full-year seed to be diagnosed locally without weakening the default four-seed gate. */
     private static List<Long> auditedSeeds() {
         String override = System.getProperty("pale_mirror.frontier_v3.annual_audit.seeds");
