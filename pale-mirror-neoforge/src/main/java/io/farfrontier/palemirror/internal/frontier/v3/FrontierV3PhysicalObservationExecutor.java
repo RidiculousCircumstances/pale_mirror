@@ -47,7 +47,7 @@ final class FrontierV3PhysicalObservationExecutor {
             if (level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()))) {
                 ledger.resolve(value); continue;
             }
-            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
             if (state.physicalDeltas().containsKey(canonicalPosition)) {
@@ -66,7 +66,7 @@ final class FrontierV3PhysicalObservationExecutor {
     static void recordManagedExplosionDelta(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId,
                                            FrontierV3ManagedExplosionLedger.BlockCandidate candidate) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         BlockPos position = candidate.blockPos(); BlockPosition canonicalPosition = new BlockPosition(position.getX(), position.getY(), position.getZ());
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (state.physicalDeltas().containsKey(canonicalPosition)) return;

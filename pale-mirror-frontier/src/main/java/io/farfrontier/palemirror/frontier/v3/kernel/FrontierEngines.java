@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
@@ -16,6 +17,16 @@ public final class FrontierEngines {
     private FrontierEngines() { }
 
     public static <S, P extends FrontierProjection> FrontierEngine<P> create(FrontierEngineConfiguration<S, P> configuration) {
+        return createCanonicalStateAccess(configuration);
+    }
+
+    /**
+     * Creates the exact immutable-state adapter view used by an owning physical runtime.
+     * Persistence remains explicit through {@link FrontierEngine#checkpoint()}.
+     */
+    public static <S, P extends FrontierProjection> FrontierCanonicalStateAccess<S, P> createCanonicalStateAccess(
+            FrontierEngineConfiguration<S, P> configuration
+    ) {
         Objects.requireNonNull(configuration, "configuration");
         return new InMemoryFrontierEngine<>(configuration.worldId(), configuration.initialState(), configuration.initialInstant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
@@ -24,6 +35,13 @@ public final class FrontierEngines {
     }
 
     public static <S, P extends FrontierProjection> FrontierEngine<P> recover(
+            FrontierEngineConfiguration<S, P> configuration, RecoveryImage image
+    ) {
+        return recoverCanonicalStateAccess(configuration, image);
+    }
+
+    /** Restores the exact immutable-state adapter view from already-verified durable facts. */
+    public static <S, P extends FrontierProjection> FrontierCanonicalStateAccess<S, P> recoverCanonicalStateAccess(
             FrontierEngineConfiguration<S, P> configuration, RecoveryImage image
     ) {
         Objects.requireNonNull(configuration, "configuration");

@@ -41,7 +41,7 @@ final class FrontierV3InfectionOverlayExecutor {
     private FrontierV3InfectionOverlayExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
@@ -70,7 +70,7 @@ final class FrontierV3InfectionOverlayExecutor {
             return BlockBreakObservation.UNMANAGED;
         }
         try {
-            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             CommandId id = new CommandId("executor:infection-overlay-break-r" + checkpoint.revision().value() + "-p" + position.asLong());
             PhysicalDeltaObserved observed = new PhysicalDeltaObserved(new PhysicalDelta(canonical(position), PhysicalDeltaKind.UNKNOWN_SCAR,
                     Optional.empty(), Optional.empty(), cause));

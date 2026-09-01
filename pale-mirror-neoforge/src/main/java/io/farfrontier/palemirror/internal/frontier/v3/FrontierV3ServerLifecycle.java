@@ -422,7 +422,7 @@ public final class FrontierV3ServerLifecycle {
         var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
         if (lease.isEmpty()) return CargoCarrierInteraction.NOT_MANAGED;
         if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) return CargoCarrierInteraction.REJECTED;
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
         CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
@@ -519,7 +519,7 @@ public final class FrontierV3ServerLifecycle {
 
     private static ExactCustodyObservation submitExactCustody(FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
                                                                String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return ExactCustodyObservation.REJECTED;
         CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),

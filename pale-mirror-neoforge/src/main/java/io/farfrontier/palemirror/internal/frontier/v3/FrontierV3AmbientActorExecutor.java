@@ -160,7 +160,7 @@ final class FrontierV3AmbientActorExecutor {
             }
             forgetColdDemand(runtime, actorId);
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
-                submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId, runtime.checkpointImage().orElseThrow().instant())));
+                submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId, runtime.canonicalState().orElseThrow().instant())));
                 admitted++;
                 continue;
             }
@@ -770,7 +770,7 @@ final class FrontierV3AmbientActorExecutor {
             return true;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol", actorId.value(),
-                new ScoutPatrolAdvanced(actorId, runtime.checkpointImage().orElseThrow().instant().ticks(), lease.goalBody().supportingSurface().support(), java.util.Optional.of(current)));
+                new ScoutPatrolAdvanced(actorId, runtime.canonicalState().orElseThrow().instant().ticks(), lease.goalBody().supportingSurface().support(), java.util.Optional.of(current)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
         return true;
     }
@@ -783,7 +783,7 @@ final class FrontierV3AmbientActorExecutor {
                                            FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease scoutLease) {
         if (!bioform(state, actorId) || bioformRole(state, actorId) != BioformRole.SCOUT
                 || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL) return false;
-        long now = runtime.checkpointImage().orElseThrow().instant().ticks();
+        long now = runtime.canonicalState().orElseThrow().instant().ticks();
         SightedCarrier candidate = level.getEntitiesOfClass(MinecartChest.class, body.getBoundingBox().inflate(96.0D), entity -> !entity.isRemoved())
                 .stream().map(entity -> FrontierV3CargoCarrierExecutor.activeLease(state, entity)
                         .map(lease -> new SightedCarrier(entity, lease))).flatMap(java.util.Optional::stream)

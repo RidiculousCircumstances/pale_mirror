@@ -132,7 +132,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
 
     private static CommandResult transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,
                                       PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation, String phase) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:hive-nutrient-" + phase + "-" + intentId.value().replace(':', '-'));
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new PhysicalIntentTransition(intentId, status, observation)))

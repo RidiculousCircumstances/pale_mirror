@@ -169,7 +169,7 @@ final class FrontierV3SceneExecutor {
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, RouteOperation operation) {
-        CheckpointImage checkpoint = checkpoint(runtime);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + operation.id().value().substring("operation:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         OperationTravel travel = operation.activeTravel().orElseThrow(() -> new IllegalArgumentException("materialized route operation has no current travel"));
@@ -179,7 +179,7 @@ final class FrontierV3SceneExecutor {
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneEngagementCandidate candidate) {
-        CheckpointImage checkpoint = checkpoint(runtime);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + candidate.engagementId().value().substring("engagement:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), candidate.cargoPosition(), checkpoint.instant(), checkpoint.revision().value(),
@@ -901,7 +901,7 @@ final class FrontierV3SceneExecutor {
         submit(runtime, "scene-recovery-unresolved", lease.id().value(), new SceneLeaseRecoveryUnresolved(lease.id(), missingActors, missingCarrier));
     }
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
-        CheckpointImage checkpoint = checkpoint(runtime);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = checkpoint(runtime);
         // A scene can perform a sequence of distinct durable transitions while retaining the
         // same lease identity.  Bind the command identity to the expected canonical revision,
         // as every other physical executor does, so a later grid checkpoint is not mistaken
@@ -913,8 +913,8 @@ final class FrontierV3SceneExecutor {
         if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("scene executor transition was rejected: " + result);
         return result;
     }
-    private static CheckpointImage checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        return runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+    private static io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.decodedState().orElse(null);

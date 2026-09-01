@@ -89,7 +89,7 @@ final class FrontierV3PhysicalIntentRestartSafety {
     }
 
     private static void quarantine(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId) {
-        CheckpointImage checkpoint = runtime.checkpointImage()
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState()
                 .orElseThrow(() -> new IllegalStateException("cannot recover physical intent from inactive runtime"));
         CommandId commandId = new CommandId("recovery:unknown-" + intentId.value().replace(':', '-'));
         FrontierCommand command = new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),

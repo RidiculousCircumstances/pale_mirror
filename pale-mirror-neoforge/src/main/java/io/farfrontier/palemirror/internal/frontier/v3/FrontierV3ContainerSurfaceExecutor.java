@@ -178,7 +178,7 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId,
                                       ContainerSurfaceStatus status) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:surface-" + status.name().toLowerCase(java.util.Locale.ROOT)
                 + "-" + containerId.value().replace(':', '-'));
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),

@@ -168,7 +168,7 @@ final class FrontierV3InventoryObservationExecutor {
     }
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId itemId,
                                InventoryCustody from, InventoryCustody to) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         String direction = from instanceof InventoryCustody.ContainerSlot ? "outbound" : "inbound";
         CommandId commandId = new CommandId("executor:item-" + direction + "-" + itemId.value().replace(':', '-') + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
@@ -201,7 +201,7 @@ final class FrontierV3InventoryObservationExecutor {
         SubjectId id = new SubjectId("conflict:inventory-" + subject.value().replace(':', '-') + "-" + container.value().replace(':', '-') + "-" + slot + "-k" + kind.ordinal());
         InventoryConflict conflict = new InventoryConflict(id, subject, container, slot, kind);
         if (state.inventory().conflicts().containsKey(id)) return;
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:inventory-conflict-" + id.value().replace(':', '-') + "-r" + checkpoint.revision().value());
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new InventoryConflictObserved(conflict)))

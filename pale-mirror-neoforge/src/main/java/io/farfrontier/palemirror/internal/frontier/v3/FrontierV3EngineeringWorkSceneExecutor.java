@@ -47,7 +47,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, EngineeringWorkSceneCandidate candidate) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         String suffix = candidate.projectId().value().substring("construction:".length());
         SceneLeaseId id = new SceneLeaseId("lease:engineering-" + suffix + "-cell-" + candidate.workCellIndex() + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()

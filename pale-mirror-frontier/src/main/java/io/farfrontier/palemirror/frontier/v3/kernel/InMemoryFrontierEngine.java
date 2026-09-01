@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
@@ -34,7 +36,7 @@ import java.util.function.Consumer;
  * Single-threaded bounded kernel implementation for deterministic tests. It intentionally has
  * no filesystem behaviour; Wave 2 supplies the durable store behind the same transaction facts.
  */
-final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements FrontierEngine<P> {
+final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements FrontierCanonicalStateAccess<S, P> {
     private final Thread ownerThread = Thread.currentThread();
     private final WorldId worldId;
     private final CommandPlanner<S> commandPlanner;
@@ -256,6 +258,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     public P projection(ProjectionQuery query) {
         requireOwnerThread();
         return projectionMapper.project(state, worldId, revision, instant, Objects.requireNonNull(query, "query"));
+    }
+
+    @Override
+    public FrontierCanonicalState<S> canonicalState() {
+        requireOwnerThread();
+        return new FrontierCanonicalState<>(worldId, revision, instant, state);
     }
 
     @Override

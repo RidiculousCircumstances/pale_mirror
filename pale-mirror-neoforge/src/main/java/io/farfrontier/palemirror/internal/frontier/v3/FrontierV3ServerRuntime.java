@@ -3,8 +3,9 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.AdvanceResult;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -31,7 +32,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private final FrontierEngineConfiguration<S, P> configuration;
     private final FrontierStore store;
     private final int checkpointIntervalTicks;
-    private FrontierEngine<P> engine;
+    private FrontierCanonicalStateAccess<S, P> engine;
     private FrontierV3RuntimeStatus status;
     private SimInstant instant;
     private int ticksSinceCheckpoint;
@@ -41,8 +42,6 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
      * canonical byte snapshot for every read without creating any new canonical evidence.
      */
     private CheckpointImage cachedCheckpoint;
-    private Revision decodedStateRevision;
-    private S decodedState;
 
     private FrontierV3ServerRuntime(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RecoveryImage recovered,
@@ -61,8 +60,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             RecoveryImage image = recovered == null ? store.recover(configuration.worldId()) : recovered;
             if (!configuration.worldId().equals(image.worldId())) throw new IllegalArgumentException("recovery image belongs to a different Frontier world");
             engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
-                    ? FrontierEngines.create(this.configuration)
-                    : FrontierEngines.recover(this.configuration, image);
+                    ? FrontierEngines.createCanonicalStateAccess(this.configuration)
+                    : FrontierEngines.recoverCanonicalStateAccess(this.configuration, image);
             cachedCheckpoint = engine.checkpoint();
             instant = cachedCheckpoint.instant();
             status = FrontierV3RuntimeStatus.active();
@@ -108,20 +107,19 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return Optional.of(cachedCheckpoint);
     }
 
+    /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
+    Optional<FrontierCanonicalState<S>> canonicalState() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.canonicalState());
+    }
+
     /**
-     * Returns the one immutable canonical state object for the current revision on the owning
-     * server thread. Adapters may inspect it but must route every mutation through {@link #submit}.
-     * The cache is revision-bound, so a successful command or due action is immediately observed
-     * on the next read without repeatedly decoding a complete world for each executor.
+     * Compatibility name for physical executors that need only the immutable current state.
+     * It is intentionally not decoded from a checkpoint: snapshots are persistence boundaries,
+     * not the ordinary materialization read path.
      */
     Optional<S> decodedState() {
-        CheckpointImage image = checkpointImage().orElse(null);
-        if (image == null) return Optional.empty();
-        if (decodedState == null || !image.revision().equals(decodedStateRevision)) {
-            decodedState = Objects.requireNonNull(configuration.stateCodec().decode(image.canonicalState()), "decoded state");
-            decodedStateRevision = image.revision();
-        }
-        return Optional.of(decodedState);
+        return canonicalState().map(FrontierCanonicalState::state);
     }
 
     Optional<CommandResult> submit(FrontierCommand command) {

@@ -177,7 +177,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     }
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId, PhysicalIntentStatus status,
                                       Optional<PhysicalEffectObservation> observation, String phase) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         // A physical action may survive a crash between its Minecraft postcondition and canonical
         // receipt. Bind each admission attempt to its precise canonical revision, as the other
         // physical bridges do: a retained rejection or pre-crash command receipt cannot turn a

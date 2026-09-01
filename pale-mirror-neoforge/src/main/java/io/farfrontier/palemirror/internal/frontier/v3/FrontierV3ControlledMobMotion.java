@@ -59,7 +59,15 @@ final class FrontierV3ControlledMobMotion {
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
-        if (PENDING.size() < MAX_PENDING_INTENTS || PENDING.containsKey(actor)) {
+        MotionIntent pending = PENDING.get(actor);
+        // The normal production order is canonical executor (post tick) → entity pre-tick on
+        // the next server tick.  Keep an already-due one-tick intent if another observer runs
+        // before that pre-tick: overwriting it with a new future timestamp creates a permanent
+        // stop/go loop whose outcome depends on event callback order rather than physical state.
+        if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L) {
+            return;
+        }
+        if (PENDING.size() < MAX_PENDING_INTENTS || pending != null) {
             PENDING.put(actor, new MotionIntent(level.getGameTime() + 1L, target, continuous));
         }
     }

@@ -269,6 +269,30 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void physicalCanonicalReadsDoNotEncodeOrDecodePersistenceSnapshots(@TempDir Path directory) {
+        CountingCounterCodec codec = new CountingCounterCodec();
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(
+                configuration(codec), new FrontierFileStore(directory, codecs()), 20);
+        codec.reset();
+
+        Counter first = runtime.decodedState().orElseThrow();
+        assertSame(first, runtime.canonicalState().orElseThrow().state());
+        assertEquals(0, codec.encodeCalls);
+        assertEquals(0, codec.decodeCalls);
+
+        assertInstanceOf(CommandResult.Accepted.class,
+                runtime.submit(command("command:direct-canonical-read", Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow());
+        Counter changed = runtime.decodedState().orElseThrow();
+        assertEquals(3, changed.value());
+        assertEquals(0, codec.encodeCalls, "ordinary physical reads and commands must not create a full snapshot");
+        assertEquals(0, codec.decodeCalls, "ordinary physical reads must not rehydrate a full snapshot");
+
+        runtime.checkpointImage().orElseThrow();
+        assertEquals(1, codec.encodeCalls, "only the explicit checkpoint boundary serializes the changed world");
+        assertEquals(0, codec.decodeCalls);
+    }
+
+    @Test
     void checkpointImageIsSharedForReadOnlyAdaptersAndInvalidatedAfterCanonicalMutation(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
         CheckpointImage first = runtime.checkpointImage().orElseThrow();
@@ -475,13 +499,16 @@ class FrontierV3ServerRuntimeTest {
     }
 
     private static FrontierEngineConfiguration<Counter, CounterProjection> configuration() {
-        StateCodec<Counter> codec = new StateCodec<>() {
+        return configuration(new StateCodec<>() {
             @Override public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
             @Override public Counter decode(byte[] bytes) {
                 if (bytes.length != 4) throw new IllegalArgumentException("counter state is malformed");
                 return new Counter(ByteBuffer.wrap(bytes).getInt());
             }
-        };
+        });
+    }
+
+    private static FrontierEngineConfiguration<Counter, CounterProjection> configuration(StateCodec<Counter> codec) {
         return new FrontierEngineConfiguration<>(WORLD, new Counter(0), SimInstant.ZERO,
                 (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
                 (state, action) -> List.of(),
@@ -524,5 +551,26 @@ class FrontierV3ServerRuntimeTest {
     private record CounterProjection(WorldId worldId, Revision revision, SimInstant instant, int value) implements FrontierProjection { }
     private record Delta(int value) implements FrontierPayload {
         @Override public String type() { return "test.runtime_delta"; }
+    }
+
+    private static final class CountingCounterCodec implements StateCodec<Counter> {
+        private int encodeCalls;
+        private int decodeCalls;
+
+        @Override public byte[] encode(Counter state) {
+            encodeCalls++;
+            return ByteBuffer.allocate(4).putInt(state.value()).array();
+        }
+
+        @Override public Counter decode(byte[] bytes) {
+            decodeCalls++;
+            if (bytes.length != 4) throw new IllegalArgumentException("counter state is malformed");
+            return new Counter(ByteBuffer.wrap(bytes).getInt());
+        }
+
+        private void reset() {
+            encodeCalls = 0;
+            decodeCalls = 0;
+        }
     }
 }

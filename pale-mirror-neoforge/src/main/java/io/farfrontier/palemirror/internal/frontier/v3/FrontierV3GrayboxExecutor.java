@@ -48,7 +48,7 @@ final class FrontierV3GrayboxExecutor {
     private FrontierV3GrayboxExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        if (runtime.checkpointImage().isEmpty()) return;
+        if (runtime.canonicalState().isEmpty()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
@@ -88,7 +88,7 @@ final class FrontierV3GrayboxExecutor {
         Optional<PhysicalDeltaObserved> observed = preparePhysicalDelta(level, ledger, position, cause);
         if (observed.isEmpty()) return BlockBreakObservation.UNMANAGED;
         try {
-            CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+            io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             CommandId id = new CommandId("executor:physical-delta-r" + checkpoint.revision().value() + "-p" + position.asLong());
             CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), observed.orElseThrow()))

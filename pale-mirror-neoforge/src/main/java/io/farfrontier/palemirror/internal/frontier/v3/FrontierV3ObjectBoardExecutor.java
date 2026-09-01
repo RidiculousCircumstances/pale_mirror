@@ -39,7 +39,7 @@ final class FrontierV3ObjectBoardExecutor {
     private FrontierV3ObjectBoardExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return;
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         FrontierReadabilityPlan.ReadabilityInput input = FrontierReadabilityPlan.input(state);
