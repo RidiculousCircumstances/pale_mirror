@@ -42,11 +42,15 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         for (Map.Entry<SubjectId, InventoryConflict> entry : conflicts.entrySet()) {
             InventoryConflict conflict = entry.getValue();
-            if (!entry.getKey().equals(conflict.id()) || (!items.containsKey(conflict.subjectId()) && !containers.containsKey(conflict.subjectId()))) {
-                throw new IllegalArgumentException("inventory conflict must retain one exact or physical-container subject");
+            if (!entry.getKey().equals(conflict.id())) {
+                throw new IllegalArgumentException("inventory conflict map key does not match conflict identity");
             }
             ContainerRecord container = containers.get(conflict.containerId());
             if (container == null || conflict.slot() >= container.slotCount()) throw new IllegalArgumentException("inventory conflict targets an invalid container slot");
+            // A conflict is durable evidence rooted at the physical slot.  Its original exact
+            // subject may legitimately have been consumed, moved out of the active ledger, or
+            // destroyed after the observation; retaining the container anchor keeps that
+            // evidence restart-safe without resurrecting the item or adopting foreign state.
         }
         for (Map.Entry<SubjectId, CargoBatch> entry : cargo.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().id())) throw new IllegalArgumentException("cargo map key does not match cargo identity");

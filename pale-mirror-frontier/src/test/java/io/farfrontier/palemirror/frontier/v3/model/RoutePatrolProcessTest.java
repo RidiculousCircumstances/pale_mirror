@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
@@ -22,6 +23,21 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoutePatrolProcessTest {
+    @Test
+    void routeLossWakeupDoesNotCreateACompetingStrategicRetryWhileDeliveryOwnsTheLane() {
+        WorldId world = new WorldId("frontier:route-loss-deferred-objective");
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId settlement = state.operations().get(new SubjectId("operation:supply-1-2")).settlementId();
+        BlockPosition obstruction = new BlockPosition(-380, 64, -304);
+        state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
+
+        var action = StrategicObjectiveProcess.routeReconsideration(settlement, obstruction, "loss", 100L);
+        assertTrue(StrategicObjectiveProcess.planReconsideration(state, action).isEmpty(),
+                "the active delivery owns the only strategic lane; its terminal route-obstruction failure must schedule the follow-up");
+    }
+
     @Test
     void activePatrolGuardCannotBeReassignedToAConcurrentSupplyOperation() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-claim"), 713L));
@@ -53,8 +69,9 @@ class RoutePatrolProcessTest {
         PhysicalDelta delta = new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:blast");
         CommandId id = new CommandId("command:route-patrol-observation");
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, id, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta))));
+        CommandResult result = engine.submit(new FrontierCommand(1, id, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)));
+        assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
         // The physical observation wakes this affected settlement at the next tick.  Do not
         // accidentally regress this into waiting for the 2,000-tick background review.
         for (long tick = 1L; tick <= 600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));

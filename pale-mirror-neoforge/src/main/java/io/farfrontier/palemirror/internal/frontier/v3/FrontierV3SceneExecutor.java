@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -19,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -77,6 +79,12 @@ final class FrontierV3SceneExecutor {
     private static final int DEMAND_RADIUS_BLOCKS = 96;
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
+    /**
+     * A chunk becoming naturally loaded is not proof that its saved entity UUID index has
+     * finished publishing.  Recovery observes a complete loaded scene for this bounded window
+     * before absence becomes durable evidence; it never creates, loads or moves an entity.
+     */
+    private static final long RESTART_RECOVERY_OBSERVATION_TICKS = 20L;
     private static final int MAX_PENDING_DRAINS = 4_096;
 
     /**
@@ -85,6 +93,12 @@ final class FrontierV3SceneExecutor {
      * making bodies disappear before their chunk can be safely released.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SceneLeaseId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
+
+    /**
+     * Volatile first-complete-load ticks for UNKNOWN_AFTER_RESTART leases.  This is deliberately
+     * not canonical state: durable evidence begins only after the bounded observation barrier.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SceneLeaseId, Long>> RESTART_RECOVERY_SINCE = new IdentityHashMap<>();
 
     /**
      * Bounded volatile evidence from the last complete, naturally loaded HOT scene. Vanilla may
@@ -158,9 +172,10 @@ final class FrontierV3SceneExecutor {
         CheckpointImage checkpoint = checkpoint(runtime);
         SceneLeaseId id = new SceneLeaseId("lease:" + operation.id().value().substring("operation:".length()) + "-r" + checkpoint.revision().value());
         List<SceneMember> members = operation.participantIds().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
-        BlockPosition cargoPosition = operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+        OperationTravel travel = operation.activeTravel().orElseThrow(() -> new IllegalArgumentException("materialized route operation has no current travel"));
+        BlockPosition cargoPosition = travel.cargoAnchor().surface().support();
         return SceneLease.atExactPositions(id, checkpoint.worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, checkpoint.instant(), checkpoint.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.empty(), members, positions(state, members));
+                SceneLeaseStatus.PREPARED, Optional.empty(), members, travel.formation());
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneEngagementCandidate candidate) {
@@ -171,9 +186,9 @@ final class FrontierV3SceneExecutor {
                 SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), members, positions(state, members));
     }
 
-    private static Map<SubjectId, BlockPosition> positions(FrontierWorldState state, List<SceneMember> members) {
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
-        for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).position());
+    private static Map<SubjectId, BodyPosition> positions(FrontierWorldState state, List<SceneMember> members) {
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        for (SceneMember member : members) positions.put(member.actorId(), BodyPosition.aboveSupportCell(state.actorLocations().get(member.actorId()).position()));
         return Map.copyOf(positions);
     }
 
@@ -194,8 +209,8 @@ final class FrontierV3SceneExecutor {
             captures.add(new SceneMemberPosition(member.actorId(), new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
         }
         if (!captures.isEmpty()) {
-            Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(lease.memberPositions());
-            captures.forEach(capture -> positions.put(capture.actorId(), capture.position()));
+            Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
+            captures.forEach(capture -> positions.put(capture.actorId(), new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z())));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_handoff", lease,
                     submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withMemberPositions(positions).withAmbientHandoff(
                             captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures)));
@@ -251,20 +266,59 @@ final class FrontierV3SceneExecutor {
 
     /** Reclaims only a complete observed body set; missing bodies remain explicit UNKNOWN. */
     static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        if (!demandExists(level, lease.handoffPosition())) return;
-        if (lease.recoveryEvidence().isPresent()) return;
+        if (!demandExists(level, lease.handoffPosition())) {
+            forgetRestartRecoveryObservation(runtime, lease.id());
+            return;
+        }
+        if (lease.recoveryEvidence().isPresent()) {
+            forgetRestartRecoveryObservation(runtime, lease.id());
+            return;
+        }
+        if (!allRestartRecoveryColumnsLoaded(level, lease)) {
+            forgetRestartRecoveryObservation(runtime, lease.id());
+            return;
+        }
+        long completeLoadSince = restartRecoveryObservationSince(runtime, lease.id(), level.getGameTime());
+        if (!restartRecoveryObservationReady(completeLoadSince, level.getGameTime())) return;
         java.util.Set<SubjectId> missing = lease.members().stream()
                 .filter(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE)
                 .filter(member -> !owned(level.getEntity(member.entityId()), state, lease, member))
                 .map(SceneMember::actorId).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        if (!missing.isEmpty()) { recoveryUnresolved(runtime, lease, missing, false); return; }
+        if (!missing.isEmpty()) {
+            forgetRestartRecoveryObservation(runtime, lease.id());
+            recoveryUnresolved(runtime, lease, missing, false);
+            return;
+        }
         boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
         RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
         boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
         if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
-            recoveryUnresolved(runtime, lease, java.util.Set.of(), true); return;
+            forgetRestartRecoveryObservation(runtime, lease.id());
+            recoveryUnresolved(runtime, lease, java.util.Set.of(), true);
+            return;
         }
-        reclaimObservedBodies(level, runtime, state, lease);
+        if (reclaimObservedBodies(level, runtime, state, lease)) forgetRestartRecoveryObservation(runtime, lease.id());
+    }
+
+    /** Package-visible recovery policy hook. The interval is inclusive at its final tick. */
+    static boolean restartRecoveryObservationReady(long completeLoadSince, long gameTime) {
+        return gameTime - completeLoadSince >= RESTART_RECOVERY_OBSERVATION_TICKS;
+    }
+
+    private static boolean allRestartRecoveryColumnsLoaded(ServerLevel level, SceneLease lease) {
+        for (SceneMember member : lease.members()) {
+            BodyPosition position = lease.memberPosition(member.actorId());
+            if (!level.hasChunkAt(new BlockPos(position.x(), position.y() - 1, position.z()))) return false;
+        }
+        if (!FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)) return true;
+        BlockPosition cargo = FrontierSceneBehaviors.logistics(lease).cargoPosition();
+        return level.hasChunkAt(new BlockPos(cargo.x(), cargo.y(), cargo.z()));
+    }
+
+    private static long restartRecoveryObservationSince(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId, long gameTime) {
+        Map<SceneLeaseId, Long> observations = RESTART_RECOVERY_SINCE.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        if (observations.size() >= MAX_PENDING_DRAINS && !observations.containsKey(leaseId)) return gameTime;
+        return observations.computeIfAbsent(leaseId, ignored -> gameTime);
     }
 
     /** Accepts only the already observed exact body set; player demand remains the caller's responsibility. */
@@ -304,16 +358,21 @@ final class FrontierV3SceneExecutor {
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
-            BlockPosition canonical = lease.memberPosition(member.actorId());
-            BlockPos candidate = new BlockPos(canonical.x(), canonical.y(), canonical.z());
+            BodyPosition canonical = lease.memberPosition(member.actorId());
+            BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
-            BlockPos position = FrontierV3StandingPosition.aboveFloor(level, candidate);
-            if (position == null) return BodyMaterialization.CONFLICT;
+            BlockPos position = FrontierV3StandingPosition.aboveExactFloor(level, candidate);
+            // The semantic floor is projected independently and only into naturally loaded
+            // chunks.  A fresh empty support column is therefore a normal materialization
+            // dependency, not permission to substitute a higher terrain surface or to mark a
+            // player/world conflict before the owned projection has had a chance to run.
+            if (position == null) return BodyMaterialization.DEFERRED;
             boolean bioform = bioform(state, member.actorId());
             Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
             if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 scene body");
             body.setUUID(member.entityId());
-            body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
+            if (position.getY() != canonical.y()) return BodyMaterialization.CONFLICT;
+            body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
             body.setPersistenceRequired();
             body.setNoAi(true);
             if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
@@ -321,7 +380,11 @@ final class FrontierV3SceneExecutor {
             body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
             body.setCustomNameVisible(true);
             mark(body, lease, member);
-            if (!level.addFreshEntity(body)) return BodyMaterialization.CONFLICT;
+            if (!level.addFreshEntity(body)) {
+                PaleMirrorMod.LOGGER.warn("Frontier v3 scene body admission failed lease={} actor={} uuid={} body={}",
+                        lease.id().value(), member.actorId().value(), member.entityId(), canonical);
+                return BodyMaterialization.CONFLICT;
+            }
         }
         return BodyMaterialization.COMPLETE;
     }
@@ -362,10 +425,10 @@ final class FrontierV3SceneExecutor {
             }
             allCurrent = false;
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
-            BlockPosition canonical = lease.memberPosition(member.actorId());
-            BlockPos candidate = new BlockPos(canonical.x(), canonical.y(), canonical.z());
+            BodyPosition canonical = lease.memberPosition(member.actorId());
+            BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return "UNLOADED";
-            if (FrontierV3StandingPosition.aboveFloor(level, candidate) == null) return "BLOCKED";
+            if (FrontierV3StandingPosition.aboveExactFloor(level, candidate) == null) return "AWAITING_EXACT_FLOOR";
         }
         return allCurrent ? "CURRENT" : "READY";
     }
@@ -401,11 +464,11 @@ final class FrontierV3SceneExecutor {
         OperationTravel next = translateTravel(current, current.nextHotCursor());
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
-            BlockPosition expected = next.formation().get(member.actorId());
+            BodyPosition expected = next.formation().get(member.actorId());
             if (!(entity instanceof Mob body) || !owned(entity, state, lease, member)
-                    || body.getBlockX() != expected.x() || body.getBlockZ() != expected.z()) return false;
+                    || body.getBlockX() != expected.x() || body.getBlockY() != expected.y() || body.getBlockZ() != expected.z()) return false;
         }
-        if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor())) return false;
+        if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor().surface().support())) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "scene-operation-travel", lease.id().value(),
                 new OperationTravelAdvanced(operation.id(), next));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "operation_travel_advanced", lease, result);
@@ -501,7 +564,7 @@ final class FrontierV3SceneExecutor {
             if (operation != null && operation.activeTravel().isPresent()) {
                 OperationTravel travel = operation.activeTravel().orElseThrow();
                 if (!travel.arrived()) {
-                    BlockPosition target = operationTravelTargetPosition(travel, actor.member().actorId());
+                    BodyPosition target = operationTravelTargetPosition(travel, actor.member().actorId());
                     return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
                 }
             }
@@ -527,21 +590,21 @@ final class FrontierV3SceneExecutor {
         RouteOperation operation = state.operations().get(logistics.operationId());
         if (logistics.engagementId().isEmpty() && operation != null && operation.activeTravel().isPresent()) {
             OperationTravel travel = operation.activeTravel().orElseThrow();
-            if (!travel.arrived()) return translateTravel(travel, travel.nextHotCursor()).cargoAnchor();
+            if (!travel.arrived()) return translateTravel(travel, travel.nextHotCursor()).cargoAnchor().surface().support();
         }
         return logistics.cargoPosition();
     }
 
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
         BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
         travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
         return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, deltaY, deltaZ));
     }
 
     /** Exact feet target for the next retained edge; package-visible for the terrain regression. */
-    static BlockPosition operationTravelTargetPosition(OperationTravel travel, SubjectId actorId) {
-        BlockPosition target = translateTravel(travel, travel.nextHotCursor()).formation().get(actorId);
+    static BodyPosition operationTravelTargetPosition(OperationTravel travel, SubjectId actorId) {
+        BodyPosition target = translateTravel(travel, travel.nextHotCursor()).formation().get(actorId);
         if (target == null) throw new IllegalArgumentException("operation travel has no formation target for " + actorId);
         // Formation cells are exact feet positions.  Retaining their Y datum is essential: the
         // motion provider may traverse only the next surveyed topology edge, including grade.
@@ -737,6 +800,12 @@ final class FrontierV3SceneExecutor {
             return lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING);
         });
         if (observations != null && observations.isEmpty()) LAST_OBSERVED.remove(runtime);
+        Map<SceneLeaseId, Long> recovery = RESTART_RECOVERY_SINCE.get(runtime);
+        if (recovery != null) recovery.keySet().removeIf(id -> {
+            SceneLease lease = state.sceneLeases().get(id);
+            return lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART;
+        });
+        if (recovery != null && recovery.isEmpty()) RESTART_RECOVERY_SINCE.remove(runtime);
     }
 
     private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
@@ -749,11 +818,20 @@ final class FrontierV3SceneExecutor {
     private static void forgetLeaseTransient(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
         forgetColdDemand(runtime, leaseId);
         forgetLastObserved(runtime, leaseId);
+        forgetRestartRecoveryObservation(runtime, leaseId);
+    }
+
+    private static void forgetRestartRecoveryObservation(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
+        Map<SceneLeaseId, Long> observations = RESTART_RECOVERY_SINCE.get(runtime);
+        if (observations == null) return;
+        observations.remove(leaseId);
+        if (observations.isEmpty()) RESTART_RECOVERY_SINCE.remove(runtime);
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         COLD_DEMAND_SINCE.remove(runtime);
         LAST_OBSERVED.remove(runtime);
+        RESTART_RECOVERY_SINCE.remove(runtime);
     }
 
     private static BlockPos spawnCandidate(BlockPosition anchor, int ordinal) {

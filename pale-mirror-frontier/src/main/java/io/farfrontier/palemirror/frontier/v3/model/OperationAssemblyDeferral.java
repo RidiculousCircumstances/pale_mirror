@@ -4,11 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Exact loaded-world reason one HOT participant cannot advance its next assembly cursor. */
-public record OperationAssemblyDeferral(SubjectId actorId, BlockPosition target, BlockPosition obstructionFloor, Reason reason) {
+public record OperationAssemblyDeferral(SubjectId actorId, SurfaceAnchor target, SurfaceAnchor obstructionSurface, Reason reason) {
     public OperationAssemblyDeferral {
         actorId = Objects.requireNonNull(actorId, "deferred assembly actor");
         target = Objects.requireNonNull(target, "deferred assembly target");
-        obstructionFloor = Objects.requireNonNull(obstructionFloor, "deferred assembly obstruction floor");
+        obstructionSurface = Objects.requireNonNull(obstructionSurface, "deferred assembly obstruction surface");
         reason = Objects.requireNonNull(reason, "deferred assembly reason");
     }
 

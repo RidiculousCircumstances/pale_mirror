@@ -306,12 +306,23 @@ final class FrontierV3DiagnosticJson {
                 + ",\"assemblyProgress\":[" + value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
                 .map(entry -> assemblyProgress(entry.getKey(), entry.getValue())).reduce((left, right) -> left + "," + right).orElse("") + "]"
                 + value.deferral().map(deferral -> ",\"assemblyDeferred\":true,\"assemblyDeferredActor\":\"" + quote(deferral.actorId().value())
-                        + "\",\"assemblyDeferredTarget\":" + position(deferral.target()) + ",\"assemblyObstructionFloor\":" + position(deferral.obstructionFloor())
+                        + "\",\"assemblyDeferredTarget\":" + position(deferral.target().support()) + ",\"assemblyObstructionSurface\":" + position(deferral.obstructionSurface().support())
                         + ",\"assemblyDeferredReason\":\"" + deferral.reason() + "\"")
                         .orElse(",\"assemblyDeferred\":false")).orElse("");
-        String travel = operation.activeTravel().map(value -> ",\"travelCursor\":" + value.cursor() + ",\"travelLength\":" + value.corridor().size()
-                + ",\"travelCurrent\":" + position(value.currentPosition()) + ",\"travelCargo\":" + position(value.cargoAnchor())
-                + ",\"travelArrived\":" + value.arrived()).orElse("");
+        String travel = operation.activeTravel().map(value -> {
+            long blockedEdges = value.topology().edges().stream()
+                    .filter(edge -> edge.availability() != io.farfrontier.palemirror.frontier.v3.model.TraversalAvailability.OPEN).count();
+            String nextEdge = value.arrived() ? "" : value.nextEdge().id().value();
+            String nextAvailability = value.arrived() ? "" : value.nextEdge().availability().name();
+            return ",\"travelTopology\":\"" + quote(value.topology().id().value()) + "\",\"travelTopologyRevision\":" + value.topology().revision()
+                    + ",\"travelCursor\":" + value.cursor() + ",\"travelLength\":" + value.corridor().size()
+                    + ",\"travelCurrent\":" + position(value.currentPosition()) + ",\"travelCargo\":" + position(value.cargoAnchor().surface().support())
+                    + ",\"travelArrived\":" + value.arrived() + ",\"travelNextEdge\":\"" + quote(nextEdge)
+                    + "\",\"travelNextEdgeAvailability\":\"" + quote(nextAvailability) + "\",\"travelUnavailableEdges\":" + blockedEdges;
+        }).orElse("");
+        var settlementTopology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), operation.settlementId());
+        long settlementUnavailableEdges = settlementTopology.edges().stream()
+                .filter(edge -> edge.availability() != io.farfrontier.palemirror.frontier.v3.model.TraversalAvailability.OPEN).count();
         String hiveSighting = HivePerceptionProcess.observedCarrierPosition(state, operation.id())
                 .map(position -> ",\"hiveObservedCarrier\":" + position(position)).orElse("");
         String hiveIntercept = HivePerceptionProcess.interceptTask(state, operation.id())
@@ -321,15 +332,17 @@ final class FrontierV3DiagnosticJson {
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
-                + ",\"routeLength\":" + operation.route().size() + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept + hiveEngagement
+                + ",\"routeLength\":" + operation.route().size() + ",\"settlementTraversalAvailable\":"
+                + (settlementUnavailableEdges == 0L) + ",\"settlementUnavailableEdges\":" + settlementUnavailableEdges
+                + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept + hiveEngagement
                 + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
     }
 
     /** Bounded exact cursors make a stalled ordinary HOT approach diagnosable without world mutation. */
     private static String assemblyProgress(SubjectId actorId, io.farfrontier.palemirror.frontier.v3.model.OperationAssembly.Member member) {
-        String next = member.arrived() ? "null" : position(member.corridor().get(member.cursor() + 1));
+        String next = member.arrived() ? "null" : position(member.nextSurface().support());
         return "{\"actor\":\"" + quote(actorId.value()) + "\",\"cursor\":" + member.cursor()
-                + ",\"length\":" + member.corridor().size() + ",\"current\":" + position(member.currentPosition()) + ",\"next\":" + next + "}";
+                + ",\"length\":" + member.corridor().size() + ",\"current\":" + position(member.currentSurface().support()) + ",\"next\":" + next + "}";
     }
 
     private static String assemblyReadiness(FrontierV3AmbientActorExecutor.AssemblyReadiness value) {
@@ -352,10 +365,54 @@ final class FrontierV3DiagnosticJson {
         if (project == null) return unavailable("route_construction", id, checkpoint, "not_found");
         java.util.List<BlockPosition> cells = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.routeConstructionCells(state, project);
         String next = project.confirmedCells() == cells.size() ? "null" : position(cells.get(project.confirmedCells()));
+        String team = project.team().map(value -> {
+            String members = value.memberIds().stream().sorted().map(actorId -> routeConstructionTeamMember(state, actorId))
+                    .reduce((left, right) -> left + "," + right).orElse("");
+            boolean fullyEquipped = io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.ready(state, value);
+            return ",\"teamPresent\":true,\"teamFullyEquipped\":" + fullyEquipped + ",\"teamMembers\":[" + members + "]";
+        }).orElse(",\"teamPresent\":false,\"teamFullyEquipped\":false,\"teamMembers\":[]");
+        String assembly = project.assembly().map(value -> {
+            String members = value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                    .map(entry -> routeConstructionAssemblyMember(state, entry.getKey(), entry.getValue()))
+                    .reduce((left, right) -> left + "," + right).orElse("");
+            int cursorTotal = value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member::cursor).sum();
+            return ",\"assemblyPresent\":true,\"assemblyComplete\":" + value.complete() + ",\"assemblyCursorTotal\":" + cursorTotal
+                    + ",\"assemblyMembers\":[" + members + "]";
+        }).orElse(",\"assemblyPresent\":false");
+        long pendingProjectIntents = state.physicalIntents().values().stream()
+                .filter(intent -> intent.subjectIds().contains(project.id()))
+                .filter(intent -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                        || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING).count();
+        long pendingOtherIntents = state.physicalIntents().values().stream()
+                .filter(intent -> !intent.subjectIds().contains(project.id()))
+                .filter(intent -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                        || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING).count();
         return base("route_construction", id, checkpoint) + ",\"status\":\"ok\",\"project\":\"" + quote(project.id().value())
                 + "\",\"phase\":\"" + project.status() + "\",\"confirmedCells\":" + project.confirmedCells()
                 + ",\"requiredCells\":" + cells.size() + ",\"cargo\":\"" + quote(project.cargoId().map(SubjectId::value).orElse(""))
-                + "\",\"cargoPresent\":" + project.cargoId().isPresent() + ",\"nextCell\":" + next + "}";
+                + "\",\"cargoPresent\":" + project.cargoId().isPresent() + ",\"nextCell\":" + next
+                + ",\"pendingProjectIntents\":" + pendingProjectIntents + ",\"pendingOtherIntents\":" + pendingOtherIntents + team + assembly + "}";
+    }
+
+    /** Bounded exact crew readiness shows why a project may not yet accept player-supplied material. */
+    private static String routeConstructionTeamMember(FrontierWorldState state, SubjectId actorId) {
+        var lease = state.ambientLeases().get(actorId);
+        return "{\"actor\":\"" + quote(actorId.value()) + "\",\"toolReady\":"
+                + io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.holdsTool(state, actorId)
+                + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
+                + "\",\"ambientGoal\":\"" + quote(lease == null ? "NONE" : lease.goal().name()) + "\"}";
+    }
+
+    /** Read-only per-worker cursor and lease state for one bounded engineering approach. */
+    private static String routeConstructionAssemblyMember(FrontierWorldState state, SubjectId actorId,
+                                                          io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member member) {
+        var lease = state.ambientLeases().get(actorId);
+        String next = member.arrived() ? "null" : position(member.corridor().get(member.cursor() + 1));
+        return "{\"actor\":\"" + quote(actorId.value()) + "\",\"cursor\":" + member.cursor()
+                + ",\"length\":" + member.corridor().size() + ",\"arrived\":" + member.arrived()
+                + ",\"next\":" + next + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
+                + "\",\"ambientGoal\":\"" + quote(lease == null ? "NONE" : lease.goal().name())
+                + "\",\"leaseTarget\":" + (lease == null ? "null" : position(lease.goalPosition())) + "}";
     }
 
     /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */

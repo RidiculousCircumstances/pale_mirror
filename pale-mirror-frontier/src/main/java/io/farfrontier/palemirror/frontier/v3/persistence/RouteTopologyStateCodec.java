@@ -21,6 +21,15 @@ public final class RouteTopologyStateCodec {
             FrontierWorldStateCodec.writeString(output, route.getKey().value()); output.writeByte(route.getValue().size());
             for (BlockPosition point : route.getValue()) FrontierWorldStateCodec.writePosition(output, point);
         }
+        List<Map.Entry<SubjectId, Map<TraversalEdgeId, TraversalAvailability>>> availability = topology.supplyAvailability().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).toList();
+        output.writeByte(availability.size());
+        for (Map.Entry<SubjectId, Map<TraversalEdgeId, TraversalAvailability>> entry : availability) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeShort(entry.getValue().size());
+            for (Map.Entry<TraversalEdgeId, TraversalAvailability> edge : entry.getValue().entrySet().stream().sorted(Map.Entry.comparingByKey(java.util.Comparator.comparing(TraversalEdgeId::value))).toList()) {
+                FrontierWorldStateCodec.writeString(output, edge.getKey().value()); output.writeByte(FrontierWireTags.tag(edge.getValue()));
+            }
+        }
     }
     public static RouteTopology read(DataInputStream input, FrontierBootstrap bootstrap) throws IOException {
         Map<SubjectId, List<BlockPosition>> routes = new LinkedHashMap<>(); int count = input.readUnsignedByte();
@@ -35,6 +44,25 @@ public final class RouteTopologyStateCodec {
             FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route);
             if (routes.put(settlement, List.copyOf(route)) != null) throw new IllegalArgumentException("duplicate replacement route settlement");
         }
-        return new RouteTopology(routes);
+        Map<SubjectId, Map<TraversalEdgeId, TraversalAvailability>> availability = new LinkedHashMap<>();
+        int availabilityOwners = input.readUnsignedByte();
+        if (availabilityOwners > RouteTopology.MAX_REPLACEMENTS) throw new IllegalArgumentException("route availability owner count is out of bounds");
+        for (int owner = 0; owner < availabilityOwners; owner++) {
+            SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); int edgeCount = input.readUnsignedShort();
+            if (edgeCount > TraversalTopology.MAX_EDGES || availability.containsKey(settlement)) throw new IllegalArgumentException("route availability edge count is invalid");
+            Map<TraversalEdgeId, TraversalAvailability> edges = new LinkedHashMap<>();
+            for (int edge = 0; edge < edgeCount; edge++) {
+                TraversalEdgeId edgeId = new TraversalEdgeId(FrontierWorldStateCodec.readString(input));
+                if (edges.put(edgeId, FrontierWireTags.require(TraversalAvailability.class, input.readUnsignedByte())) != null) {
+                    throw new IllegalArgumentException("duplicate route availability edge");
+                }
+            }
+            availability.put(settlement, Map.copyOf(edges));
+        }
+        RouteTopology topology = new RouteTopology(routes, availability);
+        for (SubjectId settlement : availability.keySet()) {
+            topology.supplyTraversalTopology(bootstrap, settlement);
+        }
+        return topology;
     }
 }

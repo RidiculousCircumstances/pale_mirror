@@ -1,9 +1,17 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
@@ -15,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RouteConstructionTaskProcessTest {
     @Test
@@ -48,6 +57,8 @@ class RouteConstructionTaskProcessTest {
         RouteConstruction project = started.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
                 .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
         assertTrue(project.team().isPresent(), "new construction must retain an exact engineering crew instead of an autonomous builder");
+        assertEquals(EngineeringRecoveryTeam.MIN_MEMBERS, project.team().orElseThrow().memberIds().size(),
+                "one narrow replacement cell admits its reachable two-person work front, not a fictitious four-body crowd");
         state = state.withStrategicPlans(state.strategicPlans().transitionTask(construction.id(), StrategicTaskStatus.ACTIVE));
         state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
@@ -81,11 +92,16 @@ class RouteConstructionTaskProcessTest {
                 "a tool-ready exact crew cannot borrow the legacy autonomous block placer before HOT assembly exists");
         RouteConstructionAssemblyStarted assemblyStarted = assemblyPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(RouteConstructionAssemblyStarted.class::isInstance).map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        assertTrue(assemblyPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast)
+                .anyMatch(created -> created.action().equals(RouteConstructionProcess.assemblyProgress(project.id(), 220L))),
+                "assembly admission must schedule the crew's own human COLD cadence, not wait for the next construction scan");
         assertEquals(assemblyStarted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(assemblyStarted.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(assemblyStarted)));
         state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, assemblyStarted);
         assertFalse(state.routeConstructions().get(project.id()).assembly().orElseThrow().complete());
-        RouteConstructionAssemblyAdvanced assemblyAdvanced = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 300L)).stream()
+        RouteConstructionAssemblyAdvanced assemblyAdvanced = RouteConstructionProcess.planAssemblyProgress(state,
+                        RouteConstructionProcess.assemblyProgress(project.id(), 320L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyAdvanced.class::isInstance)
                 .map(RouteConstructionAssemblyAdvanced.class::cast).findFirst().orElseThrow();
         assertEquals(assemblyAdvanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(assemblyAdvanced.type(),
@@ -116,6 +132,94 @@ class RouteConstructionTaskProcessTest {
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test
+    void crewAssemblyProgressIsDurableAcrossRestartAndDoesNotWaitForTheNextStrategicScan() {
+        WorldId world = new WorldId("frontier:route-construction-assembly-restart");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
+                FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(world, 41L);
+        FrontierWorldState toolReady = issueAllFixtureTools(base.initialState());
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
+                base.worldId(), toolReady, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        var original = FrontierEngines.create(configuration);
+
+        original.advanceTo(new SimInstant(200L), new WorkBudget(64, 512));
+        FrontierWorldState admitted = state(original);
+        RouteConstruction project = admitted.routeConstructions().values().stream().findFirst().orElseThrow();
+        EngineeringWorkAssembly beforeRestart = project.assembly().orElseThrow();
+        assertFalse(beforeRestart.complete());
+        assertTrue(original.checkpoint().schedules().contains(RouteConstructionProcess.assemblyProgress(project.id(), 220L)),
+                "assembly must retain its own due action before restart instead of relying on the 200-tick construction scan");
+
+        var checkpoint = original.checkpoint();
+        var recovered = FrontierEngines.recover(configuration, new RecoveryImage(world,
+                Optional.of(new SnapshotRecord(checkpoint, checkpoint.revision().value())), List.of()));
+        assertEquals(checkpoint.schedules(), recovered.checkpoint().schedules(),
+                "recovery must retain the exact outstanding COLD crew step");
+
+        recovered.advanceTo(new SimInstant(220L), new WorkBudget(64, 512));
+        EngineeringWorkAssembly afterRecoveryStep = state(recovered).routeConstructions().get(project.id()).assembly().orElseThrow();
+        assertTrue(afterRecoveryStep.members().values().stream().mapToInt(EngineeringWorkAssembly.Member::cursor).sum()
+                        > beforeRestart.members().values().stream().mapToInt(EngineeringWorkAssembly.Member::cursor).sum(),
+                "the recovered human cadence must advance a retained crew member before the next strategic scan at tick 400");
+        assertTrue(recovered.checkpoint().schedules().contains(RouteConstructionProcess.assemblyProgress(project.id(), 240L)));
+
+        for (long tick = 221L; tick <= 2_000L; tick++) {
+            recovered.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            if (state(recovered).routeConstructions().get(project.id()).assembly().orElseThrow().complete()) break;
+        }
+        assertTrue(state(recovered).routeConstructions().get(project.id()).assembly().orElseThrow().complete(),
+                "the recurring human cadence must complete the bounded two-person approach rather than merely prove its first step");
+    }
+
+    @Test
+    void engineeringAssemblyWaitsForPriorAmbientLeaseThenRetainsOneHotCursorThroughRelease() {
+        FrontierWorldState state = issueAllFixtureTools(FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(
+                new WorldId("frontier:route-construction-hot-cursor"), 41L).initialState());
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
+        SubjectId member = project.team().orElseThrow().memberIds().getFirst();
+
+        AmbientActorLease ordinary = AmbientActorProcess.nextLease(state, member, new SimInstant(0L));
+        assertEquals(AmbientGoalKind.WORK, ordinary.goal(), "the predecessor is an ordinary ambient lease before an engineering assembly exists");
+        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, ordinary), member, AmbientLeaseStatus.HOT);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> blockedAdmission = RouteConstructionProcess.plan(state,
+                RouteConstructionProcess.scan(1, 200L));
+        assertFalse(blockedAdmission.stream().anyMatch(event -> event.payload() instanceof RouteConstructionAssemblyStarted),
+                "COLD must not compile from an actor whose physical predecessor lease still owns its final floor");
+
+        state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
+        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, ordinary.handoffPosition(), FixedScalar.whole(8)));
+        RouteConstructionAssemblyStarted started = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 400L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
+                .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, started);
+
+        AmbientActorLease engineering = AmbientActorProcess.nextLease(state, member, new SimInstant(400L));
+        assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, engineering.goal());
+        EngineeringWorkAssembly assembly = state.routeConstructions().get(project.id()).assembly().orElseThrow();
+        EngineeringWorkAssembly.Member before = assembly.members().get(member);
+        assertEquals(before.corridor().get(before.cursor() + 1), engineering.goalPosition());
+        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, engineering), member, AmbientLeaseStatus.HOT);
+
+        EngineeringWorkAssembly advanced = assembly.advance(member);
+        state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
+                new RouteConstructionAssemblyAdvanced(project.id(), advanced));
+        EngineeringWorkAssembly.Member after = state.routeConstructions().get(project.id()).assembly().orElseThrow().members().get(member);
+        AmbientActorLease retargeted = state.ambientLeases().get(member);
+        BlockPosition expectedGoal = after.arrived() ? after.currentPosition() : after.corridor().get(after.cursor() + 1);
+        assertEquals(expectedGoal, retargeted.goalPosition(), "HOT arrival must advance and retarget the same retained COLD cursor");
+
+        FrontierWorldState releaseState = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
+        assertThrows(IllegalArgumentException.class, () -> AmbientLeaseStateProcess.release(releaseState,
+                new AmbientLeaseReleased(member, before.currentPosition(), FixedScalar.whole(8))),
+                "a HOT body may not silently return the assembly to a stale predecessor position");
+        FrontierWorldState released = AmbientLeaseStateProcess.release(releaseState,
+                new AmbientLeaseReleased(member, after.currentPosition(), FixedScalar.whole(8)));
+        assertEquals(AmbientLeaseStatus.CLOSED, released.ambientLeases().get(member).status());
+        assertEquals(after.currentPosition(), released.actorLocations().get(member).position());
+    }
+
     private static FrontierWorldState stateWithConfirmedPatrol() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-task"), 91L);
         FrontierWorldState state = FrontierWorldState.initial(bootstrap); Settlement settlement = bootstrap.settlements().getFirst();
@@ -139,5 +243,23 @@ class RouteConstructionTaskProcessTest {
     }
     private static StrategicTask constructionTask(FrontierWorldState state, StrategicTaskStatus status) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS && task.status() == status).findFirst().orElseThrow();
+    }
+
+    private static FrontierWorldState issueAllFixtureTools(FrontierWorldState state) {
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
+        ExactInventory inventory = state.inventory();
+        for (SubjectId member : project.team().orElseThrow().memberIds()) {
+            ExactItemStack tool = inventory.items().values().stream()
+                    .filter(item -> item.economicOwnerId().equals(project.settlementId()))
+                    .filter(item -> EngineeringToolCustody.isTool(item.itemKind()))
+                    .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot)
+                    .findFirst().orElseThrow();
+            inventory = inventory.moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(member));
+        }
+        return state.withInventory(inventory);
+    }
+
+    private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {
+        return new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
     }
 }

@@ -25,7 +25,7 @@ final class FrontierV3OperationFixture {
         BlockPosition destination = prior.corridor().get(cursor);
         int deltaX = destination.x() - from.x();
         int deltaZ = destination.z() - from.z();
-        Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
         prior.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
         return prior.advance(cursor, formation, prior.cargoAnchor().offset(deltaX, 0, deltaZ));
     }

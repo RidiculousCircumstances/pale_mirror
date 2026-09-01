@@ -58,6 +58,7 @@ final class PaleMirrorCommandRegistrar {
         inspect.then(diagnosticObject("trace"));
         inspect.then(diagnosticObject("transit"));
         inspect.then(diagnosticObject("medical"));
+        inspect.then(diagnosticObject("traversal_foundry"));
         v3.then(inspect);
         v3.then(Commands.literal("advance").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("ticks", IntegerArgumentType.integer(1, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS)).executes(context -> {

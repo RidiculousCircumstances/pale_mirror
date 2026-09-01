@@ -162,7 +162,7 @@ public final class FrontierSceneBehaviors {
         @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) {
             RouteOperation operation = state.operations().get(cause(lease).operationId());
             if (operation != null && operation.activeTravel().isPresent()
-                    && !operation.activeTravel().orElseThrow().cargoAnchor().equals(cause(lease).cargoPosition())) {
+                    && !operation.activeTravel().orElseThrow().cargoAnchor().surface().support().equals(cause(lease).cargoPosition())) {
                 throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
             }
         }
@@ -173,7 +173,7 @@ public final class FrontierSceneBehaviors {
             RouteOperation operation = operations.get(cause.operationId());
             if (operation == null || !operation.cargoId().equals(cause.cargoId())) throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
             boolean enRoute = operation.stage() == OperationStage.EN_ROUTE && operation.currentPosition().equals(lease.handoffPosition())
-                    && operation.activeTravel().map(travel -> travel.cargoAnchor().equals(cause.cargoPosition())).orElse(true);
+                    && operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(cause.cargoPosition())).orElse(true);
             boolean interrupted = operation.stage() == OperationStage.INTERRUPTED
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
             boolean unresolved = operation.stage() == OperationStage.FAILED && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isPresent();
@@ -216,7 +216,8 @@ public final class FrontierSceneBehaviors {
         @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
             RouteOperation operation = state.operations().get(cause(lease).operationId());
             boolean checkpoint = cause(lease).engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE && operation.activeTravel().isPresent();
-            return checkpoint ? operation.activeTravel().orElseThrow().formation().get(actorId) : observed;
+            return checkpoint ? operation.activeTravel().orElseThrow().formation().get(actorId).supportingSurface().support()
+                    : new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
         }
     }
 
@@ -255,7 +256,9 @@ public final class FrontierSceneBehaviors {
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) {
             return state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).id(), SettlementAssaultStatus.COLD_COMBAT);
         }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) { return observed; }
+        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
+            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        }
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {
@@ -288,7 +291,9 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) { return observed; }
+        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
+            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        }
     }
 
     /** The care owner itself, rather than a synthetic medic mob, owns every treatment scene. */
@@ -324,7 +329,9 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) { return observed; }
+        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
+            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        }
         @Override public HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));
             return operation.active() && (operation.patientId().equals(actorId) || operation.team().memberIds().contains(actorId))

@@ -15,7 +15,7 @@ final class FrontierV3TestPilotScenario {
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of(
             "summary", "performance", "site", "settlement", "hive", "hive_transfer", "actor", "item", "container", "market_order", "operation",
-            "route_construction", "physical_delta", "scene", "intent", "trace", "transit", "medical");
+            "route_construction", "physical_delta", "scene", "intent", "trace", "transit", "medical", "traversal_foundry");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }

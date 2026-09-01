@@ -69,7 +69,7 @@ public final class FrontierBootstrapper {
         for (StructureKind kind : StructureKind.values()) {
             int[] offset = offsets[kind.ordinal()];
             structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
-                    settlementId, kind, anchor.offset(offset[0], 0, offset[1])));
+                    settlementId, kind, anchor.offset(offset[0], 0, offset[1]), FacilityFacing.WEST));
         }
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
         List<BlockPosition> placements = FrontierSettlementActorSlots.slots(BOUNDS, anchor, structures, residents);

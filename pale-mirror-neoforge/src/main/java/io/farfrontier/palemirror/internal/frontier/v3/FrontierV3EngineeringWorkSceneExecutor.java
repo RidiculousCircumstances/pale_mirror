@@ -54,7 +54,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
-                members, candidate.memberPositions(), Set.of(), Optional.empty());
+                members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
@@ -92,8 +92,8 @@ final class FrontierV3EngineeringWorkSceneExecutor {
             if (!(entity instanceof Mob mob) || !FrontierV3SceneExecutor.recognizes(runtime, entity)) {
                 conflict(level, runtime, lease, "hot-body-unavailable"); return;
             }
-            BlockPosition slot = lease.memberPosition(member.actorId());
-            FrontierV3ControlledMobMotion.moveToward(level, mob, new Vec3(slot.x() + 0.5D, mob.getY(), slot.z() + 0.5D));
+            BodyPosition slot = lease.memberPosition(member.actorId());
+            FrontierV3ControlledMobMotion.moveToward(level, mob, new Vec3(slot.x() + 0.5D, slot.y(), slot.z() + 0.5D));
             if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);

@@ -25,8 +25,8 @@ class RouteOperationHotColdTransitionTest {
                 "COLD owns an arrived segment until it atomically opens the next corridor");
         assertEquals(Set.copyOf(operation.participantIds()), travel.formation().keySet(),
                 "the hand-off retains the exact formation identities");
-        BlockPosition initialCarrier = initial.formation().get(operation.cargoCarrierId());
-        BlockPosition arrivedCarrier = travel.formation().get(operation.cargoCarrierId());
+        BodyPosition initialCarrier = initial.formation().get(operation.cargoCarrierId());
+        BodyPosition arrivedCarrier = travel.formation().get(operation.cargoCarrierId());
         assertEquals(initial.cargoAnchor().x() - initialCarrier.x(), travel.cargoAnchor().x() - arrivedCarrier.x());
         assertEquals(initial.cargoAnchor().z() - initialCarrier.z(), travel.cargoAnchor().z() - arrivedCarrier.z(),
                 "the exact cargo retains its carrier-relative anchor through COLD movement");

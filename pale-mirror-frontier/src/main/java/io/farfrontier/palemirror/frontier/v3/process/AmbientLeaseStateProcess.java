@@ -50,8 +50,17 @@ public final class AmbientLeaseStateProcess {
         }
         RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
                 .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false)).findFirst().orElse(null);
-        if (assembling != null && !release.position().equals(assembling.activeAssembly().orElseThrow().members().get(release.actorId()).currentPosition())) {
+        if (assembling != null && !release.position().equals(assembling.activeAssembly().orElseThrow().members().get(release.actorId()).currentSurface().support())) {
             throw new IllegalArgumentException("HOT operation assembly may return to COLD only at its exact cursor");
+        }
+        RouteConstruction engineering = state.routeConstructions().values().stream()
+                .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
+                .findFirst().orElse(null);
+        if (engineering != null) {
+            EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(release.actorId());
+            if (current.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !release.position().equals(member.currentPosition())) {
+                throw new IllegalArgumentException("HOT engineering assembly may return to COLD only at its exact cursor");
+            }
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.position(), actor.condition().withHealth(release.health())));

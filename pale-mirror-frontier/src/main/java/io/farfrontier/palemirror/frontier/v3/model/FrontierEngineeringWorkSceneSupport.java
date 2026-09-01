@@ -56,7 +56,8 @@ public final class FrontierEngineeringWorkSceneSupport {
         RouteConstruction project = require(state, cause);
         EngineeringWorkSceneCandidate candidate = candidate(state, project)
                 .orElseThrow(() -> new IllegalArgumentException("engineering scene has no exact COLD-ready crew"));
-        if (!lease.handoffPosition().equals(candidate.workCell()) || !lease.memberPositions().equals(candidate.memberPositions())
+        if (!lease.handoffPosition().equals(candidate.workCell())
+                || !lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet())
                 .equals(candidate.memberPositions().keySet())) {
             throw new IllegalArgumentException("engineering scene must retain the current exact crew and work cell");

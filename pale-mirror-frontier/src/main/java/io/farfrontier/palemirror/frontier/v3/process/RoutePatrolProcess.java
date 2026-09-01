@@ -25,7 +25,10 @@ public final class RoutePatrolProcess {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
         List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
-        if (candidates.size() < 2 || FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas())) {
+        if (state.routeTopology().supplyPassable(state.bootstrap(), settlement.id())) {
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
+        if (candidates.size() < 2) {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
         ResidentProfile leader = candidates.getFirst();
@@ -44,7 +47,7 @@ public final class RoutePatrolProcess {
             return List.of(new ProposedEvent(patrol.settlementId(), new RoutePatrolFailed(patrol.taskId())), transition(task, StrategicTaskStatus.BLOCKED));
         }
         int next = patrol.routeIndex() + 1;
-        java.util.Optional<BlockPosition> obstruction = FrontierRouteNetwork.firstObstructionOnSegment(patrol.route(), patrol.routeIndex(), state.physicalDeltas());
+        java.util.Optional<BlockPosition> obstruction = FrontierRouteNetwork.firstObstructionOnCarriagewaySegment(patrol.route(), patrol.routeIndex(), state.physicalDeltas());
         ProposedEvent advanced = new ProposedEvent(patrol.settlementId(), new RoutePatrolAdvanced(patrol.taskId(), next));
         if (obstruction.isPresent()) {
             BlockPosition confirmed = obstruction.orElseThrow();

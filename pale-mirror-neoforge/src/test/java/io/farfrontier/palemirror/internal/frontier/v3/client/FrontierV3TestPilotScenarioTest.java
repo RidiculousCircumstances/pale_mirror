@@ -224,4 +224,12 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
                 "nameContains":"","maxDistance":8,"maxAttacks":4,"timeoutMs":30000}]}"""));
     }
+
+    @Test
+    void permitsTheReadOnlyTraversalFoundryFixtureGate() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"assert_fixture","timeoutMs":30000,"checks":[
+                {"view":"traversal_foundry","id":"compiled","expect":{"status":"ok","passed":true}}]}],"actions":[]}""");
+        assertEquals(1, parsed.setupCount());
+    }
 }

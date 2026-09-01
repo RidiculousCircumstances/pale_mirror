@@ -15,9 +15,8 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
         waypoints = List.copyOf(Objects.requireNonNull(waypoints, "route construction waypoints"));
         workCells = List.copyOf(Objects.requireNonNull(workCells, "route construction work cells"));
         if (workCells.size() > 65_535 || workCells.stream().anyMatch(Objects::isNull)
-                || !workCells.equals(workCells.stream().sorted(java.util.Comparator.comparingInt(BlockPosition::x)
-                .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z)).distinct().toList())) {
-            throw new IllegalArgumentException("route construction work cells must be bounded, distinct and ordered");
+                || workCells.stream().distinct().count() != workCells.size()) {
+            throw new IllegalArgumentException("route construction work cells must be bounded and distinct");
         }
         if (confirmedCells < 0) throw new IllegalArgumentException("route construction cursor is negative");
         Objects.requireNonNull(status, "route construction status");

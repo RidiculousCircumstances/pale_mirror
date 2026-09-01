@@ -85,7 +85,7 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         Objects.requireNonNull(travel, "operation travel");
         if (activeAssembly.isPresent()) {
             OperationAssembly assembly = activeAssembly.orElseThrow();
-            if (!assembly.complete() || !travel.formation().equals(assembly.positions())
+            if (!assembly.complete() || !travel.formation().equals(bodyPositions(assembly.positions()))
                     || !travel.cargoAnchor().equals(assembly.cargoAnchor())) {
                 throw new IllegalArgumentException("operation travel must preserve its complete assembly formation and cargo anchor");
             }
@@ -103,6 +103,16 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, activeAssembly, Optional.of(travel));
     }
 
+    /** Applies loaded owned-route loss to this operation's retained segment only. */
+    public RouteOperation blockTravelAt(BlockPosition physicalSurface) {
+        Objects.requireNonNull(physicalSurface, "physical route surface");
+        if (activeTravel.isEmpty()) return this;
+        OperationTravel travel = activeTravel.orElseThrow();
+        java.util.Set<TraversalEdgeId> affected = FrontierRouteNetwork.affectedTraversalEdges(travel.topology(), physicalSurface);
+        if (affected.isEmpty()) return this;
+        return withTravel(travel.withAvailability(affected, TraversalAvailability.BLOCKED));
+    }
+
     public RouteOperation completeTravelSegment() {
         OperationTravel travel = activeTravel.orElseThrow(() -> new IllegalArgumentException("operation has no exact travel to complete"));
         if (!travel.arrived()) throw new IllegalArgumentException("operation travel segment has not arrived");
@@ -116,5 +126,11 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         List<SubjectId> copied = List.copyOf(participantIds);
         if (copied.size() != 2) throw new IllegalArgumentException("legacy route operation must retain one crew member and one guard");
         return RouteUnitManifest.legacyCargoEscort(id, copied.getFirst(), copied.get(1));
+    }
+
+    private static java.util.Map<SubjectId, BodyPosition> bodyPositions(java.util.Map<SubjectId, SurfaceAnchor> supports) {
+        java.util.Map<SubjectId, BodyPosition> bodies = new java.util.LinkedHashMap<>();
+        supports.forEach((actor, support) -> bodies.put(actor, BodyPosition.above(support)));
+        return java.util.Map.copyOf(bodies);
     }
 }

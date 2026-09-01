@@ -26,9 +26,9 @@ final class FrontierV3StandingPosition {
         if (!level.hasChunkAt(anchor)) return null;
         BlockPos direct = aboveExactFloor(level, anchor);
         if (direct != null) return direct;
-        // Historical ambient/scene inputs still contain retained feet-air terrain positions.
-        // The compatibility read is same-column only and is not permitted for new semantic
-        // facility ports; those call aboveExactFloor and defer until their owned floor exists.
+        // Ambient actor locations are deliberately a separate current-domain provider contract:
+        // their retained support column may have acquired an ordinary terrain surface above its
+        // strategic datum.  Scene/body and cargo anchors must use aboveExactFloor instead.
         return firstStandingPosition(level, anchor, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 anchor.getX(), anchor.getZ()));
     }

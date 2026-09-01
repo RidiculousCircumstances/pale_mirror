@@ -20,7 +20,12 @@ public final class FrontierContainerSocketPlan {
         BlockPosition position = new BlockPosition(surface.position().x(), surface.position().y() - 1, surface.position().z());
         if (state.physicalDeltas().containsKey(position)) return Optional.empty();
         if (surface.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) {
-            return FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology()).contains(position)
+            // This support is checked once per active surface turn.  Building the complete
+            // multi-settlement route-cell set here turns that bounded inspection into repeated
+            // whole-world allocation during fast-forward.  The route network already owns the
+            // equivalent topology-aware point predicate; use it without changing the immutable
+            // plan or the source of truth.
+            return FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), position)
                     ? Optional.of(new GrayboxCell(position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE))
                     : Optional.empty();
         }

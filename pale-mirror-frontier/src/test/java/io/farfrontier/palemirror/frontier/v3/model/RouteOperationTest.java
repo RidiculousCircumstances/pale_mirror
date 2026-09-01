@@ -22,8 +22,9 @@ class RouteOperationTest {
     @Test void operationMayOwnOnlyTheNextExactTravelSegment() {
         List<SubjectId> people = people(); SubjectId hauler = people.getFirst();
         RouteOperation operation = operation(people, 0, OperationStage.EN_ROUTE);
-        OperationTravel travel = new OperationTravel(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
-                Map.of(hauler, new BlockPosition(0, 64, 1), people.get(1), new BlockPosition(0, 64, 2), people.get(2), new BlockPosition(1, 64, 1)), new BlockPosition(0, 64, 0));
+        OperationTravel travel = new OperationTravel(topology(List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0))), 0,
+                Map.of(hauler, new BodyPosition(0, 65, 1), people.get(1), new BodyPosition(0, 65, 2), people.get(2), new BodyPosition(1, 65, 1)),
+                TransportAnchor.atSupportCell(new BlockPosition(0, 64, 0)));
         assertDoesNotThrow(() -> operation.withTravel(travel));
     }
 
@@ -48,8 +49,17 @@ class RouteOperationTest {
     private static OperationAssembly assembly(List<SubjectId> participants) {
         java.util.Map<SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
         for (int index = 0; index < participants.size(); index++) {
-            members.put(participants.get(index), new OperationAssembly.Member(List.of(new BlockPosition(index, 64, 0)), 0));
+            members.put(participants.get(index), new OperationAssembly.Member(TraversalTopology.corridor(
+                    new TraversalTopologyId("topology:route-operation-assembly-" + index), 0L, new SubjectId("operation:supply-1"),
+                    TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                    List.of(SurfaceAnchor.at(index, 64, 0))), 0));
         }
         return new OperationAssembly(members, participants.getFirst());
+    }
+
+    private static TraversalTopology topology(List<BlockPosition> corridor) {
+        return TraversalTopology.corridor(new TraversalTopologyId("topology:route-operation:" + corridor.hashCode()), 1L,
+                FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                corridor.stream().map(SurfaceAnchor::new).toList());
     }
 }

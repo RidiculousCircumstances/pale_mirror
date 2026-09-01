@@ -38,10 +38,10 @@ class FrontierPersistenceCodecTest {
     }
 
     @Test
-    void unknownVersionAndTruncatedSnapshotsFailClosed() {
+    void preCurrentEnvelopeAndTruncatedSnapshotsFailClosed() {
         byte[] encoded = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:empty"), Revision.ZERO,
                 SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        encoded[4] = 99;
+        encoded[4] = 1;
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(encoded));
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(new byte[] {0, 1, 2}));
     }

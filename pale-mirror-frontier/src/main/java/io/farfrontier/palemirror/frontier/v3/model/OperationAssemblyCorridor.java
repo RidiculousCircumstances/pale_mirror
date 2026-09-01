@@ -19,9 +19,9 @@ public final class OperationAssemblyCorridor {
 
     private OperationAssemblyCorridor() { }
 
-    public static List<BlockPosition> compile(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
-        Objects.requireNonNull(state, "assembly state"); Objects.requireNonNull(actorId, "assembly actor"); Objects.requireNonNull(destination, "assembly destination");
-        BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").position();
+    public static TraversalTopology compile(FrontierWorldState state, SubjectId operationId, SubjectId actorId, SurfaceAnchor destination) {
+        Objects.requireNonNull(state, "assembly state"); Objects.requireNonNull(operationId, "assembly operation"); Objects.requireNonNull(actorId, "assembly actor"); Objects.requireNonNull(destination, "assembly destination");
+        SurfaceAnchor start = new SurfaceAnchor(Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").position());
         Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);
         Set<BlockPosition> occupiedFloors = new LinkedHashSet<>();
         // COLD records are not physical obstacles. Only an actor which already owns a live
@@ -32,21 +32,21 @@ public final class OperationAssemblyCorridor {
                 .map(Map.Entry::getKey).map(state.actorLocations()::get)
                 .filter(java.util.Objects::nonNull).filter(location -> location.condition().status() == ActorLifeStatus.ALIVE)
                 .map(ActorLocation::position).forEach(occupiedFloors::add);
-        if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, start)
-                || !traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, destination)) {
+        if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, start.support())
+                || !traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, destination.support())) {
             throw new IllegalArgumentException("operation assembly has no clear actor or port endpoint");
         }
-        Map<BlockPosition, BlockPosition> previous = new HashMap<>(); Map<BlockPosition, Integer> cost = new HashMap<>();
+        Map<SurfaceAnchor, SurfaceAnchor> previous = new HashMap<>(); Map<SurfaceAnchor, Integer> cost = new HashMap<>();
         PriorityQueue<Candidate> frontier = new PriorityQueue<>(Comparator.comparingInt(Candidate::estimatedCost).thenComparingInt(Candidate::cost)
-                .thenComparingInt(value -> value.position().x()).thenComparingInt(value -> value.position().z()));
+                .thenComparingInt(value -> value.position().x()).thenComparingInt(value -> value.position().y()).thenComparingInt(value -> value.position().z()));
         cost.put(start, 0); frontier.add(new Candidate(start, 0, distance(start, destination))); int searched = 0;
         while (!frontier.isEmpty()) {
             Candidate current = frontier.remove(); if (current.cost() != cost.getOrDefault(current.position(), Integer.MAX_VALUE)) continue;
             if (++searched > MAX_SEARCHED_CELLS) throw new IllegalArgumentException("operation assembly corridor search exceeds bounded profile");
-            if (current.position().equals(destination)) return route(start, destination, previous);
+            if (current.position().equals(destination)) return route(operationId, actorId, start, destination, previous);
             for (Step step : STEPS) {
-                BlockPosition next = current.position().offset(step.x(), 0, step.z());
-                if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, next)) continue;
+                SurfaceAnchor next = current.position().offset(step.x(), 0, step.z());
+                if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, next.support())) continue;
                 int nextCost = Math.addExact(current.cost(), 1); if (nextCost >= cost.getOrDefault(next, Integer.MAX_VALUE)) continue;
                 previous.put(next, current.position()); cost.put(next, nextCost);
                 frontier.add(new Candidate(next, nextCost, Math.addExact(nextCost, distance(next, destination))));
@@ -55,13 +55,15 @@ public final class OperationAssemblyCorridor {
         throw new IllegalArgumentException("operation assembly corridor has no path to declared port slot");
     }
 
-    private static List<BlockPosition> route(BlockPosition start, BlockPosition destination, Map<BlockPosition, BlockPosition> previous) {
-        ArrayDeque<BlockPosition> result = new ArrayDeque<>();
-        for (BlockPosition cursor = destination;; cursor = previous.get(cursor)) { result.addFirst(cursor); if (cursor.equals(start)) break; }
+    private static TraversalTopology route(SubjectId operationId, SubjectId actorId, SurfaceAnchor start, SurfaceAnchor destination,
+                                           Map<SurfaceAnchor, SurfaceAnchor> previous) {
+        ArrayDeque<SurfaceAnchor> result = new ArrayDeque<>();
+        for (SurfaceAnchor cursor = destination;; cursor = previous.get(cursor)) { result.addFirst(cursor); if (cursor.equals(start)) break; }
         if (result.size() > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("operation assembly corridor exceeds bounded profile");
-        return List.copyOf(result);
+        return TraversalTopology.corridor(new TraversalTopologyId("topology:operation-assembly:" + operationId.value() + ":" + actorId.value()), 0L,
+                operationId, TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), List.copyOf(result));
     }
-    private static int distance(BlockPosition first, BlockPosition second) { return Math.addExact(Math.abs(first.x() - second.x()), Math.abs(first.z() - second.z())); }
+    private static int distance(SurfaceAnchor first, SurfaceAnchor second) { return Math.addExact(Math.abs(first.x() - second.x()), Math.abs(first.z() - second.z())); }
     /** A canonical route cell is a floor anchor, so its own semantic floor never blocks a body. */
     private static boolean traversable(WorldBounds bounds, Set<BlockPosition> bodyGeometry,
                                        Set<BlockPosition> occupiedFloors, BlockPosition floor) {
@@ -70,5 +72,5 @@ public final class OperationAssemblyCorridor {
                 && !bodyGeometry.contains(floor.offset(0, 2, 0));
     }
     private record Step(int x, int z) { }
-    private record Candidate(BlockPosition position, int cost, int estimatedCost) { }
+    private record Candidate(SurfaceAnchor position, int cost, int estimatedCost) { }
 }

@@ -18,7 +18,7 @@
   "actions": [
     { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16" }, "timeoutMs": 60000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -380, "y": 65, "z": -304 }, "settleMs": 1000 },
-    { "type": "wait_until_block", "position": { "x": -380, "y": 64, "z": -304 }, "block": "minecraft:gray_concrete", "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -380, "y": 64, "z": -304 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
     { "type": "break", "position": { "x": -380, "y": 64, "z": -304 } },
     { "type": "wait_until_block", "position": { "x": -380, "y": 64, "z": -304 }, "block": "minecraft:air", "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "-380,64,-304", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "causeKind": "PLAYER" }, "timeoutMs": 30000 },
@@ -28,11 +28,17 @@
     { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "FAILED" }, "timeoutMs": 30000 },
     { "type": "fast_forward", "ticks": 6000 },
     { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 0 }, "timeoutMs": 120000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "teamPresent": true, "teamFullyEquipped": true, "cargoPresent": false, "confirmedCells": 0 }, "timeoutMs": 120000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -405, "y": 66, "z": 250 }, "settleMs": 1000 },
     { "type": "wait_until_block", "position": { "x": -405, "y": 65, "z": 250 }, "block": "minecraft:chest", "timeoutMs": 30000 },
     { "type": "open_container", "position": { "x": -405, "y": 65, "z": 250 }, "timeoutMs": 10000 },
     { "type": "quick_move_from_inventory", "item": "minecraft:gray_concrete", "count": 2, "timeoutMs": 10000 },
     { "type": "wait_until_container_item", "containerId": "container:frontier-route-maintenance", "item": "minecraft:gray_concrete", "count": 2, "slot": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "assemblyPresent": true, "assemblyComplete": false, "cargoPresent": false, "confirmedCells": 0 }, "timeoutMs": 120000 },
+    { "type": "wait", "ms": 15000 },
+    { "type": "fast_forward", "ticks": 10000 },
+    { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "assemblyPresent": true, "assemblyComplete": true, "confirmedCells": 0 }, "timeoutMs": 120000 },
     { "type": "wait_until_container_item", "containerId": "container:frontier-route-maintenance", "item": "minecraft:gray_concrete", "count": 1, "slot": 0, "timeoutMs": 120000 },
     { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": true, "confirmedCells": 0 }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--380-64--304", "expect": { "status": "ok", "eventKind": "route_construction_material_loaded", "subject": "construction:route-reroute-settlement-1--380-64--304" }, "timeoutMs": 30000 },
@@ -41,14 +47,14 @@
     { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": true, "confirmedCells": 0 }, "timeoutMs": 30000 },
     { "type": "look", "at": { "x": -405, "y": 68, "z": 247 } },
     { "type": "assert_visible_board", "text": "BYPASS BUILDING", "position": { "x": -405, "y": 68, "z": 247 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -404, "y": 65, "z": 416 }, "settleMs": 1000 },
-    { "type": "wait_until_block", "position": { "x": -404, "y": 64, "z": 416 }, "block": "minecraft:gray_concrete", "timeoutMs": 120000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -368, "y": 65, "z": -340 }, "settleMs": 1000 },
+    { "type": "wait_until_block", "position": { "x": -368, "y": 64, "z": -340 }, "block": "minecraft:gray_carpet", "timeoutMs": 120000 },
     { "type": "wait_until_diagnostic", "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--380-64--304", "expect": { "status": "ok", "eventKind": "route_construction_cell_built", "subject": "construction:route-reroute-settlement-1--380-64--304" }, "timeoutMs": 30000 }
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 23,
+    "afterAction": 29,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -405, "y": 66, "z": 250 }, "settleMs": 1000 },
       { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
@@ -58,12 +64,12 @@
     ]
   },
   "assertions": [
-    { "after": 23, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": true, "confirmedCells": 0 } },
-    { "after": 29, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 } },
-    { "after": 29, "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--380-64--304", "expect": { "status": "ok", "eventKind": "route_construction_cell_built", "subject": "construction:route-reroute-settlement-1--380-64--304" } }
+    { "after": 29, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": true, "confirmedCells": 0 } },
+    { "after": 34, "view": "route_construction", "id": "settlement:1", "expect": { "status": "ok", "phase": "BUILDING", "cargoPresent": false, "confirmedCells": 1 } },
+    { "after": 35, "view": "trace", "id": "route-construction:construction:route-reroute-settlement-1--380-64--304", "expect": { "status": "ok", "eventKind": "route_construction_cell_built", "subject": "construction:route-reroute-settlement-1--380-64--304" } }
   ],
   "frames": [
-    { "after": 25, "name": "route-repair-cargo-ready" },
-    { "after": 27, "name": "route-repair-first-cell" }
+    { "after": 31, "name": "route-repair-cargo-ready" },
+    { "after": 33, "name": "route-repair-first-cell" }
   ]
 }

@@ -23,6 +23,8 @@ import java.util.Optional;
 /** Plans at most one exact-material replacement-route cell at a time. */
 public final class RouteConstructionProcess {
     private static final SubjectId SYSTEM = new SubjectId("system:route-construction");
+    /** One replacement cell has a two-person reachable work front; larger projects compose bounded fronts. */
+    private static final int INITIAL_ROUTE_REPAIR_CREW_SIZE = EngineeringRecoveryTeam.MIN_MEMBERS;
     private static final int[] DETOUR_SPINES = {-300, -260, -220, -180, -80, -40, 40, 80, 180, 220, 260, 300};
     private static final int[] DETOUR_LANE_OFFSETS = {60, -60, 80, -80, 36};
     private RouteConstructionProcess() { }
@@ -35,6 +37,12 @@ public final class RouteConstructionProcess {
         if (task.kind() != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS) throw new IllegalArgumentException("invalid route construction task schedule");
         return new ScheduledAction(new ScheduleId("schedule:route-construction-start-" + task.id().value().replace(':', '-')), new SimInstant(dueAt), 0,
                 task.id(), "frontier.route_construction.start", 1);
+    }
+
+    /** One exact COLD step for an already-admitted crew; it is not a strategic review. */
+    public static ScheduledAction assemblyProgress(SubjectId projectId, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:route-construction-assembly-" + projectId.value().replace(':', '-')),
+                new SimInstant(dueAt), 0, projectId, "frontier.route_construction.assembly_progress", 1);
     }
 
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
@@ -62,8 +70,14 @@ public final class RouteConstructionProcess {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().routeConstructionScanInterval())));
-        if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
+        Optional<RouteConstruction> activeProject = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
+                .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
+        // Physical work serializes only with its own durable intent.  A field harvest, another
+        // settlement's surface transition or a finished unrelated operation has no authority
+        // to freeze an already admitted construction crew indefinitely.
+        RouteConstruction active = activeProject.orElse(null);
+        if (active != null && state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
+                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) && intent.subjectIds().contains(active.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
@@ -75,16 +89,18 @@ public final class RouteConstructionProcess {
             }
             return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteTopologyCutover(value.id())), transition(task, StrategicTaskStatus.COMPLETED), next);
         }
-        Optional<RouteConstruction> project = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.BUILDING)
-                .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
+        Optional<RouteConstruction> project = activeProject;
         if (project.isEmpty()) return List.of(next);
         RouteConstruction current = project.orElseThrow();
         if (current.team().isPresent() && !EngineeringToolCustody.ready(state, current.team().orElseThrow())) {
             return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> List.of(new ProposedEvent(current.settlementId(),
                     new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
         }
-        if (current.team().isPresent() && (current.assembly().isEmpty() || !current.assembly().orElseThrow().complete())) {
-            return planEngineeringAssembly(state, current, action, next);
+        if (current.team().isPresent() && current.assembly().isEmpty()) {
+            return planEngineeringAssemblyAdmission(state, current, action, next);
+        }
+        if (current.team().isPresent() && !current.assembly().orElseThrow().complete()) {
+            return List.of(next);
         }
         if (current.cargoId().isEmpty()) {
             Optional<ExactItemStack> material = maintenanceMaterial(state);
@@ -110,17 +126,41 @@ public final class RouteConstructionProcess {
      * It moves one retained living crew member by one precompiled cell, never spawns a shortcut
      * at the construction cell and never advances a body already under ambient Minecraft authority.
      */
-    private static List<ProposedEvent> planEngineeringAssembly(FrontierWorldState state, RouteConstruction project,
-                                                                 ScheduledAction action, ProposedEvent next) {
+    private static List<ProposedEvent> planEngineeringAssemblyAdmission(FrontierWorldState state, RouteConstruction project,
+                                                                          ScheduledAction action, ProposedEvent next) {
         boolean retainedHotOrRecovery = state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
-        if (project.assembly().isEmpty()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))), next);
+        // A COLD cursor is born only after every predecessor ambient body has been durably
+        // drained.  Compiling from an old COLD location while a loaded body is still governed
+        // by WORK/PATROL would create two positions for one person.  The next scan retries
+        // after ordinary HOT drain, which records the body's actual final floor first.
+        if (project.team().orElseThrow().memberIds().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return List.of(next);
+        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))),
+                new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks())))), next);
+    }
+
+    /**
+     * Advances an immutable crew corridor on the same human COLD-movement cadence as migration.
+     * The slower construction scan still owns strategic admission, tools, cargo and cutover; it
+     * must never become the clock for a person walking one retained cell.
+     */
+    public static List<ProposedEvent> planAssemblyProgress(FrontierWorldState state, ScheduledAction action) {
+        RouteConstruction project = state.routeConstructions().get(action.subject());
+        if (project == null || !assemblyProgress(project.id(), action.dueAt().ticks()).id().equals(action.id())
+                || project.status() != RouteConstructionStatus.BUILDING || project.team().isEmpty() || project.assembly().isEmpty()) return List.of();
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
-        if (assembly.complete()) return List.of(next);
+        if (assembly.complete()) return List.of();
+        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))));
+        boolean retainedHotOrRecovery = state.sceneLeases().values().stream()
+                .filter(FrontierSceneBehaviors::isEngineeringWorksite)
+                .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
+                        && lease.status() != SceneLeaseStatus.CLOSED);
+        if (retainedHotOrRecovery) return List.of(next);
         SubjectId advancing = assembly.safeAdvances().stream().filter(member -> {
             AmbientActorLease lease = state.ambientLeases().get(member);
             return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
@@ -128,6 +168,10 @@ public final class RouteConstructionProcess {
         if (advancing == null) return List.of(next);
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteConstructionAssemblyAdvanced(project.id(), assembly.advance(advancing))), next);
+    }
+
+    private static long nextAssemblyDue(FrontierWorldState state, long dueAt) {
+        return Math.addExact(dueAt, state.bootstrap().ruleset().cadence().migrationStepInterval());
     }
 
     /**
@@ -174,7 +218,7 @@ public final class RouteConstructionProcess {
                 .sorted(Comparator.comparing((ResidentProfile resident) -> resident.profession() != ResidentProfession.ENGINEER)
                         .thenComparing(Comparator.comparing((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed())
                         .thenComparing(ResidentProfile::id))
-                .limit(EngineeringRecoveryTeam.MAX_MEMBERS).map(ResidentProfile::id).toList();
+                .limit(INITIAL_ROUTE_REPAIR_CREW_SIZE).map(ResidentProfile::id).toList();
         return members.isEmpty() ? null : EngineeringRecoveryTeam.forProject(projectId, settlementId, members);
     }
 

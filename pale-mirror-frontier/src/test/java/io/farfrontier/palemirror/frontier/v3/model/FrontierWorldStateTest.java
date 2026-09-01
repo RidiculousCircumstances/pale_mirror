@@ -127,10 +127,12 @@ class FrontierWorldStateTest {
 
         assertEquals(OperationStage.ASSEMBLING, operation.stage());
         assertTrue(operation.participantIds().stream().allMatch(actor -> before.actorLocations().get(actor).position()
-                .equals(assembly.positions().get(actor))), "creation and recovery retain each actual person, not a route-anchor teleport");
+                .equals(assembly.positions().get(actor).support())), "creation and recovery retain each actual person, not a route-anchor teleport");
         assertEquals(before, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(before)));
         assertThrows(IllegalArgumentException.class, () -> before.startOperationTravel(operation.id(), new OperationTravel(
-                adjacentSegment(operation.route().getFirst(), operation.route().get(1)), 0, assembly.positions(), assembly.positions().get(assembly.cargoCarrierId()))));
+                topology(adjacentSegment(operation.route().getFirst(), operation.route().get(1))), 0,
+                assembly.positions().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> BodyPosition.above(entry.getValue()))),
+                new TransportAnchor(assembly.positions().get(assembly.cargoCarrierId())))));
         assertThrows(IllegalArgumentException.class, () -> before.advanceOperation(operation.id(), operation.routeIndex() + 1, OperationStage.EN_ROUTE));
     }
 
@@ -146,12 +148,12 @@ class FrontierWorldStateTest {
         state = AmbientLeaseStateProcess.prepare(state, prepared);
         state = AmbientLeaseStateProcess.transition(state, hauler, AmbientLeaseStatus.HOT);
         Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(initial.members());
-        OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.corridor(), current.cursor() + 1));
+        OperationAssembly.Member current = members.get(hauler); members.put(hauler, new OperationAssembly.Member(current.topology(), current.cursor() + 1));
 
         FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()));
 
-        assertEquals(current.corridor().get(current.cursor() + 1), advanced.actorLocations().get(hauler).position());
-        assertEquals(initial.members().get(operation.participantIds().get(1)).currentPosition(), advanced.actorLocations().get(operation.participantIds().get(1)).position());
+        assertEquals(current.nextSurface().support(), advanced.actorLocations().get(hauler).position());
+        assertEquals(initial.members().get(operation.participantIds().get(1)).currentSurface().support(), advanced.actorLocations().get(operation.participantIds().get(1)).position());
         assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, advanced.ambientLeases().get(hauler).goal());
         assertEquals(advanced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced)));
     }
@@ -330,5 +332,11 @@ class FrontierWorldStateTest {
             cells.add(new BlockPosition(x, from.y(), z));
             if (x == to.x() && z == to.z()) return List.copyOf(cells);
         }
+    }
+
+    private static TraversalTopology topology(List<BlockPosition> corridor) {
+        return TraversalTopology.corridor(new TraversalTopologyId("topology:world-state-test:" + corridor.hashCode()), 1L,
+                FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                corridor.stream().map(SurfaceAnchor::new).toList());
     }
 }

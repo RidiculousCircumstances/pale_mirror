@@ -57,7 +57,7 @@ public final class HivePerceptionProcess {
                 || scoutLease == null || scoutLease.status() != AmbientLeaseStatus.HOT || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL
                 || scene == null || !FrontierSceneBehaviors.isLogistics(scene) || scene.status() != SceneLeaseStatus.HOT || FrontierSceneBehaviors.logistics(scene).engagementId().isPresent()
                 || !FrontierSceneBehaviors.logistics(scene).operationId().equals(operation.id()) || !FrontierSceneBehaviors.logistics(scene).cargoId().equals(operation.cargoId())
-                || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor())
+                || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor().surface().support())
                 || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(observed.seenCarrierPosition())
                 || !nearby(state, state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
             throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
@@ -110,7 +110,7 @@ public final class HivePerceptionProcess {
     }
     /** The cargo carrier is the caravan's exact target even when its walkers use an adjacent cell. */
     private static BlockPosition carrierPosition(RouteOperation operation) {
-        return operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+        return operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(operation.currentPosition());
     }
     public record Refresh(HiveOperationKnowledge knowledge, List<ProposedEvent> events) { }
 }

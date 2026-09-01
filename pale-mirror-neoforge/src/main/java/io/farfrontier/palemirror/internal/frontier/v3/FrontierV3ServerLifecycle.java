@@ -99,6 +99,8 @@ public final class FrontierV3ServerLifecycle {
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot());
         FrontierWorldState state = runtime.decodedState().orElseThrow();
+        if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
+                FrontierV3PhysicalWorld.require(server), id);
         java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
         if ("actor".equals(view)) {
             try {

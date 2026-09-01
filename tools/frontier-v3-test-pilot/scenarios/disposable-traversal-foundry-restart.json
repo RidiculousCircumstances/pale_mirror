@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "disposable_traversal_foundry_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "medical-treatment", "viewDistance": 2 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 48, "ports": 24, "errors": 0, "blockers": 0 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "traversal_foundry", "id": "compiled" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -370, "y": 66, "z": -326 }, "settleMs": 1500 },
+    { "type": "wait_until_block", "position": { "x": -366, "y": 64, "z": -326 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "traversal_foundry", "id": "settled@structure:1-infirmary", "expect": { "status": "ok", "phase": "SETTLED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 }, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -366, "y": 64, "z": -326 } },
+    { "type": "assert_visible_block", "position": { "x": -366, "y": 64, "z": -326 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "traversal_foundry", "id": "settled@structure:1-infirmary" },
+    { "type": "wait_until_diagnostic", "view": "traversal_foundry", "id": "reloaded@structure:1-infirmary", "expect": { "status": "ok", "phase": "RELOADED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "traversal_foundry", "id": "reloaded@structure:1-infirmary" }
+  ],
+  "assertions": [
+    { "after": 1, "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 48, "ports": 24, "errors": 0, "blockers": 0 } },
+    { "after": 4, "view": "traversal_foundry", "id": "settled@structure:1-infirmary", "expect": { "status": "ok", "phase": "SETTLED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 } },
+    { "after": 9, "view": "traversal_foundry", "id": "reloaded@structure:1-infirmary", "expect": { "status": "ok", "phase": "RELOADED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 } }
+  ],
+  "frames": [
+    { "after": 6, "name": "northwatch-infirmary-public-connector" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 7,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -370, "y": 66, "z": -326 }, "settleMs": 1500 }
+    ]
+  }
+}

@@ -73,7 +73,7 @@ class StructuralRepairProcessTest {
     }
 
     @Test
-    void routeRepairRequiresDedicatedActiveMaintenanceStockAndRestoresOnlyTheKnownHole() {
+    void routeLossIsNeverAdmittedToGenericStructuralRepair() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-repair"), 91L));
         BlockPosition routeCell = FrontierRouteNetwork.supplyWaypoints(state.bootstrap(), state.bootstrap().settlements().getFirst().id()).get(2);
         state = state.recordPhysicalDelta(new PhysicalDelta(routeCell, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -85,16 +85,14 @@ class StructuralRepairProcessTest {
         state = noStock.withInventory(noStock.inventory().store(new ExactItemStack(materialId, FrontierRouteNetwork.OWNER, "minecraft:gray_concrete", 1,
                 new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
         assertTrue(StructuralRepairProcess.plan(state, StructuralRepairProcess.scan(1, 800L)).stream()
-                .anyMatch(event -> event.subject().equals(FrontierRouteNetwork.OWNER) && event.payload() instanceof PhysicalIntentPrepared));
+                .noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
                 FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, materialId), new FixedPosition(FixedScalar.whole(routeCell.x()), FixedScalar.whole(routeCell.y()), FixedScalar.whole(routeCell.z())),
                 0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
-        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:route-repair"), intent.id(), materialId, routeCell)));
-        assertTrue(!repaired.physicalDeltas().containsKey(routeCell));
-        assertTrue(!repaired.inventory().items().containsKey(materialId));
-        assertTrue(FrontierRouteNetwork.isPassable(repaired.bootstrap(), FrontierRouteNetwork.supplyWaypoints(repaired.bootstrap(), repaired.bootstrap().settlements().getFirst().id()), repaired.physicalDeltas()));
-        assertEquals(repaired, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(repaired)));
+        FrontierWorldState routeState = state;
+        assertThrows(IllegalArgumentException.class, () -> StructuralRepairProcess.reducePrepared(routeState, FrontierRouteNetwork.OWNER, intent));
+        FrontierWorldState running = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:route-repair"), intent.id(), materialId, routeCell))));
     }
 }

@@ -2,11 +2,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.RouteTopologyStateCodec;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
@@ -71,7 +73,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction"), 94L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
-                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5));
+                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4));
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-1"), settlement, replacement, 0, RouteConstructionStatus.BUILDING);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project);
         assertEquals(FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement, replacement),
@@ -86,7 +88,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-construction-work"), 95L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-work"), settlement,
-                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5)),
+                List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4)),
                 0, RouteConstructionStatus.BUILDING);
         SubjectId materialId = new SubjectId("item:route-work-concrete");
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project).withInventory(FrontierWorldState.initial(bootstrap).inventory());
@@ -104,10 +106,19 @@ class RouteTopologyTest {
         state = state.preparePhysicalIntent(loading.intent())
                 .transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         SubjectId cargoId = loading.intent().subjectIds().get(2), cargoItemId = loading.intent().subjectIds().get(3), sourceItemId = loading.intent().subjectIds().get(4);
-        state = state.transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(new RouteConstructionMaterialLoadObservation(
-                new PhysicalObservationId("observation:route-work-load"), loading.intent().id(), project.id(), cargoId, sourceItemId, cargoItemId, 1)));
+        RouteConstructionMaterialLoadObservation receipt = new RouteConstructionMaterialLoadObservation(
+                new PhysicalObservationId("observation:route-work-load"), loading.intent().id(), project.id(), cargoId, sourceItemId, cargoItemId, 1);
+        RouteConstructionMaterialLoaded loaded = new RouteConstructionMaterialLoaded(project.id(),
+                new CargoBatch(cargoId, FrontierRouteNetwork.OWNER, List.of(cargoItemId)));
+        assertEquals(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, loaded)),
+                FrontierWorldRuntimeDefinition.processRegistry().validateEmissions("physical-observation",
+                        List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, loaded))),
+                "the trusted physical material receipt must be allowed to emit the infrastructure-owned cargo binding through the closed contract");
+        state = state.transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         state = RouteConstructionStateSupport.reduceMaterialLoaded(state, FrontierRouteNetwork.OWNER,
-                new RouteConstructionMaterialLoaded(project.id(), new CargoBatch(cargoId, FrontierRouteNetwork.OWNER, List.of(cargoItemId))));
+                loaded);
+        assertEquals(1, state.inventory().items().get(sourceItemId).count(),
+                "one loaded construction cargo must leave the physical maintenance stack's exact remainder available for later work");
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
                 "a restart must retain the project-to-COLD-cargo binding before a cell is built");
         PhysicalIntentPrepared prepared = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 1_000L)).stream()
@@ -133,6 +144,11 @@ class RouteTopologyTest {
                 "a later material pickup must never reuse the completed intent identity");
         assertEquals(RouteTopology.initial(), state.routeTopology());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        FrontierWorldState sourceWithdrawn = state.withInventory(state.inventory().moveObservedItem(materialId,
+                new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0),
+                new InventoryCustody.Player(java.util.UUID.fromString("00000000-0000-0000-0000-000000000096"))));
+        assertEquals(sourceWithdrawn, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(sourceWithdrawn)),
+                "a historical material-loading receipt must not require its source remainder to retain permanent maintenance-chest custody");
     }
 
     @Test
@@ -140,7 +156,7 @@ class RouteTopologyTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-cutover"), 96L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
         List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0), baseline.get(2).offset(-10, 0, 0),
-                baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5));
+                baseline.get(2), baseline.get(3), baseline.get(4));
         int required = FrontierRouteNetwork.constructionCells(bootstrap, RouteTopology.initial(), settlement, replacement).size();
         RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover"), settlement, replacement, required, RouteConstructionStatus.READY);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), ready);

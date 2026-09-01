@@ -25,7 +25,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), advanced)));
             if (advanced.assembly().complete()) {
                 events.add(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(),
-                        SupplyOperationProcess.travelForCompletedAssembly(operation, advanced.assembly()))));
+                        SupplyOperationProcess.travelForCompletedAssembly(state, operation, advanced.assembly()))));
                 events.add(new ProposedEvent(operation.id(), new ScheduleEffect.Created(
                         SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 20L))));
             }
@@ -392,7 +392,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("operation failure lacks its owning settlement");
         boolean death = operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD);
         boolean obstruction = "route-obstructed".equals(failed.reason())
-                && !FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas());
+                && (!state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId())
+                || operation.activeTravel().map(travel -> !travel.canAdvanceNextEdge()).orElse(false));
         boolean recoveryUnresolved = "scene-recovery-unresolved".equals(failed.reason()) && state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isLogistics).anyMatch(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id())
                         && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isPresent());
@@ -412,7 +413,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SubjectId observed = null;
         for (SubjectId actor : current.members().keySet()) {
             OperationAssembly.Member before = current.members().get(actor), after = next.members().get(actor);
-            if (!before.corridor().equals(after.corridor()) || after.cursor() < before.cursor() || after.cursor() > before.cursor() + 1) {
+            if (!before.topology().equals(after.topology()) || after.cursor() < before.cursor() || after.cursor() > before.cursor() + 1) {
                 throw new IllegalArgumentException("HOT assembly observation may advance only one adjacent cursor");
             }
             if (after.cursor() > before.cursor()) {
@@ -423,14 +424,14 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (observed == null) throw new IllegalArgumentException("HOT assembly observation did not advance an actor");
         if (current.deferral().isPresent()) {
             OperationAssemblyDeferral blocked = current.deferral().orElseThrow();
-            if (!blocked.actorId().equals(observed) || !next.members().get(observed).currentPosition().equals(blocked.target())) {
+            if (!blocked.actorId().equals(observed) || !next.members().get(observed).currentSurface().equals(blocked.target())) {
                 throw new IllegalArgumentException("HOT assembly observation may not bypass a loaded-world assembly deferral");
             }
         }
         AmbientActorLease lease = state.ambientLeases().get(observed);
         OperationAssembly.Member arrived = next.members().get(observed);
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
-                || !lease.goalPosition().equals(arrived.currentPosition())) {
+                || !lease.goalPosition().equals(arrived.currentSurface().support())) {
             throw new IllegalArgumentException("HOT assembly observation lacks its exact active actor lease");
         }
     }
@@ -443,10 +444,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SettlementStructure hall = settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("assembly settlement has no Hall access port"));
         SettlementAccessPort access = SettlementAccessPort.forHall(hall);
-        if (member == null || member.arrived() || !member.corridor().get(member.cursor() + 1).equals(deferral.target())
+        if (member == null || member.arrived() || !member.nextSurface().equals(deferral.target())
                 || lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
-                || !lease.goalPosition().equals(deferral.target())
-                || (!deferral.obstructionFloor().equals(deferral.target()) && !deferral.obstructionFloor().equals(access.throatFloor()))) {
+                || !lease.goalPosition().equals(deferral.target().support())
+                || (!deferral.obstructionSurface().equals(deferral.target()) && !deferral.obstructionSurface().equals(access.throatSurface()))) {
             throw new IllegalArgumentException("HOT assembly deferral lacks its exact active actor lease");
         }
     }

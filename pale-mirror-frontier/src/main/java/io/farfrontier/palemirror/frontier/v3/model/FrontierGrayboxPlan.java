@@ -35,6 +35,7 @@ public final class FrontierGrayboxPlan {
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         addRoutes(cells, state.bootstrap(), state.routeTopology());
+        addActiveWorksiteStaging(cells, state);
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
         // observed cell is gone, desired-state projection must not ask a later loaded chunk to
         // recreate it, including after the SavedData ledger has been compacted or lost.
@@ -59,7 +60,7 @@ public final class FrontierGrayboxPlan {
     public static StructuralInput structuralInput(FrontierWorldState state) {
         Objects.requireNonNull(state, "structural projection state");
         return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
-                state.routeTopology(), state.physicalDeltas());
+                state.routeTopology(), state.physicalDeltas(), activeWorksiteStaging(state));
     }
 
     public static final class StructuralInput {
@@ -68,15 +69,18 @@ public final class FrontierGrayboxPlan {
         private final Map<SubjectId, HiveOrgan> addedOrgans;
         private final RouteTopology routeTopology;
         private final Map<BlockPosition, PhysicalDelta> physicalDeltas;
+        private final Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging;
 
         private StructuralInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
                                 Map<SubjectId, HiveOrgan> addedOrgans, RouteTopology routeTopology,
-                                Map<BlockPosition, PhysicalDelta> physicalDeltas) {
+                                Map<BlockPosition, PhysicalDelta> physicalDeltas,
+                                Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging) {
             this.bootstrap = bootstrap;
             this.structureConditions = structureConditions;
             this.addedOrgans = addedOrgans;
             this.routeTopology = routeTopology;
             this.physicalDeltas = physicalDeltas;
+            this.activeWorksiteStaging = activeWorksiteStaging;
         }
 
         @Override public boolean equals(Object other) {
@@ -84,11 +88,11 @@ public final class FrontierGrayboxPlan {
             if (!(other instanceof StructuralInput input)) return false;
             return bootstrap.equals(input.bootstrap) && structureConditions.equals(input.structureConditions)
                     && addedOrgans.equals(input.addedOrgans) && routeTopology.equals(input.routeTopology)
-                    && physicalDeltas.equals(input.physicalDeltas);
+                    && physicalDeltas.equals(input.physicalDeltas) && activeWorksiteStaging.equals(input.activeWorksiteStaging);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, physicalDeltas);
+            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, physicalDeltas, activeWorksiteStaging);
         }
     }
 
@@ -151,8 +155,8 @@ public final class FrontierGrayboxPlan {
             }
         }
         if (structure.kind() == StructureKind.HALL) {
-            for (BlockPosition access : SettlementAccessPort.forHall(structure).ownedSurfaceCells()) {
-                InfectionCell cell = InfectionCell.at(access);
+            for (SurfaceAnchor access : SettlementAccessPort.forHall(structure).ownedSurfaces()) {
+                InfectionCell cell = InfectionCell.at(access.support());
                 if (state.infection().containsKey(cell)) candidates.add(cell);
             }
         }
@@ -210,8 +214,15 @@ public final class FrontierGrayboxPlan {
 
     /** Resolves intact geometry against the accepted canonical route topology. */
     public static GrayboxCell intactSemanticCell(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology, SubjectId owner, BlockPosition position) {
+        return intactSemanticCell(bootstrap, colony, topology, Map.of(), owner, position);
+    }
+
+    /** Resolves an intact semantic baseline including a retained construction worksite. */
+    public static GrayboxCell intactSemanticCell(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology,
+                                                 Map<SubjectId, RouteConstruction> constructions, SubjectId owner, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(colony, "hive colony");
-        Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
+        Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(constructions, "route constructions");
+        Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
             if (structure.id().equals(owner)) return intactStructureCell(structure, position);
         }
@@ -220,6 +231,10 @@ public final class FrontierGrayboxPlan {
         if (added != null) return intactOrganCell(added, position);
         if (FrontierRouteNetwork.OWNER.equals(owner) && FrontierRouteNetwork.surfaceCells(bootstrap, topology).contains(position)) {
             return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        }
+        RouteConstruction project = constructions.get(owner);
+        if (project != null && EngineeringWorksite.intactStagingCells(bootstrap, topology, project).contains(position)) {
+            return new GrayboxCell(position, owner, GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
         }
         return null;
     }
@@ -273,8 +288,8 @@ public final class FrontierGrayboxPlan {
                     && (treatment == null || !treatment.throatAirCells().contains(roof))
                     && visitor.visit(roof, GrayboxSemanticPart.ROOF)) return true;
         }
-        if (access != null) for (BlockPosition surface : access.ownedSurfaceCells()) {
-            if (visitor.visit(surface, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
+        if (access != null) for (SurfaceAnchor surface : access.ownedSurfaces()) {
+            if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         if (treatment != null) for (SurfaceAnchor surface : treatment.ownedAccessSurfaces()) {
             if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
@@ -307,8 +322,38 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
-        FrontierRouteNetwork.surfaceCells(bootstrap, topology).forEach(position ->
-                add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE));
+        FrontierRouteNetwork.surfaceCells(bootstrap, topology).forEach(position -> {
+            GrayboxCell existing = cells.get(position);
+            // A Hall's declared sill is the one intentional seam where the public carriageway
+            // meets a facility.  It remains Hall-owned so damage has Hall provenance, while the
+            // route topology can still require the physical support.  Any other overlap is an
+            // invalid compiler layout, never an arbitrary ownership winner.
+            if (existing != null && existing.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE) return;
+            add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        });
+        for (Settlement settlement : bootstrap.settlements()) {
+            for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(settlement)) {
+                // The Hall route node is deliberately already route-network owned. Every other
+                // compiled sidewalk cell belongs to the settlement's public circulation plan;
+                // an audit/materializer may observe loss but never replace it opportunistically.
+                if (cells.containsKey(surface)) continue;
+                add(cells, surface, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+            }
+        }
+    }
+
+    private static void addActiveWorksiteStaging(Map<BlockPosition, GrayboxCell> cells, FrontierWorldState state) {
+        activeWorksiteStaging(state).forEach((projectId, positions) -> positions.forEach(position ->
+                add(cells, position, projectId, GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING)));
+    }
+
+    private static Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging(FrontierWorldState state) {
+        Map<SubjectId, java.util.List<BlockPosition>> staging = new LinkedHashMap<>();
+        state.routeConstructions().values().stream().sorted(java.util.Comparator.comparing(RouteConstruction::id)).forEach(project -> {
+            java.util.List<BlockPosition> positions = EngineeringWorksite.activeStagingCells(state.bootstrap(), state.routeTopology(), project);
+            if (!positions.isEmpty()) staging.put(project.id(), positions);
+        });
+        return Map.copyOf(staging);
     }
 
     private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, SubjectId owner, GrayboxMaterial material,

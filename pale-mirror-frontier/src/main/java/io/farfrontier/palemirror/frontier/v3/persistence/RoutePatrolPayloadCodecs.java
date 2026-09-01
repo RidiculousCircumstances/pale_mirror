@@ -46,10 +46,11 @@ final class RoutePatrolPayloadCodecs {
         if (patrol.obstruction().isPresent()) position(output, patrol.obstruction().orElseThrow());
     }
     private static RoutePatrol readPatrol(DataInputStream input) throws IOException {
-        SubjectId task = subject(input), settlement = subject(input); input.mark(1); int marker = input.readUnsignedByte(); input.reset();
-        RouteUnitManifest unit;
-        if (marker == 0xFF) { input.readUnsignedByte(); unit = RouteUnitManifestCodec.read(input); }
-        else unit = RouteUnitManifest.legacyPatrol(task, subject(input));
+        SubjectId task = subject(input), settlement = subject(input);
+        if (input.readUnsignedByte() != 0xFF) {
+            throw new IllegalArgumentException("route patrol payload requires the current unit-manifest envelope");
+        }
+        RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
         ArrayList<BlockPosition> route = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(position(input));
         int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();

@@ -211,7 +211,7 @@ class HiveSettlementAssaultProcessTest {
                 SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();
         SceneLease lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:assault-hot"), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), assault.settlementAnchor(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(400L),
-                7L, SceneLeaseStatus.PREPARED, members, positions, java.util.Set.of(), java.util.Optional.empty());
+                7L, SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveLegacySupports(positions), java.util.Set.of(), java.util.Optional.empty());
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(lease);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
         FrontierWorldState unknown = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);

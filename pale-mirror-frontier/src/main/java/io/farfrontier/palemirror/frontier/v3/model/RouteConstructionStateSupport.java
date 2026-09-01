@@ -150,15 +150,16 @@ public final class RouteConstructionStateSupport {
         ExactItemStack cargoItem = inventory.items().get(observation.cargoItemId());
         if (project.cargoId().equals(java.util.Optional.of(observation.cargoId())) && cargo != null
                 && cargo.ownerId().equals(FrontierRouteNetwork.OWNER) && cargo.itemIds().equals(java.util.List.of(observation.cargoItemId()))
-                && cargoItem != null && cargoItem.count() == 1 && cargoItem.custody().equals(new InventoryCustody.Cargo(observation.cargoId()))
-                && matchesSource(inventory, observation, observation.sourceRemainingCount())) {
+                && cargoItem != null && cargoItem.count() == 1 && cargoItem.custody().equals(new InventoryCustody.Cargo(observation.cargoId()))) {
+            // Once the exact cargo exists, the source-stack count/custody is historical
+            // evidence only. A later legitimate withdrawal or consumption of its remainder
+            // must not make this already-confirmed cargo hand-off unrecoverable.
             return;
         }
         boolean consumed = observations.values().stream().filter(RouteConstructionObservation.class::isInstance).map(RouteConstructionObservation.class::cast)
                 .anyMatch(construction -> construction.projectId().equals(project.id()) && construction.itemId().equals(observation.cargoItemId())
                         && intents.get(construction.intentId()) != null && intents.get(construction.intentId()).status() == PhysicalIntentStatus.CONFIRMED);
-        if (project.cargoId().isEmpty() && cargo == null && cargoItem == null && consumed
-                && matchesSource(inventory, observation, observation.sourceRemainingCount())) return;
+        if (project.cargoId().isEmpty() && cargo == null && cargoItem == null && consumed) return;
         throw new IllegalArgumentException("route construction material recovery receipt lacks its exact COLD cargo or confirmed consumption");
     }
 
@@ -272,7 +273,14 @@ public final class RouteConstructionStateSupport {
         actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentPosition(), prior.condition()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAdvancedAssembly(advanced.assembly()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects));
+        Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
+        AmbientActorLease lease = ambient.get(moved);
+        if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
+            EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
+            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target));
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects).ambientLeases(ambient));
     }
 
     public static FrontierWorldState reduceCutover(FrontierWorldState state, SubjectId subject, RouteTopologyCutover cutover) {

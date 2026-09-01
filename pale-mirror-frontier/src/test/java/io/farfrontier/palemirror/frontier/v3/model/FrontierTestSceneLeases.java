@@ -25,8 +25,9 @@ final class FrontierTestSceneLeases {
         }).toList();
         RouteOperation operation = state.operations().get(operationId);
         BlockPosition cargoPosition = operation == null ? demand
-                : operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(demand);
+                : operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(demand);
         return SceneLease.atExactPositions(id, state.bootstrap().worldId(), operationId, cargoId, demand,
-                cargoPosition, instant, revision, SceneLeaseStatus.PREPARED, engagementId, members, positions);
+                cargoPosition, instant, revision, SceneLeaseStatus.PREPARED, engagementId, members,
+                SceneLease.bodiesAboveLegacySupports(positions));
     }
 }

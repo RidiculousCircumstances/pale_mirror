@@ -16,9 +16,11 @@ import java.util.function.Function;
 /**
  * Closed NeoForge behavior registry for scene-local materialization.
  *
- * <p>The ordering is explicit compatibility policy: an active settlement assault retains the
- * materialization turn before a logistics scene may claim it.  Generic lifecycle code has no
- * concrete cause tests and never calls a sibling executor directly.</p>
+ * <p>The ordering is deterministic admission policy, not a global scene lock. Every registered
+ * behavior receives one bounded turn each server tick, so an unrelated or unloaded assault can
+ * never starve an engineering worksite in another naturally loaded area. Actor admission remains
+ * exclusive in canonical state. Generic lifecycle code has no concrete cause tests and never
+ * calls a sibling executor directly.</p>
  */
 final class FrontierV3SceneBehaviorRegistry {
     private static final FrontierV3SceneBehaviorRegistry CURRENT = new FrontierV3SceneBehaviorRegistry(List.of(
@@ -49,9 +51,16 @@ final class FrontierV3SceneBehaviorRegistry {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state != null) FrontierV3SceneExecutor.cleanClosedBodies(level, state);
-        for (Behavior behavior : CURRENT.ordered) {
-            if (behavior.tick().tick(level, runtime)) return;
-        }
+        CURRENT.tickAll(level, runtime);
+    }
+
+    /** Every registered scene family gets one ordered bounded turn; return values are local only. */
+    void tickAll(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        runBoundedTurns(ordered.stream().<Runnable>map(behavior -> () -> behavior.tick().tick(level, runtime)).toList());
+    }
+
+    static void runBoundedTurns(List<? extends Runnable> turns) {
+        for (Runnable turn : turns) turn.run();
     }
 
     static SubjectId strikeCause(SceneLease lease) {

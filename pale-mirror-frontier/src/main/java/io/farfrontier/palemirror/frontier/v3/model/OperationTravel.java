@@ -15,8 +15,8 @@ import java.util.Objects;
  * anchor survive a HOT/COLD hand-off as one immutable fact.  It deliberately contains no
  * Minecraft identity or physics policy.</p>
  */
-public record OperationTravel(TraversalTopology topology, int cursor, Map<SubjectId, BlockPosition> formation,
-                              BlockPosition cargoAnchor) {
+public record OperationTravel(TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation,
+                              TransportAnchor cargoAnchor) {
     public static final int MAX_CELLS = 4_096;
     public static final int MAX_COLD_ADVANCE = 32;
 
@@ -24,8 +24,8 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
         topology = Objects.requireNonNull(topology, "operation travel topology");
         List<BlockPosition> corridor = corridor(topology);
         if (topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
-                || !edge.traversableBy(TraversalCapability.PEDESTRIAN))) {
-            throw new IllegalArgumentException("operation travel requires an open pedestrian topology");
+                || !edge.capabilities().contains(TraversalCapability.PEDESTRIAN))) {
+            throw new IllegalArgumentException("operation travel requires a pedestrian topology");
         }
         if (corridor.size() < 2 || corridor.size() > MAX_CELLS) {
             throw new IllegalArgumentException("operation travel corridor must contain 2.." + MAX_CELLS + " cells");
@@ -38,7 +38,7 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
             }
         }
         if (cursor < 0 || cursor >= corridor.size()) throw new IllegalArgumentException("operation travel cursor is outside corridor");
-        Map<SubjectId, BlockPosition> copy = new LinkedHashMap<>();
+        Map<SubjectId, BodyPosition> copy = new LinkedHashMap<>();
         formation.forEach((actor, position) -> {
             if (copy.put(Objects.requireNonNull(actor, "operation travel actor"), Objects.requireNonNull(position, "operation travel formation position")) != null) {
                 throw new IllegalArgumentException("operation travel has a duplicate actor");
@@ -50,21 +50,35 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
         }
         formation = Map.copyOf(copy);
         cargoAnchor = Objects.requireNonNull(cargoAnchor, "operation travel cargo anchor");
-        if (formation.containsValue(cargoAnchor)) throw new IllegalArgumentException("operation travel cargo anchor must remain distinct from every exact actor");
+        if (formation.values().stream().anyMatch(cargoAnchor::sharesSupportColumn)) {
+            throw new IllegalArgumentException("operation travel cargo anchor must remain in a separate support column from every exact actor");
+        }
     }
 
-    /** Explicit migration constructor for historic persisted horizontal corridors. */
-    public OperationTravel(List<BlockPosition> corridor, int cursor, Map<SubjectId, BlockPosition> formation, BlockPosition cargoAnchor) {
-        this(legacyTopology(corridor), cursor, formation, cargoAnchor);
-    }
-
-    /** Historical call sites can read surfaces during migration, but no longer own this value. */
     public List<BlockPosition> corridor() { return corridor(topology); }
 
     public BlockPosition currentPosition() { return corridor().get(cursor); }
     public boolean arrived() { return cursor == corridor().size() - 1; }
     public int nextHotCursor() { return Math.min(cursor + 1, corridor().size() - 1); }
-    public int nextColdCursor() { return Math.min(cursor + MAX_COLD_ADVANCE, corridor().size() - 1); }
+    /**
+     * The farthest COLD cursor reachable through this exact retained graph this turn.
+     * A bounded background step may cover several adjacent cells, but it may never jump over
+     * a non-OPEN edge discovered by physical observation.
+     */
+    public int nextColdCursor() {
+        int limit = Math.min(cursor + MAX_COLD_ADVANCE, corridor().size() - 1);
+        for (int edgeCursor = cursor; edgeCursor < limit; edgeCursor++) {
+            if (!topology.edgeAfterCursor(edgeCursor).traversableBy(TraversalCapability.PEDESTRIAN)) return edgeCursor;
+        }
+        return limit;
+    }
+    public TraversalTopology.Edge nextEdge() { return topology.edgeAfterCursor(cursor); }
+    public boolean canAdvanceNextEdge() { return !arrived() && nextEdge().traversableBy(TraversalCapability.PEDESTRIAN); }
+
+    /** Physical evidence may change retained edge availability, never geometry or the cursor. */
+    public OperationTravel withAvailability(java.util.Set<TraversalEdgeId> affected, TraversalAvailability availability) {
+        return new OperationTravel(topology.withAvailability(affected, availability), cursor, formation, cargoAnchor);
+    }
 
     /** A loaded physical caravan may certify only its immediately adjacent cell. */
     public boolean isExactHotAdvanceFrom(OperationTravel prior) {
@@ -77,7 +91,7 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
         return formationTranslated && cargoAnchor.equals(prior.cargoAnchor.offset(deltaX, deltaY, deltaZ));
     }
 
-    public OperationTravel advance(int nextCursor, Map<SubjectId, BlockPosition> nextFormation, BlockPosition nextCargoAnchor) {
+    public OperationTravel advance(int nextCursor, Map<SubjectId, BodyPosition> nextFormation, TransportAnchor nextCargoAnchor) {
         if (nextCursor <= cursor || nextCursor > nextColdCursor()) {
             throw new IllegalArgumentException("operation travel cursor must advance by one bounded COLD step");
         }
@@ -88,14 +102,4 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
         return topology.linearCorridorSurfaces().stream().map(SurfaceAnchor::support).toList();
     }
 
-    private static TraversalTopology legacyTopology(List<BlockPosition> corridor) {
-        corridor = List.copyOf(Objects.requireNonNull(corridor, "legacy operation travel corridor"));
-        if (corridor.size() < 2 || corridor.size() > MAX_CELLS) throw new IllegalArgumentException("operation travel corridor size is invalid");
-        long revision = 0xcbf29ce484222325L;
-        for (BlockPosition position : corridor) revision = (revision ^ position.hashCode()) * 0x100000001b3L;
-        return TraversalTopology.corridor(new TraversalTopologyId("topology:legacy-operation:" + Long.toUnsignedString(revision, 36)),
-                revision & Long.MAX_VALUE, FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN,
-                java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
-                corridor.stream().map(SurfaceAnchor::new).toList());
-    }
 }

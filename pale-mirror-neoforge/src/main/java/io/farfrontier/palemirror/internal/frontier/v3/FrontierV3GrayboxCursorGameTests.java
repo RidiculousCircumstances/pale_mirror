@@ -53,6 +53,24 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void worksiteStagingRequiresRealSupportAndKeepsProjectProvenance(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
+        GrayboxCell staging = new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
+                new SubjectId("construction:staging-proof"), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, staging), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "a temporary work floor may not float merely to make a scene materialize");
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, staging), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "a naturally supported worksite floor must become a real visible block");
+        helper.assertTrue(level.getBlockState(position).is(Blocks.LIGHT_BLUE_CONCRETE) && ledger.claim(position) != null
+                        && ledger.claim(position).owner().equals("construction:staging-proof")
+                        && ledger.claim(position).semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name()),
+                "the floor must retain its temporary project identity rather than masquerade as built route infrastructure");
+        helper.succeed();
+    }
+
     private static GrayboxCell cell(int x, int y, int z, String owner) {
         return new GrayboxCell(new BlockPosition(x, y, z), new SubjectId(owner), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
     }

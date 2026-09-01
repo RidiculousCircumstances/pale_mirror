@@ -45,6 +45,11 @@ final class FrontierV3StructuralRepairExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, PhysicalIntent intent) {
+        // A repair intent carries its exact damaged cell in origin.  Check ordinary local
+        // demand before compiling the owning semantic geometry: a stale loaded chunk must
+        // neither authorize the mutation nor repeatedly rebuild the full route plan.
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
         Target target = target(state, intent);
         if (target == null || !level.hasChunkAt(target.position()) || !level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
@@ -77,8 +82,10 @@ final class FrontierV3StructuralRepairExecutor {
         StructuralRepairObservation observation = new StructuralRepairObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.material().id(),
                 new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
-        if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) {
-            throw new IllegalStateException("structural repair confirmation was rejected");
+        CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
+        if (!(result instanceof CommandResult.Accepted)) {
+            CommandResult.Rejected rejected = (CommandResult.Rejected) result;
+            throw new IllegalStateException("structural repair confirmation was rejected: " + rejected.rejection().detail());
         }
     }
 
@@ -119,12 +126,15 @@ final class FrontierV3StructuralRepairExecutor {
     }
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,
                                       PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation, String phase) {
+        return transitionResult(runtime, intentId, status, observation, phase) instanceof CommandResult.Accepted;
+    }
+    private static CommandResult transitionResult(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,
+                                                   PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation, String phase) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId id = new CommandId("executor:repair-" + phase + "-" + intentId.value().replace(':', '-'));
-        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+        return runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalIntentTransition(intentId, status, observation)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.decodedState().orElse(null);

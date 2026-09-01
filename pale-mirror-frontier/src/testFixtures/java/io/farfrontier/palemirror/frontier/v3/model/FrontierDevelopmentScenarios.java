@@ -35,7 +35,7 @@ final class FrontierDevelopmentScenarios {
             }
         }
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -291,7 +291,7 @@ final class FrontierDevelopmentScenarios {
         Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
                 .filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
-        FrontierWorldState state = base.state().withActorLocation(scout.id(), operation.activeTravel().orElseThrow().cargoAnchor());
+        FrontierWorldState state = base.state().withActorLocation(scout.id(), operation.activeTravel().orElseThrow().cargoAnchor().surface().support());
         // This isolated proof must demonstrate physical HOT perception only.  Retain every
         // ordinary route/actor schedule, but remove the one pre-existing COLD hive-review that
         // could derive knowledge before a player loads the scene.
@@ -310,7 +310,7 @@ final class FrontierDevelopmentScenarios {
         RouteSceneReturnFixture base = hotScoutSightingFixture(worldId, seed);
         RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout intercept fixture has no active exact cargo route");
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         FrontierWorldState state = base.state();
         List<Bioform> attackers = java.util.stream.Stream.concat(
                         state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())

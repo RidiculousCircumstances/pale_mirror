@@ -204,6 +204,9 @@ class ExactInventoryTest {
         assertEquals(conflict, observed.conflicts().get(conflict.id()));
         assertEquals(observed, observed.recordConflict(conflict));
         assertEquals(slot, observed.items().get(item).custody(), "conflict evidence must not repair or move the canonical item");
+        ExactInventory consumed = observed.consume(item, 8);
+        assertEquals(conflict, consumed.conflicts().get(conflict.id()),
+                "durable conflict evidence remains anchored at its physical container after its original exact subject retires");
         assertThrows(IllegalArgumentException.class, () -> observed.recordConflict(new InventoryConflict(conflict.id(), item, container, 3, InventoryConflictKind.FOREIGN_OR_DUPLICATE)));
     }
 

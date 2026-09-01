@@ -98,10 +98,9 @@ new movement-bearing scene or transport family is added, close
 `V3-AUD-019` in this order:
 
 1. **T0.1 — typed spatial values.** Introduce distinct immutable surface anchor,
-   body position, facility-port station and transport-node values. Version the
-   persisted movement values explicitly; old bytes recover through one named
-   migration and are never interpreted opportunistically from surrounding
-   blocks.
+   body position, facility-port station and transport-node values. Persist one
+   explicit current-world format; an older payload is rejected and its world is
+   recreated, never inferred from surrounding blocks.
 2. **T0.2 — semantic facility ports.** Compile orientation, exterior approach,
    threshold/throat clearance, interior connector and bounded work/formation
    stations from the owning building plan. Remove structure-centre and
@@ -121,22 +120,25 @@ new movement-bearing scene or transport family is added, close
    cases. A disposable player scenario must show the same actor/route cursor
    before and after HOT/COLD/restart without force-loading.
 
-T0.3 is active: supply routes and their active `OperationTravel` cursors retain
-the same persisted topology (snapshot schema 91 and a versioned WAL envelope).
-Historic corridor bytes recover through one deterministic legacy-topology
-migration. This is deliberately not T0.4 completion: migration and assembly
-cursors, observed edge damage and the physical restart proof remain separate
-owners and gates.
+T0.3 is active: supply routes, active `OperationTravel` cursors and each active
+`OperationAssembly` member retain their own persisted topology. Current snapshot schema 95
+and persistence-envelope v5 retain typed `BodyPosition` formation cells,
+`TransportAnchor` and assembly `SurfaceAnchor` routes.
+Any other snapshot or WAL envelope is rejected fail-closed; v3 worlds are
+disposable and recreated for a new format. This is deliberately not T0.4
+completion: observed edge damage and its physical restart proof remain separate
+owners and gates. Assembly cursors are already typed topology owners.
 
-The partial implementation still has one non-negotiable migration boundary:
-`TraversalTopology` nodes are typed support surfaces, while the historical
-`OperationTravel` formation and cargo values are still raw `BlockPosition`s.
-No executor may treat the latter as both a support column and a body/cargo
-position. Before a non-flat operation route, assembly or transit cursor is
-accepted, move these values to their role-specific persisted types and make
-the physical adapter prove the exact support-to-feet conversion once at scene
-admission. This rules out a superficially passing stair test whose body has
-actually been spawned, compared or recovered at the support-block datum.
+The partial implementation still has one non-negotiable semantic boundary:
+`TraversalTopology` nodes are typed support surfaces while `OperationTravel`
+and scene leases retain role-specific body/transport values. Current
+actor/assembly/work/medical candidates may deliberately own support cells and
+cross only through a named support-to-body conversion. No executor may treat one
+value as both a support column and a body/cargo position. Before a non-flat
+transit cursor is accepted, move that remaining candidate to role-specific
+persisted types and make the physical adapter prove the exact support-to-feet
+conversion once at scene admission. Assembly now retains typed pedestrian topology rather
+than a raw support list, and its registered HOT provider resolves the explicit feet cell.
 
 The first implementation may keep the graybox physically flat by providing a
 uniform-datum topology. It is not required to build the production terrain
@@ -410,10 +412,11 @@ remains present because breadth, balance and product comprehension are not done.
   age/condition, trainable skills, profession/employment, exclusive current
   assignment, exact equipment and work/tactical organization remain separate
   canonical components.
-- Replace the provisional six-value `ResidentRole` bootstrap model through an
-  explicit stable-tag snapshot/WAL migration. Preserve exact people,
-  households, health, nutrition, contracts and custody; do not infer a current
-  task or military membership from the old role.
+- Replace the provisional six-value `ResidentRole` bootstrap model through a
+  new explicitly tagged schema in a fresh world. Do not add a snapshot/WAL
+  migration or compatibility decoder; bootstrap exact people, households,
+  health, nutrition, contracts and custody directly under the new model, and
+  do not infer a current task or military membership from the old role.
 - Birth/death and exact-person migration, including assignment, equipment and
   organization conflicts.
 - Facilities, resource sites, recipes, work allocation, maintenance,
@@ -494,8 +497,12 @@ remains present because breadth, balance and product comprehension are not done.
   adds the exact naturally loaded HOT crew/work-site lease. Its typed cause
   retains `projectId + workCellIndex`, demands the same completed COLD crew and
   permits exactly one durable physical work intent; the separate physical
-  adapter alone observes/places the cell. A confirmed cell clears the old
-  approach so the same people must take a new COLD approach to the next
+  adapter alone observes/places the cell. Before the lease can materialize its
+  bodies, the same canonical project compiles one temporary, provenance-owned
+  worksite floor for every retained worker. It is not a route cell or a hidden
+  spawn platform: ordinary loss conflicts the exact project, and an untouched
+  floor retires only after the work front moves. A confirmed cell clears the
+  old approach so the same people must take a new COLD approach to the next
   immutable cell.
 
 ### Verification matrix

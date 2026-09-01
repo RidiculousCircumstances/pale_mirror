@@ -62,7 +62,7 @@ class FrontierWorldRuntimeDefinitionTest {
         SubjectId first = operation.participantIds().getFirst();
         Map<SubjectId, OperationAssembly.Member> rejectedMembers = new LinkedHashMap<>(assembly.members());
         OperationAssembly.Member firstMember = rejectedMembers.get(first);
-        rejectedMembers.put(first, new OperationAssembly.Member(firstMember.corridor(), firstMember.cursor() + 1));
+        rejectedMembers.put(first, new OperationAssembly.Member(firstMember.topology(), firstMember.cursor() + 1));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class, submit(engine, world, "assembly-without-lease",
                 new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(rejectedMembers, assembly.cargoCarrierId()))));
 
@@ -82,7 +82,7 @@ class FrontierWorldRuntimeDefinitionTest {
                     .map(entry -> {
                         Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(active.members());
                         OperationAssembly.Member member = members.get(entry.getKey());
-                        members.put(entry.getKey(), new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+                        members.put(entry.getKey(), new OperationAssembly.Member(member.topology(), member.cursor() + 1));
                         try { return new OperationAssembly(members, active.cargoCarrierId()); }
                         catch (IllegalArgumentException collision) { return null; }
                     }).filter(java.util.Objects::nonNull).findFirst().orElseThrow();
@@ -95,7 +95,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertTrue(departed.activeTravel().isPresent());
         assertEquals(departed.activeTravel().orElseThrow().formation(), after.actorLocations().entrySet().stream()
                 .filter(entry -> departed.participantIds().contains(entry.getKey())).collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
-                        entry -> entry.getValue().position())));
+                        entry -> BodyPosition.aboveLegacySupport(entry.getValue().position()))));
         assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(operation.id())
                 && action.kind().equals("frontier.operation.progress")));
         assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
@@ -114,7 +114,7 @@ class FrontierWorldRuntimeDefinitionTest {
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.HALL).findFirst().orElseThrow());
         OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actor,
-                assembly.members().get(actor).corridor().get(1), access.throatFloor(),
+                assembly.members().get(actor).nextSurface(), new SurfaceAnchor(access.throatFloor()),
                 OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
 
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
@@ -461,13 +461,15 @@ class FrontierWorldRuntimeDefinitionTest {
                 List.of(new SubjectId("resident:1-6"), new SubjectId("resident:1-4")), List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-420, 64, 420)), 0, OperationStage.EN_ROUTE);
         OperationCreated operationCreated = new OperationCreated(operation);
         OperationAdvanced operationAdvanced = new OperationAdvanced(operation.id(), 1, OperationStage.ARRIVED);
-        OperationTravel travel = new OperationTravel(List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-361, 64, -340)), 0,
-                Map.of(new SubjectId("resident:1-6"), new BlockPosition(-360, 64, -339), new SubjectId("resident:1-4"), new BlockPosition(-360, 64, -341)),
-                new BlockPosition(-360, 64, -340));
+        OperationTravel travel = new OperationTravel(TraversalTopology.corridor(new TraversalTopologyId("topology:runtime-payload"), 1L,
+                FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
+                List.of(SurfaceAnchor.at(-360, 64, -340), SurfaceAnchor.at(-361, 64, -340))), 0,
+                Map.of(new SubjectId("resident:1-6"), new BodyPosition(-360, 65, -339), new SubjectId("resident:1-4"), new BodyPosition(-360, 65, -341)),
+                TransportAnchor.atSupportCell(new BlockPosition(-360, 64, -340)));
         OperationTravelStarted travelStarted = new OperationTravelStarted(operation.id(), travel);
         OperationTravelAdvanced travelAdvanced = new OperationTravelAdvanced(operation.id(), travel.advance(1,
-                Map.of(new SubjectId("resident:1-6"), new BlockPosition(-361, 64, -339), new SubjectId("resident:1-4"), new BlockPosition(-361, 64, -341)),
-                new BlockPosition(-361, 64, -340)));
+                Map.of(new SubjectId("resident:1-6"), new BodyPosition(-361, 65, -339), new SubjectId("resident:1-4"), new BodyPosition(-361, 65, -341)),
+                TransportAnchor.atSupportCell(new BlockPosition(-361, 64, -340))));
         assertEquals(operationCreated, codecs.decode(operationCreated.type(), codecs.encode(operationCreated)));
         assertEquals(operationAdvanced, codecs.decode(operationAdvanced.type(), codecs.encode(operationAdvanced)));
         assertThrows(IllegalArgumentException.class, () -> new OperationAdvanced(operation.id(), 0, OperationStage.RETURNING),
@@ -518,7 +520,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertTrue(arrivedTravel.arrived());
         assertEquals(destination, arrivedTravel.currentPosition());
         assertTrue(operation.participantIds().stream().allMatch(participant -> arrivedTravel.formation().get(participant)
-                .equals(state.actorLocations().get(participant).position())));
+                .equals(BodyPosition.aboveLegacySupport(state.actorLocations().get(participant).position()))));
         assertEquals(1, engine.projection(ProjectionQuery.summary()).activeRouteOperationCount());
         PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"));
         assertEquals(null, handoff, "an unloaded receiver completes the exact COLD delivery without a materialization-only intent");
@@ -635,14 +637,15 @@ class FrontierWorldRuntimeDefinitionTest {
         List<SceneMember> members = operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList();
         Map<SubjectId, BlockPosition> memberPositions = new LinkedHashMap<>();
         members.forEach(member -> memberPositions.put(member.actorId(), before.actorLocations().get(member.actorId()).position()));
-        BlockPosition cargoPosition = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition cargoPosition = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         SceneLease lease = SceneLease.atExactPositions(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, handoffInstant,
-                projection.revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);
+                projection.revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members,
+                SceneLease.bodiesAboveLegacySupports(memberPositions));
         SceneLease legacyUniformLease = new SceneLease(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:legacy-uniform"), before.bootstrap().worldId(),
                 operation.id(), operation.cargoId(), operation.currentPosition(), handoffInstant, projection.revision().value(), SceneLeaseStatus.PREPARED, members);
         SceneLease wrongCargoLease = SceneLease.atExactPositions(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:wrong-cargo"), before.bootstrap().worldId(),
                 operation.id(), operation.cargoId(), operation.currentPosition(), operation.currentPosition(), handoffInstant, projection.revision().value(),
-                SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);
+                SceneLeaseStatus.PREPARED, Optional.empty(), members, SceneLease.bodiesAboveLegacySupports(memberPositions));
         assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(legacyUniformLease), "a uniform handoff point must not relocate a formation");
         assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(wrongCargoLease), "a scene must retain the operation's exact cargo anchor");
         assertEquals(cargoPosition, FrontierSceneBehaviors.logistics(lease).cargoPosition());
@@ -650,7 +653,7 @@ class FrontierWorldRuntimeDefinitionTest {
         List<SceneMember> foreignMembers = operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(foreignWorld, actor))).toList();
         SceneLease foreignLease = SceneLease.atExactPositions(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:foreign-scene-world"), foreignWorld,
                 operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, handoffInstant, projection.revision().value(), SceneLeaseStatus.PREPARED,
-                Optional.empty(), foreignMembers, memberPositions);
+                Optional.empty(), foreignMembers, SceneLease.bodiesAboveLegacySupports(memberPositions));
         assertThrows(IllegalArgumentException.class, () -> before.prepareSceneLease(foreignLease), "a scene lease from another world cannot share this world's canonical actors");
         SceneLeasePrepared payload = new SceneLeasePrepared(lease);
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-lease-start");
@@ -683,7 +686,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(java.util.Optional.empty(), FrontierSceneBehaviors.logistics(hotTravel.sceneLeases().get(leaseId)).engagementId());
         assertEquals(currentTravel.formation(), hotTravel.sceneLeases().get(leaseId).memberPositions(),
                 "a prepared/HOT scene must retain the current exact operation formation before its first observation");
-        assertEquals(currentTravel.cargoAnchor(), FrontierSceneBehaviors.logistics(hotTravel.sceneLeases().get(leaseId)).cargoPosition(),
+        assertEquals(currentTravel.cargoAnchor().surface().support(), FrontierSceneBehaviors.logistics(hotTravel.sceneLeases().get(leaseId)).cargoPosition(),
                 "a prepared/HOT scene must retain the current exact operation cargo before its first observation");
         OperationTravel oneHotCell = translateTravel(currentTravel, currentTravel.nextHotCursor());
         var hotAdvance = submit(engine, world, "scene-exact-hot-travel", new OperationTravelAdvanced(operation.id(), oneHotCell));
@@ -694,7 +697,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(oneHotCell, advancedHotTravel.operations().get(operation.id()).activeTravel().orElseThrow());
         assertEquals(oneHotCell.currentPosition(), advancedLease.handoffPosition());
         assertEquals(oneHotCell.formation(), advancedLease.memberPositions());
-        assertEquals(oneHotCell.cargoAnchor(), FrontierSceneBehaviors.logistics(advancedLease).cargoPosition());
+        assertEquals(oneHotCell.cargoAnchor().surface().support(), FrontierSceneBehaviors.logistics(advancedLease).cargoPosition());
         assertEquals(advancedHotTravel, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advancedHotTravel)));
         if (currentTravel.nextColdCursor() > currentTravel.nextHotCursor()) {
             assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
@@ -730,7 +733,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 new BlockPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()), FixedScalar.whole(7))).toList();
         FrontierWorldState released = draining.releaseSceneLease(leaseId, captured);
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
-        assertEquals(hot.operations().get(operation.id()).activeTravel().orElseThrow().formation().get(captured.getFirst().actorId()),
+        assertEquals(hot.operations().get(operation.id()).activeTravel().orElseThrow().formation().get(captured.getFirst().actorId()).supportingSurface().support(),
                 released.actorLocations().get(captured.getFirst().actorId()).position());
         assertEquals(FixedScalar.whole(7), released.actorLocations().get(captured.getFirst().actorId()).condition().health());
         SceneLeaseReleased releasePayload = new SceneLeaseReleased(leaseId, captured);
@@ -749,7 +752,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 before.routeTopology(), before.strategicPlans(), before.humanPopulation(), before.companies(), before.resourceSites());
         var nextLeaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:after-compaction");
         SceneLease nextLease = SceneLease.atExactPositions(nextLeaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, new SimInstant(551L),
-                2_000L, SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);
+                2_000L, SceneLeaseStatus.PREPARED, Optional.empty(), members, SceneLease.bodiesAboveLegacySupports(memberPositions));
         FrontierWorldState compacted = retentionState.prepareSceneLease(nextLease);
         assertEquals(1_024, compacted.sceneLeases().size()); assertTrue(compacted.sceneLeases().containsKey(nextLeaseId));
         assertTrue(!compacted.sceneLeases().containsKey(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-0")));
@@ -762,7 +765,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
         BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
         travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
         return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, 0, deltaZ));
     }

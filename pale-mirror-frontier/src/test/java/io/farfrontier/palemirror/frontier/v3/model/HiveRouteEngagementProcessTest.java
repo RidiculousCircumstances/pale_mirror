@@ -70,7 +70,7 @@ class HiveRouteEngagementProcessTest {
     @Test void taskBindsOneOperationAndMovesExactGuardsThroughPersistedColdRoutes() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept.offset(-16, 0, 0));
         }
@@ -114,7 +114,7 @@ class HiveRouteEngagementProcessTest {
     @Test void loadedSceneConflictIsNotRestartUnknownAndCanResumeOnlyThroughFreshPreparation() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
@@ -190,7 +190,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -304,7 +304,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatWaitsRatherThanResolvingOverAnActiveRouteScene() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -337,7 +337,7 @@ class HiveRouteEngagementProcessTest {
     @Test void coldCombatDefersAndReducerRejectsAnActorRetainedByActiveOrRecoveryAmbientLease() {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
-        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
             state = state.withActorLocation(bioform.id(), intercept);
         }
@@ -418,7 +418,7 @@ class HiveRouteEngagementProcessTest {
 
     private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        BlockPosition carrierPosition = operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(operation.currentPosition());
+        BlockPosition carrierPosition = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(operation.currentPosition());
         state = state.withActorLocation(scout.id(), carrierPosition);
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));

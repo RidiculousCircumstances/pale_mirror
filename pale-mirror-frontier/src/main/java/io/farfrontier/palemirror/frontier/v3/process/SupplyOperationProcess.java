@@ -128,14 +128,14 @@ public final class SupplyOperationProcess {
             AmbientActorLease lease = state.ambientLeases().get(actor);
             if (member.arrived() || lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return null;
             java.util.Map<SubjectId, OperationAssembly.Member> advanced = new java.util.LinkedHashMap<>(assembly.members());
-            advanced.put(actor, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+            advanced.put(actor, new OperationAssembly.Member(member.topology(), member.cursor() + 1));
             try { return new OperationAssembly(advanced, assembly.cargoCarrierId()); }
             catch (IllegalArgumentException collision) { return null; }
         }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
         if (next == null) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
-                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(operation, next.positions(), next.cargoAnchor()))),
+                    new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForCompletedAssembly(state, operation, next))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
@@ -161,7 +161,7 @@ public final class SupplyOperationProcess {
         }
         boolean heldAtIntercept = operation.stage() == OperationStage.EN_ROUTE && state.strategicPlans().routeEngagements().values().stream()
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
-                        && operation.activeTravel().map(travel -> travel.cargoAnchor().equals(engagement.intercept()))
+                        && operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(engagement.intercept()))
                         .orElseGet(() -> operation.currentPosition().equals(engagement.intercept())));
         if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
         Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
@@ -174,7 +174,9 @@ public final class SupplyOperationProcess {
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
         if (lease.isPresent()) return List.of(new ProposedEvent(operation.settlementId(), new OperationColdSuspended(operation.id(), lease.orElseThrow().id())));
-        if (!FrontierRouteNetwork.isPassable(state.bootstrap(), operation.route(), state.physicalDeltas())) return failed(state, operation, "route-obstructed");
+        if (!state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId())) {
+            return failed(state, operation, "route-obstructed", action.dueAt().ticks());
+        }
         if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
                 && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
@@ -182,6 +184,7 @@ public final class SupplyOperationProcess {
         }
         OperationTravel travel = operation.activeTravel().orElseThrow();
         if (!travel.arrived()) {
+            if (!travel.canAdvanceNextEdge()) return failed(state, operation, "route-obstructed", action.dueAt().ticks());
             OperationTravel advanced = translateTravel(travel, travel.nextColdCursor());
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced)),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
@@ -224,6 +227,32 @@ public final class SupplyOperationProcess {
                 transition(deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE), StrategicTaskStatus.BLOCKED));
     }
 
+    /**
+     * The route-loss observation may happen while this delivery owns the settlement's only
+     * strategic lane.  A fresh reconsideration belongs at the terminal failure boundary,
+     * after its delivery task has released that lane, rather than as a retrying side queue.
+     */
+    private static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason, long now) {
+        List<ProposedEvent> events = new ArrayList<>(failed(state, operation, reason));
+        if (reason.equals("route-obstructed")) {
+            firstObservedRouteLoss(state, operation).ifPresent(loss -> events.add(schedule(
+                    StrategicObjectiveProcess.routeReconsideration(operation.settlementId(), loss, "failure", Math.addExact(now, 1L)))));
+        }
+        return List.copyOf(events);
+    }
+
+    private static Optional<BlockPosition> firstObservedRouteLoss(FrontierWorldState state, RouteOperation operation) {
+        return state.physicalDeltas().values().stream()
+                .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
+                .filter(delta -> delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent())
+                .filter(delta -> delta.semanticPart().filter(GrayboxSemanticPart.ROUTE_SURFACE::equals).isPresent())
+                .map(PhysicalDelta::position)
+                .filter(position -> FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), position))
+                .filter(position -> !state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId()))
+                .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
+                .findFirst();
+    }
+
     public static ScheduledAction operationProgress(RouteOperation operation, long due) { return new ScheduledAction(new ScheduleId("schedule:operation-progress-" + operation.id().value().substring("operation:".length())),
             new SimInstant(due), 0, operation.id(), "frontier.operation.progress", 1); }
     public static ScheduledAction operationAssembly(RouteOperation operation, long due) { return new ScheduledAction(new ScheduleId("schedule:operation-assembly-" + operation.id().value().substring("operation:".length())),
@@ -233,18 +262,16 @@ public final class SupplyOperationProcess {
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
 
     private static OperationTravel travelForNextSegment(FrontierWorldState state, RouteOperation operation) {
-        BlockPosition cargoAnchor = operation.activeAssembly().map(OperationAssembly::cargoAnchor)
+        TransportAnchor cargoAnchor = operation.activeAssembly().map(OperationAssembly::cargoAnchor)
                 .orElseGet(() -> operation.activeTravel().orElseThrow(() -> new IllegalArgumentException("operation has no prior cargo anchor")).cargoAnchor());
-        return travelForNextSegment(operation, participantPositions(state, operation), cargoAnchor);
+        return travelForNextSegment(state, operation, participantBodies(state, operation), cargoAnchor);
     }
-    private static OperationTravel travelForNextSegment(RouteOperation operation, java.util.Map<SubjectId, BlockPosition> formation, BlockPosition cargoAnchor) {
+    private static OperationTravel travelForNextSegment(FrontierWorldState state, RouteOperation operation, java.util.Map<SubjectId, BodyPosition> formation, TransportAnchor cargoAnchor) {
         int next = operation.stage() == OperationStage.ARRIVED || operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
         if (next < 0 || next >= operation.route().size()) throw new IllegalArgumentException("operation has no next travel segment");
-        List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(next));
-        TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:operation:" + operation.id().value() + ":segment:" + operation.routeIndex()),
-                operation.routeIndex(), FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN,
-                java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
-                corridor.stream().map(SurfaceAnchor::new).toList());
+        TraversalTopology topology = state.routeTopology().supplyTraversalSegment(state.bootstrap(), operation.settlementId(),
+                operation.route().get(operation.routeIndex()), operation.route().get(next),
+                new TraversalTopologyId("topology:operation:" + operation.id().value() + ":segment:" + operation.routeIndex()));
         return new OperationTravel(topology, 0, formation, cargoAnchor);
     }
 
@@ -252,18 +279,20 @@ public final class SupplyOperationProcess {
      * The final HOT observed arrival is an authoritative assembly completion, so it starts the
      * first segment in that same canonical transaction instead of waiting for a stale COLD poll.
      */
-    public static OperationTravel travelForCompletedAssembly(RouteOperation operation, OperationAssembly assembly) {
+    public static OperationTravel travelForCompletedAssembly(FrontierWorldState state, RouteOperation operation, OperationAssembly assembly) {
         if (!assembly.complete()) throw new IllegalArgumentException("only a complete assembly may start operation travel");
-        return travelForNextSegment(operation, assembly.positions(), assembly.cargoAnchor());
+        java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
+        assembly.positions().forEach((actor, position) -> formation.put(actor, BodyPosition.above(position)));
+        return travelForNextSegment(state, operation, java.util.Map.copyOf(formation), assembly.cargoAnchor());
     }
-    private static java.util.Map<SubjectId, BlockPosition> participantPositions(FrontierWorldState state, RouteOperation operation) {
-        java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
-        operation.participantIds().forEach(actor -> formation.put(actor, state.actorLocations().get(actor).position()));
+    private static java.util.Map<SubjectId, BodyPosition> participantBodies(FrontierWorldState state, RouteOperation operation) {
+        java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
+        operation.participantIds().forEach(actor -> formation.put(actor, BodyPosition.aboveSupportCell(state.actorLocations().get(actor).position())));
         return java.util.Map.copyOf(formation);
     }
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
         BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
         travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
         return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, deltaY, deltaZ));
     }
@@ -361,14 +390,14 @@ public final class SupplyOperationProcess {
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("supply settlement lacks a Hall")));
         java.util.Map<SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
-        members.put(hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, hauler, access.assemblyFloor()), 0));
+        members.put(hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, operationId, hauler, access.assemblySurface()), 0));
         // The lead escort holds the outward port beside the cargo crew. Further escorts use
         // lateral assembly slots rather than queuing through that same one-cell throat.
-        List<BlockPosition> escortSlots = List.of(access.routeFloor(), access.assemblyFloor().offset(0, 0, 1), access.assemblyFloor().offset(0, 0, -1),
-                access.interiorFloor().offset(0, 0, 1));
+        List<SurfaceAnchor> escortSlots = List.of(access.routeSurface(), access.assemblySurface().offset(0, 0, 1), access.assemblySurface().offset(0, 0, -1),
+                access.interiorSurface().offset(0, 0, 1));
         for (int index = 0; index < escorts.size(); index++) {
             SubjectId escort = escorts.get(index);
-            members.put(escort, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, escort, escortSlots.get(index)), 0));
+            members.put(escort, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, operationId, escort, escortSlots.get(index)), 0));
         }
         OperationAssembly assembly = new OperationAssembly(members, hauler);
         return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,

@@ -13,7 +13,8 @@ final class FrontierWorldPhysicalDeltaSupport {
     private FrontierWorldPhysicalDeltaSupport() { }
 
     /** Validates retained evidence; a superseded route loss stays historical even after rerouting. */
-    static void validate(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas) {
+    static void validate(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology,
+                         Map<SubjectId, RouteConstruction> constructions, Map<BlockPosition, PhysicalDelta> deltas) {
         if (deltas.size() > MAX_PHYSICAL_DELTAS) throw new IllegalArgumentException("physical delta retention limit exceeded");
         for (Map.Entry<BlockPosition, PhysicalDelta> entry : deltas.entrySet()) {
             BlockPosition position = entry.getKey(); PhysicalDelta delta = entry.getValue();
@@ -26,7 +27,7 @@ final class FrontierWorldPhysicalDeltaSupport {
                 }
                 continue;
             }
-            GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, delta.ownerId().orElseThrow(), position);
+            GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, topology, constructions, delta.ownerId().orElseThrow(), position);
             if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
                 throw new IllegalArgumentException("known physical delta is not an exact semantic cell");
             }
@@ -40,14 +41,44 @@ final class FrontierWorldPhysicalDeltaSupport {
         validateCurrent(state, delta);
         Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas()); next.put(delta.position(), delta);
         FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
+        if (isKnownRouteSurfaceLoss(delta)) {
+            RouteTopology topology = changed.routeTopology().blockAffectedSupplyEdges(changed.bootstrap(), delta.position());
+            Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
+            changed.operations().forEach((operationId, operation) -> operations.put(operationId, operation.blockTravelAt(delta.position())));
+            changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeTopology(topology).operations(operations));
+        }
+        if (isKnownWorksiteStagingLoss(delta)) {
+            SubjectId projectId = delta.ownerId().orElseThrow();
+            RouteConstruction project = changed.routeConstructions().get(projectId);
+            if (project != null && project.status() == RouteConstructionStatus.BUILDING) {
+                Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(changed.routeConstructions());
+                projects.put(projectId, project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
+                Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(changed.sceneLeases());
+                leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
+                        && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(projectId)
+                        && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
+                changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects).sceneLeases(leases));
+            }
+        }
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().orElseThrow().value().startsWith("structure:")) return changed;
         return changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+    }
+
+    private static boolean isKnownRouteSurfaceLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+                && delta.semanticPart().filter(GrayboxSemanticPart.ROUTE_SURFACE::equals).isPresent();
+    }
+
+    private static boolean isKnownWorksiteStagingLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticPart().filter(GrayboxSemanticPart.WORKSITE_STAGING::equals).isPresent();
     }
 
     private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) return;
         GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(),
-                delta.ownerId().orElseThrow(), delta.position());
+                state.routeConstructions(), delta.ownerId().orElseThrow(), delta.position());
         if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
             throw new IllegalArgumentException("known physical delta is not an exact current semantic cell");
         }

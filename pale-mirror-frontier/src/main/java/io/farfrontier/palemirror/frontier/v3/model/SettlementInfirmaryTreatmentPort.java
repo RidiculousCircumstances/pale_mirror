@@ -39,23 +39,24 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     }
 
     /**
-     * The current graybox layout is a west-facing compiled provider. The facing is part of the
-     * port itself, so a future terrain/provider compiler must supply a different oriented port
-     * rather than make a HOT executor infer another entrance from a structure centre.
+     * The structure plan owns its facing. A terrain/provider compiler can therefore supply a
+     * different orientation without asking a HOT executor to infer an entrance from a centre.
      */
     public static SettlementInfirmaryTreatmentPort forInfirmary(SettlementStructure infirmary) {
         Objects.requireNonNull(infirmary, "settlement infirmary");
         if (infirmary.kind() != StructureKind.INFIRMARY) throw new IllegalArgumentException("only an infirmary owns a treatment port");
-        FacilityFacing facing = FacilityFacing.WEST;
+        FacilityFacing facing = infirmary.facing();
         SurfaceAnchor center = new SurfaceAnchor(infirmary.anchor());
         SurfaceAnchor interior = facing.step(center, 2);
         SurfaceAnchor throat = facing.step(center, 3);
         SurfaceAnchor approach = facing.step(center, 4);
-        // Graybox foundations sit one block above the surrounding natural street. This is a
-        // declared grade, not an ambiguous feet cell passed through aboveFloor compatibility.
-        SurfaceAnchor exterior = approach.offset(facing.x() * 2, -1, -4);
+        // The flat graybox provider must not claim a lower datum inside its immutable neutral
+        // foundation: materialization is intentionally air-only and cannot excavate that base.
+        // A surveyed terrain provider supplies a genuine grade as part of its own topology.
+        SurfaceAnchor exterior = facing.step(approach, 2);
+        SurfaceAnchor patient = facing.step(center, 1);
         return new SettlementInfirmaryTreatmentPort(infirmary.settlementId(), infirmary.id(), facing, interior, throat, approach, exterior,
-                center.offset(1, 0, 0), List.of(center.offset(0, 0, 1), center.offset(2, 0, 1)));
+                patient, List.of(facing.stepLeft(interior, 1), facing.stepRight(interior, 1)));
     }
 
     /** Two body cells absent from the wall/roof projection above the throat. */
@@ -72,6 +73,12 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     }
 
     public TraversalPath arrivalPath() { return new TraversalPath(arrivalSurfaces()); }
+    public FacilityTraversalPort topologyPort() {
+        return new FacilityTraversalPort(infirmaryId, facing, List.of(exteriorApproachSurface,
+                facing.step(approachSurface, 1), approachSurface), throatSurface,
+                interiorSurface, List.of(patientSurface, medicSurfaces.getFirst(), medicSurfaces.getLast()),
+                java.util.Set.of(TraversalCapability.PEDESTRIAN));
+    }
     public List<SurfaceAnchor> ingressSurfaces() { return List.of(approachSurface, throatSurface, interiorSurface); }
 
     /** Patient first, then the bounded ordered medical-team positions. */
@@ -88,10 +95,7 @@ public record SettlementInfirmaryTreatmentPort(SubjectId settlementId, SubjectId
     }
 
     private static List<SurfaceAnchor> composeOwnedAccess(FacilityFacing facing, SurfaceAnchor approach) {
-        List<SurfaceAnchor> values = new ArrayList<>();
-        for (int z = -4; z <= 0; z++) values.add(approach.offset(facing.x(), 0, z));
-        values.add(approach);
-        return List.copyOf(values);
+        return List.of(facing.step(approach, 1), approach);
     }
 
     private static List<SurfaceAnchor> composeArrival(FacilityFacing facing, SurfaceAnchor approach, SurfaceAnchor exterior,

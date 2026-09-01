@@ -1,25 +1,19 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.OperationCreated;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolStatus;
-import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveKind;
-import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class StrategicPlanStateCodecLegacyOrdinalTest {
     @Test
-    void recoversTheDeployedPreAssaultHarvestLayoutEvenWhenItRetainedSchema79() throws Exception {
+    void rejectsThePreAssaultStrategicSnapshotLayout() throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(bytes)) {
             output.writeShort(1);
@@ -40,18 +34,12 @@ class StrategicPlanStateCodecLegacyOrdinalTest {
             output.writeShort(0); output.writeShort(0); output.writeShort(0); output.writeByte(0); output.writeLong(0L);
         }
 
-        var restored = StrategicPlanStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())), false,
-                true, true, true, true, true, true, true, 79);
-
-        assertEquals(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE,
-                restored.objectives().get(new SubjectId("objective:settlement-1-settlement_harvest_resource_site-1")).kind());
-        assertEquals(StrategicTaskKind.HARVEST_RESOURCE_SITE,
-                restored.tasks().get(new SubjectId("task:settlement-1-settlement_harvest_resource_site-1")).kind());
-        assertEquals(Optional.of(new SubjectId("site:1-wheat-field")), restored.objectives().values().iterator().next().resourceSiteTarget());
+        assertThrows(IllegalArgumentException.class, () -> StrategicPlanStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())), false,
+                true, true, true, true, true, true, true, 79));
     }
 
     @Test
-    void recoversSchema82PatrolAsItsExactUnderstrengthHistoricalUnit() throws Exception {
+    void rejectsTheSchema82PatrolSnapshotLayout() throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(bytes)) {
             output.writeShort(1); // objectives
@@ -82,17 +70,12 @@ class StrategicPlanStateCodecLegacyOrdinalTest {
             output.writeByte(0); output.writeLong(0L); // doctrine
         }
 
-        var restored = StrategicPlanStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())), false,
-                true, true, true, true, true, true, true, 82);
-
-        var patrol = restored.routePatrols().get(new SubjectId("task:settlement-1-settlement_patrol_obstructed_route"));
-        assertEquals(true, patrol.unit().legacyUnderstrength());
-        assertEquals(new SubjectId("resident:1-16"), patrol.unit().leaderId());
-        assertEquals(java.util.List.of(new SubjectId("resident:1-16")), patrol.memberIds());
+        assertThrows(IllegalArgumentException.class, () -> StrategicPlanStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())), false,
+                true, true, true, true, true, true, true, 82));
     }
 
     @Test
-    void recoversHistoricalPatrolWalAsItsExactUnderstrengthHistoricalUnit() throws Exception {
+    void rejectsHistoricalPatrolWalPayload() throws Exception {
         byte[] oldPayload = FrontierWorldPayloadCodecs.encodeProduction(output -> {
             output.writeUTF("task:settlement-1-settlement_patrol_obstructed_route");
             output.writeUTF("settlement:1");
@@ -103,15 +86,11 @@ class StrategicPlanStateCodecLegacyOrdinalTest {
             output.writeByte(0); output.writeByte(RoutePatrolStatus.EN_ROUTE.wireTag()); output.writeBoolean(false);
         });
 
-        RoutePatrolStarted restored = (RoutePatrolStarted) RoutePatrolPayloadCodecs.started().decode(oldPayload);
-
-        assertEquals(true, restored.patrol().unit().legacyUnderstrength());
-        assertEquals(new SubjectId("resident:1-16"), restored.patrol().unit().leaderId());
-        assertEquals(java.util.List.of(new SubjectId("resident:1-16")), restored.patrol().memberIds());
+        assertThrows(IllegalArgumentException.class, () -> RoutePatrolPayloadCodecs.started().decode(oldPayload));
     }
 
     @Test
-    void recoversHistoricalCargoOperationWalAsItsExactUnderstrengthEscort() throws Exception {
+    void rejectsHistoricalCargoOperationWalPayload() throws Exception {
         byte[] oldPayload = FrontierWorldPayloadCodecs.encodeProduction(output -> {
             output.writeUTF("operation:supply-1-2"); output.writeUTF("settlement:1");
             output.writeUTF("cargo:supply-1-2"); output.writeUTF("hive:frontier");
@@ -124,12 +103,7 @@ class StrategicPlanStateCodecLegacyOrdinalTest {
             output.writeByte(0); // old no-active-travel flag
         });
 
-        OperationCreated restored = (OperationCreated) io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
-                .decode("frontier.operation_created", oldPayload);
-
-        assertEquals(true, restored.operation().unit().legacyUnderstrength());
-        assertEquals(new SubjectId("resident:1-30"), restored.operation().unit().cargoCrewId());
-        assertEquals(new SubjectId("resident:1-16"), restored.operation().unit().leaderId());
-        assertEquals(java.util.List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16")), restored.operation().participantIds());
+        assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
+                .decode("frontier.operation_created", oldPayload));
     }
 }

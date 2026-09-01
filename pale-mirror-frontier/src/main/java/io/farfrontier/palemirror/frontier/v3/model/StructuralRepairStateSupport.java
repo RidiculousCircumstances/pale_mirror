@@ -25,6 +25,9 @@ final class StructuralRepairStateSupport {
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
         validateReceipt(current, repair);
+        if (FrontierRouteNetwork.OWNER.equals(current.causeSubjectId())) {
+            throw new IllegalArgumentException("route loss belongs exclusively to route construction recovery");
+        }
         PhysicalDelta delta = state.physicalDeltas().get(repair.position());
         if (delta == null || delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().equals(java.util.Optional.of(current.causeSubjectId()))) {
             throw new IllegalArgumentException("repair has no matching known physical loss");
@@ -58,22 +61,12 @@ final class StructuralRepairStateSupport {
 
     private static FrontierWorldState completeHiveOrgan(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
                                                          Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
-        if (FrontierRouteNetwork.OWNER.equals(current.causeSubjectId())) return completeRoute(state, current, repair, nextIntents);
         if (!FrontierWorldStateSupport.isHiveOrgan(state.bootstrap(), state.hiveColony(), current.causeSubjectId())) {
             throw new IllegalArgumentException("repair owner is neither a settlement structure nor hive organ");
         }
         Map<BlockPosition, PhysicalDelta> deltas = new LinkedHashMap<>(state.physicalDeltas()); deltas.remove(repair.position());
         nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(repair.id(), repair);
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeOne(repair.itemId())).physicalIntents(nextIntents)
-                .physicalObservations(observations).physicalDeltas(deltas));
-    }
-
-    private static FrontierWorldState completeRoute(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
-                                                     Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
-        Map<BlockPosition, PhysicalDelta> deltas = new LinkedHashMap<>(state.physicalDeltas()); deltas.remove(repair.position());
-        nextIntents.put(current.id(), current.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(repair.id())));
-        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(); observations.putAll(state.physicalObservations()); observations.put(repair.id(), repair);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeOne(repair.itemId())).physicalIntents(nextIntents)
                 .physicalObservations(observations).physicalDeltas(deltas));
     }

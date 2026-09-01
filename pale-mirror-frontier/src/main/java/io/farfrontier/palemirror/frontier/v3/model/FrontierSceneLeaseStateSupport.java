@@ -26,7 +26,8 @@ public final class FrontierSceneLeaseStateSupport {
         if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
         }
-        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position().equals(lease.memberPosition(member.actorId())))) {
+        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position()
+                .equals(lease.memberPosition(member.actorId()).supportingSurface().support()))) {
             throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
         }
         FrontierSceneBehaviors.validatePrepared(state, lease);
@@ -61,7 +62,8 @@ public final class FrontierSceneLeaseStateSupport {
                 throw new IllegalArgumentException("scene hand-off capture lacks one living HOT ambient actor");
             }
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), capture.position());
-            actors.put(capture.actorId(), new ActorLocation(capture.position(), actor.condition().withHealth(capture.health())));
+            BodyPosition body = new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z());
+            actors.put(capture.actorId(), new ActorLocation(body.supportingSurface().support(), actor.condition().withHealth(capture.health())));
             ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         }
         return copy(state, actors, withPreparedLease(state, handoff.lease()), ambient, state.strategicPlans());

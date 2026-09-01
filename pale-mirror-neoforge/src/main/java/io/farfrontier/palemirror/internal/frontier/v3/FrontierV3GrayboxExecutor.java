@@ -59,6 +59,7 @@ final class FrontierV3GrayboxExecutor {
             CURSORS.put(runtime, cursor);
         }
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        retireStaleWorksiteStaging(level, ledger, cursor);
         for (int count = 0; count < MAX_CELLS_PER_TICK; count++) {
             GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> level.hasChunkAt(toMinecraft(candidate))).orElse(null);
             if (cell == null) return;
@@ -171,13 +172,43 @@ final class FrontierV3GrayboxExecutor {
             // stays plainly visible in graybox; exact Transit bodies use the compiler's adjacent
             // clear lane, so forced HOT motion never treats the route block as pass-through air.
             case ROUTE -> Blocks.GRAY_CARPET.defaultBlockState();
+            // A full visible pad is intentional: it gives the exact crew a real floor before
+            // any route cell exists, and its distinct cyan makes temporary work easy to read.
+            case WORKSITE -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
             case INFECTION -> throw new IllegalArgumentException("infection requires the dynamic overlay executor");
         };
     }
 
+    /**
+     * A stage is an explicit, project-owned temporary floor. Once its canonical work front has
+     * moved on, delete only the exact untouched block we wrote; a modified block stays a visible
+     * conflict and is never overwritten or silently adopted. The bounded ledger owns at most
+     * 48 such claims (12 projects × 4 crew slots), so this scan remains cheaper than one
+     * projection chunk turn and is safe across unload/restart.
+     */
+    private static void retireStaleWorksiteStaging(ServerLevel level, FrontierV3GrayboxLedger ledger, Cursor cursor) {
+        for (FrontierV3GrayboxLedger.ClaimAt staged : ledger.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name())) {
+            BlockPos position = staged.position();
+            if (cursor.retainsWorksiteStaging(position) || !level.hasChunkAt(position)) continue;
+            FrontierV3GrayboxLedger.Claim claim = staged.claim();
+            GrayboxMaterial stagedMaterial;
+            try {
+                stagedMaterial = GrayboxMaterial.valueOf(claim.material());
+            } catch (IllegalArgumentException malformed) {
+                ledger.conflict(position); continue;
+            }
+            if (claim.conflicted() || stagedMaterial != GrayboxMaterial.WORKSITE
+                    || !level.getBlockState(position).equals(material(stagedMaterial))) {
+                ledger.conflict(position); continue;
+            }
+            if (!level.setBlock(position, Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(position).isAir()) continue;
+            ledger.retire(position, claim.owner(), claim.material(), claim.semanticPart());
+        }
+    }
+
     private static boolean requiresSupport(GrayboxSemanticPart part) {
         return part == GrayboxSemanticPart.FOUNDATION || part == GrayboxSemanticPart.ROUTE_SURFACE
-                || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE;
+                || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || part == GrayboxSemanticPart.WORKSITE_STAGING;
     }
     private static boolean matches(FrontierV3GrayboxLedger.Claim claim, GrayboxCell cell) {
         return claim.owner().equals(cell.ownerId().value()) && claim.material().equals(cell.material().name())
@@ -197,18 +228,27 @@ final class FrontierV3GrayboxExecutor {
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
-        private Cursor(FrontierGrayboxPlan.StructuralInput input, List<ChunkCells> chunks, int nextChunkIndex) {
+        private Cursor(FrontierGrayboxPlan.StructuralInput input, List<ChunkCells> chunks, int nextChunkIndex,
+                       java.util.Set<BlockPos> activeWorksiteStaging) {
             this.input = input;
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
+            this.activeWorksiteStaging = activeWorksiteStaging;
         }
+        private final java.util.Set<BlockPos> activeWorksiteStaging;
         static Cursor from(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan plan, Cursor prior) {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            return fromCells(input, cells, prior);
+            return fromCells(input, cells, prior, plan.cells().values().stream()
+                    .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.WORKSITE_STAGING)
+                    .map(FrontierV3GrayboxExecutor::toMinecraft).collect(java.util.stream.Collectors.toUnmodifiableSet()));
         }
         static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior) {
+            return fromCells(input, cells, prior, java.util.Set.of());
+        }
+        private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior,
+                                        java.util.Set<BlockPos> activeWorksiteStaging) {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
             cells.forEach(cell -> grouped.computeIfAbsent(ChunkKey.of(cell), ignored -> new ArrayList<>()).add(cell));
             List<ChunkCells> chunks = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
@@ -216,13 +256,14 @@ final class FrontierV3GrayboxExecutor {
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
-            return new Cursor(input, chunks, next);
+            return new Cursor(input, chunks, next, activeWorksiteStaging);
         }
         /** Test-only cell ordering probe; production cursors always retain an exact structural input. */
         static Cursor fromCells(List<GrayboxCell> cells, Cursor prior) {
             return fromCells(null, cells, prior);
         }
         FrontierGrayboxPlan.StructuralInput input() { return input; }
+        boolean retainsWorksiteStaging(BlockPos position) { return activeWorksiteStaging.contains(position); }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             for (int attempts = 0; attempts < chunks.size(); attempts++) {

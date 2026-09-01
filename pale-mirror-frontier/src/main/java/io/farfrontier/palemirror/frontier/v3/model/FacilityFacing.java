@@ -11,4 +11,8 @@ public enum FacilityFacing {
     public int x() { return x; }
     public int z() { return z; }
     public SurfaceAnchor step(SurfaceAnchor origin, int distance) { return origin.offset(x * distance, 0, z * distance); }
+    /** One local-left step, so a compiled formation never hard-codes a global Z offset. */
+    public SurfaceAnchor stepLeft(SurfaceAnchor origin, int distance) { return origin.offset(z * distance, 0, -x * distance); }
+    /** One local-right step, so a compiled formation never hard-codes a global X offset. */
+    public SurfaceAnchor stepRight(SurfaceAnchor origin, int distance) { return origin.offset(-z * distance, 0, x * distance); }
 }

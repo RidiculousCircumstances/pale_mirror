@@ -58,7 +58,7 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
             append(text, settlement.id(), settlement.anchor());
             text.append('|').append(settlement.displayName());
             settlement.residents().forEach(resident -> { append(text, resident.id(), resident.home()); text.append(':').append(resident.role()); });
-            settlement.structures().forEach(structure -> { append(text, structure.id(), structure.anchor()); text.append(':').append(structure.kind()); });
+            settlement.structures().forEach(structure -> { append(text, structure.id(), structure.anchor()); text.append(':').append(structure.kind()).append(':').append(structure.facing()); });
         }
         text.append('|').append(hive.id().value());
         hive.seedNests().forEach(nest -> append(text, nest.id(), nest.anchor()));

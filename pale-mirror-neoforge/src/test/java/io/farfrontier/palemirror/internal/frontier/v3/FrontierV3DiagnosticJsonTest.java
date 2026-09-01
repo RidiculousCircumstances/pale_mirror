@@ -146,8 +146,8 @@ class FrontierV3DiagnosticJsonTest {
         var entry = operation.activeAssembly().orElseThrow().members().entrySet().iterator().next();
         var member = entry.getValue();
         var readiness = new FrontierV3AmbientActorExecutor.AssemblyReadiness(java.util.List.of(
-                new FrontierV3AmbientActorExecutor.AssemblyMemberReadiness(entry.getKey(), member.currentPosition(),
-                        member.corridor().get(member.cursor() + 1), member.currentPosition(), new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 64.0D, 8.5D), "OCCUPIED",
+                new FrontierV3AmbientActorExecutor.AssemblyMemberReadiness(entry.getKey(), member.currentSurface().support(),
+                        member.nextSurface().support(), member.currentSurface().support(), new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 64.0D, 8.5D), "OCCUPIED",
                         "minecraft:gray_carpet", "minecraft:stone", "minecraft:air", "minecraft:air", java.util.List.of("minecraft:villager"))));
 
         String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty(),
@@ -157,6 +157,28 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(operationJson.contains("\"targetStatus\":\"OCCUPIED\"") && operationJson.contains("\"occupants\":[\"minecraft:villager\"]"));
         assertTrue(operationJson.contains("\"observedExact\":{\"x\":4.5,\"y\":64.0,\"z\":8.5}") && operationJson.contains("\"supportBlock\":\"minecraft:stone\""));
         assertTrue(runtime.decodedState().orElseThrow().equals(state), "a physical assembly probe may not advance or defer the operation");
+    }
+
+    @Test
+    void exposesTheRetainedTraversalEdgeWithoutChangingTheRoute(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.routeSceneReturnConfiguration(new WorldId("frontier:diagnostic-traversal-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        var travel = operation.activeTravel().orElseThrow();
+
+        String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty());
+
+        assertTrue(operationJson.contains("\"travelTopology\":\"" + travel.topology().id().value() + "\""));
+        assertTrue(operationJson.contains("\"travelNextEdge\":\"" + travel.nextEdge().id().value() + "\""));
+        assertTrue(operationJson.contains("\"travelNextEdgeAvailability\":\"OPEN\"")
+                        && operationJson.contains("\"settlementTraversalAvailable\":true")
+                        && operationJson.contains("\"settlementUnavailableEdges\":0"),
+                "the read-only operation view must distinguish an intact retained edge from a globally blocked route");
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "a traversal diagnostic may not replan or advance the operation");
+        runtime.shutdown();
     }
 
     @Test
@@ -268,7 +290,7 @@ class FrontierV3DiagnosticJsonTest {
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-assault-r0"), checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, candidate.memberPositions(), java.util.Set.of(), Optional.empty());
+                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
 
         String scene = FrontierV3DiagnosticJson.render("scene", candidate.assaultId().value(), checkpoint, hot, Optional.empty());
@@ -313,7 +335,7 @@ class FrontierV3DiagnosticJsonTest {
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-engineering-r0"), checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause(project.id(), 0), project.workCells().getFirst(),
                 checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, positions, java.util.Set.of(), Optional.empty());
+                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(positions), java.util.Set.of(), Optional.empty());
         FrontierWorldState diagnosticState = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
                 .sceneLeases(java.util.Map.of(lease.id(), lease)));
 
@@ -355,7 +377,7 @@ class FrontierV3DiagnosticJsonTest {
         var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
                 new io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
                 checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
-                members, candidate.memberPositions(), java.util.Set.of(), Optional.empty());
+                members, io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
         FrontierWorldState diagnosticState = state.prepareSceneLease(lease);
 
         String medical = FrontierV3DiagnosticJson.render("medical", operation.id().value(), checkpoint, diagnosticState, Optional.empty());
@@ -394,9 +416,13 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState baseline = runtime.decodedState().orElseThrow();
         SubjectId settlement = baseline.bootstrap().settlements().getFirst().id();
         java.util.List<BlockPosition> waypoints = baseline.routeTopology().supplyWaypoints(baseline.bootstrap(), settlement);
+        java.util.List<BlockPosition> bypass = java.util.List.of(waypoints.get(0), waypoints.get(1),
+                waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
+                waypoints.get(2), waypoints.get(3), waypoints.get(4));
+        java.util.List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(
+                baseline.bootstrap(), baseline.routeTopology(), settlement, bypass);
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
-                java.util.List.of(waypoints.get(0), waypoints.get(1), waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
-                        waypoints.get(2), waypoints.get(3), waypoints.get(4), waypoints.get(5)), 0, RouteConstructionStatus.BUILDING);
+                bypass, workCells, 0, RouteConstructionStatus.BUILDING, Optional.empty(), Optional.empty(), Optional.empty());
         FrontierWorldState changed = RouteConstructionStateSupport.reduceStarted(baseline, FrontierRouteNetwork.OWNER,
                 new RouteConstructionStarted(project));
 
@@ -405,6 +431,10 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(route.contains("\"status\":\"ok\"") && route.contains("\"project\":\"construction:diagnostic-route\""));
         assertTrue(route.contains("\"phase\":\"BUILDING\"") && route.contains("\"cargoPresent\":false") && route.contains("\"nextCell\":{"));
+        assertTrue(route.contains("\"assemblyPresent\":false"),
+                "the route diagnostic must make an absent COLD crew assembly distinguishable from a stalled one");
+        assertTrue(route.contains("\"teamPresent\":false") && route.contains("\"teamFullyEquipped\":false"),
+                "the route diagnostic must distinguish an autonomous historical fixture from a real unready crew");
         assertTrue(missing.contains("\"status\":\"not_found\""));
         assertTrue(changed.routeConstructions().get(project.id()).confirmedCells() == 0,
                 "read-only route diagnostics never advance a project");

@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -327,7 +328,8 @@ public final class FrontierV3CargoCarrierGameTests {
         BlockPos cargo = origin.offset((members.size() % 2) * 2 + 1, 0, (members.size() / 2) * 2);
         return SceneLease.atExactPositions(new SceneLeaseId(id), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), handoff,
                 new BlockPosition(cargo.getX(), cargo.getY(), cargo.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members,
-                members.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId, ignored -> handoff, (left, right) -> left, java.util.LinkedHashMap::new)));
+                members.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId,
+                        ignored -> BodyPosition.aboveLegacySupport(handoff), (left, right) -> left, java.util.LinkedHashMap::new)));
     }
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

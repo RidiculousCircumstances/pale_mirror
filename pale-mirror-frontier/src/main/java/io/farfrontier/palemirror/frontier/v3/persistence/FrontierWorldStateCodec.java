@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 91; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 95; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -54,36 +54,27 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version != 41 && version != LEGACY_VERSION && version != 43 && version != 44 && version != 45
-                    && version != 46 && version != 47 && version != 48 && version != 49 && version != 50 && version != 51
-                    && version != 52 && version != 53 && version != 54 && version != 55 && version != 56 && version != 57
-                    && version != 58 && version != 59 && version != 60 && version != 61 && version != 62 && version != 63
-                    && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
-                    && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75
-                    && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81
-                    && version != 82 && version != 83 && version != 84 && version != 85 && version != 86 && version != 87 && version != 88 && version != 89 && version != 90 && version != VERSION) {
-                throw new IllegalArgumentException("unknown Frontier v3 state version");
-            }
+            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state requires a fresh current-schema world");
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
-            FrontierRuleset ruleset = version >= 80 ? readRuleset(input) : FrontierRulesets.legacyForSnapshotVersion(version);
+            FrontierRuleset ruleset = readRuleset(input);
             FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset);
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
-            Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input, version >= 73, version >= 74, version >= 75);
-            EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
-            CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64, version >= 65) : CompanyRegistry.empty();
-            ExactInventory inventory = readInventory(input, economics); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, version >= 66);
-            Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55, version >= 83, version >= 91);
-            LogisticsHistory history = version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty();
-            Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, version >= 82);
+            Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input, true, true, true);
+            EconomicLedger economics = readEconomicLedger(input, true);
+            CompanyRegistry companies = readCompanyRegistry(input, true, true, true);
+            ExactInventory inventory = readInventory(input, economics); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, true);
+            Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
+            LogisticsHistory history = readLogisticsHistory(input);
+            Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, true);
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = PhysicalEffectObservationStateCodec.read(input);
-            Map<SceneLeaseId, SceneLease> scenes = readSceneLeases(input, version); Map<SubjectId, AmbientActorLease> ambient = AmbientLeaseStateCodec.read(input);
-            Map<SubjectId, RouteConstruction> constructions = RouteConstructionStateCodec.read(input, version >= 45, version >= 84, version >= 85, version >= 86);
+            Map<SceneLeaseId, SceneLease> scenes = readSceneLeases(input); Map<SubjectId, AmbientActorLease> ambient = AmbientLeaseStateCodec.read(input);
+            Map<SubjectId, RouteConstruction> constructions = RouteConstructionStateCodec.read(input, true, true, true, true);
             RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
-            StrategicPlanState plans = StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version);
-            HumanPopulation population = HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81, version >= 88, version >= 89);
+            StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, VERSION);
+            HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, topology, plans, population, companies, sites);
@@ -569,24 +560,18 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
     }
     private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel, boolean hasAssembly, boolean hasAssemblyDeferral,
-                                                                   boolean hasDeferralObstruction, boolean hasRouteUnit, boolean hasTraversalTopology) throws IOException {
+                                                                   boolean hasDeferralObstruction, boolean hasRouteUnit, boolean hasTraversalTopology,
+                                                                   boolean hasTypedTravelAnchors) throws IOException {
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
             SubjectId destination = new SubjectId(readString(input));
-            RouteUnitManifest unit;
-            if (hasRouteUnit) unit = RouteUnitManifestCodec.read(input);
-            else {
-                java.util.ArrayList<SubjectId> participants = new java.util.ArrayList<>();
-                for (int participant = 0, participantCount = readCount(input); participant < participantCount; participant++) participants.add(new SubjectId(readString(input)));
-                if (participants.size() != 2) throw new IllegalArgumentException("legacy route operation has invalid participant count");
-                unit = RouteUnitManifest.legacyCargoEscort(id, participants.getFirst(), participants.get(1));
-            }
+            RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
             for (int point = 0, pointCount = readCount(input); point < pointCount; point++) route.add(readPosition(input));
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-            java.util.Optional<OperationAssembly> assembly = hasAssembly && input.readBoolean() ? java.util.Optional.of(readAssembly(input, hasAssemblyDeferral, hasDeferralObstruction)) : java.util.Optional.empty();
-            java.util.Optional<OperationTravel> travel = hasTravel && input.readBoolean() ? java.util.Optional.of(readTravel(input, hasTraversalTopology)) : java.util.Optional.empty();
+            java.util.Optional<OperationAssembly> assembly = input.readBoolean() ? java.util.Optional.of(readAssembly(input, true, true)) : java.util.Optional.empty();
+            java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(readTravel(input, true, true)) : java.util.Optional.empty();
             if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
@@ -622,45 +607,45 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     } private static void writeTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         TraversalTopologyStateCodec.write(output, travel.topology());
         writeCount(output, travel.cursor()); writeCount(output, travel.formation().size());
-        for (var entry : travel.formation().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { writeString(output, entry.getKey().value()); writePosition(output, entry.getValue()); }
-        writePosition(output, travel.cargoAnchor());
+        for (var entry : travel.formation().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().value());
+            BodyPosition body = entry.getValue(); writePosition(output, new BlockPosition(body.x(), body.y(), body.z()));
+        }
+        writePosition(output, travel.cargoAnchor().surface().support());
     }
-    private static OperationTravel readTravel(DataInputStream input, boolean hasTraversalTopology) throws IOException {
-        if (hasTraversalTopology) return readTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
-        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0, count = readCount(input); index < count; index++) corridor.add(readPosition(input));
-        int cursor = readCount(input); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) formation.put(new SubjectId(readString(input)), readPosition(input));
-        return new OperationTravel(corridor, cursor, formation, readPosition(input));
-    } static OperationTravel readTravelWithTopology(DataInputStream input, TraversalTopology topology) throws IOException {
-        int cursor = readCount(input); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) formation.put(new SubjectId(readString(input)), readPosition(input));
-        return new OperationTravel(topology, cursor, formation, readPosition(input));
+    private static OperationTravel readTravel(DataInputStream input, boolean hasTraversalTopology, boolean hasTypedTravelAnchors) throws IOException {
+        return readTravelWithTopology(input, TraversalTopologyStateCodec.read(input), true);
+    } static OperationTravel readTravelWithTopology(DataInputStream input, TraversalTopology topology, boolean hasTypedTravelAnchors) throws IOException {
+        int cursor = readCount(input); Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId actor = new SubjectId(readString(input)); BlockPosition body = readPosition(input); formation.put(actor,
+                    new BodyPosition(body.x(), body.y(), body.z()));
+        }
+        return new OperationTravel(topology, cursor, formation, TransportAnchor.atSupportCell(readPosition(input)));
     } private static void writeAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
         writeString(output, assembly.cargoCarrierId().value()); writeCount(output, assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); writeCount(output, entry.getValue().corridor().size());
-            for (BlockPosition point : entry.getValue().corridor()) writePosition(output, point);
+            writeString(output, entry.getKey().value()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
             writeCount(output, entry.getValue().cursor());
         }
         output.writeBoolean(assembly.deferral().isPresent());
         if (assembly.deferral().isPresent()) {
             OperationAssemblyDeferral deferred = assembly.deferral().orElseThrow(); writeString(output, deferred.actorId().value());
-            writePosition(output, deferred.target()); writePosition(output, deferred.obstructionFloor()); output.writeByte(deferred.reason().wireTag());
+            writePosition(output, deferred.target().support()); writePosition(output, deferred.obstructionSurface().support()); output.writeByte(deferred.reason().wireTag());
         }
     }
     private static OperationAssembly readAssembly(DataInputStream input, boolean hasDeferral, boolean hasDeferralObstruction) throws IOException {
         SubjectId carrier = new SubjectId(readString(input)); Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId actor = new SubjectId(readString(input)); List<BlockPosition> corridor = new java.util.ArrayList<>();
-            for (int cell = 0, cellCount = readCount(input); cell < cellCount; cell++) corridor.add(readPosition(input));
-            if (members.put(actor, new OperationAssembly.Member(corridor, readCount(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+            SubjectId actor = new SubjectId(readString(input));
+            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), readCount(input))) != null) throw new IllegalArgumentException("duplicate operation assembly member");
         }
         java.util.Optional<OperationAssemblyDeferral> deferral = java.util.Optional.empty();
         if (hasDeferral && input.readBoolean()) {
             SubjectId actor = new SubjectId(readString(input)); BlockPosition target = readPosition(input);
             BlockPosition obstruction = hasDeferralObstruction ? readPosition(input) : target; int reason = input.readUnsignedByte();
             if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
-            deferral = java.util.Optional.of(new OperationAssemblyDeferral(actor, target, obstruction, FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
+            deferral = java.util.Optional.of(new OperationAssemblyDeferral(actor, new SurfaceAnchor(target), new SurfaceAnchor(obstruction), FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
         }
         return new OperationAssembly(members, carrier, deferral);
     }
@@ -675,7 +660,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
             writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag());
             writeCount(output, lease.members().size());
-            for (SceneMember member : lease.members()) { writeString(output, member.actorId().value()); writeString(output, member.entityId().toString()); writePosition(output, lease.memberPosition(member.actorId())); }
+            for (SceneMember member : lease.members()) {
+                writeString(output, member.actorId().value());
+                writeString(output, member.entityId().toString());
+                BodyPosition position = lease.memberPosition(member.actorId());
+                writePosition(output, new BlockPosition(position.x(), position.y(), position.z()));
+            }
             writeCount(output, lease.ambientHandoffActorIds().size());
             for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeString(output, actor.value());
             output.writeBoolean(lease.recoveryEvidence().isPresent());
@@ -687,34 +677,33 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
     }
-    private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input, int version) throws IOException {
+    private static Map<SceneLeaseId, SceneLease> readSceneLeases(DataInputStream input) throws IOException {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>();
         int count = readCount(input);
-        if (version < 53 && count > 0) throw new IllegalArgumentException("legacy scene lease lacks exact member or cargo positions");
         for (int index = 0; index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input));
-            SceneCauseKind causeKind = version >= 77 ? readSceneCauseKind(input) : SceneCauseKind.LOGISTICS;
+            SceneCauseKind causeKind = readSceneCauseKind(input);
             SubjectId operation; SubjectId cargo; java.util.Optional<SubjectId> engagement; BlockPosition cargoPosition;
-            if (version < 79 || causeKind instanceof SceneCauseKind.Logistics) {
+            if (causeKind instanceof SceneCauseKind.Logistics) {
                 operation = new SubjectId(readString(input)); cargo = new SubjectId(readString(input));
                 engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-                cargoPosition = version < 79 ? null : readPosition(input);
+                cargoPosition = readPosition(input);
             } else {
                 operation = null; cargo = null; engagement = java.util.Optional.empty(); cargoPosition = null;
             }
             BlockPosition handoff = readPosition(input);
-            if (version < 79) cargoPosition = readPosition(input);
             long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); Map<SubjectId, BlockPosition> memberPositions = new LinkedHashMap<>();
+            java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); Map<SubjectId, BodyPosition> memberPositions = new LinkedHashMap<>();
             for (int member = 0, memberCount = readCount(input); member < memberCount; member++) {
                 SubjectId actor = new SubjectId(readString(input)); members.add(new SceneMember(actor, UUID.fromString(readString(input))));
-                memberPositions.put(actor, readPosition(input));
+                BlockPosition position = readPosition(input);
+                memberPositions.put(actor, new BodyPosition(position.x(), position.y(), position.z()));
             }
             java.util.Set<SubjectId> handoffActors = new java.util.LinkedHashSet<>();
             for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) handoffActors.add(new SubjectId(readString(input)));
             java.util.Optional<SceneRecoveryEvidence> recovery = java.util.Optional.empty();
-            if (version >= 62 && input.readBoolean()) {
+            if (input.readBoolean()) {
                 java.util.Set<SubjectId> missing = new java.util.LinkedHashSet<>();
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));

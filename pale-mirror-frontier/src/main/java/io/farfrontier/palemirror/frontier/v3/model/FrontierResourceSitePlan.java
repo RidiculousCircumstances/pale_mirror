@@ -12,6 +12,8 @@ import java.util.WeakHashMap;
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
     private static final int FIELD_SIDE = 8;
+    /** Leaves a two-cell field edge clear of the Farm shell and the three-wide public route. */
+    private static final int FIELD_X_OFFSET = 7;
     /**
      * Resource-site geometry is a pure function of an immutable fresh-world bootstrap.
      *
@@ -46,7 +48,9 @@ public final class FrontierResourceSitePlan {
 
     private static List<BlockPosition> cropSlots(BlockPosition farm) {
         java.util.ArrayList<BlockPosition> slots = new java.util.ArrayList<>(ResourceSiteKind.WHEAT_FIELD.cropSlotCount());
-        for (int x = 8; x < 8 + FIELD_SIDE; x++) for (int z = -3; z < -3 + FIELD_SIDE; z++) slots.add(farm.offset(x, 0, z));
+        for (int x = FIELD_X_OFFSET; x < FIELD_X_OFFSET + FIELD_SIDE; x++) {
+            for (int z = -3; z < -3 + FIELD_SIDE; z++) slots.add(farm.offset(x, 0, z));
+        }
         return List.copyOf(slots);
     }
 }

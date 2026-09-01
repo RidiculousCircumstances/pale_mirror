@@ -24,7 +24,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         if (isKnownRouteSurfaceLoss(observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
-                if (!FrontierRouteNetwork.isPassable(after.bootstrap(), after.routeTopology().supplyWaypoints(after.bootstrap(), settlement.id()), after.physicalDeltas())) {
+                if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), observed.delta().position(), "loss", Math.addExact(submittedAt, 1L));
                     events.add(new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(reconsideration)));
                 }

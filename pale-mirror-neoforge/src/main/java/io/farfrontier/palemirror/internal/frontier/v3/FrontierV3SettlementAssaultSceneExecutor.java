@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -86,7 +87,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
                 candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
-                candidate.memberPositions(), Set.of(), Optional.empty());
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
     }
 
     private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
@@ -108,8 +109,9 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             captures.add(new SceneMemberPosition(member.actorId(), at(body), fixed(mob.getHealth())));
         }
         if (captures.isEmpty()) return;
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(lease.memberPositions());
-        captures.forEach(capture -> positions.put(capture.actorId(), capture.position()));
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
+        captures.forEach(capture -> positions.put(capture.actorId(),
+                new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z())));
         SceneLease handed = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
                 .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,

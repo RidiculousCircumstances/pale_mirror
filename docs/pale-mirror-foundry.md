@@ -23,6 +23,16 @@ Foundry never tickets it. `SETTLED` should be run after neighbour updates have
 completed. `RELOADED` is the same physical audit after an ordinary
 unload/reload or restart and exists to make recovery evidence explicit.
 
+For a v3 traversal surface, the runtime result is deliberately three-way. A
+fresh air cell that exactly belongs to the immutable plan but has no ledger
+claim is `pending`: its naturally loaded projection has not yet received its
+fair executor turn, so it is not physical damage. `current` requires all three
+facts to agree: the plan cell, an unconflicted matching ledger claim, and the
+observed block. Every other loaded case is a mismatch: a foreign or changed
+block, a missing/wrong/conflicted claim, or a matching-looking unclaimed block
+is never adopted as truth. A strict v3 `SETTLED` or `RELOADED` proof therefore
+requires zero pending and zero unverified cells in its declared scope.
+
 ## Rules in the P0 gate
 
 - every declared module compiles non-air cells inside its true footprint;
@@ -67,6 +77,13 @@ observes only loaded cells and reports blocked/damaged/unknown ports or edges;
 it never opens a door, clears a path, chooses an alternate entrance or changes
 canonical availability. Non-flat, blocked-entrance and bridge/rail-grade
 fixtures are mandatory exit evidence for the T0 foundation gate.
+
+The read-only v3 diagnostic may narrow a runtime proof to one semantic facility:
+`/pale_mirror v3 inspect traversal_foundry settled@structure:1-infirmary`.
+The scope is that port's declared ingress and public topology, never a
+nearest-route lookup. It neither loads nor projects cells; it merely makes a
+naturally visited facility's terminal proof practical while keeping foreign
+world changes visible as errors.
 
 ## Operator commands
 

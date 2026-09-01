@@ -8,7 +8,13 @@ public enum GrayboxSemanticPart {
     HIVE_TISSUE,
     ROUTE_SURFACE,
     PUBLIC_ACCESS_SURFACE,
-    INFECTION_SURFACE
+    INFECTION_SURFACE,
+    /**
+     * A project-owned, temporary work floor.  It is neither an accepted route cell nor a
+     * generic structure: losing it stops the exact construction project instead of allowing a
+     * materializer to recreate it or treating it as completed infrastructure.
+     */
+    WORKSITE_STAGING
 ;
 
     public int wireTag() { return FrontierWireTags.tag(this); }

@@ -168,9 +168,12 @@ async function writeScenario(path, value) {
 async function stopServerSafely(server, logPath, offset, serverPort) {
   // Gradle's JavaExec console does not reliably forward `stop` from a pipe.
   // Its SIGINT does begin the Minecraft shutdown, but Gradle can return before
-  // its forked server has flushed every level.  Therefore SIGINT is only a
-  // stop request; deletion waits for Minecraft's own durable acknowledgement.
+  // its forked server has flushed every level. In that case the exact JVM PID
+  // from this run's ready marker is the only remaining valid stop target.
+  // Therefore SIGINT is only a stop request; deletion waits for Minecraft's
+  // own durable acknowledgement and never infers success from process exit.
   if (server.child.exitCode === null && server.child.signalCode === null) server.child.kill('SIGINT');
+  else requestGracefulStop(server.serverPid);
   const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', DURABLE_STOP_TIMEOUT_MS);
   if (!stopped) throw new Error('disposable v3 server did not confirm a flushed world; preserving it for diagnosis');
   // The Gradle wrapper may linger after its dedicated Minecraft child has
@@ -209,6 +212,11 @@ function releaseWrapper(child) {
 function killIfPresent(pid) {
   try { process.kill(pid, 'SIGKILL'); }
   catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not abruptly stop exact disposable process ${pid}: ${failure}`); }
+}
+function requestGracefulStop(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
+  try { process.kill(pid, 'SIGINT'); }
+  catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not gracefully stop exact disposable JVM ${pid}: ${failure}`); }
 }
 async function logOffsetAfter(path, marker, timeoutMs) {
   const deadline = Date.now() + timeoutMs;

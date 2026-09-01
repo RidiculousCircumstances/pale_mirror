@@ -52,8 +52,14 @@ final class FrontierV3RouteConstructionExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
         Target target = target(state, intent);
-        if (target == null || !level.hasChunkAt(target.position())) return;
+        // A loaded stale chunk is not player demand.  Route work is a HOT physical action:
+        // without a nearby non-spectator player it remains a prepared/running canonical intent
+        // and cannot silently spend the next cargo unit merely because the old chunk has not
+        // been evicted yet.
+        if (target == null) return;
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!applyOne(level, FrontierV3GrayboxLedger.get(level), target.position(), target.cell())) {
@@ -122,7 +128,10 @@ final class FrontierV3RouteConstructionExecutor {
      */
     private static void loadMaterial(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                      FrontierWorldState state, PhysicalIntent intent) {
-        MaterialTarget target = materialTarget(state, intent); if (target == null || !level.hasChunkAt(target.chestPosition())) return;
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
+        MaterialTarget target = materialTarget(state, intent);
+        if (target == null) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
                 new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "material-chest-conflict"); return; }

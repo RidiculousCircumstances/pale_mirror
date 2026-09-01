@@ -45,6 +45,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -150,7 +151,8 @@ class FrontierV3ServerRuntimeTest {
 
         FrontierWorldState transferred = worldState(runtime);
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
-        assertEquals(capture.position(), transferred.actorLocations().get(participant).position());
+        assertEquals(capture.position().offset(0, -1, 0), transferred.actorLocations().get(participant).position(),
+                "a captured Minecraft feet cell must return to canonical support-cell location");
         assertEquals(lease, transferred.sceneLeases().get(lease.id()));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
     }
@@ -394,8 +396,10 @@ class FrontierV3ServerRuntimeTest {
         transitionScene(recovered, world, leaseId, SceneLeaseStatus.HOT, "command:scene-recovery-hot");
         transitionScene(recovered, world, leaseId, SceneLeaseStatus.DRAINING, "command:scene-recovery-draining");
         CheckpointImage draining = recovered.checkpointImage().orElseThrow();
-        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member ->
-                new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList());
+        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member -> {
+            var body = lease.memberPosition(member.actorId());
+            return new SceneMemberPosition(member.actorId(), new BlockPosition(body.x(), body.y(), body.z()));
+        }).toList());
         CommandId releaseCommand = new CommandId("command:scene-recovery-release");
         assertInstanceOf(CommandResult.Accepted.class, recovered.submit(new FrontierCommand(1, releaseCommand, world, draining.revision(), draining.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(releaseCommand), released)).orElseThrow());

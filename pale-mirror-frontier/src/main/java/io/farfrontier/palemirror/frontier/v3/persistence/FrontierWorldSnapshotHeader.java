@@ -23,11 +23,10 @@ public record FrontierWorldSnapshotHeader(WorldId worldId, long seed, FrontierRu
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version < 41 || version > FrontierWorldStateCodec.VERSION) throw new IllegalArgumentException("unknown Frontier v3 state version");
+            if (version != FrontierWorldStateCodec.VERSION) throw new IllegalArgumentException("Frontier v3 header requires a fresh current-schema world");
             WorldId worldId = new WorldId(readString(input));
             long seed = input.readLong();
-            FrontierRuleset ruleset = version >= 80 ? FrontierRulesets.require(readString(input), input.readInt(), readString(input))
-                    : FrontierRulesets.legacyForSnapshotVersion(version);
+            FrontierRuleset ruleset = FrontierRulesets.require(readString(input), input.readInt(), readString(input));
             return new FrontierWorldSnapshotHeader(worldId, seed, ruleset);
         } catch (IOException error) {
             throw new IllegalArgumentException("truncated Frontier v3 state header", error);

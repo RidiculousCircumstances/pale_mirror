@@ -9,6 +9,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierGrayboxPlanTest {
     @Test
+    void activeEngineeringWorksiteHasExactTemporaryFloorsAndTheirLossConflictsOnlyThatProject() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:graybox-worksite-staging"), 41L).initialState();
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
+        java.util.List<BlockPosition> staging = EngineeringWorksite.activeStagingCells(state.bootstrap(), state.routeTopology(), project);
+        assertEquals(project.team().orElseThrow().memberIds().size(), staging.size(),
+                "the complete exact crew must receive one canonical temporary floor each");
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+        staging.forEach(position -> assertEquals(new GrayboxCell(position, project.id(), GrayboxMaterial.WORKSITE,
+                GrayboxSemanticPart.WORKSITE_STAGING), plan.cells().get(position),
+                "temporary support must remain distinct from both a route and a completed building"));
+
+        BlockPosition broken = staging.getFirst();
+        FrontierWorldState conflicted = state.recordPhysicalDelta(new PhysicalDelta(broken, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(project.id()), java.util.Optional.of(GrayboxSemanticPart.WORKSITE_STAGING), "player:test"));
+        assertEquals(RouteConstructionStatus.CONFLICT, conflicted.routeConstructions().get(project.id()).status(),
+                "breaking the project-owned floor must be an immediate canonical construction conflict, never a silent rebuild");
+        assertEquals(null, FrontierGrayboxPlan.compile(conflicted).cells().get(broken),
+                "a broken temporary floor must not remain in desired-state materialization after that conflict");
+        assertEquals(conflicted, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(conflicted)),
+                "the exact staging loss and its project conflict must survive recovery");
+    }
+
+    @Test
     void fullBootstrapCompilesAStableAttributablePlan() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan first = FrontierGrayboxPlan.compile(state);
@@ -68,10 +93,27 @@ class FrontierGrayboxPlanTest {
                     plan.cells().get(port.assemblyFloor()), "public assembly sill must retain exact Hall provenance");
             assertEquals(new GrayboxCell(port.routeFloor(), FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE),
                     plan.cells().get(port.routeFloor()), "public assembly sill must join the route graph at its exact route cell");
+            assertEquals(new GrayboxCell(port.assemblyFloor(), hall.id(), GrayboxMaterial.HALL, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
+                    plan.cells().get(port.assemblyFloor()), "Hall-owned sill must win the declared public-route seam");
             port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
                     "Hall throat must retain two body-clear cells: " + hall.id()));
             assertEquals(FrontierGrayboxPlan.intactStructureCell(hall, port.assemblyFloor()), plan.cells().get(port.assemblyFloor()));
         });
+    }
+
+    @Test
+    void activeConvoyFormationAndCargoHaveExactPlannedSupportAcrossTheWholeCarriageway() {
+        FrontierWorldState state = FrontierDevelopmentScenarios.routeSceneReturnFixture(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:carriageway-support"), 91L).state();
+        RouteOperation operation = state.operations().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("operation:supply-1-2"));
+        OperationTravel travel = operation.activeTravel().orElseThrow();
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        travel.formation().forEach((actor, body) -> org.junit.jupiter.api.Assertions.assertNotNull(
+                plan.cells().get(body.supportingSurface().support()),
+                () -> "active convoy body must have a compiled exact support: " + actor));
+        org.junit.jupiter.api.Assertions.assertNotNull(plan.cells().get(travel.cargoAnchor().surface().support()),
+                "active convoy cargo must have a compiled exact support");
     }
 
     @Test

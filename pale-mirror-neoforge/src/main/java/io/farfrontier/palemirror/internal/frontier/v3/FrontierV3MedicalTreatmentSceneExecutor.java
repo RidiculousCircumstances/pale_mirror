@@ -58,7 +58,8 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new MedicalTreatmentSceneCause(candidate.operationId()), candidate.infirmaryAnchor(),
-                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, candidate.memberPositions(), Set.of(), Optional.empty());
+                checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

@@ -36,11 +36,15 @@ import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferral;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferred;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
+import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.Settlement;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementStructure;
 import io.farfrontier.palemirror.frontier.v3.model.StructureKind;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -91,6 +95,12 @@ final class FrontierV3AmbientActorExecutor {
      * never allowed to fall out of a chunk and serialize after its lease has become COLD.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
+    /**
+     * Volatile same-runtime hand-off evidence for one ambient body. Vanilla can unload an
+     * ordinary resident between executor turns; the last complete observation may close only
+     * that already HOT lease after the normal hysteresis, never recreate or retarget it.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, AmbientObserved>> LAST_OBSERVED = new IdentityHashMap<>();
     /** One noncanonical exact reservation index per immutable decoded canonical state. */
     private static final Map<FrontierV3ServerRuntime<?, ?>, ReservationCache> RESERVATIONS = new IdentityHashMap<>();
 
@@ -113,19 +123,28 @@ final class FrontierV3AmbientActorExecutor {
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
                     || reservedActors.contains(actorId)) {
                 forgetColdDemand(runtime, actorId);
+                forgetObserved(runtime, actorId);
                 continue;
             }
             var lease = state.ambientLeases().get(actorId);
+            if (lease != null && lease.status() == AmbientLeaseStatus.CLOSED) {
+                Entity stale = level.getEntity(entityId(state, actorId));
+                if (stale != null && owned(stale, actorId, bioform(state, actorId))) stale.discard();
+                forgetObserved(runtime, actorId);
+            }
             boolean demanded = demand(level, location.position());
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
+                        rememberObserved(runtime, actorId, mob);
                         if (directedGoal(lease)) {
                             if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
                             if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
                         }
                         if (drainAfterDemandHysteresis(level, runtime, actorId, mob)) admitted++;
+                    } else if (drainObservedAfterDemandHysteresis(level, runtime, actorId)) {
+                        admitted++;
                     }
                 } else {
                     forgetColdDemand(runtime, actorId);
@@ -164,6 +183,7 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
+                rememberObserved(runtime, actorId, mob);
                 FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
                 if (observeHotScoutSighting(level, runtime, state, actorId, mob, lease)) {
                     admitted++;
@@ -279,20 +299,20 @@ final class FrontierV3AmbientActorExecutor {
 
     private static AssemblyMemberReadiness assemblyMemberReadiness(ServerLevel level, FrontierWorldState state, SubjectId actorId,
                                                                      OperationAssembly.Member member) {
-        BlockPosition next = member.arrived() ? null : member.corridor().get(member.cursor() + 1);
+        BlockPosition next = member.arrived() ? null : member.nextSurface().support();
         Entity body = level.getEntity(entityId(state, actorId));
         BlockPosition observed = body == null ? null : new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
         ObservedPosition observedExact = body == null ? null : new ObservedPosition(body.getX(), body.getY(), body.getZ());
-        if (next == null) return new AssemblyMemberReadiness(actorId, member.currentPosition(), null, observed, observedExact, "ARRIVED", "", "", "", "", List.of());
+        if (next == null) return new AssemblyMemberReadiness(actorId, member.currentSurface().support(), null, observed, observedExact, "ARRIVED", "", "", "", "", List.of());
         BlockPos target = new BlockPos(next.x(), next.y(), next.z());
         if (!level.hasChunkAt(target)) {
-            return new AssemblyMemberReadiness(actorId, member.currentPosition(), next, observed, observedExact, "UNLOADED", "", "", "", "", List.of());
+            return new AssemblyMemberReadiness(actorId, member.currentSurface().support(), next, observed, observedExact, "UNLOADED", "", "", "", "", List.of());
         }
         List<String> occupants = level.getEntities((Entity) null, new AABB(target.getX(), target.getY(), target.getZ(),
                         target.getX() + 1.0D, target.getY() + 3.0D, target.getZ() + 1.0D), entity -> entity != body).stream()
                 .sorted(java.util.Comparator.comparing(entity -> entity.getUUID().toString())).limit(4).map(FrontierV3AmbientActorExecutor::occupantKind).toList();
         String status = !FrontierV3StandingPosition.hasExactHeadroom(level, next) ? "BLOCKED" : occupants.isEmpty() ? "CLEAR" : "OCCUPIED";
-        return new AssemblyMemberReadiness(actorId, member.currentPosition(), next, observed, observedExact, status,
+        return new AssemblyMemberReadiness(actorId, member.currentSurface().support(), next, observed, observedExact, status,
                 blockKind(level, target), blockKind(level, target.below()), blockKind(level, target.above()), blockKind(level, target.above(2)), occupants);
     }
 
@@ -471,7 +491,7 @@ final class FrontierV3AmbientActorExecutor {
             }
             BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalPosition());
             if (obstruction != null) {
-                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, lease.goalPosition(), obstruction,
+                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, new SurfaceAnchor(lease.goalPosition()), new SurfaceAnchor(obstruction),
                         OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
                 if (!assembly.deferral().filter(deferral::equals).isPresent()) {
                     io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
@@ -483,6 +503,37 @@ final class FrontierV3AmbientActorExecutor {
                 body.getNavigation().stop();
                 return false;
             }
+            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
+            if (physicalTarget == null) {
+                body.getNavigation().stop();
+                return false;
+            }
+            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
+                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            return false;
+        }
+        if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
+            EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
+            if (member == null || member.arrived()) {
+                body.getNavigation().stop();
+                return false;
+            }
+            EngineeringWorkAssembly assembly = engineeringProject(state, actorId).assembly().orElseThrow();
+            // This is the same retained queue that COLD advances.  A physical body waits for
+            // the exact leading cursor instead of walking around a colleague or inventing an
+            // alternate lane; arrival will atomically advance this one cursor in the domain.
+            if (!assembly.safeAdvances().contains(actorId)) {
+                body.getNavigation().stop();
+                return false;
+            }
+            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
+            if (physicalTarget == null) {
+                body.getNavigation().stop();
+                return false;
+            }
+            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
+                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            return false;
         }
         FrontierV3ControlledMobMotion.moveToward(level, body, localTarget(state, actorId, lease, level.getGameTime()));
         return false;
@@ -544,7 +595,12 @@ final class FrontierV3AmbientActorExecutor {
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, state.ambientLeases().get(actorId));
-            if (member == null || !sameColumn(position, member.currentPosition())) return false;
+            if (member == null || !(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, member.currentSurface().support())) return false;
+            position = member.currentSurface().support();
+        }
+        if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
+            EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, state.ambientLeases().get(actorId));
+            if (member == null || !(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, member.currentPosition())) return false;
             position = member.currentPosition();
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
@@ -560,6 +616,7 @@ final class FrontierV3AmbientActorExecutor {
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         PENDING_ADMISSIONS.remove(runtime);
         COLD_DEMAND_SINCE.remove(runtime);
+        LAST_OBSERVED.remove(runtime);
         RESERVATIONS.remove(runtime);
     }
 
@@ -592,9 +649,33 @@ final class FrontierV3AmbientActorExecutor {
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
         return drained;
     }
+    private static boolean drainObservedAfterDemandHysteresis(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                               SubjectId actorId) {
+        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        if (absentSince.size() >= MAX_PENDING_ADMISSIONS && !absentSince.containsKey(actorId)) return false;
+        long started = absentSince.computeIfAbsent(actorId, ignored -> level.getGameTime());
+        AmbientObserved observed = lastObserved(runtime, actorId);
+        if (observed == null || level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS
+                || playerWithin(level, new BlockPos(observed.position().x(), observed.position().y(), observed.position().z()), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
+        // The state reducer independently proves cursor identity for Transit, operation and
+        // engineering movement. A stale cached body is therefore rejected rather than changing
+        // the canonical actor's position.
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult draining = submit(runtime, "ambient-draining-unloaded", actorId.value(),
+                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+        if (!(draining instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult released = submit(runtime, "ambient-release-unloaded", actorId.value(),
+                new AmbientLeaseReleased(actorId, observed.position(), observed.health()));
+        if (released instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
+            forgetObserved(runtime, actorId); absentSince.remove(actorId);
+            if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
+            return true;
+        }
+        return false;
+    }
     private static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
@@ -610,13 +691,27 @@ final class FrontierV3AmbientActorExecutor {
     private static boolean observeAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
         OperationAssembly.Member member = assemblyMember(state, actorId, lease);
-        if (member == null || member.arrived() || !sameColumn(new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        if (member == null || member.arrived() || !sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
         RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
         Map<SubjectId, OperationAssembly.Member> members = new LinkedHashMap<>(assembly.members());
-        members.put(actorId, new OperationAssembly.Member(member.corridor(), member.cursor() + 1));
+        members.put(actorId, new OperationAssembly.Member(member.topology(), member.cursor() + 1));
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
                 new OperationAssemblyAdvanced(operation.id(), new OperationAssembly(members, assembly.cargoCarrierId())));
         FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_advanced", actorId, result);
+        return true;
+    }
+    private static boolean observeEngineeringAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                              FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
+        RouteConstruction project = engineeringProject(state, actorId);
+        if (project == null || member == null || member.arrived()
+                || !sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
+        if (!assembly.safeAdvances().contains(actorId)) return false;
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-engineering-assembly", actorId.value(),
+                new RouteConstructionAssemblyAdvanced(project.id(), assembly.advance(actorId)));
+        FrontierV3DiagnosticTrace.record(level.getServer(), "route-construction:" + project.id().value(),
+                "route_construction_assembly_advanced", actorId, result);
         return true;
     }
     private static boolean observeScoutPatrolArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
@@ -667,7 +762,8 @@ final class FrontierV3AmbientActorExecutor {
         return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }
     private static boolean directedGoal(AmbientActorLease lease) {
-        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY || lease.goal() == AmbientGoalKind.SCOUT_PATROL;
+        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY
+                || lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY || lease.goal() == AmbientGoalKind.SCOUT_PATROL;
     }
     private static RouteOperation assemblingOperation(FrontierWorldState state, SubjectId actorId) {
         return state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
@@ -679,13 +775,25 @@ final class FrontierV3AmbientActorExecutor {
         if (!FrontierV3StandingPosition.hasExactHeadroom(level, target)) return target;
         Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(operation.settlementId())).findFirst().orElse(null);
         SettlementStructure hall = settlement == null ? null : settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst().orElse(null);
-        BlockPosition throat = hall == null ? null : SettlementAccessPort.forHall(hall).throatFloor();
+        BlockPosition throat = hall == null ? null : SettlementAccessPort.forHall(hall).throatSurface().support();
         return throat != null && !FrontierV3StandingPosition.hasExactHeadroom(level, throat) ? throat : null;
     }
     private static OperationAssembly.Member assemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         RouteOperation operation = assemblingOperation(state, actorId);
         if (operation == null || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY) return null;
         OperationAssembly.Member member = operation.activeAssembly().orElseThrow().members().get(actorId);
+        SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
+        return lease.goalPosition().equals(expected.support()) ? member : null;
+    }
+    private static RouteConstruction engineeringProject(FrontierWorldState state, SubjectId actorId) {
+        return state.routeConstructions().values().stream()
+                .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
+                .findFirst().orElse(null);
+    }
+    private static EngineeringWorkAssembly.Member engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+        RouteConstruction project = engineeringProject(state, actorId);
+        if (project == null || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return null;
+        EngineeringWorkAssembly.Member member = project.assembly().orElseThrow().members().get(actorId);
         BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
         return lease.goalPosition().equals(expected) ? member : null;
     }
@@ -705,6 +813,22 @@ final class FrontierV3AmbientActorExecutor {
         absentSince.remove(actorId);
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
     }
+    private static void rememberObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId, Mob body) {
+        Map<SubjectId, AmbientObserved> observations = LAST_OBSERVED.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        if (observations.size() < MAX_PENDING_ADMISSIONS || observations.containsKey(actorId)) observations.put(actorId,
+                new AmbientObserved(new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+                        new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))));
+    }
+    private static AmbientObserved lastObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
+        Map<SubjectId, AmbientObserved> observations = LAST_OBSERVED.get(runtime);
+        return observations == null ? null : observations.get(actorId);
+    }
+    private static void forgetObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
+        Map<SubjectId, AmbientObserved> observations = LAST_OBSERVED.get(runtime);
+        if (observations == null) return;
+        observations.remove(actorId);
+        if (observations.isEmpty()) LAST_OBSERVED.remove(runtime);
+    }
     private static boolean playerWithin(ServerLevel level, BlockPos position, int radius) {
         return level.players().stream().filter(player -> !player.isSpectator()).anyMatch(player -> player.blockPosition().closerThan(position, radius));
     }
@@ -713,6 +837,7 @@ final class FrontierV3AmbientActorExecutor {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
+    private record AmbientObserved(BlockPosition position, FixedScalar health) { }
     private record ReservationCache(FrontierWorldState state, java.util.Set<SubjectId> actors) { }
     private record SightedCarrier(MinecartChest carrier, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) { }
     private record LocalBrain(double radius, long periodTicks, int identityPhase) { }

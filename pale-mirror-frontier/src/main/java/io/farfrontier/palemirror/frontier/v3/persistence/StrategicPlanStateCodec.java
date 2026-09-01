@@ -115,6 +115,14 @@ public final class StrategicPlanStateCodec {
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition, boolean hasHiveTerritoryKnowledge,
                                    boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge, boolean hasSettlementAssaults, int snapshotVersion) throws IOException {
+        // Frontier v3 deliberately has no in-place world migration.  This nested codec is not
+        // a second admission path around FrontierWorldStateCodec: every field below belongs to
+        // the one current snapshot layout.
+        if (snapshotVersion != FrontierWorldStateCodec.VERSION || migrateLegacyProductionSlotRequirement
+                || !hasInfectionKnowledge || !hasHiveOperationKnowledge || !hasOperationObservationPosition
+                || !hasHiveTerritoryKnowledge || !hasHiveDoctrine || !hasHiveSettlementKnowledge || !hasSettlementAssaults) {
+            throw new IllegalArgumentException("strategic plan requires the fresh current-schema layout");
+        }
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
         List<RawObjective> encodedObjectives = new ArrayList<>();
         for (int index = 0, count = readCount(input); index < count; index++) {

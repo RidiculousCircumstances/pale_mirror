@@ -225,7 +225,7 @@ public final class HiveRouteEngagementProcess {
     }
     /** The Scout pins the exact carrier it saw; people and cargo may occupy adjacent route cells. */
     private static boolean cargoAtIntercept(RouteOperation operation, RouteEngagement engagement) {
-        return operation.activeTravel().map(travel -> travel.cargoAnchor().equals(engagement.intercept()))
+        return operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(engagement.intercept()))
                 .orElseGet(() -> operation.currentPosition().equals(engagement.intercept()));
     }
     private static List<ProposedEvent> terminal(FrontierWorldState state, RouteEngagement engagement) {

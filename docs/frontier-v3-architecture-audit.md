@@ -74,7 +74,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-016 | CLOSED | Versioned strategic hydration recognizes the pre-assault r41 ordinal layout only from its unambiguous raw field-target evidence, uses explicit objective/task maps and retains the normal schema-78/79 assault layout otherwise. An old-byte regression and full critical gate pass; the same deployed r41 snapshot and WAL replayed on SHA-512 `61e5d3c0…c71c1d0`, reached `Frontier v3 runtime started`, and remained healthy on port 25565. |
 | V3-AUD-017 | CLOSED | `RoutePatrol` and `RouteOperation` now solely own one immutable exact `RouteUnitManifest`, with stable explicit duty tags and no global roster. New patrols retain one leader plus one to three scouts; new cargo operations retain one logistic crew member plus two to four separately named escorts. Schema-82 snapshot and historical WAL patrol bytes decode only to explicit understrength legacy manifests, never a fabricated replacement. Focused admission, assignment, COLD formation, death/loss and byte-recovery tests pass. Native HOT cargo and route-return scenarios prove the exact named three-person caravan before and after ordinary unload/reload. |
 | V3-AUD-018 | CLOSED | `AmbientLeaseRestartAbsenceObserved` is the sole typed evidence for a naturally loaded exact hand-off column that lacks its expected UUID after restart. It validates UNKNOWN status plus exact canonical/lease position, closes only that physical lease and never infers death or moves the actor; the ordinary next demand prepares the same deterministic UUID. Pure normal/forged evidence tests and the 29/29 HOT/COLD GameTest slice pass. |
-| V3-AUD-019 | IN PROGRESS | T0.1/T0.2 have a first medical-scene implementation. T0.3 now compiles each persisted supply-route owner into one immutable bounded ground topology and `OperationTravel` retains that exact topology/cursor through schema-91 snapshots and versioned WAL; legacy corridor WAL migrates deterministically. A focused stepped HOT-target GameTest proves that the physical adapter retains the next Y datum rather than flattening it. The debt remains open until migration/assembly cursors retain topology edges, loaded blocked/damaged evidence alters availability, and the rail-grade/Foundry evidence closes T0.4–T0.5. |
+| V3-AUD-019 | IN PROGRESS | T0.1/T0.2 have a first medical-scene implementation. T0.3 compiles each persisted supply-route owner into one immutable bounded ground topology; `OperationTravel` and every `OperationAssembly` member retain exact topology/cursors through current schema-95 snapshots and persistence-envelope v5. Any older bytes fail closed and require a fresh world. A focused graded-assembly test proves the canonical cursor retains a one-block surface grade and derives its distinct feet cell; the Scene slice proves the registered standing provider executes the support-to-feet boundary. T0.5 now has native `COMPILED`, scoped `SETTLED` and scoped graceful-`RELOADED` Foundry evidence: fresh unclaimed expected air is explicit pending projection work, while exact plan/ledger/block provenance remains required for current materialization and all other drift stays an error. The debt remains open for a real non-flat terrain provider, blocked/damaged port availability, bridge/rail-grade evidence and cross-family HOT/COLD continuity. |
 
 ## Findings and required corrections
 
@@ -102,7 +102,8 @@ hidden sidestep or desired-state repair. Pedestrian/bioform and rail graphs are
 distinct capability views. The flat graybox implements the same contract as a
 uniform-datum provider rather than remaining the domain model.
 
-Exit evidence: old movement bytes recover through an explicit migration;
+Exit evidence: old movement bytes and snapshots reject fail-closed, requiring a
+fresh world rather than a semantic migration;
 source/architecture guards reject new constant-Y/fixed-compass route APIs;
 compiled ports prove supported connectivity and two-body clearance; focused
 fixtures cover a stepped or ramped path, another facility datum, a blocked or
@@ -112,10 +113,12 @@ force-loading; Foundry passes the relevant `COMPILED`, `SETTLED` and `RELOADED`
 rules.
 
 Current implementation boundary: this correction must not be misreported as
-complete merely because the medical scene now traverses a non-flat port. Its
-`TraversalPath` is a small immutable value proving the spatial type and
-observed-arrival rule; it is not yet the persisted capability topology required
-by all route, transit, assault and rail owners. The generic closed-scene cleanup
+complete merely because the medical scene has typed port data. The flat provider
+does not claim physical excavation or a non-flat entrance: its infirmary
+support remains at the uniform datum. `TraversalPath` is a small immutable value
+proving the spatial type and observed-arrival rule; it is not yet the persisted
+capability topology required by all route, transit, assault and rail owners.
+The generic closed-scene cleanup
 does now run before every registered behavior, preventing historical lease tags
 from leaking from the medical path into another scene family; the terminal
 diagnostic reports such a released historical lease as `CLOSED`, not a false
@@ -127,33 +130,30 @@ typed support nodes and directed pedestrian edges. Each edge retains its
 ground/rail capability separation, exact grade and two-body clearance, named
 route provenance, content revision and explicit availability. This compiler is
 not an adapter pathfinder and never reads Minecraft. `OperationTravel` is now
-the first retained cursor consumer: it persists that topology directly in
-snapshot schema 91 and in a `0xffff`-marked WAL envelope; the former bounded
-horizontal corridor decodes only through its deterministic legacy-topology
-migration. Its HOT translation retains the same next-edge Y delta for every
-formation and cargo position. Migration and assembly still retain historical
-lists, and no caller may claim a new rail route or runtime replan from this
-partial implementation.
+the first retained cursor consumer: schema 95 persists the topology with exact
+`BodyPosition` formation cells and one `TransportAnchor`; its WAL uses `0xfffe`.
+Schema-91/`0xffff` operation formations, former bounded corridor bytes and
+pre-current scene payloads are rejected: v3 recreates worlds rather than
+migrating spatial meaning. Its HOT translation retains the same next-edge Y
+delta for every formation and cargo position. Each `OperationAssembly` member
+now retains its own typed pedestrian topology, not a historical support list;
+no caller may claim a new rail route or runtime replan from this partial implementation.
 
-Native route-return evidence additionally exposed the remaining semantic seam:
-the topology is a support-surface graph, but legacy `OperationTravel`
-formation/cargo values and the scene executor still use raw `BlockPosition`.
-The executor's standing-position resolver can therefore reinterpret one value
-as a floor column at materialization while later HOT observation compares it as
-a body location. That is not a harmless flat-world representation detail; on a
-slope it can produce a one-block datum error, ambiguous cargo/body clearance or
-a false observed-arrival failure. The failed 2026-09-01 disposable route-return
-attempt is retained as boundary evidence, not treated as a test-pilot fault.
+Native route-return evidence exposed a semantic seam: the topology is a
+support-surface graph while the prior operation/scene representation was raw
+`BlockPosition`. Schema 94 corrects the active operation/scene boundary with
+distinct body/transport values and exact loaded-column verification. The failed
+2026-09-01 disposable route-return attempt is
+retained as boundary evidence, not treated as a test-pilot fault.
 
-Required correction before T0.4: `OperationTravel`, `OperationAssembly`, scene
-leases and their codecs must retain role-specific support, body-feet and cargo
-anchor values. Scene admission performs the one deterministic support → first
-two-cell-clear feet conversion and persists/observes that result; local motion
-and recovery compare only body-feet values. Cargo uses its own transport anchor
-and cannot share a physical column with a body merely because its raw Y differs.
-The focused regression must cover a grade edge, an unchanged flat edge, a
-blocked port and HOT/COLD/restart recovery. Only then may the route-return
-scenario become T0.4 evidence rather than a presentation of the old ambiguity.
+The graded assembly regression now proves a retained one-block edge and distinct feet cell.
+Fresh schema-95/persistence-v5 `disposable_route_scene_return` evidence retains
+the same members and cargo through normal unload/reload, graceful restart and
+natural recovery to `HOT`; it proves retained cursor continuity, not edge
+availability. Remaining correction before T0.4: loaded blocked-port/edge
+evidence must alter availability, then HOT/COLD/restart recovery must prove the
+same edge without a hidden sidestep. Only then may this route-return scenario
+also become T0.4 evidence rather than a presentation of the old ambiguity.
 
 ### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
 

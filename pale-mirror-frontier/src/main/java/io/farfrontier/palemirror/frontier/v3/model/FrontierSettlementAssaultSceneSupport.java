@@ -48,7 +48,7 @@ public final class FrontierSettlementAssaultSceneSupport {
         Set<BlockPosition> floors = new HashSet<>();
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
-            BlockPosition floor = lease.memberPosition(member.actorId());
+            BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(floor)
                     || !floor.equals(candidate.memberPositions().get(member.actorId()))
                     || !actual.add(member.actorId()) || !floors.add(floor) || !near(assault.settlementAnchor(), floor)) {

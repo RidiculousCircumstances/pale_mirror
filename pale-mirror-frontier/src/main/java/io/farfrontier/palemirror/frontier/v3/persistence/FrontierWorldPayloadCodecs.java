@@ -234,14 +234,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationAssemblyDeferred deferred = (OperationAssemblyDeferred) payload;
             writeSubject(output, deferred.operationId()); writeSubject(output, deferred.deferral().actorId());
             output.writeInt(deferred.deferral().target().x()); output.writeInt(deferred.deferral().target().y()); output.writeInt(deferred.deferral().target().z());
-            output.writeInt(deferred.deferral().obstructionFloor().x()); output.writeInt(deferred.deferral().obstructionFloor().y()); output.writeInt(deferred.deferral().obstructionFloor().z());
+            output.writeInt(deferred.deferral().obstructionSurface().x()); output.writeInt(deferred.deferral().obstructionSurface().y()); output.writeInt(deferred.deferral().obstructionSurface().z());
             output.writeByte(deferred.deferral().reason().wireTag()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder operation = readSubject(input); SubjectIdHolder actor = readSubject(input);
             BlockPosition target = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
             BlockPosition obstruction = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); int reason = input.readUnsignedByte();
             if (reason >= OperationAssemblyDeferral.Reason.values().length) throw new IllegalArgumentException("unknown operation assembly deferral reason");
-            return new OperationAssemblyDeferred(operation.value(), new OperationAssemblyDeferral(actor.value(), target, obstruction,
+            return new OperationAssemblyDeferred(operation.value(), new OperationAssemblyDeferral(actor.value(), new SurfaceAnchor(target), new SurfaceAnchor(obstruction),
                     FrontierWireTags.require(OperationAssemblyDeferral.Reason.class, reason)));
         }); }
     }
@@ -648,31 +648,22 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
         int participantEnvelope = input.readUnsignedByte();
         RouteUnitManifest unit;
-        if (participantEnvelope == 0xFF) unit = RouteUnitManifestCodec.read(input);
-        else {
-            java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> participants = new java.util.ArrayList<>();
-            for (int index = 0; index < participantEnvelope; index++) participants.add(readSubject(input).value());
-            if (participants.size() != 2) throw new IllegalArgumentException("legacy route operation payload has invalid participant count");
-            unit = RouteUnitManifest.legacyCargoEscort(id.value(), participants.getFirst(), participants.get(1));
-        }
+        if (participantEnvelope != 0xFF) throw new IllegalArgumentException("route operation payload requires the current unit-manifest envelope");
+        unit = RouteUnitManifestCodec.read(input);
         java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
-        int marker = input.available() > 0 ? input.readUnsignedByte() : 0;
+        int marker = input.readUnsignedByte();
         java.util.Optional<OperationAssembly> assembly = java.util.Optional.empty();
         java.util.Optional<OperationTravel> travel;
-        if (marker == 0xA5) {
-            assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
-            travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
-        } else if (marker == 0 || marker == 1) {
-            travel = marker == 1 ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
-        } else throw new IllegalArgumentException("unknown route operation payload envelope");
+        if (marker != 0xA5) throw new IllegalArgumentException("route operation payload requires the current assembly envelope");
+        assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
+        travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
         return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        // 0xffff cannot be a historic corridor length (the canonical cap is 4,096), so it is a
-        // stable envelope marker for the typed topology without changing old WAL payload bytes.
-        output.writeShort(0xffff); TraversalTopologyStateCodec.write(output, travel.topology());
+        // This envelope is mandatory for every current-schema operation cursor.
+        output.writeShort(0xfffe); TraversalTopologyStateCodec.write(output, travel.topology());
         output.writeShort(travel.cursor()); output.writeByte(travel.formation().size());
         for (var entry : travel.formation().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             writeSubject(output, entry.getKey()); output.writeInt(entry.getValue().x());
@@ -682,24 +673,23 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static OperationTravel readOperationTravel(DataInputStream input) throws IOException {
         int envelope = input.readUnsignedShort();
-        if (envelope == 0xffff) return readOperationTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
-        if (envelope > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("legacy operation travel corridor is out of bounds");
-        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0; index < envelope; index++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
-        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
-        return new OperationTravel(corridor, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        if (envelope != 0xfffe) throw new IllegalArgumentException("operation travel payload requires the current typed-anchor envelope");
+        return readOperationTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
     }
 
     private static OperationTravel readOperationTravelWithTopology(DataInputStream input, TraversalTopology topology) throws IOException {
-        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
-        return new OperationTravel(topology, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
+            BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+            formation.put(actor, new BodyPosition(position.x(), position.y(), position.z()));
+        }
+        return new OperationTravel(topology, cursor, formation, TransportAnchor.atSupportCell(new BlockPosition(input.readInt(), input.readInt(), input.readInt())));
     }
     private static void writeOperationAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
         writeSubject(output, assembly.cargoCarrierId()); output.writeByte(assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); output.writeShort(entry.getValue().corridor().size());
-            for (BlockPosition point : entry.getValue().corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
+            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology());
             output.writeShort(entry.getValue().cursor());
         }
     }
@@ -707,9 +697,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         io.farfrontier.palemirror.frontier.v3.api.SubjectId carrier = readSubject(input).value();
         java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value(); java.util.List<BlockPosition> corridor = new java.util.ArrayList<>();
-            for (int cell = 0, cellCount = input.readUnsignedShort(); cell < cellCount; cell++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
-            if (members.put(actor, new OperationAssembly.Member(corridor, input.readUnsignedShort())) != null) throw new IllegalArgumentException("duplicate operation assembly member");
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
+            if (members.put(actor, new OperationAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) throw new IllegalArgumentException("duplicate operation assembly member");
         }
         return new OperationAssembly(members, carrier);
     }
@@ -730,11 +719,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
+    private static final int TYPED_BODY_LEASE_MARKER = 0xfffe;
+
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!FrontierSceneBehaviors.isLogistics(lease)) {
-            throw new IllegalArgumentException("legacy scene WAL payload may encode logistics causes only");
+            throw new IllegalArgumentException("logistics scene WAL payload requires its typed cause");
         }
         LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
+        output.writeShort(TYPED_BODY_LEASE_MARKER);
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, logistics.operationId()); writeSubject(output, logistics.cargoId());
         output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeSubject(output, logistics.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
@@ -743,12 +735,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (SceneMember member : lease.members()) {
             writeSubject(output, member.actorId());
             writeString(output, member.entityId().toString());
-            BlockPosition position = lease.memberPosition(member.actorId());
+            BodyPosition position = lease.memberPosition(member.actorId());
             output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
         }
         output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
     }
     private static SceneLease readSceneLease(DataInputStream input) throws IOException {
+        if (input.readUnsignedShort() != TYPED_BODY_LEASE_MARKER) throw new IllegalArgumentException("scene lease payload requires the current typed-body envelope");
         var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input));
         var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input)); SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input);
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
@@ -757,41 +750,45 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
-        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> memberPositions = new java.util.LinkedHashMap<>();
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> memberPositions = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor = readSubject(input).value();
             members.add(new SceneMember(actor, java.util.UUID.fromString(readString(input))));
-            memberPositions.put(actor, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+            BlockPosition memberPosition = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+            memberPositions.put(actor, new BodyPosition(memberPosition.x(), memberPosition.y(), memberPosition.z()));
         }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> handoffActors = new java.util.LinkedHashSet<>();
         for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
-        return new SceneLease(id, world, operation.value(), cargo.value(), position, cargoPosition,
+        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition), position,
                 new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
-                FrontierWireTags.require(SceneLeaseStatus.class, status), engagement, members, memberPositions, handoffActors,
+                FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors,
                 java.util.Optional.empty());
     }
     private static void writeAssaultSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!(lease.cause() instanceof SettlementAssaultSceneCause cause)) {
             throw new IllegalArgumentException("assault scene WAL payload requires its typed cause");
         }
+        output.writeShort(TYPED_BODY_LEASE_MARKER);
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, cause.assaultId()); writeSubject(output, cause.settlementId());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
         output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             writeSubject(output, member.actorId()); writeString(output, member.entityId().toString());
-            BlockPosition position = lease.memberPosition(member.actorId()); output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
+            BodyPosition position = lease.memberPosition(member.actorId()); output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
         }
         output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
     }
     private static SceneLease readAssaultSceneLease(DataInputStream input) throws IOException {
+        if (input.readUnsignedShort() != TYPED_BODY_LEASE_MARKER) throw new IllegalArgumentException("assault scene payload requires the current typed-body envelope");
         var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input));
         var cause = new SettlementAssaultSceneCause(readSubject(input).value(), readSubject(input).value());
         BlockPosition handoff = new BlockPosition(input.readInt(), input.readInt(), input.readInt()); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
-        java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> positions = new java.util.LinkedHashMap<>();
+        java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> positions = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             var actor = readSubject(input).value(); members.add(new SceneMember(actor, java.util.UUID.fromString(readString(input))));
-            positions.put(actor, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+            BlockPosition memberPosition = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+            positions.put(actor, new BodyPosition(memberPosition.x(), memberPosition.y(), memberPosition.z()));
         }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> ambient = new java.util.LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(readSubject(input).value());
@@ -826,6 +823,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     public static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long"); output.writeShort(encoded.length); output.write(encoded);
     } static String readString(DataInputStream input) throws IOException {
-        int length = input.readUnsignedShort(); if (length > 256) throw new IllegalArgumentException("production payload field is too long");
+        return readString(input, input.readUnsignedShort());
+    } static String readString(DataInputStream input, int length) throws IOException {
+        if (length > 256) throw new IllegalArgumentException("production payload field is too long");
         byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field"); return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
 }

@@ -10,6 +10,7 @@ import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
@@ -55,6 +56,24 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (prior == null || prior.conflicted()) return;
         claims.put(position.asLong(), new Claim(prior.owner(), prior.material(), prior.semanticPart(), true)); setDirty();
     }
+    /**
+     * Returns a bounded stable snapshot of claims of one semantic kind.  It is deliberately a
+     * ledger query, not materialization authority: callers must still require a naturally
+     * loaded exact expected block before retiring a temporary cell.
+     */
+    List<ClaimAt> claimsWithSemanticPart(String semanticPart) {
+        return claims.entrySet().stream().filter(entry -> entry.getValue().semanticPart().equals(semanticPart))
+                .sorted(Map.Entry.comparingByKey()).map(entry -> new ClaimAt(BlockPos.of(entry.getKey()), entry.getValue())).toList();
+    }
+    /** Removes one exact temporary claim only after its owned world block has been cleared. */
+    void retire(BlockPos position, String owner, String material, String semanticPart) {
+        Claim claim = claims.get(position.asLong());
+        if (claim == null || claim.conflicted() || !claim.owner().equals(owner) || !claim.material().equals(material)
+                || !claim.semanticPart().equals(semanticPart)) {
+            throw new IllegalStateException("v3 graybox retirement does not match its exact claim");
+        }
+        claims.remove(position.asLong()); setDirty();
+    }
     /** Restores an exact previously claimed semantic cell after its separately durable repair receipt. */
     void repaired(BlockPos position, String owner, String material, String semanticPart) {
         Claim prior = claims.get(position.asLong());
@@ -93,4 +112,5 @@ final class FrontierV3GrayboxLedger extends SavedData {
         return value;
     }
     record Claim(String owner, String material, String semanticPart, boolean conflicted) { }
+    record ClaimAt(BlockPos position, Claim claim) { }
 }

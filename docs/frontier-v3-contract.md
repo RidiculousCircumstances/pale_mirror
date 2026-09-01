@@ -31,7 +31,9 @@ the Python parity port or an adapter over `ReferenceGrayboxSimulation`.
   fixtures are historical evidence only. They do not gate v3 behavior or
   require parallel development.
 - Frontier v3 supports fresh worlds only. It does not migrate or reinterpret a
-  v2 save.
+  v2 save. This applies equally to Frontier v3's own schemas, WAL envelopes
+  and immutable projections: a format change requires an explicit world reset,
+  rather than an in-process compatibility reader or semantic migration.
 - Existing v2 runtime remains frozen and isolated until the v3 cutover gate.
   There is no v3-to-v2 fallback and no shared canonical state.
 - A launch with `pale_mirror.frontier_v3.enabled=true` exclusively owns
@@ -325,8 +327,10 @@ All scene kinds share one generic lifecycle (`candidate → admission → PREPAR
 → HOT → DRAINING → CLOSED/UNKNOWN/CONFLICT`) and one persisted `SceneLease`.
 A closed NeoForge `SceneBehavior` registry dispatches each known typed cause to
 its own candidate, physical admission, local goals/effects, drain, recovery and
-diagnostic rules. Generic infrastructure owns ordering, lease identity, actor
-exclusivity, persistence and failure policy. A behavior may submit only its
+diagnostic rules. Generic infrastructure owns deterministic ordering, lease identity, actor
+exclusivity, persistence and failure policy. Ordering is not a global scene
+lock: every registered behavior gets one bounded turn, while canonical actor
+admission alone resolves ownership conflicts. A behavior may submit only its
 own typed canonical commands/observations; it may not coerce another cause into
 logistics, invent cargo, substitute an actor or bypass loaded-world admission.
 Adding a scene kind therefore adds one registered behavior plus its canonical
@@ -339,15 +343,22 @@ through the lifecycle.
   One persisted scene lease names its revision, members, custody and hand-off
   instant before any body or container appears. The broad hand-off point is
   demand/readability metadata only: the lease separately snapshots one exact
-  canonical floor-anchor position for every member and one exact cargo floor
-  anchor. A floor anchor is the semantic support-cell column, not a mob's
-  feet-air cell: materialization may place feet only in the first two-cell-clear
-  space directly above that same loaded column.
+  canonical `BodyPosition` (the mob's feet-air cell) for every member and one
+  exact `TransportAnchor` support column for cargo. A support surface is not a
+  body position: the single explicit support-to-body conversion happens at
+  admission, and materialization verifies the same two-cell-clear column rather
+  than reinterpreting or offsetting either datum.
   Materialization may not arrange a formation around that broad point or offset
   a carrier for convenience.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
+- A physical world-effect executor first checks present naturally loaded
+  non-spectator player demand at the intent's exact physical origin, before it
+  resolves or recompiles any semantic geometry. A merely retained chunk is not
+  demand: the intent stays durable and pending until an ordinary visit. This
+  keeps a stale loaded repair/build from spending material or consuming an
+  unbounded server tick in background geometry work.
 - Every spatial logistics operation owns an immutable bounded `OperationTravel`:
   strategic route milestones remain planning facts, while its adjacent-cell
   corridor, cursor, formation positions and cargo anchor are the one movement
@@ -443,6 +454,16 @@ observed baseline matches its precondition. Unknown or player-changed blocks are
 recorded as conflicts/deltas and are never silently overwritten to restore a
 template.
 
+A naturally demanded engineering scene may additionally materialize a small
+project-owned temporary worksite floor under each exact worker. These floors
+are distinct from completed route surfaces: they provide real support for the
+same retained bodies, have their own provenance and are visible in a separate
+graybox colour. A player/world loss of one is durable `WORKSITE_STAGING`
+evidence that conflicts that one construction project and prevents any silent
+restoration or route credit. When the work front advances, the materializer may
+remove only its own still-intact temporary floor after a naturally loaded exact
+postcondition; a changed block is left as conflict evidence.
+
 Physical effects have no protected settlement, player, parcel or operation
 boundary. A bomber's projectile follows ordinary Minecraft flight, collision
 and explosion geometry; it may hit its target, an unrelated building, a player
@@ -469,6 +490,15 @@ a second mutable infection state.
 Canonical storage is exact slot-level inventory, even while COLD. Every stored
 resource has a named owner, container/cargo ID, item kind, count and slot or
 custody position.
+
+An inventory reconciliation conflict is durable evidence anchored to one known
+physical container slot. It may also name the exact item that was observed, but
+that item reference is historical evidence rather than a second live-custody
+claim: later legitimate consumption, destruction or transfer must not erase the
+conflict, resurrect the item, or make snapshot/WAL recovery invalid. New
+observations still require a current known exact item or the container itself as
+their subject; an unknown item is never adopted merely because a prior conflict
+exists.
 
 An economic need is not permission to fabricate work or money. The bounded
 market aggregate retains one exact buyer demand (resource kind, exact count,

@@ -24,6 +24,7 @@ import java.util.UUID;
 
 /** Stable WAL representation for the typed infirmary-scene boundary. */
 final class MedicalTreatmentScenePayloadCodecs {
+    private static final int TYPED_BODY_LEASE_MARKER = 0xfffe;
     private MedicalTreatmentScenePayloadCodecs() { }
 
     static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec())); }
@@ -56,6 +57,7 @@ final class MedicalTreatmentScenePayloadCodecs {
         if (!(lease.cause() instanceof MedicalTreatmentSceneCause cause)) {
             throw new IllegalArgumentException("medical scene WAL payload requires its typed cause");
         }
+        output.writeShort(TYPED_BODY_LEASE_MARKER);
         FrontierWorldPayloadCodecs.writeString(output, lease.id().value());
         FrontierWorldPayloadCodecs.writeString(output, lease.worldId().value());
         FrontierWorldPayloadCodecs.writeSubject(output, cause.operationId());
@@ -64,23 +66,27 @@ final class MedicalTreatmentScenePayloadCodecs {
         for (SceneMember member : lease.members()) {
             FrontierWorldPayloadCodecs.writeSubject(output, member.actorId());
             FrontierWorldPayloadCodecs.writeString(output, member.entityId().toString());
-            writePosition(output, lease.memberPosition(member.actorId()));
+            BodyPosition position = lease.memberPosition(member.actorId()); writePosition(output, new BlockPosition(position.x(), position.y(), position.z()));
         }
         output.writeByte(lease.ambientHandoffActorIds().size());
         for (SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) FrontierWorldPayloadCodecs.writeSubject(output, actor);
     }
 
     private static SceneLease readLease(DataInputStream input) throws IOException {
+        if (input.readUnsignedShort() != TYPED_BODY_LEASE_MARKER) {
+            throw new IllegalArgumentException("medical scene payload requires the current typed-body envelope");
+        }
         SceneLeaseId id = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
         WorldId world = new WorldId(FrontierWorldPayloadCodecs.readString(input));
         MedicalTreatmentSceneCause cause = new MedicalTreatmentSceneCause(FrontierWorldPayloadCodecs.readSubject(input).value());
         BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong();
         int status = input.readUnsignedByte();
-        List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value();
             members.add(new SceneMember(actor, UUID.fromString(FrontierWorldPayloadCodecs.readString(input))));
-            positions.put(actor, readPosition(input));
+            BlockPosition position = readPosition(input); positions.put(actor,
+                    new BodyPosition(position.x(), position.y(), position.z()));
         }
         Set<SubjectId> ambient = new LinkedHashSet<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) ambient.add(FrontierWorldPayloadCodecs.readSubject(input).value());

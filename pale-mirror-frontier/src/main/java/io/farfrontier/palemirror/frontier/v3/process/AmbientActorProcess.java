@@ -143,12 +143,21 @@ public final class AmbientActorProcess {
     }
 
     public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId) {
+        RouteConstruction engineering = state.routeConstructions().values().stream()
+                .filter(project -> project.status() == RouteConstructionStatus.BUILDING)
+                .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
+                .findFirst().orElse(null);
+        if (engineering != null) {
+            EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(actorId);
+            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
+            return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);
+        }
         RouteOperation assembling = state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.ASSEMBLING)
                 .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false)).findFirst().orElse(null);
         if (assembling != null) {
             OperationAssembly.Member member = assembling.activeAssembly().orElseThrow().members().get(actorId);
-            BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-            return new AmbientGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target);
+            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            return new AmbientGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.support());
         }
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey != null) {

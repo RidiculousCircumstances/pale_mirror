@@ -426,18 +426,24 @@ tasks.register('verifyPackagedJar') {
 }
 
 tasks.named('runGameTestServer') {
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
         coreGameTestDirectory.deleteDir()
     }
 }
 
 tasks.named('runFrontierV3SceneGameTestServer') {
+    // ModDev resolves the Frontier project as a runtime JAR.  Classes alone are not enough:
+    // without this edge a source edit could leave native/GameTest v3 runs executing a stale
+    // dependency artifact.
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
         frontierV3SceneGameTestDirectory.deleteDir()
     }
 }
 
 tasks.named('runFrontierV3EconomyGameTestServer') {
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
         frontierV3EconomyGameTestDirectory.deleteDir()
     }
@@ -823,6 +829,26 @@ tasks.named('prepareFrontierV3PilotClientRun') {
         options.parentFile.mkdirs()
         options.text = 'onboardAccessibility:b:true\n' +
                 'narrator:0\n'
+        // NeoForge's early loading screen is not game-facing evidence and is
+        // known to fail intermittently in the disposable XWayland profile
+        // before Minecraft creates its real client window.  Disable only that
+        // pre-game screen for the pilot; the actual fullscreen Minecraft
+        // window, renderer and ordinary connection remain unchanged.
+        def fmlConfig = new File(frontierV3PilotClientDirectory.get().asFile, 'config/fml.toml')
+        fmlConfig.parentFile.mkdirs()
+        fmlConfig.text = 'earlyWindowControl = false\n' +
+                'disableConfigWatcher = false\n' +
+                'maxThreads = -1\n' +
+                'versionCheck = true\n' +
+                'defaultConfigPath = "defaultconfigs"\n' +
+                'disableOptimizedDFU = true\n' +
+                'earlyWindowProvider = "fmlearlywindow"\n' +
+                'earlyWindowWidth = 854\n' +
+                'earlyWindowHeight = 480\n' +
+                'earlyWindowFBScale = 1\n' +
+                'earlyWindowMaximized = false\n' +
+                'earlyWindowSkipGLVersions = []\n' +
+                'earlyWindowSquir = false\n'
     }
 }
 
@@ -852,7 +878,8 @@ def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3Pil
 }
 
 tasks.named('runFrontierV3PilotServer') {
-    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods
+    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods,
+            project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
         def directory = frontierV3PilotServerRunDirectory
         def world = frontierV3PilotWorldName

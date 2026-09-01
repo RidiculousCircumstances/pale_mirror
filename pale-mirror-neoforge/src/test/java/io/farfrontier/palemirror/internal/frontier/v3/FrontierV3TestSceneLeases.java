@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -24,14 +25,14 @@ final class FrontierV3TestSceneLeases {
                             SubjectId cargoId, BlockPosition demand, Optional<SubjectId> engagementId, List<SubjectId> actorIds) {
         RouteOperation operation = state.operations().get(operationId);
         if (operation == null) throw new IllegalArgumentException("test scene operation is not canonical: " + operationId.value());
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         List<SceneMember> members = actorIds.stream().sorted().map(actor -> {
             var location = state.actorLocations().get(actor);
             if (location == null) throw new IllegalArgumentException("test scene actor is not canonical: " + actor.value());
-            positions.put(actor, location.position());
+            positions.put(actor, BodyPosition.aboveSupportCell(location.position()));
             return new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor));
         }).toList();
-        BlockPosition cargo = operation.activeTravel().map(OperationTravel::cargoAnchor).orElse(demand);
+        BlockPosition cargo = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(demand);
         return SceneLease.atExactPositions(id, checkpoint.worldId(), operationId, cargoId, demand, cargo,
                 checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, engagementId, members, positions);
     }

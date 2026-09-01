@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -36,6 +37,7 @@ import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalKind;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalTopology;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalTopologyId;
+import io.farfrontier.palemirror.frontier.v3.model.TransportAnchor;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
@@ -82,9 +84,10 @@ public final class FrontierV3SceneGameTests {
                 new SubjectId("route:frontier-network"), TraversalKind.PEDESTRIAN,
                 java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
                 List.of(SurfaceAnchor.at(4, 63, 8), SurfaceAnchor.at(5, 64, 8)));
-        OperationTravel travel = new OperationTravel(topology, 0, java.util.Map.of(hauler, new BlockPosition(4, 64, 9)), new BlockPosition(4, 63, 9));
+        OperationTravel travel = new OperationTravel(topology, 0, java.util.Map.of(hauler, new BodyPosition(4, 65, 9)),
+                TransportAnchor.atLegacySupport(new BlockPosition(4, 63, 7)));
 
-        helper.assertValueEqual(FrontierV3SceneExecutor.operationTravelTargetPosition(travel, hauler), new BlockPosition(5, 65, 9),
+        helper.assertValueEqual(FrontierV3SceneExecutor.operationTravelTargetPosition(travel, hauler), new BodyPosition(5, 66, 9),
                 "the HOT adapter must retain the next canonical grade instead of flattening its target Y");
         helper.succeed();
     }
@@ -137,6 +140,18 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void restartRecoveryWaitsForBoundedEntityRegistrationAfterNaturalLoad(GameTestHelper helper) {
+        long completeLoadTick = 40L;
+        helper.assertFalse(FrontierV3SceneExecutor.restartRecoveryObservationReady(completeLoadTick, completeLoadTick),
+                "the first naturally loaded tick is not yet evidence that saved entity UUIDs are absent");
+        helper.assertFalse(FrontierV3SceneExecutor.restartRecoveryObservationReady(completeLoadTick, 59L),
+                "recovery must not turn a short entity-registration delay into a durable missing-body fact");
+        helper.assertTrue(FrontierV3SceneExecutor.restartRecoveryObservationReady(completeLoadTick, 60L),
+                "after the fixed complete-load observation barrier, a missing owned UUID is durable recovery evidence");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void logisticsSceneNeverAcquiresCombatAuthorityWithoutAnEngagement(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
@@ -158,9 +173,16 @@ public final class FrontierV3SceneGameTests {
         prepareFloor(level, origin); prepareFloor(level, origin.east(2));
         // A route deck may physically occupy the strategic hand-off height.
         level.setBlock(origin, Blocks.GRAY_CARPET.defaultBlockState(), 3);
-        SceneLease lease = lease(origin);
+        WorldId world = new WorldId("frontier:scene-body-test");
+        List<SceneMember> members = List.of(member(world, "resident:frontier-v3-test-hauler"), member(world, "resident:frontier-v3-test-guard"));
+        SceneLease lease = SceneLease.atExactPositions(new SceneLeaseId("lease:frontier-v3-game-test"), world,
+                new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), new BlockPosition(origin.getX() + 3, origin.getY() - 1, origin.getZ()),
+                SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members,
+                java.util.Map.of(members.getFirst().actorId(), new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()),
+                        members.getLast().actorId(), new BodyPosition(origin.getX() + 2, origin.getY(), origin.getZ())));
 
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-body-test"), 91L));
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded thin route surface must materialize each deterministic Villager body exactly once");
         for (SceneMember member : lease.members()) {

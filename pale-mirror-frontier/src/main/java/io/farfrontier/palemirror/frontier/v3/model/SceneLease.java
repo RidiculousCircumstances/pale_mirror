@@ -17,7 +17,7 @@ import java.util.UUID;
 /** Immutable durable claim preventing concurrent COLD and HOT execution of one typed scene. */
 public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, BlockPosition handoffPosition,
                          SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members,
-                         Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
+                         Map<SubjectId, BodyPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
                          Optional<SceneRecoveryEvidence> recoveryEvidence) {
     public SceneLease {
         Objects.requireNonNull(id, "scene lease id");
@@ -28,7 +28,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         Objects.requireNonNull(status, "scene lease status");
         cause = Objects.requireNonNull(cause, "scene cause");
         members = List.copyOf(members);
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         memberPositions.forEach((actor, position) -> positions.put(Objects.requireNonNull(actor, "scene member position actor"),
                 Objects.requireNonNull(position, "scene member position")));
         memberPositions = Map.copyOf(positions);
@@ -56,36 +56,36 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
                       Optional<SubjectId> engagementId, List<SceneMember> members, Map<SubjectId, BlockPosition> memberPositions,
                       Set<SubjectId> ambientHandoffActorIds, Optional<SceneRecoveryEvidence> recoveryEvidence) {
         this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition), handoffPosition, handoffInstant,
-                revision, status, members, memberPositions, ambientHandoffActorIds, recoveryEvidence);
+                revision, status, members, bodiesAtLegacyFeet(memberPositions), ambientHandoffActorIds, recoveryEvidence);
     }
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, Optional.empty(), members, positions(members, handoffPosition), Set.of(), Optional.empty());
+        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, Optional.empty(), handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), Set.of(), Optional.empty());
     }
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, engagementId, members, positions(members, handoffPosition), Set.of(), Optional.empty());
+        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), Set.of(), Optional.empty());
     }
 
     public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
                       Set<SubjectId> ambientHandoffActorIds) {
-        this(id, worldId, operationId, cargoId, handoffPosition, handoffPosition, handoffInstant, revision, status, engagementId, members, positions(members, handoffPosition), ambientHandoffActorIds, Optional.empty());
+        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), ambientHandoffActorIds, Optional.empty());
     }
 
     public static SceneLease atExactPositions(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId,
                                               BlockPosition handoffPosition, BlockPosition cargoPosition, SimInstant handoffInstant, long revision,
                                               SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
-                                              Map<SubjectId, BlockPosition> memberPositions) {
-        return new SceneLease(id, worldId, operationId, cargoId, handoffPosition, cargoPosition, handoffInstant, revision, status, engagementId,
-                members, memberPositions, Set.of(), Optional.empty());
+                                              Map<SubjectId, BodyPosition> memberPositions) {
+        return new SceneLease(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition), handoffPosition, handoffInstant,
+                revision, status, members, memberPositions, Set.of(), Optional.empty());
     }
 
     /** New scene families must use an explicit typed cause; their owner validates it before preparation. */
     public static SceneLease forCause(SceneLeaseId id, WorldId worldId, SceneCause cause, BlockPosition handoffPosition,
                                       SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members,
-                                      Map<SubjectId, BlockPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
+                                      Map<SubjectId, BodyPosition> memberPositions, Set<SubjectId> ambientHandoffActorIds,
                                       Optional<SceneRecoveryEvidence> recoveryEvidence) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions,
                 ambientHandoffActorIds, recoveryEvidence);
@@ -109,7 +109,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
     public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions, actorIds, recoveryEvidence);
     }
-    public SceneLease withMemberPositions(Map<SubjectId, BlockPosition> positions) {
+    public SceneLease withMemberPositions(Map<SubjectId, BodyPosition> positions) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, positions, ambientHandoffActorIds, recoveryEvidence);
     }
     /**
@@ -121,21 +121,39 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         Objects.requireNonNull(prior, "prior operation travel"); Objects.requireNonNull(next, "next operation travel");
         LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(this);
         if (status != SceneLeaseStatus.HOT || logistics.engagementId().isPresent() || !memberPositions.equals(prior.formation())
-                || !logistics.cargoPosition().equals(prior.cargoAnchor()) || !next.isExactHotAdvanceFrom(prior)) {
+                || !logistics.cargoPosition().equals(prior.cargoAnchor().surface().support()) || !next.isExactHotAdvanceFrom(prior)) {
             throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
         }
         return new SceneLease(id, worldId,
-                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor()),
+                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor().surface().support()),
                 next.currentPosition(), handoffInstant, revision, status, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
     }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions,
                 ambientHandoffActorIds, Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
     }
-    public BlockPosition memberPosition(SubjectId actorId) { return memberPositions.get(Objects.requireNonNull(actorId, "scene actor")); }
-    private static Map<SubjectId, BlockPosition> positions(List<SceneMember> members, BlockPosition handoffPosition) {
-        Map<SubjectId, BlockPosition> result = new LinkedHashMap<>();
-        members.forEach(member -> result.put(member.actorId(), handoffPosition));
+    public BodyPosition memberPosition(SubjectId actorId) { return memberPositions.get(Objects.requireNonNull(actorId, "scene actor")); }
+    private static Map<SubjectId, BodyPosition> positions(List<SceneMember> members, BlockPosition handoffPosition) {
+        Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
+        members.forEach(member -> result.put(member.actorId(), new BodyPosition(handoffPosition.x(), handoffPosition.y(), handoffPosition.z())));
         return Map.copyOf(result);
+    }
+    /** Historical scene leases already persisted feet-air cells, unlike actor records and assembly slots. */
+    private static Map<SubjectId, BodyPosition> bodiesAtLegacyFeet(Map<SubjectId, BlockPosition> feet) {
+        Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
+        feet.forEach((actor, position) -> result.put(actor, new BodyPosition(position.x(), position.y(), position.z())));
+        return Map.copyOf(result);
+    }
+    /** Converts current-domain support cells supplied by scene candidates to exact body cells. */
+    public static Map<SubjectId, BodyPosition> bodiesAboveSupportCells(Map<SubjectId, BlockPosition> supports) {
+        Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
+        supports.forEach((actor, support) -> result.put(actor, BodyPosition.aboveSupportCell(support)));
+        return Map.copyOf(result);
+    }
+
+    /** @deprecated Source-only transition alias; persisted formats never use this path. */
+    @Deprecated(forRemoval = true)
+    public static Map<SubjectId, BodyPosition> bodiesAboveLegacySupports(Map<SubjectId, BlockPosition> supports) {
+        return bodiesAboveSupportCells(supports);
     }
 }

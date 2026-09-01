@@ -29,10 +29,16 @@ public final class StrategicObjectiveProcess {
      * ordinary recurring review stream just because one player broke a block.
      */
     public static ScheduledAction routeReconsideration(SubjectId settlementId, BlockPosition obstruction, String trigger, long dueAt) {
+        return routeReconsideration(settlementId, obstruction, trigger, dueAt, 1);
+    }
+
+    /** The trigger is causal identity, so failure confirmation cannot collide with patrol confirmation. */
+    private static ScheduledAction routeReconsideration(SubjectId settlementId, BlockPosition obstruction, String trigger, long dueAt, int ordinal) {
         requireKnownRouteTrigger(trigger);
+        if (ordinal <= 0) throw new IllegalArgumentException("route reconsideration ordinal must be positive");
         String owner = settlementId.value().replace(':', '-');
         String position = obstruction.x() + "-" + obstruction.y() + "-" + obstruction.z();
-        return new ScheduledAction(new ScheduleId("schedule:objective-route-" + trigger + "-" + owner + "-" + position + "-1"),
+        return new ScheduledAction(new ScheduleId("schedule:objective-route-" + trigger + "-" + owner + "-" + position + "-" + ordinal),
                 new SimInstant(dueAt), 0, settlementId, "frontier.objective.reconsider", 1);
     }
 
@@ -185,7 +191,9 @@ public final class StrategicObjectiveProcess {
         candidate.filter(value -> emergencyFoodCandidate(state, owner, value)).ifPresent(ignored -> preempted.addAll(preemptForEmergencyProvision(state, owner)));
         if (candidate.isEmpty()) return concatenate(observedAndHealth, next);
         Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal, eventIdentity);
-        if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) return concatenate(observedAndHealth, next);
+        if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) {
+            return concatenate(observedAndHealth, next);
+        }
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE) {
             StrategicTask preparation = cargoPreparationTask(state, objective); StrategicTask delivery = deliveryTask(objective, preparation);
             List<ProposedEvent> events = new java.util.ArrayList<>(perception.events()); events.addAll(preempted);
@@ -280,7 +288,7 @@ public final class StrategicObjectiveProcess {
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
-        boolean blockedRoute = !FrontierRouteNetwork.isPassable(state.bootstrap(), state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), state.physicalDeltas());
+        boolean blockedRoute = !state.routeTopology().supplyPassable(state.bootstrap(), settlement.id());
         // A confirmed physical logistics failure outranks ordinary production and containment
         // selection.  It does not cancel an already active task; lane ownership remains the
         // sole authority for that decision.
@@ -353,8 +361,11 @@ public final class StrategicObjectiveProcess {
                 StrategicObjectiveStatus.ACTIVE);
     }
     private static void requireKnownRouteTrigger(String trigger) {
-        if (!trigger.equals("loss") && !trigger.equals("confirmed")) throw new IllegalArgumentException("route reconsideration has an unknown trigger");
+        if (!trigger.equals("loss") && !trigger.equals("failure") && !trigger.equals("confirmed")) {
+            throw new IllegalArgumentException("route reconsideration has an unknown trigger");
+        }
     }
+
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective) { return task(state, objective, Optional.empty(), Optional.empty()); }
     private static StrategicTask task(FrontierWorldState state, StrategicObjective objective, Optional<SubjectId> observedOperation,
                                       Optional<BlockPosition> operationObservationPosition) {

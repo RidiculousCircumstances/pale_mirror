@@ -16,8 +16,12 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,9 +37,18 @@ class RouteSceneReturnRepairTest {
 
         submit(engine, world, new SceneLeasePrepared(lease));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
-        BlockPosition obstruction = new BlockPosition(-380, 64, -304);
+        // One lateral physical carriageway cell of the exact currently retained HOT edge.
+        // The observation must update both the durable settlement topology and this existing
+        // travel cursor; COLD is not allowed to reconstruct a fresh open segment on release.
+        BlockPosition obstruction = new BlockPosition(-367, 64, -320);
         submit(engine, world, new PhysicalDeltaObserved(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
+        RouteOperation obstructed = state(engine).operations().get(operation.id());
+        OperationTravel travel = obstructed.activeTravel().orElseThrow();
+        assertTrue(travel.canAdvanceNextEdge());
+        assertEquals(19, travel.nextColdCursor(), "COLD must stop before the first damaged retained edge");
+        assertEquals(TraversalAvailability.BLOCKED, travel.topology().edgeAfterCursor(travel.nextColdCursor()).availability());
+        assertFalse(state(engine).routeTopology().supplyPassable(state(engine).bootstrap(), operation.settlementId()));
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
         submit(engine, world, new SceneLeaseReleased(lease.id(), memberPositions(state(engine), operation)));
 
@@ -48,7 +61,61 @@ class RouteSceneReturnRepairTest {
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED));
         assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(operation.settlementId())),
-                () -> "confirmed patrol did not start a route project");
+                () -> "confirmed patrol did not start a route project; objectives=" + after.strategicPlans().objectives()
+                        + ", tasks=" + after.strategicPlans().tasks() + ", patrols=" + after.strategicPlans().routePatrols());
+    }
+
+    /**
+     * Mirrors the ordinary pilot path: the caravan first makes two observed HOT advances, then
+     * a player breaks the later horizontal carriageway cell.  This prevents the first-edge unit
+     * fixture from masking a repair planner that cannot recover an already-moving convoy.
+     */
+    @Test
+    void laterHotRouteLossStillStartsTheExactBypassProject() {
+        WorldId world = new WorldId("frontier:route-scene-return-repair-later-edge");
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
+        RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
+        SceneLease lease = lease(state(engine), engine.checkpoint(), operation);
+
+        submit(engine, world, new SceneLeasePrepared(lease));
+        submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        advanceHot(engine, world, operation.id());
+        advanceHot(engine, world, operation.id());
+
+        BlockPosition obstruction = new BlockPosition(-380, 64, -304);
+        submit(engine, world, new PhysicalDeltaObserved(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
+        RouteOperation obstructed = state(engine).operations().get(operation.id());
+        assertFalse(state(engine).routeTopology().supplyPassable(state(engine).bootstrap(), operation.settlementId()));
+        // The retained HOT segment ends before this later loss.  It remains traversable only
+        // until that segment completes; the next segment must compile from the now-blocked
+        // durable settlement topology rather than forgetting the player observation.
+        assertTrue(obstructed.activeTravel().isPresent());
+
+        // Let the original loss wake-up run while this delivery remains HOT.  Native coverage
+        // must not accidentally depend on releasing the scene before that causal race exists.
+        long lossReview = engine.checkpoint().instant().ticks();
+        // Match the native departure hysteresis: the player can leave a HOT scene while its
+        // route-loss wake-up has already retried more than once.  A direct immediate release
+        // would hide a planner that only works because it gets the lane back unrealistically
+        // early.
+        engine.advanceTo(new SimInstant(lossReview + 350L), new WorkBudget(64, 512));
+
+        submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        submit(engine, world, new SceneLeaseReleased(lease.id(), memberPositions(obstructed)));
+        long start = engine.checkpoint().instant().ticks();
+        for (long tick = start + 1L; tick <= start + 6_000L; tick++) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        }
+
+        FrontierWorldState after = state(engine);
+        assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
+        assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED), () -> "later obstruction did not reach the patrol: " + after.strategicPlans());
+        assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(operation.settlementId())),
+                () -> "later obstruction did not start a route project; objectives=" + after.strategicPlans().objectives()
+                        + ", tasks=" + after.strategicPlans().tasks() + ", patrols=" + after.strategicPlans().routePatrols()
+                        + ", deltas=" + after.physicalDeltas());
     }
 
     private static SceneLease lease(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint, RouteOperation operation) {
@@ -59,6 +126,24 @@ class RouteSceneReturnRepairTest {
 
     private static List<SceneMemberPosition> memberPositions(FrontierWorldState state, RouteOperation operation) {
         return operation.participantIds().stream().map(actor -> new SceneMemberPosition(actor, state.actorLocations().get(actor).position())).toList();
+    }
+
+    private static List<SceneMemberPosition> memberPositions(RouteOperation operation) {
+        return operation.activeTravel().orElseThrow().formation().entrySet().stream()
+                .map(entry -> new SceneMemberPosition(entry.getKey(), entry.getValue().supportingSurface().support())).toList();
+    }
+
+    private static void advanceHot(FrontierEngine<FrontierWorldProjection> engine, WorldId world, SubjectId operationId) {
+        OperationTravel current = state(engine).operations().get(operationId).activeTravel().orElseThrow();
+        BlockPosition from = current.currentPosition();
+        BlockPosition to = current.corridor().get(current.nextHotCursor());
+        int deltaX = to.x() - from.x();
+        int deltaY = to.y() - from.y();
+        int deltaZ = to.z() - from.z();
+        Map<SubjectId, BodyPosition> formation = new LinkedHashMap<>();
+        current.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
+        submit(engine, world, new OperationTravelAdvanced(operationId, new OperationTravel(current.topology(), current.nextHotCursor(), formation,
+                current.cargoAnchor().offset(deltaX, deltaY, deltaZ))));
     }
 
     private static void submit(FrontierEngine<FrontierWorldProjection> engine,

@@ -127,6 +127,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.structural_repair.scan", (state, action, autonomous) -> StructuralRepairProcess.plan(state, action)),
             Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
             Map.entry("frontier.route_construction.start", (state, action, autonomous) -> RouteConstructionProcess.planStart(state, action)),
+            Map.entry("frontier.route_construction.assembly_progress", (state, action, autonomous) -> RouteConstructionProcess.planAssemblyProgress(state, action)),
             Map.entry("frontier.route_patrol.start", (state, action, autonomous) -> RoutePatrolProcess.planStart(state, action)),
             Map.entry("frontier.route_patrol.progress", (state, action, autonomous) -> RoutePatrolProcess.planProgress(state, action)),
             Map.entry("frontier.hive_route_engagement.start", (state, action, autonomous) -> HiveRouteEngagementProcess.planStart(state, action)),
@@ -271,6 +272,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.hive.nutrient.transfer.progress", "frontier.hive.scout.patrol"); }
     private static Set<String> infrastructureSchedules() { return types(
             "frontier.structural_repair.scan", "frontier.route_construction.scan", "frontier.route_construction.start",
+            "frontier.route_construction.assembly_progress",
             "frontier.route_patrol.start", "frontier.route_patrol.progress", "frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
@@ -289,7 +291,8 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
-                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.resident_born", "frontier.resident_migrated",
+                    "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.route_construction_material_loaded",
+                    "frontier.resident_born", "frontier.resident_migrated",
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
                     "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",

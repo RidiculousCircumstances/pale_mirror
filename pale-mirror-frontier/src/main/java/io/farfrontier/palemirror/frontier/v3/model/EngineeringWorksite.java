@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,8 @@ public final class EngineeringWorksite {
      * turning COLD approach into an unbounded live pathfinder.
      */
     private static final int MAX_JOINT_CORRIDOR_COMBINATIONS = 256;
+    /** Total retained scheduler transitions evaluated while compiling one work-site team. */
+    private static final int MAX_JOINT_SCHEDULER_STEPS = 131_072;
 
     private EngineeringWorksite() { }
 
@@ -80,7 +83,7 @@ public final class EngineeringWorksite {
             } catch (IllegalArgumentException invalid) {
                 return null;
             }
-            return completesUnderRetainedSchedule(assembly) ? assembly : null;
+            return completesUnderRetainedSchedule(assembly, budget) ? assembly : null;
         }
         SubjectId member = members.get(memberIndex);
         List<List<BlockPosition>> options = candidates.get(member);
@@ -96,15 +99,59 @@ public final class EngineeringWorksite {
         return null;
     }
 
-    private static boolean completesUnderRetainedSchedule(EngineeringWorkAssembly initial) {
-        EngineeringWorkAssembly assembly = initial;
-        int remainingMoves = assembly.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
-        for (int move = 0; move < remainingMoves; move++) {
-            SubjectId advancing = assembly.nextSafeAdvance().orElse(null);
-            if (advancing == null) return false;
-            assembly = assembly.advance(advancing);
+    private static boolean completesUnderRetainedSchedule(EngineeringWorkAssembly initial, AttemptBudget budget) {
+        // This is compilation proof, not canonical movement.  Reconstructing an immutable
+        // EngineeringWorkAssembly for each hypothetical step used to allocate a full map and
+        // corridor wrapper per transition, making a bounded candidate search capable of
+        // stalling the server tick that admits a repair.  Keep exactly the same ordered
+        // queue/swap rule as EngineeringWorkAssembly.nextSafeAdvance(), but model only the
+        // four cursors locally.  The retained assembly is still the sole published result.
+        List<SchedulerMember> members = initial.members().entrySet().stream()
+                .map(entry -> new SchedulerMember(entry.getKey(), entry.getValue().corridor(), entry.getValue().cursor()))
+                .sorted(Comparator.comparing(member -> member.actor().value()))
+                .toList();
+        int[] cursors = members.stream().mapToInt(SchedulerMember::cursor).toArray();
+        int remainingMoves = 0;
+        for (int index = 0; index < members.size(); index++) {
+            remainingMoves += members.get(index).corridor().size() - cursors[index] - 1;
         }
-        return assembly.complete();
+        for (int move = 0; move < remainingMoves; move++) {
+            if (!budget.recordSchedulerStep()) return false;
+            int advancing = nextSafeAdvance(members, cursors);
+            if (advancing < 0) return false;
+            cursors[advancing]++;
+        }
+        for (int index = 0; index < members.size(); index++) {
+            if (cursors[index] != members.get(index).corridor().size() - 1) return false;
+        }
+        return true;
+    }
+
+    /** Mirrors the published assembly's deterministic safe-move semantics without allocations. */
+    private static int nextSafeAdvance(List<SchedulerMember> members, int[] cursors) {
+        int advancing = -1;
+        for (int index = 0; index < members.size(); index++) {
+            int leader = advanceLeader(index, members, cursors, new boolean[members.size()]);
+            if (leader >= 0 && (advancing < 0
+                    || members.get(leader).actor().compareTo(members.get(advancing).actor()) < 0)) {
+                advancing = leader;
+            }
+        }
+        return advancing;
+    }
+
+    /** Resolves a queue from its empty leading cell backwards; cycles and arrived blockers wait. */
+    private static int advanceLeader(int actorIndex, List<SchedulerMember> members, int[] cursors, boolean[] visiting) {
+        SchedulerMember actor = members.get(actorIndex);
+        if (cursors[actorIndex] >= actor.corridor().size() - 1 || visiting[actorIndex]) return -1;
+        visiting[actorIndex] = true;
+        BlockPosition next = actor.corridor().get(cursors[actorIndex] + 1);
+        for (int index = 0; index < members.size(); index++) {
+            if (index != actorIndex && members.get(index).corridor().get(cursors[index]).equals(next)) {
+                return advanceLeader(index, members, cursors, visiting);
+            }
+        }
+        return actorIndex;
     }
 
     static void validate(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
@@ -128,6 +175,29 @@ public final class EngineeringWorksite {
         return cells.get(project.confirmedCells());
     }
 
+    /**
+     * Immutable support columns for the current construction front.  They have a separate
+     * semantic owner from completed route cells: an engineer may stand on one, but it never
+     * grants route passability or construction credit.
+     *
+     * <p>The baseline intentionally remains available after a project has failed, so an
+     * already observed loss can survive validation and explain that failure.  A failed project
+     * cannot advance its cursor, therefore this is still one exact bounded footprint.</p>
+     */
+    public static List<BlockPosition> intactStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
+        Objects.requireNonNull(bootstrap, "engineering staging bootstrap"); Objects.requireNonNull(topology, "engineering staging topology");
+        Objects.requireNonNull(project, "engineering staging project");
+        if (project.team().isEmpty() || project.confirmedCells() >= project.workCells().size()) return List.of();
+        return List.copyOf(slots(bootstrap, topology, project).subList(0, project.team().orElseThrow().memberIds().size()));
+    }
+
+    /** Current desired staging exists only for a supplied, assembled active work front. */
+    public static List<BlockPosition> activeStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
+        if (project.status() != RouteConstructionStatus.BUILDING || project.cargoId().isEmpty()
+                || project.assembly().isEmpty() || !project.assembly().orElseThrow().complete()) return List.of();
+        return intactStagingCells(bootstrap, topology, project);
+    }
+
     private static List<BlockPosition> slots(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
         // Canonical actor positions are column anchors; the NeoForge materializer resolves
         // their actual standing cell through FrontierV3StandingPosition. Keep the engineering
@@ -146,9 +216,13 @@ public final class EngineeringWorksite {
 
     private static final class AttemptBudget {
         private int attempts;
+        private int schedulerSteps;
         boolean exhausted() { return attempts >= MAX_JOINT_CORRIDOR_COMBINATIONS; }
         void recordAttempt() { attempts++; }
+        boolean recordSchedulerStep() { return ++schedulerSteps <= MAX_JOINT_SCHEDULER_STEPS; }
     }
+
+    private record SchedulerMember(SubjectId actor, List<BlockPosition> corridor, int cursor) { }
 
     private record Offset(int x, int z) { }
 }

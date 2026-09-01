@@ -26,7 +26,11 @@ import java.util.List;
 public final class FrontierPersistenceCodec {
     private static final int SNAPSHOT_MAGIC = 0x46563353;
     private static final int WAL_MAGIC = 0x46563357;
-    private static final int VERSION = 1;
+    /**
+     * Fresh-world v3 envelope.  Bumping this rejects an entire old WAL tail before any payload
+     * decoder runs, so a recreated world cannot accidentally replay a previous campaign.
+     */
+    private static final int VERSION = 5;
     private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 
@@ -108,7 +112,7 @@ public final class FrontierPersistenceCodec {
     private static <T> T decode(byte[] encoded, int magic, Reader<T> reader) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != magic) throw new IllegalArgumentException("unknown persistence magic");
-            if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("unknown persistence version");
+            if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("Frontier v3 persistence requires a fresh current-schema world");
             byte[] body = readBytes(input, MAX_STATE_BYTES);
             byte[] checksum = input.readNBytes(32);
             if (checksum.length != 32 || !MessageDigest.isEqual(checksum, digest(body)) || input.available() != 0) {
