@@ -41,10 +41,12 @@ final class FrontierV3ObjectBoardExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         CheckpointImage checkpoint = runtime.checkpointImage().orElse(null);
         if (checkpoint == null) return;
+        FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        FrontierReadabilityPlan.ReadabilityInput input = FrontierReadabilityPlan.input(state);
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
-            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive")));
-            cursor = Cursor.from(checkpoint.revision(), plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList(), cursor);
+        if (cursor == null || !cursor.input().equals(input)) {
+            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state);
+            cursor = Cursor.from(input, plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList(), cursor);
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
@@ -126,21 +128,26 @@ final class FrontierV3ObjectBoardExecutor {
         }
     }
     /**
-     * A canonical revision is not a materialization epoch.  The simulation can advance its
-     * revision more quickly than the loaded-world budget can inspect every board.  Keep the
-     * round-robin position whenever the stable board slots are unchanged, otherwise remote
-     * settlement work could permanently starve an already-loaded later hive board.
+     * A canonical revision is not a board epoch.  The simulation can advance a moving actor
+     * position more quickly than the loaded-world budget can inspect every board.  Keep the
+     * round-robin position whenever the exact board dependencies and stable slots are unchanged,
+     * otherwise remote settlement work could permanently starve an already-loaded later hive
+     * board.
      */
     static final class Cursor {
-        private final Revision revision;
+        private final FrontierReadabilityPlan.ReadabilityInput input;
         private final List<FrontierObjectBoard> boards;
         private int index;
-        Cursor(Revision revision, List<FrontierObjectBoard> boards, int index) { this.revision = revision; this.boards = boards; this.index = index; }
-        static Cursor from(Revision revision, List<FrontierObjectBoard> boards, Cursor prior) {
+        Cursor(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, int index) { this.input = input; this.boards = boards; this.index = index; }
+        static Cursor from(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, Cursor prior) {
             int next = prior != null && sameSlots(prior.boards, boards) ? prior.index % Math.max(1, boards.size()) : 0;
-            return new Cursor(revision, boards, next);
+            return new Cursor(input, boards, next);
         }
-        Revision revision() { return revision; }
+        /** Test-only slot-order probe; production cursors always retain an exact readability input. */
+        static Cursor from(Revision ignored, List<FrontierObjectBoard> boards, Cursor prior) {
+            return from((FrontierReadabilityPlan.ReadabilityInput) null, boards, prior);
+        }
+        FrontierReadabilityPlan.ReadabilityInput input() { return input; }
         boolean hasNext() { return !boards.isEmpty(); }
         FrontierObjectBoard next() { FrontierObjectBoard value = boards.get(index); index = (index + 1) % boards.size(); return value; }
         private static boolean sameSlots(List<FrontierObjectBoard> prior, List<FrontierObjectBoard> next) {

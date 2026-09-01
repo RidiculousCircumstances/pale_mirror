@@ -37,6 +37,16 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void boardInputIgnoresActorMotion() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-motion"), 91L));
+        SubjectId actor = state.actorLocations().keySet().iterator().next();
+        FrontierWorldState moved = state.withActorLocation(actor, state.actorLocations().get(actor).position().offset(1, 0, 0));
+
+        assertEquals(FrontierReadabilityPlan.input(state), FrontierReadabilityPlan.input(moved),
+                "walking changes no player-facing board and must not rebuild the complete board plan");
+    }
+
+    @Test
     void reportsDamagedAndDisabledObjectsWithoutOpaqueIdentifiers() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-condition"), 91L));
         SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();

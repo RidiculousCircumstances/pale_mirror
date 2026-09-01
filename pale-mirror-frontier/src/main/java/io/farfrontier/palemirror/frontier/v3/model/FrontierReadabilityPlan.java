@@ -39,6 +39,46 @@ public final class FrontierReadabilityPlan {
 
     public Map<SubjectId, FrontierObjectBoard> boards() { return boards; }
 
+    /**
+     * Exact canonical dependencies of the board projection.  Deliberately excludes ambient
+     * lease positions, actor body positions, checkpoint revision and other continuously changing
+     * execution data: none of those facts changes a board's slot, text or tone.  Keeping those
+     * motion-only revisions out of the NeoForge board cursor prevents a full player-facing plan
+     * recompilation on every server tick.
+     */
+    public static ReadabilityInput input(FrontierWorldState state) {
+        Objects.requireNonNull(state, "readability state");
+        Map<SubjectId, ActorCondition> actorConditions = new LinkedHashMap<>();
+        state.actorLocations().forEach((actor, location) -> actorConditions.put(actor, location.condition()));
+        boolean routeDamaged = state.physicalDeltas().values().stream()
+                .anyMatch(delta -> delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
+        boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
+        boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
+        RouteConstruction construction = state.routeConstructions().values().stream()
+                .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
+        return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+                state.hiveColony().addedOrgans(), state.physicalDeltas(), state.resourceSites(), state.routeTopology(), state.humanPopulation(),
+                state.companies(), Map.copyOf(actorConditions), routeDamaged, sceneConflict, caravan, construction);
+    }
+
+    /** Immutable equality key for the bounded physical board cursor. */
+    public record ReadabilityInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
+                                   Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection,
+                                   ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+                                   Map<SubjectId, HiveOrgan> addedOrgans, Map<BlockPosition, PhysicalDelta> physicalDeltas,
+                                   ResourceSiteState resourceSites, RouteTopology routeTopology, HumanPopulation humanPopulation,
+                                   CompanyRegistry companies, Map<SubjectId, ActorCondition> actorConditions,
+                                   boolean routeDamaged, boolean sceneConflict, boolean caravan, RouteConstruction construction) {
+        public ReadabilityInput {
+            Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(structureConditions, "structure conditions");
+            Objects.requireNonNull(infection, "infection"); Objects.requireNonNull(inventory, "inventory");
+            Objects.requireNonNull(productionJobs, "production jobs"); Objects.requireNonNull(addedOrgans, "added organs");
+            Objects.requireNonNull(physicalDeltas, "physical deltas"); Objects.requireNonNull(resourceSites, "resource sites");
+            Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
+            Objects.requireNonNull(companies, "companies"); actorConditions = Map.copyOf(Objects.requireNonNull(actorConditions, "actor conditions"));
+        }
+    }
+
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
         boolean operational = state.isHiveOrganOperational(organ.id());
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), stage == null && operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
