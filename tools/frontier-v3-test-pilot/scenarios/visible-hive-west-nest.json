@@ -18,7 +18,7 @@
   ],
   "assertions": [
     { "after": 3, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT" } },
-    { "after": 4, "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "bioforms": 48, "sites": 12 } }
+    { "after": 4, "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
   ],
   "frames": [
     { "after": 6, "name": "hive-west-nest" }

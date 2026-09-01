@@ -156,16 +156,22 @@
 - `1bdbd84` establishes the bounded physical settlement-food provisioning boundary: the current settlement cycle consumes the required number of named `minecraft:bread` items every 24,000 ticks, COLD directly from canonical custody and ACTIVE only through a durable `EXACT_ITEM_CONSUMPTION` intent with the exact observed physical remainder. A derived two-cycle reserve protects future food from exports without becoming a second inventory ledger. Depot boards and read-only diagnostics expose `SECURE`, `RATIONED`, `SHORTAGE` and `CONFLICT`. The checked-in `disposable_settlement_provision` pilot starts from 64 exact bread for Northwatch's 37 residents, naturally materializes it, reaches the terminal 27-item/`CONFIRMED` state, survives a graceful restart, and captures the readable exterior `FOOD SECURE · 27 / 74` board frame at `build/frontier-v3-scenarios/disposable_settlement_provision-4dec504d-e3a1-4805-9441-ff2e6fc74a43-northwatch-food-secure.png`. Node 25/25, focused domain/diagnostic tests, economy GameTests 10/10 and the critical gate (guardrails/check, build/package, 245/245 GameTests) pass. The full gate also exposed and fixed a test-only graybox field fixture that had not loaded all of its exact 8×8 boundary chunks before checking COLD materialization.
 - H0.6 closes the final Frontier v3 architecture-audit debt at the declared current limits: bounded noncanonical metrics, a retained schedule-capacity guard, the repeatable seed-41 twelve-front scale/WAL proof, and a 120-second naturally loaded 27-member physical JFR route. The full critical gate passes with 248/248 GameTests; larger physical limits remain separately gated by a fresh same-seed JFR plus terminal causal scenario.
 ### Now
-- `a56aa9fd` completes the schema-90 HOT medical-treatment and same-floor Scout-patrol
-  recovery slice. Its checksum-pinned artifact was published and installed into the retained
-  r41 world without a reset; the server reached ready state on port 25565. Live inspection then
-  exposed V3-AUD-018: a naturally loaded column with an ambient lease marked UNKNOWN after
-  restart and no saved exact body stayed UNKNOWN forever, making the otherwise living world look
-  empty. The current critical recovery fix adds one typed absence observation: it closes only
-  the failed physical lease after exact loaded-world proof, retains the canonical actor and lets
-  ordinary demand materialize its same deterministic UUID. Pure recovery/forgery tests and the
-  focused HOT/COLD GameTest slice pass (29/29). Publish this follow-up only after its applicable
-  critical gate; then naturally visit the retained hive and verify visible body recovery.
+- `4ddfa1ba` closes V3-AUD-018: after restart, a naturally loaded exact actor column with an
+  `UNKNOWN_AFTER_RESTART` ambient lease and no exact physical body emits one typed absence
+  observation that closes only that failed lease. The living canonical actor is retained; the
+  next ordinary player demand materializes the same deterministic UUID. Unloaded, foreign or
+  mismatched bodies remain unknown/conflict. Pure recovery/forgery checks, the focused HOT/COLD
+  slice (29/29) and the critical gate (`guardrails`, `check`, build/package, 252/252 GameTests)
+  pass. The checksum-pinned artifact `8b01f33d…ced87f` is installed on retained
+  `frontier-v3-live-r41` without a reset; it is healthy on 25565. A native pack-pilot scenario
+  on one `:0` client proves `bioform:west-0` as `ALIVE`, `HOT`, physically `INDEXED` at
+  `(-426,64,415)` with UUID `74dea1a5-3577-3fac-b13e-2a084920465c`; the same frame visibly
+  contains its hive organs and multiple Zombies at
+  `build/frontier-v3-scenarios/visible_hive_west_nest-88cd6b36-44d7-46fb-acec-db8ed00dd4ef-hive-west-nest.png`.
+- The native pack-pilot runner now directs screenshot acknowledgement to its actual pack-client
+  run directory and resolves default frame destinations from the Pale Mirror root. The retained
+  live hive scenario asserts stable world facts and its terminal actor state, not the incidental
+  live count of autonomous bioforms; Node checks pass 28/28 and the live manifest is `ok`.
 - The committed schema-90 slice completes the first HOT medical-treatment scene and repairs
   retained same-floor Scout patrol leases without weakening quarantine. `ScoutPatrolLeaseRecovered`
   accepts only the living exact HOT Scout at its exact stale lease goal, keeps its canonical
@@ -270,11 +276,10 @@
 - Frontier v3 now has one V3-owned `FrontierV3PhysicalWorld`: lifecycle execution, restart inspection and all public physical-event bridges use only Graybox; other dimensions are explicit no-ops. Its canonical `WorldId` is `frontier:graybox`, invalidating the faulty r5 state; Graybox's known light-gray-concrete baseline is accepted exactly for field preparation. SourceGraybox delegates to the same physical dimension identity without a V3→legacy dependency. Fresh r6 materialized the Northwatch field and exposed one HOT/COLD route-lease race; `4b68424` made the lease exclusive, deferred COLD start/progress/readiness/combat and excluded a generic route scene during unresolved interception. The critical gate passed with 222 required GameTests.
 - Fresh r7 exposed COLD combat changing an actor under unresolved ambient recovery; `1d2de76` makes ambient authority exclusive. r8 then exposed PREPARED restart turning permanent UNKNOWN; `0e7896d` retains PREPARED, but r9 found bootstrap resident anchors inside Hall. `FrontierSettlementActorSlots` now compiles bounded, unique clear street/perimeter anchors for bootstrap and births; r10 then found legacy admission cancelling V3 bodies. Strict canonical UUID/type/lease proof permits only exact V3 bodies. `0e1a8a4` freezes HOT leases at server stop; an initial fresh-r11 graceful recovery retained resident `1-1`'s UUID, but a later ordinary client reconnect exposed a separate duplicate-UUID race: late `EntityLeave` had closed a lease after the old body entered chunk NBT. The r11 world is tainted as recovery evidence. `e0cd261` replaces that late close with fail-closed HOT recovery and the only COLD hand-off with 200-tick absent-demand/64-block-safe durable capture followed by explicit body discard; the contract/map and GameTest negative path match it. Fresh r12 proved normal player leave/rejoin and stop/restart with 20 recovered HOT leases and no duplicate UUID/quarantine, but its field exposed a separate V2/V3 single-writer violation: frozen SourceGraybox could republish into V3 Graybox. The r12 field is tainted. The successor makes launch-mode V3 exclusively own Graybox, pauses/rejects V2 writers even after V3 quarantine, and has focused launch-ownership coverage; without competing client/server load its full critical gate passed 223/223 GameTests plus build/package verification.
 ### Next
-- Complete the follow-up critical gate, commit and publish the V3-AUD-018 ambient restart-absence
-  recovery fix, then restart retained `frontier-v3-live-r41` without a reset. Verify normal boot,
-  absence of a new PMV3 quarantine and naturally loaded visible resident/bioform recovery before
-  asking the player to revisit the hive.
-- Resume the smallest remaining Wave 5/6 deliverable from the approved plan. The current physical body/scene limits remain fixed; any future increase requires the documented same-seed JFR and terminal causal scenario, not a TPS-only claim.
+- Commit the pack-pilot capture-path and live-scenario stability correction, then resume the
+  smallest remaining Wave 5/6 deliverable from the approved plan. The current physical
+  body/scene limits remain fixed; any future increase requires the documented same-seed JFR and
+  terminal causal scenario, not a TPS-only claim.
 - The engineering/recovery slice now has the shared exact tool boundary: every
   fresh 12-settlement bootstrap explicitly stocks four exact iron pickaxes per
   depot; a retained `EngineeringRecoveryTeam` issues/returns one of those

@@ -31,7 +31,8 @@ function trace(kind, data = {}) {
 }
 trace('run_started', { scenarioId: scenario.id, scenarioSha256: sha256, profile: process.env.FRONTIER_V3_PILOT_PROFILE ?? 'lite' });
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
-const pilotTask = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack'
+const packPilot = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack';
+const pilotTask = packPilot
   ? ':pale-mirror-neoforge:runFrontierV3PilotPackClient' : ':pale-mirror-neoforge:runFrontierV3PilotClient';
 const args = [pilotTask, '--no-daemon',
   `-PfrontierV3PilotScenario=${scenarioFile}`,
@@ -43,7 +44,8 @@ const args = [pilotTask, '--no-daemon',
 // cookie without serializing it; pass that private child environment to
 // Gradle as well, otherwise an explicitly XWayland pilot cannot start.
 const auditEnvironment = await x11AuditEnvironment(process.env);
-auditEnvironment.PALE_MIRROR_CLIENT_SCREENSHOTS = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-client/screenshots');
+auditEnvironment.PALE_MIRROR_CLIENT_SCREENSHOTS = resolve(project,
+  `pale-mirror-neoforge/build/runs/${packPilot ? 'frontier-v3-pilot-pack-client' : 'frontier-v3-pilot-client'}/screenshots`);
 const child = spawn(gradle, args, { cwd: project, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });
 let childExit;
 child.once('exit', (code) => { childExit = code ?? 1; });
@@ -85,7 +87,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     if (frameReady) {
       const after = Number(frameReady[1]); const frame = (scenario.frames ?? []).find((value) => value.after === after && value.name === frameReady[2]);
       if (!frame) { failure ??= `pilot announced undeclared frame after=${after} name=${frameReady[2]}`; return; }
-      const destination = resolve(frame.destination ?? `build/frontier-v3-scenarios/${scenario.id}-${runId}-${frame.name}.png`);
+      const destination = resolve(project, frame.destination ?? `build/frontier-v3-scenarios/${scenario.id}-${runId}-${frame.name}.png`);
       frameTasks.push(executeFile('python3', [auditScript, 'capture', destination], { cwd: project, env: auditEnvironment })
         .then(async () => {
           manifest.frames.push({ after: frame.after, name: frame.name, presentation: frameReady[3], path: destination });
