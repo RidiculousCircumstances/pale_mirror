@@ -47,6 +47,7 @@ properties_backup="$profile_dir/server.properties.before-graybox"
 # reversible without guessing a transitive dependency graph.
 competing_jars=(
   'alexscaves-2.0.10.jar'
+  'bettercombat-neoforge-2.4.0+1.21.1.jar'
   'born_in_chaos_[Neoforge]_1.21.1_1.7.6.jar'
   'hostile_tactics-neoforge-1.21.1-0.10.1.jar'
   "L_Ender's Cataclysm 1.21.1-3.32.jar"
