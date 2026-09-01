@@ -2,7 +2,10 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import org.junit.jupiter.api.Test;
+
+import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,6 +47,19 @@ class FrontierReadabilityPlanTest {
 
         assertEquals(FrontierReadabilityPlan.input(state), FrontierReadabilityPlan.input(moved),
                 "walking changes no player-facing board and must not rebuild the complete board plan");
+    }
+
+    @Test
+    void boardInputStillRefreshesWhenAnActorConditionChanges() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-condition-change"), 91L));
+        SubjectId actor = state.actorLocations().keySet().iterator().next();
+        java.util.Map<SubjectId, ActorLocation> changedActors = new LinkedHashMap<>(state.actorLocations());
+        ActorLocation prior = changedActors.get(actor);
+        changedActors.put(actor, new ActorLocation(prior.body(), prior.condition().withHealth(FixedScalar.whole(7))));
+        FrontierWorldState injured = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(changedActors));
+
+        org.junit.jupiter.api.Assertions.assertNotEquals(FrontierReadabilityPlan.input(state), FrontierReadabilityPlan.input(injured),
+                "a real actor-condition transition must invalidate the player-facing board cursor");
     }
 
     @Test

@@ -72,6 +72,28 @@ public final class FrontierV3GrayboxCursorGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void worksiteRetirementIndexSurvivesLedgerReloadWithoutScanningStructuralClaims(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        for (int offset = 0; offset < 512; offset++) {
+            BlockPos position = helper.absolutePos(new BlockPos(offset, 8, 4));
+            ledger.applied(position, "structure:static-" + offset, GrayboxMaterial.HALL.name(), GrayboxSemanticPart.FOUNDATION.name());
+        }
+        BlockPos first = helper.absolutePos(new BlockPos(0, 8, 8));
+        BlockPos second = helper.absolutePos(new BlockPos(1, 8, 8));
+        ledger.applied(first, "construction:index-a", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        ledger.applied(second, "construction:index-b", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        FrontierV3GrayboxLedger restored = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
+                        .map(value -> value.position().asLong()).toList(), List.of(first.asLong(), second.asLong()),
+                "only exact retained temporary claims are returned in stable order after restart; unrelated structural provenance is not retirement work");
+        restored.retire(first, "construction:index-a", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).size(), 1,
+                "retiring one owned temporary floor immediately removes it from the bounded index");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void declaredSteppedRouteEnvelopeUsesItsActualTerrainDatums(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos lower = helper.absolutePos(new BlockPos(24, 8, 0));

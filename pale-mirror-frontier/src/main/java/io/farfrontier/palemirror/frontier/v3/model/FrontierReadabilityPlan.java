@@ -48,8 +48,6 @@ public final class FrontierReadabilityPlan {
      */
     public static ReadabilityInput input(FrontierWorldState state) {
         Objects.requireNonNull(state, "readability state");
-        Map<SubjectId, ActorCondition> actorConditions = new LinkedHashMap<>();
-        state.actorLocations().forEach((actor, location) -> actorConditions.put(actor, location.condition()));
         boolean routeDamaged = state.physicalDeltas().values().stream()
                 .anyMatch(delta -> delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
         boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
@@ -58,7 +56,7 @@ public final class FrontierReadabilityPlan {
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
         return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.hiveColony().addedOrgans(), state.physicalDeltas(), state.resourceSites(), state.routeTopology(), state.humanPopulation(),
-                state.companies(), Map.copyOf(actorConditions), routeDamaged, sceneConflict, caravan, construction);
+                state.companies(), new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
     }
 
     /** Immutable equality key for the bounded physical board cursor. */
@@ -67,7 +65,7 @@ public final class FrontierReadabilityPlan {
                                    ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
                                    Map<SubjectId, HiveOrgan> addedOrgans, Map<BlockPosition, PhysicalDelta> physicalDeltas,
                                    ResourceSiteState resourceSites, RouteTopology routeTopology, HumanPopulation humanPopulation,
-                                   CompanyRegistry companies, Map<SubjectId, ActorCondition> actorConditions,
+                                   CompanyRegistry companies, ActorConditionView actorConditions,
                                    boolean routeDamaged, boolean sceneConflict, boolean caravan, RouteConstruction construction) {
         public ReadabilityInput {
             Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(structureConditions, "structure conditions");
@@ -75,7 +73,40 @@ public final class FrontierReadabilityPlan {
             Objects.requireNonNull(productionJobs, "production jobs"); Objects.requireNonNull(addedOrgans, "added organs");
             Objects.requireNonNull(physicalDeltas, "physical deltas"); Objects.requireNonNull(resourceSites, "resource sites");
             Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
-            Objects.requireNonNull(companies, "companies"); actorConditions = Map.copyOf(Objects.requireNonNull(actorConditions, "actor conditions"));
+            Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(actorConditions, "actor conditions");
+        }
+    }
+
+    /**
+     * A board plan needs actor vitality, never a walking body's coordinates.  This view retains
+     * the immutable actor-location map without allocating a second map each tick and compares
+     * only the exact condition values which can change player-facing text.
+     */
+    public static final class ActorConditionView {
+        private final Map<SubjectId, ActorLocation> locations;
+
+        private ActorConditionView(Map<SubjectId, ActorLocation> locations) {
+            this.locations = Objects.requireNonNull(locations, "actor locations");
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof ActorConditionView candidate) || locations.size() != candidate.locations.size()) return false;
+            for (Map.Entry<SubjectId, ActorLocation> entry : locations.entrySet()) {
+                ActorLocation otherLocation = candidate.locations.get(entry.getKey());
+                if (otherLocation == null || !entry.getValue().condition().equals(otherLocation.condition())) return false;
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 0;
+            for (Map.Entry<SubjectId, ActorLocation> entry : locations.entrySet()) {
+                hash += entry.getKey().hashCode() ^ entry.getValue().condition().hashCode();
+            }
+            return hash;
         }
     }
 

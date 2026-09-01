@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -12,6 +13,8 @@ import net.minecraft.world.level.saveddata.SavedData;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
+import java.util.TreeSet;
 
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends SavedData {
@@ -19,9 +22,22 @@ final class FrontierV3GrayboxLedger extends SavedData {
     private static final int FORMAT = 2;
     private static final int MAX_CELLS = 65_536;
     private final Map<Long, Claim> claims;
+    /**
+     * The only claim family that needs ordinary per-tick retirement.  Keeping its bounded
+     * position index beside the durable provenance map prevents a global 65,536-cell scan just
+     * to discover at most 48 temporary work floors.  It is derived from {@link #claims} on
+     * hydration, so it grants no independent materialization authority.
+     */
+    private final NavigableSet<Long> worksiteStagingPositions;
 
     private FrontierV3GrayboxLedger() { this(new HashMap<>()); }
-    private FrontierV3GrayboxLedger(Map<Long, Claim> claims) { this.claims = claims; }
+    private FrontierV3GrayboxLedger(Map<Long, Claim> claims) {
+        this.claims = claims;
+        this.worksiteStagingPositions = new TreeSet<>();
+        claims.forEach((position, claim) -> {
+            if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
+        });
+    }
     static FrontierV3GrayboxLedger get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3GrayboxLedger::new,
                 FrontierV3GrayboxLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
@@ -39,7 +55,10 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (prior != null && !prior.equals(replacement)) {
             throw new IllegalStateException("v3 graybox claim already belongs to another semantic cell");
         }
-        if (prior == null) setDirty();
+        if (prior == null) {
+            index(replacement, position.asLong());
+            setDirty();
+        }
     }
     /** Records a foreign obstruction before any v3 block is placed, so a later pass cannot adopt it. */
     void obstructed(BlockPos position, String owner, String material, String semanticPart) {
@@ -49,7 +68,10 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (prior != null && !prior.equals(blocked)) {
             throw new IllegalStateException("v3 graybox obstruction collides with another semantic cell");
         }
-        if (prior == null) setDirty();
+        if (prior == null) {
+            index(blocked, position.asLong());
+            setDirty();
+        }
     }
     void conflict(BlockPos position) {
         Claim prior = claims.get(position.asLong());
@@ -62,6 +84,9 @@ final class FrontierV3GrayboxLedger extends SavedData {
      * loaded exact expected block before retiring a temporary cell.
      */
     List<ClaimAt> claimsWithSemanticPart(String semanticPart) {
+        if (semanticPart.equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) {
+            return worksiteStagingPositions.stream().map(position -> new ClaimAt(BlockPos.of(position), claims.get(position))).toList();
+        }
         return claims.entrySet().stream().filter(entry -> entry.getValue().semanticPart().equals(semanticPart))
                 .sorted(Map.Entry.comparingByKey()).map(entry -> new ClaimAt(BlockPos.of(entry.getKey()), entry.getValue())).toList();
     }
@@ -72,7 +97,9 @@ final class FrontierV3GrayboxLedger extends SavedData {
                 || !claim.semanticPart().equals(semanticPart)) {
             throw new IllegalStateException("v3 graybox retirement does not match its exact claim");
         }
-        claims.remove(position.asLong()); setDirty();
+        claims.remove(position.asLong());
+        worksiteStagingPositions.remove(position.asLong());
+        setDirty();
     }
     /** Restores an exact previously claimed semantic cell after its separately durable repair receipt. */
     void repaired(BlockPos position, String owner, String material, String semanticPart) {
@@ -93,6 +120,10 @@ final class FrontierV3GrayboxLedger extends SavedData {
                     requireText(entry.getString("part"), "semantic part"), entry.getBoolean("conflict"));
             if (claims.put(position, claim) != null) throw new IllegalStateException("duplicate v3 graybox claim"); }
         return new FrontierV3GrayboxLedger(claims);
+    }
+
+    private void index(Claim claim, long position) {
+        if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
     }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag entries = new ListTag();
