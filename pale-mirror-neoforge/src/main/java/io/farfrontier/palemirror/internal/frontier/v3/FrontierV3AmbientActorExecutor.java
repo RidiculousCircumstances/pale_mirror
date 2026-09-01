@@ -542,7 +542,7 @@ final class FrontierV3AmbientActorExecutor {
                     physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
             return false;
         }
-        FrontierV3ControlledMobMotion.moveToward(level, body, localTarget(state, actorId, lease, level.getGameTime()));
+        FrontierV3ControlledMobMotion.followContinuously(level, body, localTarget(state, actorId, lease, level.getGameTime()));
         return false;
     }
 

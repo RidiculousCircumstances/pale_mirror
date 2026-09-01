@@ -179,6 +179,27 @@ public final class FrontierV3AmbientActorGameTests {
         }));
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void continuousPatrolDoesNotIdleInsideTheNormalArrivalRadius(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos floor = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, floor, 2);
+        Zombie body = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create patrol bioform");
+        body.setPos(floor.getX() + 0.5D, floor.getY(), floor.getZ() + 0.5D); body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the continuous-patrol fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> {
+            // This is deliberately nearer than the ordinary exact-arrival radius. A slow circular
+            // patrol target repeatedly enters that radius; treating it as terminal produced a
+            // visible stop → one fixed step → stop cadence.
+            FrontierV3ControlledMobMotion.followContinuously(level, body,
+                    new Vec3(floor.getX() + 0.65D, floor.getY(), floor.getZ() + 0.5D));
+            helper.runAfterDelay(2L, () -> {
+                helper.assertTrue(body.getX() > floor.getX() + 0.58D,
+                        "a continuous local target inside the exact-arrival radius must still yield a small physical step");
+                body.discard(); helper.succeed();
+            });
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scout-patrol-cursor", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
     public static void hotScoutFollowsItsLeasedCanonicalPatrolStepRatherThanASeparateLocalCircle(GameTestHelper helper) {
         // Keep this footprint inside the stock template's isolated test cell: the full suite

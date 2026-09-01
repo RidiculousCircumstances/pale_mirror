@@ -34,6 +34,19 @@ final class FrontierV3ControlledMobMotion {
     private FrontierV3ControlledMobMotion() { }
 
     static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
+        submit(level, actor, target, false);
+    }
+
+    /**
+     * Follows a continuously moving local target without treating the ordinary arrival radius
+     * as a stop-and-go patrol cadence.  This is presentation-only local motion: it does not
+     * choose a route, change a cursor, or create a second canonical movement authority.
+     */
+    static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
+        submit(level, actor, target, true);
+    }
+
+    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous) {
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -41,13 +54,13 @@ final class FrontierV3ControlledMobMotion {
         actor.getNavigation().stop();
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { stop(actor); return; }
+        if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { stop(actor); return; }
         // A HOT adapter may only follow the next retained pedestrian edge.  Existing callers
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
         if (PENDING.size() < MAX_PENDING_INTENTS || PENDING.containsKey(actor)) {
-            PENDING.put(actor, new MotionIntent(level.getGameTime() + 1L, target));
+            PENDING.put(actor, new MotionIntent(level.getGameTime() + 1L, target, continuous));
         }
     }
 
@@ -58,7 +71,7 @@ final class FrontierV3ControlledMobMotion {
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); return; }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
-        apply(level, actor, intent.target());
+        apply(level, actor, intent.target(), intent.continuous());
     }
 
     static void stop(Mob actor) {
@@ -66,13 +79,13 @@ final class FrontierV3ControlledMobMotion {
         actor.stopInPlace();
     }
 
-    private static void apply(ServerLevel level, Mob actor, Vec3 target) {
+    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous) {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
+        if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE || horizontalDistance <= 1.0E-8D) return;
         double vertical = Math.copySign(Math.min(Math.abs(delta.y), VERTICAL_SPEED), delta.y);
-        double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
+        double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, horizontalDistance);
         Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
         for (Vec3 step : List.of(direct, new Vec3(-direct.z, vertical, direct.x), new Vec3(direct.z, vertical, -direct.x))) {
             Vec3 before = actor.position();
@@ -90,5 +103,5 @@ final class FrontierV3ControlledMobMotion {
         }
     }
 
-    private record MotionIntent(long applyAtGameTime, Vec3 target) { }
+    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous) { }
 }
