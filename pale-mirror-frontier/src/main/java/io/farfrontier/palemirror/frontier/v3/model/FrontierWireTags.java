@@ -51,7 +51,7 @@ public final class FrontierWireTags {
             entry(GrayboxSemanticPart.class,
                     tag(0, GrayboxSemanticPart.FOUNDATION), tag(1, GrayboxSemanticPart.WALL), tag(2, GrayboxSemanticPart.ROOF), tag(3, GrayboxSemanticPart.HIVE_TISSUE),
                     tag(4, GrayboxSemanticPart.ROUTE_SURFACE), tag(5, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), tag(6, GrayboxSemanticPart.INFECTION_SURFACE),
-                    tag(7, GrayboxSemanticPart.WORKSITE_STAGING)),
+                    tag(7, GrayboxSemanticPart.WORKSITE_STAGING), tag(8, GrayboxSemanticPart.ROUTE_FOUNDATION)),
             entry(HiveDoctrine.class,
                     tag(0, HiveDoctrine.CONSOLIDATE), tag(1, HiveDoctrine.EXPAND), tag(2, HiveDoctrine.INTERDICT)),
             entry(HiveGrowthBlockReason.class,

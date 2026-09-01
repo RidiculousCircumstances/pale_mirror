@@ -22,8 +22,9 @@ final class FrontierWorldPhysicalDeltaSupport {
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
             if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) continue;
             if (FrontierRouteNetwork.OWNER.equals(delta.ownerId().orElseThrow())) {
-                if (delta.semanticPart().orElseThrow() != GrayboxSemanticPart.ROUTE_SURFACE) {
-                    throw new IllegalArgumentException("route loss must name a route surface");
+                GrayboxSemanticPart part = delta.semanticPart().orElseThrow();
+                if (part != GrayboxSemanticPart.ROUTE_SURFACE && part != GrayboxSemanticPart.ROUTE_FOUNDATION) {
+                    throw new IllegalArgumentException("route loss must name a route surface or foundation");
                 }
                 continue;
             }
@@ -41,7 +42,7 @@ final class FrontierWorldPhysicalDeltaSupport {
         validateCurrent(state, delta);
         Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas()); next.put(delta.position(), delta);
         FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
-        if (isKnownRouteSurfaceLoss(delta)) {
+        if (isKnownRouteLoss(delta)) {
             RouteTopology topology = changed.routeTopology().blockAffectedSupplyEdges(changed.bootstrap(), delta.position());
             Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
             changed.operations().forEach((operationId, operation) -> operations.put(operationId, operation.blockTravelAt(delta.position())));
@@ -64,10 +65,10 @@ final class FrontierWorldPhysicalDeltaSupport {
         return changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
     }
 
-    private static boolean isKnownRouteSurfaceLoss(PhysicalDelta delta) {
+    private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
                 && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
-                && delta.semanticPart().filter(GrayboxSemanticPart.ROUTE_SURFACE::equals).isPresent();
+                && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
 
     private static boolean isKnownWorksiteStagingLoss(PhysicalDelta delta) {

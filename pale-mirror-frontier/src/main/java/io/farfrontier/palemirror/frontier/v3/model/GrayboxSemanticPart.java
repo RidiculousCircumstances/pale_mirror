@@ -7,6 +7,8 @@ public enum GrayboxSemanticPart {
     ROOF,
     HIVE_TISSUE,
     ROUTE_SURFACE,
+    /** Load-bearing graybox fill below a surveyed raised route surface. */
+    ROUTE_FOUNDATION,
     PUBLIC_ACCESS_SURFACE,
     INFECTION_SURFACE,
     /**

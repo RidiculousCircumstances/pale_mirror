@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.api.FoundryAuditPhase;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
@@ -29,6 +31,18 @@ class FrontierV3TraversalFoundryAuditTest {
         assertTrue(metric(report, "frontier.traversal.edges") > 0D);
         assertEquals(0D, metric(report, "frontier.traversal.missing_support"));
         assertEquals(0D, metric(report, "frontier.port.disconnected"));
+    }
+
+    @Test void compiledSurveyedRampHasOwnedFootingsWithoutPlayerScaffolding() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:foundry-surveyed-ramp"), 41L).initialState();
+
+        var report = FrontierV3TraversalFoundryAudit.auditCompiled(state);
+
+        assertTrue(report.passed(), report::summary);
+        assertEquals(0D, metric(report, "frontier.traversal.missing_support"));
+        assertTrue(FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .anyMatch(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_FOUNDATION),
+                "the compiled Foundry plan owns the raised route footing rather than awaiting a player block");
     }
 
     @Test void runtimeSupportPendingIsOnlyFreshAirWithoutAnyOwnershipClaim() {

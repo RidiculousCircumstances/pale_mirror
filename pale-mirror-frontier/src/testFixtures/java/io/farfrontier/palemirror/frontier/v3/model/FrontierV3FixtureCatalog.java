@@ -210,10 +210,9 @@ public final class FrontierV3FixtureCatalog {
     }
 
     /**
-     * Test-only surveyed rise on Northwatch's normal supply corridor.  It changes no runtime
-     * provider and does not manufacture terrain: the native pilot must place the four ordinary
-     * support blocks (including the one block required to build the high support) before the
-     * existing graybox executor may project the three raised route cells.
+     * Test-only surveyed rise on Northwatch's normal supply corridor. The immutable terrain
+     * provider remains a datum at y=63; the ordinary graybox plan owns the exact gray-concrete
+     * ramp fill beneath every raised route carpet. The fixture itself writes no Minecraft block.
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> steppedRouteConfiguration(WorldId worldId, long seed) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);

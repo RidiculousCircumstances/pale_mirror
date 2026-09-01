@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 97; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 98; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -24,6 +24,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC); output.writeByte(VERSION);
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
+                TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeStructureDamage(output, state.structureDamage());
@@ -56,8 +57,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int version = input.readUnsignedByte();
             if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state requires a fresh current-schema world");
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
-            FrontierRuleset ruleset = readRuleset(input);
-            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset);
+            FrontierRuleset ruleset = readRuleset(input); TerrainSurfacePlan terrain = TerrainSurfacePlanCodec.read(input);
+            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain);
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
@@ -82,16 +83,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
-    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset) {
-        if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed, ruleset);
-        if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed || !pinnedBootstrap.ruleset().equals(ruleset)) {
+    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
+        if (pinnedBootstrap == null) return FrontierBootstrapper.create(worldId, seed, ruleset, terrain);
+        if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed || !pinnedBootstrap.ruleset().equals(ruleset)
+                || !pinnedBootstrap.terrain().equals(terrain)) {
             throw new IllegalArgumentException("Frontier v3 state belongs to a different pinned bootstrap");
         }
         return pinnedBootstrap;
     }
     private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
         if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed()
-                || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()))) {
+                || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()) || !pinnedBootstrap.terrain().equals(bootstrap.terrain()))) {
             throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
         }
     }

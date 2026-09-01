@@ -179,6 +179,7 @@ final class FrontierV3GrayboxExecutor {
             // stays plainly visible in graybox; exact Transit bodies use the compiler's adjacent
             // clear lane, so forced HOT motion never treats the route block as pass-through air.
             case ROUTE -> Blocks.GRAY_CARPET.defaultBlockState();
+            case ROUTE_FOUNDATION -> Blocks.GRAY_CONCRETE.defaultBlockState();
             // A full visible pad is intentional: it gives the exact crew a real floor before
             // any route cell exists, and its distinct cyan makes temporary work easy to read.
             case WORKSITE -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
@@ -214,7 +215,7 @@ final class FrontierV3GrayboxExecutor {
     }
 
     private static boolean requiresSupport(GrayboxSemanticPart part) {
-        return part == GrayboxSemanticPart.FOUNDATION || part == GrayboxSemanticPart.ROUTE_SURFACE
+        return part == GrayboxSemanticPart.FOUNDATION || part == GrayboxSemanticPart.ROUTE_FOUNDATION || part == GrayboxSemanticPart.ROUTE_SURFACE
                 || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || part == GrayboxSemanticPart.WORKSITE_STAGING;
     }
     private static boolean matches(FrontierV3GrayboxLedger.Claim claim, GrayboxCell cell) {

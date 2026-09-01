@@ -99,6 +99,32 @@ public final class FrontierRouteNetwork {
         return Set.copyOf(cells);
     }
 
+    /**
+     * Provider-owned graybox fill below elevated route cells. The terrain survey is immutable
+     * bootstrap input: this compiler never probes a loaded height-map or asks Minecraft to
+     * excavate a slope. A surface at/below its surveyed datum is impossible without an explicit
+     * future earthworks provider and therefore fails closed here.
+     */
+    public static Set<BlockPosition> foundationCells(FrontierBootstrap bootstrap, RouteTopology topology) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
+        Set<BlockPosition> surfaces = surfaceCells(bootstrap, topology);
+        Set<BlockPosition> foundations = new LinkedHashSet<>();
+        for (BlockPosition surface : surfaces) {
+            int terrain = bootstrap.terrain().supportYAt(surface.x(), surface.z());
+            if (terrain >= surface.y()) {
+                throw new IllegalArgumentException("route surface is not above its immutable terrain support at " + surface);
+            }
+            for (int y = terrain + 1; y < surface.y(); y++) {
+                BlockPosition footing = new BlockPosition(surface.x(), y, surface.z());
+                // A lower declared route deck can be the physical support at a compact graded
+                // junction. It keeps its own surface provenance; do not fabricate a second
+                // semantic owner for the same block.
+                if (!surfaces.contains(footing)) foundations.add(footing);
+            }
+        }
+        return Set.copyOf(foundations);
+    }
+
     /** True when a canonical floor cell is occupied by the one-block visible route surface. */
     public static boolean isSurfaceCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
@@ -170,7 +196,7 @@ public final class FrontierRouteNetwork {
         for (TraversalTopology.Edge edge : topology.edges()) {
             BlockPosition from = topology.nodes().get(edge.from()).support();
             BlockPosition to = topology.nodes().get(edge.to()).support();
-            if (onCarriagewaySegment(physicalSurface, from, to)) affected.add(edge.id());
+            if (onCarriagewaySegment(physicalSurface, from, to) || onCarriagewayColumn(physicalSurface, from, to)) affected.add(edge.id());
         }
         return Set.copyOf(affected);
     }
@@ -246,6 +272,12 @@ public final class FrontierRouteNetwork {
                 || onSegment(position, from.offset(1, 0, 0), to.offset(1, 0, 0)))
                 || from.z() == to.z() && (onSegment(position, from.offset(0, 0, -1), to.offset(0, 0, -1))
                 || onSegment(position, from.offset(0, 0, 1), to.offset(0, 0, 1)));
+    }
+
+    /** A confirmed foundation loss is support evidence for the same elevated carriageway, not a second path. */
+    private static boolean onCarriagewayColumn(BlockPosition position, BlockPosition from, BlockPosition to) {
+        return onCarriagewaySegment(new BlockPosition(position.x(), from.y(), position.z()), from, to)
+                || onCarriagewaySegment(new BlockPosition(position.x(), to.y(), position.z()), from, to);
     }
 
     private static void addSegment(Set<BlockPosition> cells, BlockPosition from, BlockPosition to) {

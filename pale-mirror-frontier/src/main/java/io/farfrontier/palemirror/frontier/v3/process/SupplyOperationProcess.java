@@ -240,9 +240,9 @@ public final class SupplyOperationProcess {
         return state.physicalDeltas().values().stream()
                 .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
                 .filter(delta -> delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent())
-                .filter(delta -> delta.semanticPart().filter(GrayboxSemanticPart.ROUTE_SURFACE::equals).isPresent())
+                .filter(delta -> delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
+                        || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent())
                 .map(PhysicalDelta::position)
-                .filter(position -> FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), position))
                 .filter(position -> !state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId()))
                 .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
                 .findFirst();

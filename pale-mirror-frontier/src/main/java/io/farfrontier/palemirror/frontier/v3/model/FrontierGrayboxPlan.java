@@ -242,8 +242,13 @@ public final class FrontierGrayboxPlan {
         for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(organ, position);
         HiveOrgan added = colony.addedOrgans().get(owner);
         if (added != null) return intactOrganCell(added, position);
-        if (FrontierRouteNetwork.OWNER.equals(owner) && FrontierRouteNetwork.surfaceCells(bootstrap, topology).contains(position)) {
-            return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        if (FrontierRouteNetwork.OWNER.equals(owner)) {
+            if (FrontierRouteNetwork.surfaceCells(bootstrap, topology).contains(position)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+            }
+            if (FrontierRouteNetwork.foundationCells(bootstrap, topology).contains(position)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+            }
         }
         RouteConstruction project = constructions.get(owner);
         if (project != null && EngineeringWorksite.intactStagingCells(bootstrap, topology, project).contains(position)) {
@@ -335,6 +340,8 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
+        FrontierRouteNetwork.foundationCells(bootstrap, topology).forEach(position ->
+                add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION));
         FrontierRouteNetwork.surfaceCells(bootstrap, topology).forEach(position -> {
             GrayboxCell existing = cells.get(position);
             // A Hall's declared sill is the one intentional seam where the public carriageway

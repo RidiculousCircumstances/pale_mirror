@@ -22,7 +22,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
-        if (isKnownRouteSurfaceLoss(observed.delta())) {
+        if (isKnownRouteLoss(observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), observed.delta().position(), "loss", Math.addExact(submittedAt, 1L));
@@ -39,9 +39,9 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.recordPhysicalDelta(observed.delta());
     }
 
-    private static boolean isKnownRouteSurfaceLoss(PhysicalDelta delta) {
+    private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
-                && delta.semanticPart().filter(GrayboxSemanticPart.ROUTE_SURFACE::equals).isPresent();
+                && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
 
     static CommandPlan planResourceDeposit(FrontierWorldState state, ResourceDeposited deposited) {

@@ -77,19 +77,22 @@ public final class FrontierV3GrayboxCursorGameTests {
         BlockPos lower = helper.absolutePos(new BlockPos(24, 8, 0));
         BlockPos upper = lower.east();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        GrayboxCell lowerSurface = routeSurface(lower), upperSurface = routeSurface(upper.above());
+        GrayboxCell lowerSurface = routeSurface(lower), upperFoundation = routeFoundation(upper), upperSurface = routeSurface(upper.above());
 
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperSurface), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
                 "a declared raised datum never floats merely because the route compiler contains a grade");
         level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(upper, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(upper.below(), Blocks.STONE.defaultBlockState(), 3);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, lowerSurface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the lower declared terrain datum materializes its route surface");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperFoundation), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the provider-owned graybox footing materializes before the raised deck");
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperSurface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the adjacent raised declared terrain datum materializes the same owned route");
-        helper.assertTrue(level.getBlockState(lower).is(Blocks.GRAY_CARPET) && level.getBlockState(upper.above()).is(Blocks.GRAY_CARPET)
-                        && ledger.claim(lower) != null && ledger.claim(upper.above()) != null,
-                "one physical stepped corridor retains route provenance at both real terrain levels");
+        helper.assertTrue(level.getBlockState(lower).is(Blocks.GRAY_CARPET) && level.getBlockState(upper).is(Blocks.GRAY_CONCRETE)
+                        && level.getBlockState(upper.above()).is(Blocks.GRAY_CARPET) && ledger.claim(lower) != null
+                        && ledger.claim(upper) != null && ledger.claim(upper.above()) != null,
+                "one physical stepped corridor retains exact visible deck and footing provenance at both terrain levels");
         helper.succeed();
     }
 
@@ -100,5 +103,10 @@ public final class FrontierV3GrayboxCursorGameTests {
     private static GrayboxCell routeSurface(BlockPos position) {
         return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
                 new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+    }
+
+    private static GrayboxCell routeFoundation(BlockPos position) {
+        return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
+                new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
     }
 }

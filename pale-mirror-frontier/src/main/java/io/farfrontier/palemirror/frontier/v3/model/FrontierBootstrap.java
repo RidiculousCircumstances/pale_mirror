@@ -12,9 +12,13 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Immutable, fresh-world-only v3 bootstrap manifest. */
-public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset) {
+public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset,
+                                TerrainSurfacePlan terrain) {
     public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive) {
-        this(worldId, seed, bounds, settlements, hive, FrontierRulesets.production());
+        this(worldId, seed, bounds, settlements, hive, FrontierRulesets.production(), TerrainSurfacePlan.uniform(63));
+    }
+    public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset) {
+        this(worldId, seed, bounds, settlements, hive, ruleset, TerrainSurfacePlan.uniform(63));
     }
     public FrontierBootstrap {
         Objects.requireNonNull(worldId, "world id");
@@ -22,6 +26,7 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         settlements = List.copyOf(settlements);
         Objects.requireNonNull(hive, "hive");
         ruleset = Objects.requireNonNull(ruleset, "ruleset");
+        terrain = Objects.requireNonNull(terrain, "terrain surface plan");
         if (bounds.width() != 1024 || bounds.depth() != 1024) throw new IllegalArgumentException("Frontier v3 bootstrap is exactly 1024 by 1024 blocks");
         if (settlements.size() != 12) throw new IllegalArgumentException("Frontier v3 bootstrap requires exactly 12 settlements");
         Set<SubjectId> ids = new HashSet<>();
@@ -35,6 +40,9 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         hive.seedNests().forEach(nest -> { add(ids, nest.id()); require(bounds, nest.anchor()); });
         hive.organs().forEach(organ -> { add(ids, organ.id()); require(bounds, organ.anchor()); });
         hive.bioforms().forEach(bioform -> { add(ids, bioform.id()); require(bounds, bioform.position()); });
+        TerrainSurfacePlan surfacePlan = terrain;
+        surfacePlan.surveyedSupportY().keySet().forEach(column -> require(bounds,
+                new BlockPosition(column.x(), surfacePlan.baselineSupportY(), column.z())));
     }
 
     public int residentCount() { return settlements.stream().mapToInt(settlement -> settlement.residents().size()).sum(); }
@@ -53,7 +61,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
     private String canonicalText() {
         StringBuilder text = new StringBuilder(worldId.value()).append('|').append(seed).append('|')
                 .append(bounds.minX()).append(',').append(bounds.minZ()).append(',').append(bounds.width()).append(',').append(bounds.depth())
-                .append('|').append(ruleset.id()).append(':').append(ruleset.schemaVersion()).append(':').append(ruleset.contentSha256());
+                .append('|').append(ruleset.id()).append(':').append(ruleset.schemaVersion()).append(':').append(ruleset.contentSha256())
+                .append('|').append(terrain.canonicalText());
         for (Settlement settlement : settlements) {
             append(text, settlement.id(), settlement.anchor());
             text.append('|').append(settlement.displayName());

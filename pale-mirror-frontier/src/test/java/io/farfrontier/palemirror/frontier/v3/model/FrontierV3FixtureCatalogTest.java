@@ -69,14 +69,17 @@ class FrontierV3FixtureCatalogTest {
     }
 
     @Test
-    void steppedRouteFixtureDeclaresButDoesNotMaterializeOneBoundedTwoBlockRise() {
+    void steppedRouteFixtureCompilesOneBoundedTwoBlockRiseAndItsProviderOwnedFootings() {
         FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:stepped-route-fixture"), 41L).initialState();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
         TraversalTopology topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
 
         assertEquals(4L, topology.edges().stream().filter(edge -> edge.grade() == 1).count());
         assertEquals(1, topology.edges().stream().mapToInt(TraversalTopology.Edge::grade).max().orElseThrow());
-        assertTrue(state.physicalDeltas().isEmpty(), "the fixture declares surveyed geometry but cannot pre-place a Minecraft support or surface");
+        assertTrue(state.physicalDeltas().isEmpty(), "the fixture declares geometry but cannot pre-place a Minecraft support or surface");
+        assertTrue(!FrontierRouteNetwork.foundationCells(state.bootstrap(), state.routeTopology()).isEmpty(),
+                "the immutable provider compiles the real ramp footing rather than requiring pilot scaffolding");
+        assertTrue(FrontierGrayboxPlan.compile(state).cells().values().stream().anyMatch(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_FOUNDATION));
     }
 
     @Test

@@ -120,10 +120,14 @@ new movement-bearing scene or transport family is added, close
    cases. A disposable player scenario must show the same actor/route cursor
    before and after HOT/COLD/restart without force-loading.
 
-T0.3 is active: supply routes, active `OperationTravel` cursors and each active
-`OperationAssembly` member retain their own persisted topology. Current snapshot schema 97
-and persistence-envelope v6 retain typed `BodyPosition` formation cells,
-`TransportAnchor` and assembly `SurfaceAnchor` routes.
+T0.3 now owns a bounded immutable terrain-provider contract: supply routes, active
+`OperationTravel` cursors and each active `OperationAssembly` member retain their own persisted topology,
+while the bootstrap retains a baseline plus sparse surveyed support columns. Current snapshot schema 98
+and persistence-envelope v7 retain typed `BodyPosition` formation cells, `TransportAnchor`, assembly
+`SurfaceAnchor` routes and the exact terrain survey. Raised surfaces compile provider-owned footing/deck
+cells from that survey; player scaffolding is not part of a valid route and foundation loss blocks the
+same retained edge. The present provider deliberately does not excavate or synthesize a facility terrace:
+support at or above a declared deck fails closed until an explicit earthworks/bridge provider exists.
 Any other snapshot or WAL envelope is rejected fail-closed; v3 worlds are
 disposable and recreated for a new format. This is deliberately not T0.4
 completion: observed edge damage and its physical restart proof remain separate

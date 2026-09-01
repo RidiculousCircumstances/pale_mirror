@@ -31,7 +31,13 @@ public final class FrontierBootstrapper {
 
     /** Creates a fresh world from an explicitly selected immutable balance contract. */
     public static FrontierBootstrap create(WorldId worldId, long seed, FrontierRuleset ruleset) {
+        return create(worldId, seed, ruleset, TerrainSurfacePlan.uniform(63));
+    }
+
+    /** Creates a fresh world from explicitly surveyed immutable support data. */
+    public static FrontierBootstrap create(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
         java.util.Objects.requireNonNull(ruleset, "ruleset");
+        java.util.Objects.requireNonNull(terrain, "terrain surface plan");
         List<Settlement> settlements = new ArrayList<>(12);
         for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index));
         SubjectId hiveId = new SubjectId("hive:frontier");
@@ -58,7 +64,7 @@ public final class FrontierBootstrapper {
                         nest.id(), role, placements.get(ordinal)));
             }
         }
-        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms), ruleset);
+        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms), ruleset, terrain);
     }
 
     private static Settlement settlement(long seed, int index) {

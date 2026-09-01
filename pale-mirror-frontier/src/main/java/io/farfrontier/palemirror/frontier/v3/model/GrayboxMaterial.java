@@ -12,6 +12,7 @@ public enum GrayboxMaterial {
     HIVE_BROOD,
     HIVE_STORE,
     ROUTE,
+    ROUTE_FOUNDATION,
     WORKSITE,
     INFECTION;
 
@@ -27,7 +28,7 @@ public enum GrayboxMaterial {
             case HIVE_HEART -> "minecraft:red_concrete";
             case HIVE_BROOD -> "minecraft:purple_concrete";
             case HIVE_STORE -> "minecraft:magenta_concrete";
-            case ROUTE -> "minecraft:gray_concrete";
+            case ROUTE, ROUTE_FOUNDATION -> "minecraft:gray_concrete";
             case WORKSITE, INFECTION -> throw new IllegalArgumentException("temporary/overlay geometry is not a structural repair material");
         };
     }
