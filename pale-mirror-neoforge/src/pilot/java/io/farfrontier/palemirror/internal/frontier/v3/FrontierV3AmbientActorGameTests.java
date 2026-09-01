@@ -103,6 +103,37 @@ public final class FrontierV3AmbientActorGameTests {
         body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void unindexedManagedJoinDefersAdmissionUntilItsExactUuidIsPublished(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-unindexed-join-game-test"), 91L), new EphemeralStore(), 10_000);
+        SubjectId resident = new SubjectId("resident:1-1");
+        FrontierWorldState before = state(runtime);
+        FrontierV3CommandSubmission.submit(runtime, "ambient-unindexed-prepare", resident.value(),
+                new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, resident, runtime.checkpointImage().orElseThrow().instant())));
+        FrontierWorldState prepared = state(runtime);
+        Villager joining = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (joining == null) throw new IllegalStateException("game test could not create resident body");
+        joining.setUUID(FrontierV3AmbientActorExecutor.entityId(prepared, resident));
+        BlockPos observed = helper.absolutePos(new BlockPos(2, 8, 0)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
+        joining.setNoAi(true); joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
+        joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.observeJoin(runtime, joining),
+                "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
+        FrontierV3AmbientActorExecutor.AdmissionDiagnostic diagnostic = FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident);
+        helper.assertValueEqual(diagnostic.status(), "PENDING_UNINDEXED",
+                "the diagnostic must expose the pre-index bridge instead of claiming the actor is ready");
+        helper.assertTrue(diagnostic.pending(), "the exact body must retain the bounded pending identity bridge");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, prepared, resident, prepared.actorLocations().get(resident).body()),
+                FrontierV3AmbientActorExecutor.Result.PENDING,
+                "a pending exact UUID must defer admission rather than create a second managed body");
+        joining.discard(); FrontierV3AmbientActorExecutor.tick(level, runtime);
+        helper.assertFalse(FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident).pending(),
+                "a discarded candidate must release only its volatile bridge and allow normal later admission");
+        FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-restart-absence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void loadedAbsentHotBodyBecomesAVisibleFreshAdmissionAfterRestartRecovery(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
