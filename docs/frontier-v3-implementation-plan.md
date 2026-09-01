@@ -151,6 +151,19 @@ means domain and scene code can no longer tell that the provider is flat, and
 Foundry can audit compiled port connectivity, two-body clearance, supported
 surface and permitted grade at `COMPILED`, `SETTLED` and `RELOADED` phases.
 
+## Route-maintenance closure gate
+
+Before another route or transport scene, close `V3-AUD-022` according to
+[`frontier-v3-route-maintenance-contract.md`](frontier-v3-route-maintenance-contract.md).
+The operation is a distinct exact owner: it carries one observed route-loss
+cell through source pickup, retained cargo, the existing bounded engineering
+worksite protocol and an observed physical repair receipt. It may reopen only
+the exact affected retained traversal edges after the final competing loss has
+gone. It may not force-load, substitute generic structural repair, turn a
+player road into topology, or perform a bypass cutover. Exit evidence is the
+normal/conflict/restart matrix plus the native player break -> repair ->
+same-edge recovery scenario defined by that contract.
+
 ## Target dependency graph
 
 ```text
