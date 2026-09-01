@@ -74,7 +74,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-016 | CLOSED | Versioned strategic hydration recognizes the pre-assault r41 ordinal layout only from its unambiguous raw field-target evidence, uses explicit objective/task maps and retains the normal schema-78/79 assault layout otherwise. An old-byte regression and full critical gate pass; the same deployed r41 snapshot and WAL replayed on SHA-512 `61e5d3c0…c71c1d0`, reached `Frontier v3 runtime started`, and remained healthy on port 25565. |
 | V3-AUD-017 | CLOSED | `RoutePatrol` and `RouteOperation` now solely own one immutable exact `RouteUnitManifest`, with stable explicit duty tags and no global roster. New patrols retain one leader plus one to three scouts; new cargo operations retain one logistic crew member plus two to four separately named escorts. Schema-82 snapshot and historical WAL patrol bytes decode only to explicit understrength legacy manifests, never a fabricated replacement. Focused admission, assignment, COLD formation, death/loss and byte-recovery tests pass. Native HOT cargo and route-return scenarios prove the exact named three-person caravan before and after ordinary unload/reload. |
 | V3-AUD-018 | CLOSED | `AmbientLeaseRestartAbsenceObserved` is the sole typed evidence for a naturally loaded exact hand-off column that lacks its expected UUID after restart. It validates UNKNOWN status plus exact canonical/lease position, closes only that physical lease and never infers death or moves the actor; the ordinary next demand prepares the same deterministic UUID. Pure normal/forged evidence tests and the 29/29 HOT/COLD GameTest slice pass. |
-| V3-AUD-019 | IN PROGRESS | T0.1/T0.2 have a first medical-scene implementation: typed support/body values, a semantic oriented infirmary port, an immutable grade-checked path and observed HOT cursor. The focused pure/Scene tests and the native medical HOT/COLD/restart scenario pass. The debt remains open until all movement owners retain persisted topology edges/cursors, blocked/damaged evidence and the rail-grade/Foundry evidence close T0.3–T0.5. |
+| V3-AUD-019 | IN PROGRESS | T0.1/T0.2 have a first medical-scene implementation, and T0.3 now compiles each persisted supply-route owner into one immutable bounded ground topology with stable nodes/edges, grade, clearance, provenance, revision and explicit availability/capabilities. The focused pure tests pass. The debt remains open until operation/migration/assembly cursors retain those topology edges, loaded blocked/damaged evidence can alter availability, and the rail-grade/Foundry evidence closes T0.4–T0.5. |
 
 ## Findings and required corrections
 
@@ -120,6 +120,16 @@ does now run before every registered behavior, preventing historical lease tags
 from leaking from the medical path into another scene family; the terminal
 diagnostic reports such a released historical lease as `CLOSED`, not a false
 duplicate-UUID conflict. The remaining exit gates above are mandatory.
+
+The first T0.3 owner is the persisted `RouteTopology`: its declared supply
+waypoints compile deterministically into one bounded `TraversalTopology` of
+typed support nodes and directed pedestrian edges. Each edge retains its
+ground/rail capability separation, exact grade and two-body clearance, named
+route provenance, content revision and explicit availability. This compiler is
+not an adapter pathfinder and never reads Minecraft. It is deliberately only a
+foundation until `OperationTravel`, migration and assembly retain the same
+edge/cursor instead of their historical `BlockPosition` lists; no caller may
+claim a new rail route or runtime replan from this partial implementation.
 
 ### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
 

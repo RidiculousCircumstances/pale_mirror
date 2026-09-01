@@ -340,7 +340,7 @@ critical_flows:
     owner: "future registered NeoForge Create facility/rail provider; pure Frontier v3 retains facilities, items, routes, operations and outcomes"
     verification: "critical-code"
   - id: "frontier-v3-terrain-aware-movement"
-    lifecycle: "planned-foundation"
+    lifecycle: "active-development"
     path: "immutable surveyed/compiled surface plan -> typed facility ports plus bounded 3D capability topology -> canonical retained route and cursor -> COLD edge advance or naturally loaded HOT movement provider -> observed arrival, obstruction or damage -> atomic cursor/availability transition -> deterministic replan, engineering task or visible block; the flat graybox and later real-terrain/Create providers consume the same contract"
     owner: "pure Frontier v3 traversal/port topology and canonical route owners; registered NeoForge movement and terrain/rail physical providers"
     verification: "critical-code"

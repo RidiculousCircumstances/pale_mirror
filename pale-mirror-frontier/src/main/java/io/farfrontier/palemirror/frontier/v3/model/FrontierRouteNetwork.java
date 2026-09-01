@@ -145,6 +145,25 @@ public final class FrontierRouteNetwork {
         return operationSurfaceCells(waypoints).contains(position);
     }
 
+    /**
+     * Expands declared axis-aligned waypoints into their one ordered semantic surface path.
+     * This is immutable plan compilation, not a runtime Minecraft heightmap or navigation scan.
+     */
+    public static List<BlockPosition> expandWaypoints(List<BlockPosition> waypoints) {
+        Objects.requireNonNull(waypoints, "route waypoints");
+        if (waypoints.size() < 2) throw new IllegalArgumentException("route needs at least two waypoints");
+        List<BlockPosition> expanded = new ArrayList<>();
+        for (int index = 1; index < waypoints.size(); index++) {
+            List<BlockPosition> segment = new ArrayList<>();
+            addSegment(segment, Objects.requireNonNull(waypoints.get(index - 1), "route waypoint"),
+                    Objects.requireNonNull(waypoints.get(index), "route waypoint"));
+            if (!expanded.isEmpty()) segment.removeFirst();
+            expanded.addAll(segment);
+            if (expanded.size() > TraversalTopology.MAX_NODES) throw new IllegalArgumentException("expanded route exceeds traversal topology bound");
+        }
+        return List.copyOf(expanded);
+    }
+
     /** First physical delta on the segment a COLD patrol has just traversed, in stable block order. */
     public static java.util.Optional<BlockPosition> firstObstructionOnSegment(List<BlockPosition> waypoints, int fromWaypointIndex,
                                                                         Map<BlockPosition, PhysicalDelta> deltas) {

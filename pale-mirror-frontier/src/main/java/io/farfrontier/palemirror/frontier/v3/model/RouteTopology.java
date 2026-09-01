@@ -36,10 +36,35 @@ public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementSuppl
         return replacementSupplyRoutes.getOrDefault(settlementId, FrontierRouteNetwork.supplyWaypoints(bootstrap, settlementId));
     }
 
+    /**
+     * The sole compiled ground topology for this settlement's declared supply route.
+     *
+     * <p>Persisted replacement waypoints remain the authority; this deterministic expansion
+     * supplies stable nodes, edges, capabilities and a content revision without asking a
+     * Minecraft navigator to discover a path. Rail is intentionally absent from this graph.</p>
+     */
+    public TraversalTopology supplyTraversalTopology(FrontierBootstrap bootstrap, SubjectId settlementId) {
+        List<BlockPosition> expanded = FrontierRouteNetwork.expandWaypoints(supplyWaypoints(bootstrap, settlementId));
+        return TraversalTopology.corridor(new TraversalTopologyId("topology:route:" + settlementId.value()), contentRevision(expanded),
+                FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN,
+                java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
+                expanded.stream().map(SurfaceAnchor::new).toList());
+    }
+
     /** A caller must already have constructed every physical replacement cell before acceptance. */
     public RouteTopology replaceSupplyRoute(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
         FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlementId, route);
         Map<SubjectId, List<BlockPosition>> next = new LinkedHashMap<>(replacementSupplyRoutes); next.put(settlementId, List.copyOf(route));
         return new RouteTopology(next);
     }
+
+    private static long contentRevision(List<BlockPosition> positions) {
+        long hash = 0xcbf29ce484222325L;
+        for (BlockPosition position : positions) {
+            hash = mix(hash, position.x()); hash = mix(hash, position.y()); hash = mix(hash, position.z());
+        }
+        return hash & Long.MAX_VALUE;
+    }
+
+    private static long mix(long current, int value) { return (current ^ Integer.toUnsignedLong(value)) * 0x100000001b3L; }
 }
