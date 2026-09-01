@@ -46,7 +46,7 @@ final class FrontierV3CargoCarrierExecutor {
         }
         BlockPos candidate = spawnCandidate(lease);
         if (!level.hasChunkAt(candidate)) return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
-        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, candidate);
+        BlockPos position = FrontierV3StandingPosition.aboveExactFloor(level, candidate);
         if (position == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         MinecartChest cart = EntityType.CHEST_MINECART.create(level);
         if (cart == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 cargo carrier");
@@ -70,10 +70,30 @@ final class FrontierV3CargoCarrierExecutor {
         Entity entity = carrier(level, lease);
         if (!owned(entity, lease, items(state, cargo))) return false;
         MinecartChest cart = (MinecartChest) entity;
-        Vec3 target = new Vec3(destination.x() + 0.5D, cart.getY(), destination.z() + 0.5D);
-        Vec3 delta = target.subtract(cart.position()); double distance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        BlockPos standing = FrontierV3StandingPosition.aboveExactFloor(level, destination);
+        if (standing == null) return false;
+        Vec3 target = new Vec3(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
+        Vec3 delta = target.subtract(cart.position()); double distance = delta.length();
         if (distance <= ARRIVAL_DISTANCE) return true;
-        Vec3 step = new Vec3(delta.x / distance * SPEED, 0.0D, delta.z / distance * SPEED);
+        double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        // The current graybox carrier is deliberately a no-gravity visual vehicle, not a
+        // vanilla rail-cart physics replacement.  A retained one-block graded edge therefore
+        // uses its declared destination datum: rise before crossing an uphill support face,
+        // cross before descending, and never flatten the stored Y.  Collision remains the
+        // world authority for each bounded physical move.
+        Vec3 step;
+        // Do not use the general arrival tolerance before the uphill horizontal crossing:
+        // a minecart's collision box still intersects the raised support until its base reaches
+        // the exact destination datum.
+        if (delta.y > 1.0E-6D) {
+            step = new Vec3(0.0D, Math.min(SPEED, delta.y), 0.0D);
+        } else if (delta.y < -ARRIVAL_DISTANCE && horizontalDistance <= ARRIVAL_DISTANCE) {
+            step = new Vec3(0.0D, -Math.min(SPEED, -delta.y), 0.0D);
+        } else if (horizontalDistance > 1.0E-8D) {
+            step = new Vec3(delta.x / horizontalDistance * SPEED, 0.0D, delta.z / horizontalDistance * SPEED);
+        } else {
+            step = new Vec3(0.0D, Math.copySign(Math.min(SPEED, Math.abs(delta.y)), delta.y), 0.0D);
+        }
         if (!level.noCollision(cart, cart.getBoundingBox().move(step))) return true;
         cart.move(MoverType.SELF, step); cart.setDeltaMovement(Vec3.ZERO);
         return true;
@@ -83,8 +103,10 @@ final class FrontierV3CargoCarrierExecutor {
         CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         Entity entity = carrier(level, lease);
         if (cargo == null || !owned(entity, lease, items(state, cargo))) return false;
-        Vec3 delta = entity.position().subtract(destination.x() + 0.5D, entity.getY(), destination.z() + 0.5D);
-        return delta.x * delta.x + delta.z * delta.z <= ARRIVAL_DISTANCE * ARRIVAL_DISTANCE;
+        BlockPos standing = FrontierV3StandingPosition.aboveExactFloor(level, destination);
+        if (standing == null) return false;
+        Vec3 delta = entity.position().subtract(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
+        return delta.lengthSqr() <= ARRIVAL_DISTANCE * ARRIVAL_DISTANCE;
     }
 
     static boolean intact(ServerLevel level, FrontierWorldState state, SceneLease lease) {
@@ -101,7 +123,7 @@ final class FrontierV3CargoCarrierExecutor {
         if (existing != null) return owned(existing, lease, items) ? Readiness.CURRENT : Readiness.CONFLICT;
         BlockPos candidate = spawnCandidate(lease);
         if (!level.hasChunkAt(candidate)) return Readiness.UNLOADED;
-        return FrontierV3StandingPosition.aboveFloor(level, candidate) == null ? Readiness.BLOCKED : Readiness.READY;
+        return FrontierV3StandingPosition.aboveExactFloor(level, candidate) == null ? Readiness.BLOCKED : Readiness.READY;
     }
 
     static void discardClosed(ServerLevel level, FrontierWorldState state, SceneLease lease) {

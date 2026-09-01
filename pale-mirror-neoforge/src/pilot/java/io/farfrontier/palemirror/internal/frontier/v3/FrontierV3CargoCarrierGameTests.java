@@ -56,7 +56,7 @@ public final class FrontierV3CargoCarrierGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-test");
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         var expected = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().stream().map(state.inventory().items()::get)
                 .sorted(java.util.Comparator.comparing(value -> value.id())).toList();
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
@@ -85,7 +85,7 @@ public final class FrontierV3CargoCarrierGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-deck-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-deck-test");
-        BlockPos deck = cargoPosition(origin, lease); prepareFloor(level, deck); level.setBlock(deck, Blocks.GRAY_CARPET.defaultBlockState(), 3);
+        BlockPos deck = cargoPosition(origin, lease); prepareSupport(level, deck); level.setBlock(deck, Blocks.GRAY_CARPET.defaultBlockState(), 3);
 
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded thin route surface may occupy strategic hand-off height without blocking the exact cargo carrier");
@@ -102,11 +102,36 @@ public final class FrontierV3CargoCarrierGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void cargoCarrierFollowsTheExactRaisedTransportSupportRatherThanFlatteningItsGrade(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-raised-grade-test");
+        FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-raised-grade-test");
+        BlockPos start = cargoPosition(origin, lease); BlockPos raised = start.offset(1, 1, 0);
+        prepareSupport(level, start); prepareSupport(level, raised);
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                "one exact cargo carrier must materialize above its retained start support");
+        helper.runAfterDelay(1L, () -> {
+            try {
+                for (int tick = 0; tick < 80; tick++) helper.assertTrue(FrontierV3CargoCarrierExecutor.move(level, state, lease,
+                        new BlockPosition(raised.getX(), raised.getY(), raised.getZ())), "a loaded raised support must remain available to its exact carrier");
+                Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
+                helper.assertTrue(carrier != null && FrontierV3CargoCarrierExecutor.atDestination(level, state, lease,
+                                new BlockPosition(raised.getX(), raised.getY(), raised.getZ()))
+                                && Math.abs(carrier.getY() - (raised.getY() + 1.0D)) < 0.36D,
+                        "the carrier must reach the one-block raised support's exact standing datum rather than flattening Y: "
+                                + (carrier == null ? "missing" : carrier.position()) + " support=" + raised
+                                + " expectedFeet=" + raised.above());
+                discard(level, lease); runtime.shutdown(); helper.succeed();
+            } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedSceneRefusesForeignCargoCarrierWithExpectedUuid(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-conflict-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-conflict-test");
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         MinecartChest foreign = EntityType.CHEST_MINECART.create(level);
         helper.assertTrue(foreign != null, "the foreign carrier fixture must be constructible");
         foreign.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); foreign.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
@@ -135,7 +160,7 @@ public final class FrontierV3CargoCarrierGameTests {
             BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position);
             addOwnedBody(helper, level, lease, lease.members().get(index), position);
         }
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-recovery-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         MinecartChest carrier = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-recovery-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
@@ -169,7 +194,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-player-release"));
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         MinecartChest carrier = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
@@ -213,7 +238,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-external-impact"));
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(1L, () -> {
@@ -281,7 +306,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
         var checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, checkpoint, candidate, new SceneLeaseId("lease:frontier-v3-cargo-terminal-damage"));
-        prepareFloor(level, cargoPosition(origin, lease));
+        prepareSupport(level, cargoPosition(origin, lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-prepare", lease.id().value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(1L, () -> {
@@ -334,6 +359,10 @@ public final class FrontierV3CargoCarrierGameTests {
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3); level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+    private static void prepareSupport(ServerLevel level, BlockPos support) {
+        level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
     }
     private static BlockPos cargoPosition(BlockPos anchor, SceneLease lease) {
         int ordinal = lease.members().size(); return anchor.offset((ordinal % 2) * 2 + 1, 0, (ordinal / 2) * 2);

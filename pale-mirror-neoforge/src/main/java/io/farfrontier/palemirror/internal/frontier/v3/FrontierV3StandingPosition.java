@@ -14,23 +14,30 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * and never chooses another column. Minecraft remains the collision authority after spawn.</p>
  */
 final class FrontierV3StandingPosition {
-    private static final int MAX_VERTICAL_SEARCH = 8;
+    private static final int MAX_LEGACY_VERTICAL_SEARCH = 8;
 
     private FrontierV3StandingPosition() { }
 
+    /**
+     * Transitional adapter for the historical ambient actor record.
+     *
+     * <p>That record still carries an untyped position which may be old feet-air data or a
+     * support cell. New route, scene and transport code must use {@link #aboveExactFloor}; this
+     * method is deliberately kept out of those providers until the actor/ambient schema has one
+     * typed body/surface migration. It must never become a new caller's convenience fallback.</p>
+     */
+    @Deprecated(forRemoval = true)
     static BlockPos aboveFloor(ServerLevel level, BlockPosition anchor) {
         return aboveFloor(level, new BlockPos(anchor.x(), anchor.y(), anchor.z()));
     }
 
+    @Deprecated(forRemoval = true)
     static BlockPos aboveFloor(ServerLevel level, BlockPos anchor) {
         if (!level.hasChunkAt(anchor)) return null;
         BlockPos direct = aboveExactFloor(level, anchor);
         if (direct != null) return direct;
-        // Ambient actor locations are deliberately a separate current-domain provider contract:
-        // their retained support column may have acquired an ordinary terrain surface above its
-        // strategic datum.  Scene/body and cargo anchors must use aboveExactFloor instead.
-        return firstStandingPosition(level, anchor, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                anchor.getX(), anchor.getZ()));
+        return firstLegacyStandingPosition(level, anchor,
+                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ()));
     }
 
     /** Resolves only the two-cell-clear position directly above an exact semantic floor cell. */
@@ -40,15 +47,19 @@ final class FrontierV3StandingPosition {
 
     static BlockPos aboveExactFloor(ServerLevel level, BlockPos anchor) {
         if (!level.hasChunkAt(anchor)) return null;
-        return firstStandingPosition(level, anchor, anchor.getY() + 1);
+        BlockPos feet = anchor.above();
+        if (!level.hasChunkAt(feet)) return null;
+        // A thin route or infection surface is physical geometry.  The retained support is
+        // therefore the only legal floor: never climb a player obstruction or consult a
+        // heightmap to invent a different world datum for the same canonical cursor.
+        return !level.getBlockState(anchor).isAir() && level.getBlockState(feet).isAir()
+                && level.getBlockState(feet.above()).isAir() ? feet : null;
     }
 
-    private static BlockPos firstStandingPosition(ServerLevel level, BlockPos anchor, int startY) {
-        for (int y = startY; y <= startY + MAX_VERTICAL_SEARCH; y++) {
+    private static BlockPos firstLegacyStandingPosition(ServerLevel level, BlockPos anchor, int startY) {
+        for (int y = startY; y <= startY + MAX_LEGACY_VERTICAL_SEARCH; y++) {
             BlockPos candidate = new BlockPos(anchor.getX(), y, anchor.getZ());
             if (!level.hasChunkAt(candidate)) return null;
-            // A thin route or infection surface is not a full sturdy face, but it is still
-            // physical world geometry. Never shift, clear or manufacture a different floor.
             if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()
                     && !level.getBlockState(candidate.below()).isAir()) return candidate;
         }

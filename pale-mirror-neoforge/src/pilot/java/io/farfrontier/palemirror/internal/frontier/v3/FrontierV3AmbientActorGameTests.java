@@ -220,9 +220,13 @@ public final class FrontierV3AmbientActorGameTests {
         BlockPosition anchor = new BlockPosition(floor.getX(), floor.getY(), floor.getZ());
         helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
                 "a canonical floor with two clear body cells admits its exact assembly cursor");
+        helper.assertValueEqual(FrontierV3StandingPosition.aboveExactFloor(level, anchor), floor.above(),
+                "the exact cursor resolves only to the feet cell directly above its retained support");
         level.setBlock(floor.above(), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
                 "a player block at the exact feet cell is a loaded-world deferral, not an invitation to climb it");
+        helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, anchor) == null,
+                "an obstruction at the exact feet cell may not be reinterpreted as a higher floor");
         level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(floor, Blocks.AIR.defaultBlockState(), 3);
         helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
                 "headroom checks only the exact canonical body cells; ordinary Minecraft collision remains the support authority");
