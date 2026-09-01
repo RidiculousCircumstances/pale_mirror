@@ -426,7 +426,10 @@ remains present because breadth, balance and product comprehension are not done.
   the former autonomous route placer. Schema 85 additionally retains one
   bounded immutable COLD approach corridor/cursor per same crew member to a
   distinct declared work-site column, admitting no bypass for which that
-  approach cannot compile. Schema 86 makes each accepted replacement-cell
+  approach cannot compile. A bounded joint compiler selects only a retained
+  lane combination whose deterministic one-person COLD schedule can bring the
+  full exact crew to its distinct columns without overlap or a head-on swap;
+  lanes may cross only through that serialized schedule. Schema 86 makes each accepted replacement-cell
   plan immutable and durable, so neither a COLD tick nor recovery recompiles
   world route geometry. Engineering uses a small deterministic catalogue of
   bounded rectilinear public lanes rather than an unbounded general pathfinder;

@@ -281,6 +281,51 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneTypedEngineeringWorksiteWithoutTreatingItAsLogistics(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(new WorldId("frontier:diagnostic-engineering-scene-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        RouteConstruction project = state.routeConstructions().values().iterator().next();
+        var assembly = io.farfrontier.palemirror.frontier.v3.model.EngineeringWorksite.compile(state, project);
+        FrontierWorldState sourceState = state;
+        var completedMembers = new java.util.LinkedHashMap<SubjectId, io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member>();
+        var completedLocations = new java.util.LinkedHashMap<>(state.actorLocations());
+        assembly.members().forEach((member, approach) -> {
+            var completed = new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member(approach.corridor(), approach.corridor().size() - 1);
+            completedMembers.put(member, completed);
+            completedLocations.put(member, new io.farfrontier.palemirror.frontier.v3.model.ActorLocation(completed.currentPosition(),
+                    sourceState.actorLocations().get(member).condition()));
+        });
+        assembly = new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly(completedMembers);
+        var projects = new java.util.LinkedHashMap<>(state.routeConstructions());
+        projects.put(project.id(), new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
+                project.status(), project.cargoId(), project.team(), Optional.of(assembly)));
+        state = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
+                .actorLocations(completedLocations).routeConstructions(projects));
+        project = projects.get(project.id());
+        var members = project.team().orElseThrow().memberIds().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(member,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), member))).toList();
+        var positions = project.assembly().orElseThrow().members().entrySet().stream().collect(java.util.stream.Collectors.toMap(
+                java.util.Map.Entry::getKey, entry -> entry.getValue().currentPosition()));
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-engineering-r0"), checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause(project.id(), 0), project.workCells().getFirst(),
+                checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
+                members, positions, java.util.Set.of(), Optional.empty());
+        FrontierWorldState diagnosticState = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
+                .sceneLeases(java.util.Map.of(lease.id(), lease)));
+
+        String scene = FrontierV3DiagnosticJson.render("scene", project.id().value(), checkpoint, diagnosticState, Optional.empty());
+
+        assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"ENGINEERING_WORKSITE\""));
+        assertTrue(scene.contains("\"project\":\"" + project.id().value() + "\"")
+                && scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"\""));
+        runtime.shutdown();
+    }
+
+    @Test
     void keepsPhysicalReadinessScopedToHarvestIntents(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-readiness-test"), 94L),

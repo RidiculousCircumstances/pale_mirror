@@ -28,6 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -375,20 +376,24 @@ final class FrontierV3DiagnosticJson {
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease) : null;
         SettlementAssaultSceneCause assault = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease)
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.settlementAssault(lease) : null;
+        EngineeringWorkSceneCause engineering = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isEngineeringWorksite(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.engineeringWorksite(lease) : null;
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
                 .filter(value -> engagement != null && value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
                 .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
-        SubjectId strikeCause = assault == null ? logistics.operationId() : assault.assaultId();
-        PhysicalIntent strike = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
+        SubjectId strikeCause = logistics != null ? logistics.operationId() : assault != null ? assault.assaultId() : null;
+        PhysicalIntent strike = strikeCause == null ? null : state.physicalIntents().values().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
                 .filter(value -> value.causeSubjectId().equals(strikeCause)).sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
-                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (assault == null ? "LOGISTICS" : "SETTLEMENT_ASSAULT")
+                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT" : "ENGINEERING_WORKSITE")
                 + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
                 + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
+                + "\",\"project\":\"" + quote(engineering == null ? "" : engineering.projectId().value())
                 + "\",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""

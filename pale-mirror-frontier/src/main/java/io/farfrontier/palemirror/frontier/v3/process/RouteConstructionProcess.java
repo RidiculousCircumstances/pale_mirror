@@ -121,13 +121,10 @@ public final class RouteConstructionProcess {
                 new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))), next);
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (assembly.complete()) return List.of(next);
-        SubjectId advancing = assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
-                .filter(entry -> !entry.getValue().arrived())
-                .map(java.util.Map.Entry::getKey)
-                .filter(member -> {
-                    AmbientActorLease lease = state.ambientLeases().get(member);
-                    return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
-                }).findFirst().orElse(null);
+        SubjectId advancing = assembly.safeAdvances().stream().filter(member -> {
+            AmbientActorLease lease = state.ambientLeases().get(member);
+            return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
+        }).findFirst().orElse(null);
         if (advancing == null) return List.of(next);
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteConstructionAssemblyAdvanced(project.id(), assembly.advance(advancing))), next);

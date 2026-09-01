@@ -24,6 +24,13 @@ final class EngineeringApproachCorridor {
     private EngineeringApproachCorridor() { }
 
     static List<BlockPosition> compile(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
+        List<List<BlockPosition>> candidates = candidates(state, actorId, destination);
+        if (!candidates.isEmpty()) return candidates.getFirst();
+        throw new IllegalArgumentException("engineering approach has no clear bounded public lane");
+    }
+
+    /** All bounded clear candidates in stable priority order for one joint crew compiler. */
+    static List<List<BlockPosition>> candidates(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
         Objects.requireNonNull(state, "engineering approach state"); Objects.requireNonNull(actorId, "engineering approach actor");
         Objects.requireNonNull(destination, "engineering approach destination");
         BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "engineering approach actor location").position();
@@ -34,11 +41,12 @@ final class EngineeringApproachCorridor {
                 || !traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, destination)) {
             throw new IllegalArgumentException("engineering approach has no clear actor or work-site endpoint");
         }
-        for (List<BlockPosition> candidate : candidates(state.bootstrap().bounds(), start, destination)) {
+        List<List<BlockPosition>> clear = new ArrayList<>();
+        for (List<BlockPosition> candidate : pathCandidates(state.bootstrap().bounds(), start, destination)) {
             if (candidate.size() <= OperationTravel.MAX_CELLS && candidate.stream()
-                    .allMatch(cell -> traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, cell))) return candidate;
+                    .allMatch(cell -> traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, cell))) clear.add(candidate);
         }
-        throw new IllegalArgumentException("engineering approach has no clear bounded public lane");
+        return List.copyOf(clear);
     }
 
     private static Set<BlockPosition> occupiedFloors(FrontierWorldState state, SubjectId actorId) {
@@ -50,7 +58,7 @@ final class EngineeringApproachCorridor {
         return occupied;
     }
 
-    private static List<List<BlockPosition>> candidates(WorldBounds bounds, BlockPosition start, BlockPosition destination) {
+    private static List<List<BlockPosition>> pathCandidates(WorldBounds bounds, BlockPosition start, BlockPosition destination) {
         List<List<BlockPosition>> candidates = new ArrayList<>();
         add(candidates, route(start, new BlockPosition(start.x(), start.y(), destination.z()), destination));
         add(candidates, route(start, new BlockPosition(destination.x(), start.y(), start.z()), destination));

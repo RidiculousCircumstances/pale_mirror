@@ -75,4 +75,22 @@ class FrontierV3FixtureCatalogTest {
         assertTrue(state.physicalIntents().isEmpty(), "the fixture must not pre-issue or materialize an engineering tool");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.route_construction.scan")));
     }
+
+    @Test
+    void engineeringFixtureCompilesOneDeterministicallyCompletableExactCrewApproach() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(
+                new WorldId("frontier:engineering-joint-approach-fixture"), 41L).initialState();
+        SubjectId projectId = new SubjectId("construction:route-reroute-settlement-1--366-64--304");
+        EngineeringWorkAssembly assembly = EngineeringWorksite.compile(state, state.routeConstructions().get(projectId));
+        int boundedMoves = assembly.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
+        for (int move = 0; move < boundedMoves; move++) {
+            int moveIndex = move;
+            SubjectId advancing = assembly.nextSafeAdvance().orElseThrow(
+                    () -> new AssertionError("compiled engineering crew must not deadlock at move " + moveIndex));
+            assembly = assembly.advance(advancing);
+            assertEquals(assembly.members().size(), assembly.positions().values().stream().distinct().count(),
+                    "one COLD move may not overlap exact people");
+        }
+        assertTrue(assembly.complete(), "the retained COLD schedule must reach every distinct work-site slot");
+    }
 }
