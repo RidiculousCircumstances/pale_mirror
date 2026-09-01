@@ -222,13 +222,11 @@ public final class FrontierReadabilityPlan {
     /** Pure semantic contact: a live infection column intersects one current object cell. */
     private static Map<SubjectId, InfectionOverlayStage> contamination(FrontierWorldState state) {
         Map<SubjectId, InfectionOverlayStage> values = new LinkedHashMap<>();
-        FrontierGrayboxPlan.compile(state).cells().values().forEach(cell -> {
-            var intensity = state.infection().get(InfectionCell.at(cell.position()));
-            if (intensity != null && intensity.value().raw() > 0L) {
-                values.merge(cell.ownerId(), InfectionOverlayStage.fromRaw(intensity.value().raw()),
-                        (left, right) -> left.ordinal() >= right.ordinal() ? left : right);
-            }
-        });
+        FrontierGrayboxPlan.currentObjectCellsByOwner(state).forEach((owner, positions) -> positions.forEach(position -> {
+            var intensity = state.infection().get(InfectionCell.at(position));
+            if (intensity != null && intensity.value().raw() > 0L) values.merge(owner, InfectionOverlayStage.fromRaw(intensity.value().raw()),
+                    (left, right) -> left.ordinal() >= right.ordinal() ? left : right);
+        }));
         return Map.copyOf(values);
     }
 

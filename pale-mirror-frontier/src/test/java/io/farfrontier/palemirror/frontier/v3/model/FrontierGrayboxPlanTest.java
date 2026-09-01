@@ -81,6 +81,25 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void localObjectCellIndexMatchesTheFullPlanForEveryBuildingAndHiveOrgan() {
+        FrontierWorldState state = initial();
+        GrayboxCell lost = FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().value().startsWith("organ:")).findFirst().orElseThrow();
+        state = state.recordPhysicalDelta(new PhysicalDelta(lost.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(lost.ownerId()), java.util.Optional.of(lost.semanticPart()), "test:object-index-loss"));
+
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, java.util.Set<BlockPosition>> expected = new java.util.LinkedHashMap<>();
+        FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().value().startsWith("structure:") || cell.ownerId().value().startsWith("organ:"))
+                .forEach(cell -> expected.computeIfAbsent(cell.ownerId(), ignored -> new java.util.LinkedHashSet<>()).add(cell.position()));
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, java.util.Set<BlockPosition>> immutable = new java.util.LinkedHashMap<>();
+        expected.forEach((owner, positions) -> immutable.put(owner, java.util.Set.copyOf(positions)));
+
+        assertEquals(java.util.Map.copyOf(immutable), FrontierGrayboxPlan.currentObjectCellsByOwner(state),
+                "local board contamination must retain exact object geometry and aftermath without rebuilding the route network");
+    }
+
+    @Test
     void destroyedStructureHasNoDesiredCellsButOtherOwnersRemain() {
         FrontierWorldState state = initial().withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"), StructureCondition.DESTROYED);
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

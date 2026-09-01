@@ -127,6 +127,29 @@ public final class FrontierGrayboxPlan {
     }
 
     /**
+     * Current object-owned cells for local presentation rules.
+     *
+     * <p>This deliberately excludes the world-wide route grid, worksite staging and infection
+     * overlay.  Boards need to explain contamination on buildings and hive organs, not rebuild
+     * every road in order to answer that local question.  The same structure and organ
+     * compilers as graybox projection remain the sole definition of the included geometry.</p>
+     */
+    static Map<SubjectId, Set<BlockPosition>> currentObjectCellsByOwner(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
+                addStructure(cells, structure, state.structureConditions().get(structure.id()))));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
+        state.physicalDeltas().keySet().forEach(cells::remove);
+        Map<SubjectId, Set<BlockPosition>> byOwner = new LinkedHashMap<>();
+        cells.values().forEach(cell -> byOwner.computeIfAbsent(cell.ownerId(), ignored -> new LinkedHashSet<>()).add(cell.position()));
+        Map<SubjectId, Set<BlockPosition>> immutable = new LinkedHashMap<>();
+        byOwner.forEach((owner, positions) -> immutable.put(owner, Set.copyOf(positions)));
+        return Map.copyOf(immutable);
+    }
+
+    /**
      * Tests whether one settlement's current semantic structures still touch a live infection
      * cell. Health reviews reuse the exact structure-cell grammar but never construct the
      * unrelated world plan or temporary GrayboxCell map on their recurring COLD path.
@@ -340,9 +363,10 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
-        FrontierRouteNetwork.foundationCells(bootstrap, topology).forEach(position ->
+        FrontierRouteNetwork.RouteFootprint footprint = FrontierRouteNetwork.footprint(bootstrap, topology);
+        footprint.foundationCells().forEach(position ->
                 add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION));
-        FrontierRouteNetwork.surfaceCells(bootstrap, topology).forEach(position -> {
+        footprint.surfaceCells().forEach(position -> {
             GrayboxCell existing = cells.get(position);
             // A Hall's declared sill is the one intentional seam where the public carriageway
             // meets a facility.  It remains Hall-owned so damage has Hall provenance, while the

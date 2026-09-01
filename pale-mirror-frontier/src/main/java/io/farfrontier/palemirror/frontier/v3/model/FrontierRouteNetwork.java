@@ -79,6 +79,38 @@ public final class FrontierRouteNetwork {
     }
 
     public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
+        return compileSurfaceCells(bootstrap, topology);
+    }
+
+    /**
+     * Compiles the two materialized layers of the exact route network in one pass.
+     *
+     * <p>The surface and its foundations are one indivisible structural projection.  Keeping
+     * them together matters at the NeoForge boundary: rebuilding a 1024-block-world route
+     * twice merely to ask for each layer separately can stall the server thread while a player
+     * enters a loaded scene.  This is still a pure, immutable compiler result; callers may not
+     * cache it as world authority.</p>
+     */
+    static RouteFootprint footprint(FrontierBootstrap bootstrap, RouteTopology topology) {
+        Set<BlockPosition> surfaces = compileSurfaceCells(bootstrap, topology);
+        Set<BlockPosition> foundations = new LinkedHashSet<>();
+        for (BlockPosition surface : surfaces) {
+            int terrain = bootstrap.terrain().supportYAt(surface.x(), surface.z());
+            if (terrain >= surface.y()) {
+                throw new IllegalArgumentException("route surface is not above its immutable terrain support at " + surface);
+            }
+            for (int y = terrain + 1; y < surface.y(); y++) {
+                BlockPosition footing = new BlockPosition(surface.x(), y, surface.z());
+                // A lower declared route deck can be the physical support at a compact graded
+                // junction. It keeps its own surface provenance; do not fabricate a second
+                // semantic owner for the same block.
+                if (!surfaces.contains(footing)) foundations.add(footing);
+            }
+        }
+        return new RouteFootprint(surfaces, Set.copyOf(foundations));
+    }
+
+    private static Set<BlockPosition> compileSurfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
         Set<BlockPosition> cells = new LinkedHashSet<>();
         List<Settlement> settlements = bootstrap.settlements();
@@ -106,23 +138,14 @@ public final class FrontierRouteNetwork {
      * future earthworks provider and therefore fails closed here.
      */
     public static Set<BlockPosition> foundationCells(FrontierBootstrap bootstrap, RouteTopology topology) {
-        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
-        Set<BlockPosition> surfaces = surfaceCells(bootstrap, topology);
-        Set<BlockPosition> foundations = new LinkedHashSet<>();
-        for (BlockPosition surface : surfaces) {
-            int terrain = bootstrap.terrain().supportYAt(surface.x(), surface.z());
-            if (terrain >= surface.y()) {
-                throw new IllegalArgumentException("route surface is not above its immutable terrain support at " + surface);
-            }
-            for (int y = terrain + 1; y < surface.y(); y++) {
-                BlockPosition footing = new BlockPosition(surface.x(), y, surface.z());
-                // A lower declared route deck can be the physical support at a compact graded
-                // junction. It keeps its own surface provenance; do not fabricate a second
-                // semantic owner for the same block.
-                if (!surfaces.contains(footing)) foundations.add(footing);
-            }
+        return footprint(bootstrap, topology).foundationCells();
+    }
+
+    /** Exact immutable route layers from one deterministic topology compilation. */
+    record RouteFootprint(Set<BlockPosition> surfaceCells, Set<BlockPosition> foundationCells) {
+        RouteFootprint {
+            surfaceCells = Set.copyOf(surfaceCells); foundationCells = Set.copyOf(foundationCells);
         }
-        return Set.copyOf(foundations);
     }
 
     /** True when a canonical floor cell is occupied by the one-block visible route surface. */
