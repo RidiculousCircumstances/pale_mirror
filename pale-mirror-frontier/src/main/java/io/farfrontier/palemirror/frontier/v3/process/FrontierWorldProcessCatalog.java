@@ -47,7 +47,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.operation_failed", "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared",
             "frontier.scene_lease_handoff", "frontier.scene_lease_transition", "frontier.scene_lease_released_v2",
             "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
-            "frontier.settlement_assault_scene_lease_handoff");
+            "frontier.settlement_assault_scene_lease_handoff", "frontier.engineering_work_scene_lease_prepared",
+            "frontier.engineering_work_scene_lease_handoff");
     private static final Set<String> POPULATION = types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started",
             "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
@@ -238,7 +239,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.operation_travel_segment_completed", "frontier.operation_travel_advanced", "frontier.operation_travel_started",
             "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
             "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died",
-            "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_scene_lease_handoff"); }
+            "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_scene_lease_handoff",
+            "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff"); }
     private static Set<String> populationCommands() { return types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
@@ -306,7 +308,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_cold_suspended", "frontier.operation_failed",
                     "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
                     "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
-                    "frontier.settlement_assault_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
+                    "frontier.settlement_assault_scene_lease_handoff", "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff",
+                    "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
                     "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed", "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed",
                     "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.company_registered",

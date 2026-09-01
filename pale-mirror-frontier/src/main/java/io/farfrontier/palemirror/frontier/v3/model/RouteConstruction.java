@@ -64,7 +64,10 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
     }
 
     RouteConstruction withConfirmedCells(int nextConfirmedCells, RouteConstructionStatus nextStatus) {
-        Optional<EngineeringWorkAssembly> nextAssembly = nextStatus == RouteConstructionStatus.BUILDING ? assembly : Optional.empty();
+        // A completed physical cell invalidates the prior work-site slots.  The same retained
+        // crew must compile a fresh bounded COLD approach for the next immutable cell.
+        Optional<EngineeringWorkAssembly> nextAssembly = nextStatus == RouteConstructionStatus.BUILDING
+                && nextConfirmedCells == confirmedCells ? assembly : Optional.empty();
         return new RouteConstruction(id, settlementId, waypoints, workCells, nextConfirmedCells, nextStatus, cargoId, team, nextAssembly);
     }
 

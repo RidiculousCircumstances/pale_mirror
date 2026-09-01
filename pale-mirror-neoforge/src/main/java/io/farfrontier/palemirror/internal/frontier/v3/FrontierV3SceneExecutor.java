@@ -245,7 +245,7 @@ final class FrontierV3SceneExecutor {
     }
 
     /** Reclaims only a complete observed body set; missing bodies remain explicit UNKNOWN. */
-    private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+    static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         if (!demandExists(level, lease.handoffPosition())) return;
         if (lease.recoveryEvidence().isPresent()) return;
         java.util.Set<SubjectId> missing = lease.members().stream()
@@ -253,9 +253,10 @@ final class FrontierV3SceneExecutor {
                 .filter(member -> !owned(level.getEntity(member.entityId()), state, lease, member))
                 .map(SceneMember::actorId).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         if (!missing.isEmpty()) { recoveryUnresolved(runtime, lease, missing, false); return; }
-        RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
-        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
-        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+        boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
+        RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
+        boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
             recoveryUnresolved(runtime, lease, java.util.Set.of(), true); return;
         }
         reclaimObservedBodies(level, runtime, state, lease);
@@ -268,9 +269,10 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return false;
         }
-        RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
-        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
-        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return false;
+        boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
+        RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
+        boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) return false;
         boolean hasDeadMember = lease.members().stream()
                 .anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD);
         submit(runtime, hasDeadMember ? "scene-recovery-draining" : "scene-reclaimed", lease.id().value(),
@@ -558,8 +560,9 @@ final class FrontierV3SceneExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
-        RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
-        boolean interrupted = operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
+        boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
+        RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
+        boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
         if (!loaded(level, lease)) {
             List<SceneMemberPosition> observed = lastObserved(runtime, lease.id());
             // The entire hand-off surface is naturally unloaded. Its complete exact body/carrier
@@ -575,7 +578,7 @@ final class FrontierV3SceneExecutor {
             // normal player/world load permits full physical postcondition inspection.
             return;
         }
-        if (!interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+        if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
             conflict(level, runtime, state, lease, "release-carrier-unavailable"); return;
         }
         List<SceneMemberPosition> positions = new ArrayList<>();
@@ -609,7 +612,7 @@ final class FrontierV3SceneExecutor {
                 .forEach(lease -> FrontierV3CargoCarrierExecutor.discardClosed(level, state, lease));
     }
 
-    private static boolean demandExists(ServerLevel level, BlockPosition anchor) {
+    static boolean demandExists(ServerLevel level, BlockPosition anchor) {
         BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
         return level.hasChunkAt(position) && level.players().stream().filter(player -> !player.isSpectator())
                 .anyMatch(player -> player.blockPosition().closerThan(position, DEMAND_RADIUS_BLOCKS));
@@ -620,10 +623,10 @@ final class FrontierV3SceneExecutor {
         return level.hasChunkAt(new BlockPos(anchor.x(), anchor.y(), anchor.z()));
     }
 
-    private static void rememberObserved(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static void rememberObserved(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                          FrontierWorldState state, SceneLease lease) {
         if (!loaded(level, lease)) return;
-        if (!FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
+        if (FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease) && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
             forgetLastObserved(runtime, lease.id());
             return;
         }
@@ -671,7 +674,7 @@ final class FrontierV3SceneExecutor {
         return FrontierSceneBehaviors.logistics(lease).engagementId().isPresent();
     }
 
-    private static boolean playerWithinSafeRadius(ServerLevel level, SceneLease lease) {
+    static boolean playerWithinSafeRadius(ServerLevel level, SceneLease lease) {
         List<BlockPos> positions = new ArrayList<>();
         positions.add(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z()));
         for (SceneMember member : lease.members()) {

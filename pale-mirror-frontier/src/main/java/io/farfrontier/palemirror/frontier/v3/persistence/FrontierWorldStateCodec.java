@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 86; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 87; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -730,16 +730,20 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         if (cause instanceof SettlementAssaultSceneCause assault) {
             output.writeByte(1); writeString(output, assault.assaultId().value()); writeString(output, assault.settlementId().value()); return;
         }
+        if (cause instanceof EngineeringWorkSceneCause engineering) {
+            output.writeByte(2); writeString(output, engineering.projectId().value()); output.writeInt(engineering.workCellIndex()); return;
+        }
         throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
     }
     private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> SceneCauseKind.LOGISTICS;
             case 1 -> new SceneCauseKind.Assault(new SubjectId(readString(input)), new SubjectId(readString(input)));
+            case 2 -> new SceneCauseKind.Engineering(new SubjectId(readString(input)), input.readInt());
             default -> throw new IllegalArgumentException("unknown scene cause kind");
         };
     }
-    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault {
+    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering {
         SceneCauseKind LOGISTICS = new Logistics();
         SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
         final class Logistics implements SceneCauseKind {
@@ -750,6 +754,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         record Assault(SubjectId assaultId, SubjectId settlementId) implements SceneCauseKind {
             @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
                 return new SettlementAssaultSceneCause(assaultId, settlementId);
+            }
+        }
+        record Engineering(SubjectId projectId, int workCellIndex) implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
+                return new EngineeringWorkSceneCause(projectId, workCellIndex);
             }
         }
     }

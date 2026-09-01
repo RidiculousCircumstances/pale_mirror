@@ -70,6 +70,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSettlementAssaultSceneSupport.owner(state, prepared.lease()), prepared))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof EngineeringWorkSceneLeasePrepared prepared) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierEngineeringWorkSceneSupport.owner(state,
+                    FrontierSceneBehaviors.engineeringWorksite(prepared.lease())), prepared))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof SceneLeaseHandoff handoff) {
             RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(handoff.lease()).operationId());
             if (operation == null) return FrontierWorldCommandPlanner.rejected("scene hand-off has no owning operation");
@@ -77,6 +82,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         }
         if (command.payload() instanceof SettlementAssaultSceneLeaseHandoff handoff) {
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSettlementAssaultSceneSupport.owner(state, handoff.lease()), handoff))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof EngineeringWorkSceneLeaseHandoff handoff) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierEngineeringWorkSceneSupport.owner(state,
+                    FrontierSceneBehaviors.engineeringWorksite(handoff.lease())), handoff))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof SceneLeaseTransition transition) {
@@ -109,6 +119,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             case SceneLeaseHandoff handoff -> reduceSceneHandoff(state, event.subject(), event, handoff);
             case SettlementAssaultSceneLeasePrepared prepared -> reduceAssaultPrepared(state, event.subject(), event, prepared);
             case SettlementAssaultSceneLeaseHandoff handoff -> reduceAssaultHandoff(state, event.subject(), event, handoff);
+            case EngineeringWorkSceneLeasePrepared prepared -> reduceEngineeringPrepared(state, event.subject(), event, prepared);
+            case EngineeringWorkSceneLeaseHandoff handoff -> reduceEngineeringHandoff(state, event.subject(), event, handoff);
             case SceneLeaseTransition transition -> reduceSceneTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceRecoveryUnresolved(state, event.subject(), unresolved);
@@ -311,6 +323,26 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SceneLease lease = handoff.lease();
         if (!subject.equals(FrontierSettlementAssaultSceneSupport.owner(state, lease)) || !lease.handoffInstant().equals(event.instant())) {
             throw new IllegalArgumentException("assault scene hand-off does not match its retained battle");
+        }
+        return state.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
+    }
+
+    private static FrontierWorldState reduceEngineeringPrepared(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                                 EngineeringWorkSceneLeasePrepared prepared) {
+        SceneLease lease = prepared.lease();
+        if (!subject.equals(FrontierEngineeringWorkSceneSupport.owner(state, FrontierSceneBehaviors.engineeringWorksite(lease)))
+                || !lease.handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("engineering scene lease does not match its retained work-site hand-off");
+        }
+        return state.prepareSceneLease(lease);
+    }
+
+    private static FrontierWorldState reduceEngineeringHandoff(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                                EngineeringWorkSceneLeaseHandoff handoff) {
+        SceneLease lease = handoff.lease();
+        if (!subject.equals(FrontierEngineeringWorkSceneSupport.owner(state, FrontierSceneBehaviors.engineeringWorksite(lease)))
+                || !lease.handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("engineering scene hand-off does not match its retained work-site");
         }
         return state.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
     }

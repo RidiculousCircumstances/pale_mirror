@@ -431,9 +431,13 @@ remains present because breadth, balance and product comprehension are not done.
   world route geometry. Engineering uses a small deterministic catalogue of
   bounded rectilinear public lanes rather than an unbounded general pathfinder;
   no viable lane visibly blocks task admission. It advances one non-HOT living
-  person by one exact cell per turn and is not itself block placement. The next owner is the exact
-  naturally loaded HOT crew/work-site lease, rather than pretending that a
-  tool-ready label or a COLD cursor placed the block.
+  person by one exact cell per turn and is not itself block placement. Schema 87
+  adds the exact naturally loaded HOT crew/work-site lease. Its typed cause
+  retains `projectId + workCellIndex`, demands the same completed COLD crew and
+  permits exactly one durable physical work intent; the separate physical
+  adapter alone observes/places the cell. A confirmed cell clears the old
+  approach so the same people must take a new COLD approach to the next
+  immutable cell.
 
 ### Verification matrix
 

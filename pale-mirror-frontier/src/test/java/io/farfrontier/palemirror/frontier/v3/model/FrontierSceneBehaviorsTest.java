@@ -11,9 +11,9 @@ class FrontierSceneBehaviorsTest {
     @Test
     void registryRefusesMissingAndDuplicateSceneFamiliesBeforeEngineStart() {
         assertDoesNotThrow(() -> FrontierSceneBehaviors.requireCompleteKindsForTest(List.of(
-                SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT)));
+                SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT, SceneCauseKind.ENGINEERING_WORKSITE)));
         assertThrows(IllegalArgumentException.class, () -> FrontierSceneBehaviors.requireCompleteKindsForTest(List.of(SceneCauseKind.LOGISTICS)));
         assertThrows(IllegalArgumentException.class, () -> FrontierSceneBehaviors.requireCompleteKindsForTest(List.of(
-                SceneCauseKind.LOGISTICS, SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT)));
+                SceneCauseKind.LOGISTICS, SceneCauseKind.LOGISTICS, SceneCauseKind.SETTLEMENT_ASSAULT, SceneCauseKind.ENGINEERING_WORKSITE)));
     }
 }

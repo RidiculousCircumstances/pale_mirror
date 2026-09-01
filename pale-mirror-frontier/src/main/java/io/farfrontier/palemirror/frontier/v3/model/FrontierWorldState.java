@@ -309,7 +309,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
-        FrontierSceneLeaseValidationSupport.validate(bootstrap, actorLocations, structureConditions, operations, strategicPlans, sceneLeases, activelyAmbientLeased);
+        FrontierSceneLeaseValidationSupport.validate(bootstrap, actorLocations, structureConditions, operations, routeConstructions, strategicPlans, sceneLeases, activelyAmbientLeased);
         }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }

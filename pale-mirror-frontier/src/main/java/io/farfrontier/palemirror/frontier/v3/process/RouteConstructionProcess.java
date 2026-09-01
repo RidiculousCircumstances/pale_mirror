@@ -83,7 +83,9 @@ public final class RouteConstructionProcess {
             return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> List.of(new ProposedEvent(current.settlementId(),
                     new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
         }
-        if (current.team().isPresent()) return planEngineeringAssembly(state, current, action, next);
+        if (current.team().isPresent() && (current.assembly().isEmpty() || !current.assembly().orElseThrow().complete())) {
+            return planEngineeringAssembly(state, current, action, next);
+        }
         if (current.cargoId().isEmpty()) {
             Optional<ExactItemStack> material = maintenanceMaterial(state);
             ContainerSurface surface = state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER);
@@ -96,13 +98,11 @@ public final class RouteConstructionProcess {
         ExactItemStack material = state.inventory().items().get(cargo.itemIds().getFirst());
         if (material == null || !material.custody().equals(new InventoryCustody.Cargo(cargoId))
                 || !material.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind())) return List.of(next);
-        BlockPosition position = current.workCells().get(current.confirmedCells());
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + current.id().value().replace(':', '-') + "-" + current.confirmedCells()),
-                PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
-                List.of(FrontierRouteNetwork.OWNER, current.id(), cargoId, material.id()),
-                new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
-                PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
-        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new PhysicalIntentPrepared(intent)), next);
+        // A retained engineering team has reached its immutable work site.  Its naturally
+        // loaded HOT lease, not this COLD scheduler, is now the only owner allowed to open the
+        // physical placement intent. Legacy no-team projects retain their old migration path.
+        if (current.team().isPresent()) return List.of(next);
+        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new PhysicalIntentPrepared(workIntent(current, cargoId, material.id()))), next);
     }
 
     /**
@@ -112,6 +112,11 @@ public final class RouteConstructionProcess {
      */
     private static List<ProposedEvent> planEngineeringAssembly(FrontierWorldState state, RouteConstruction project,
                                                                  ScheduledAction action, ProposedEvent next) {
+        boolean retainedHotOrRecovery = state.sceneLeases().values().stream()
+                .filter(FrontierSceneBehaviors::isEngineeringWorksite)
+                .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
+                        && lease.status() != SceneLeaseStatus.CLOSED);
+        if (retainedHotOrRecovery) return List.of(next);
         if (project.assembly().isEmpty()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))), next);
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
@@ -198,6 +203,16 @@ public final class RouteConstructionProcess {
     }
     public static SubjectId cargoItemId(RouteConstruction project) {
         return new SubjectId("item:route-build-" + project.id().value().substring("construction:".length()) + "-" + project.confirmedCells());
+    }
+
+    /** Exact next-cell physical work intent; admission is separately guarded by its HOT scene. */
+    public static PhysicalIntent workIntent(RouteConstruction project, SubjectId cargoId, SubjectId materialId) {
+        BlockPosition position = project.workCells().get(project.confirmedCells());
+        return new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + project.id().value().replace(':', '-') + "-" + project.confirmedCells()),
+                PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
+                List.of(FrontierRouteNetwork.OWNER, project.id(), cargoId, materialId),
+                new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
+                PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
     }
 
     private static Optional<List<BlockPosition>> acceptedWorkCells(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {

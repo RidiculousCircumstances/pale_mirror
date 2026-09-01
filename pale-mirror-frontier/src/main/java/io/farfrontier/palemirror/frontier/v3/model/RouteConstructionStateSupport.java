@@ -184,11 +184,16 @@ public final class RouteConstructionStateSupport {
         int required = project.workCells().size();
         RouteConstruction completed = project.withConfirmedCells(confirmed, confirmed == required ? RouteConstructionStatus.READY : RouteConstructionStatus.BUILDING);
         projects.put(project.id(), material.count() == 1 ? completed.withoutCargo() : completed);
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.replaceAll((leaseId, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
+                && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
+                && FrontierSceneBehaviors.engineeringWorksite(lease).workCellIndex() == project.confirmedCells()
+                && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.put(observation.id(), observation);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(project.cargoId().orElseThrow(), observation.itemId()))
-                .physicalIntents(intents).physicalObservations(observations).routeConstructions(projects));
+                .physicalIntents(intents).physicalObservations(observations).routeConstructions(projects).sceneLeases(leases));
     }
 
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,

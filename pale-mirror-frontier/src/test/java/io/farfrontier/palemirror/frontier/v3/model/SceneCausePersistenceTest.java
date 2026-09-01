@@ -47,6 +47,23 @@ class SceneCausePersistenceTest {
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
     }
 
+    @Test void engineeringWorkSceneWalRetainsProjectAndExactWorkCursor() {
+        WorldId world = new WorldId("frontier:engineering-scene-wal");
+        SubjectId actor = new SubjectId("resident:engineering-scene-wal");
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:engineering-wal"), world,
+                new EngineeringWorkSceneCause(new SubjectId("construction:engineering-wal"), 3),
+                new BlockPosition(8, 64, 8), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
+                Map.of(actor, new BlockPosition(7, 64, 7)), Set.of(), Optional.empty());
+
+        EngineeringWorkSceneLeasePrepared payload = new EngineeringWorkSceneLeasePrepared(lease);
+        EngineeringWorkSceneLeasePrepared decoded = assertInstanceOf(EngineeringWorkSceneLeasePrepared.class,
+                FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
+        EngineeringWorkSceneCause retained = assertInstanceOf(EngineeringWorkSceneCause.class, decoded.lease().cause());
+        assertEquals(new SubjectId("construction:engineering-wal"), retained.projectId());
+        assertEquals(3, retained.workCellIndex());
+    }
+
     @Test void currentStateRejectsATypeWhoseOwnerValidatorDoesNotExistYet() {
         FrontierWorldState state = FrontierDevelopmentScenarios.hotSceneStrikeState(new WorldId("frontier:scene-cause-owner"), 91L);
         SubjectId actor = state.bootstrap().hive().bioforms().getFirst().id();

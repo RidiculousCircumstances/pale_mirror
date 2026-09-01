@@ -17,12 +17,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new CargoCarrierReleasedPayloadCodec())); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released())); }
-    static PayloadCodecs logisticsCodecs() { return new PayloadCodecs(List.of(
+    static PayloadCodecs logisticsCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new ContractCreatedCodec(), new ContractAbandonedCodec(), new CargoLoadedCodec(), new CargoDeliveredCodec(), new OperationCreatedCodec(),
             new OperationAdvancedCodec(), new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(),
             new OperationTravelAdvancedCodec(), new OperationTravelSegmentCompletedCodec(), new OperationColdSuspendedCodec(), new SceneLeasePreparedCodec(),
             new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
-            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())); }
+            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())),
+            EngineeringWorkScenePayloadCodecs.codecs()); }
     static PayloadCodecs populationCodecs() { return new PayloadCodecs(List.of(
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
             HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(), HumanPopulationPayloadCodecs.transitAdvanced(),

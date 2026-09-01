@@ -118,6 +118,13 @@ public final class FrontierPhysicalIntentCommandProcess {
                 EquipmentReturnStateSupport.validateIntent(state, intent);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
             }
+            if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) {
+                RouteConstructionStateSupport.validateIntent(state, intent);
+                if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+                    return rejected("route construction physical work requires its current HOT engineering scene");
+                }
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+            }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");
             SceneStrikeStateSupport.validateIntent(state, intent);
             return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), prepared)));
