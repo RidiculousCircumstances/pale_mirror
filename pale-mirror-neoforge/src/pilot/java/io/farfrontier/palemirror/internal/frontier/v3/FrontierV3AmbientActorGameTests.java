@@ -119,7 +119,7 @@ public final class FrontierV3AmbientActorGameTests {
         BlockPos observed = helper.absolutePos(new BlockPos(2, 8, 0)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
         joining.setNoAi(true); joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
-        helper.assertTrue(FrontierV3AmbientActorExecutor.observeJoin(runtime, joining),
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, joining), FrontierV3AmbientActorExecutor.JoinDisposition.RETAINED,
                 "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
         FrontierV3AmbientActorExecutor.AdmissionDiagnostic diagnostic = FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident);
         helper.assertValueEqual(diagnostic.status(), "PENDING_UNINDEXED",
@@ -128,6 +128,18 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, prepared, resident, prepared.actorLocations().get(resident).body()),
                 FrontierV3AmbientActorExecutor.Result.PENDING,
                 "a pending exact UUID must defer admission rather than create a second managed body");
+        Villager duplicate = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (duplicate == null) throw new IllegalStateException("game test could not create duplicate resident body");
+        duplicate.setUUID(joining.getUUID()); duplicate.setPos(joining.position()); duplicate.setNoAi(true);
+        duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
+        duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, duplicate),
+                FrontierV3AmbientActorExecutor.JoinDisposition.DUPLICATE_UNINDEXED,
+                "a second unindexed body with the same exact UUID must be rejected before Minecraft admits it");
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, prepared, resident, prepared.actorLocations().get(resident).body()),
+                FrontierV3AmbientActorExecutor.Result.PENDING,
+                "rejecting the later duplicate must retain the first exact body as the only pending admission");
+        duplicate.discard();
         joining.discard(); FrontierV3AmbientActorExecutor.tick(level, runtime);
         helper.assertFalse(FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident).pending(),
                 "a discarded candidate must release only its volatile bridge and allow normal later admission");

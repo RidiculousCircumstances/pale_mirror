@@ -343,28 +343,28 @@ final class FrontierV3AmbientActorExecutor {
     }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
-    static boolean observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+    static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || !recognizes(runtime, entity)) return false;
+        if (state == null || !recognizes(runtime, entity)) return JoinDisposition.NOT_MANAGED;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
-        if (rawActorId.isBlank()) return false;
+        if (rawActorId.isBlank()) return JoinDisposition.NOT_MANAGED;
         SubjectId actorId;
-        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return JoinDisposition.NOT_MANAGED; }
         if (!state.actorLocations().containsKey(actorId) || state.actorLocations().get(actorId).condition().status() != ActorLifeStatus.ALIVE
-                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
+                || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return JoinDisposition.NOT_MANAGED;
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
-        if (pending.size() >= MAX_PENDING_ADMISSIONS && !pending.containsKey(entity.getUUID())) return false;
+        if (pending.size() >= MAX_PENDING_ADMISSIONS && !pending.containsKey(entity.getUUID())) return JoinDisposition.NOT_MANAGED;
         PendingAdmission present = pending.get(entity.getUUID());
         if (present != null && present.entity() != entity && !present.entity().isRemoved()) {
-            PaleMirrorMod.LOGGER.warn("Frontier v3 retains a different unindexed managed body uuid={} before admitting actor={}",
+            PaleMirrorMod.LOGGER.warn("Frontier v3 rejects a duplicate unindexed managed body uuid={} for actor={}",
                     entity.getUUID(), actorId.value());
-            return false;
+            return JoinDisposition.DUPLICATE_UNINDEXED;
         }
         pending.put(entity.getUUID(), new PendingAdmission(entity));
         if (state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
             submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
         }
-        return true;
+        return JoinDisposition.RETAINED;
     }
 
     /**
@@ -908,4 +908,5 @@ final class FrontierV3AmbientActorExecutor {
         AssemblyMemberReadiness { occupants = List.copyOf(occupants); }
     }
     enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
+    enum JoinDisposition { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
 }

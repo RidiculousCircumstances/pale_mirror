@@ -329,11 +329,17 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /** Retains an exact restored ambient body until ServerLevel publishes its UUID index. */
-    public static boolean observeEntityJoin(ServerLevel level, Entity entity) {
+    public static EntityJoinAdmission observeEntityJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3AmbientActorExecutor.observeJoin(runtime, entity);
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return EntityJoinAdmission.NOT_MANAGED;
+        }
+        return switch (FrontierV3AmbientActorExecutor.observeJoin(runtime, entity)) {
+            case NOT_MANAGED -> EntityJoinAdmission.NOT_MANAGED;
+            case RETAINED -> EntityJoinAdmission.RETAINED;
+            case DUPLICATE_UNINDEXED -> EntityJoinAdmission.DUPLICATE_UNINDEXED;
+        };
     }
 
     /**
@@ -594,6 +600,9 @@ public final class FrontierV3ServerLifecycle {
 
     /** Delegates only a previously registered v3 local movement intent at the normal entity tick. */
     public static void advanceControlledMob(net.minecraft.world.entity.Mob mob) { FrontierV3ControlledMobMotion.advance(mob); }
+
+    /** Result of the read-only ambient join bridge; only a duplicate may be safely cancelled. */
+    public enum EntityJoinAdmission { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }
 }

@@ -389,7 +389,7 @@ public final class FrontierV3SceneGameTests {
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         helper.assertTrue(level.addFreshEntity(restored), "the restored body fixture must enter the loaded world");
 
-        helper.assertTrue(FrontierV3AmbientActorExecutor.observeJoin(runtime, restored),
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, restored), FrontierV3AmbientActorExecutor.JoinDisposition.RETAINED,
                 "only the exact loaded owned body may reclaim an UNKNOWN ambient lease");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "loaded-world reclaim must make the same canonical lease HOT");
