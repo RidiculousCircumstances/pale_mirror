@@ -71,7 +71,34 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void declaredSteppedRouteEnvelopeUsesItsActualTerrainDatums(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos lower = helper.absolutePos(new BlockPos(24, 8, 0));
+        BlockPos upper = lower.east();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        GrayboxCell lowerSurface = routeSurface(lower), upperSurface = routeSurface(upper.above());
+
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperSurface), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "a declared raised datum never floats merely because the route compiler contains a grade");
+        level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(upper, Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, lowerSurface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the lower declared terrain datum materializes its route surface");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, upperSurface), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the adjacent raised declared terrain datum materializes the same owned route");
+        helper.assertTrue(level.getBlockState(lower).is(Blocks.GRAY_CARPET) && level.getBlockState(upper.above()).is(Blocks.GRAY_CARPET)
+                        && ledger.claim(lower) != null && ledger.claim(upper.above()) != null,
+                "one physical stepped corridor retains route provenance at both real terrain levels");
+        helper.succeed();
+    }
+
     private static GrayboxCell cell(int x, int y, int z, String owner) {
         return new GrayboxCell(new BlockPosition(x, y, z), new SubjectId(owner), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
+    }
+
+    private static GrayboxCell routeSurface(BlockPos position) {
+        return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
+                new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
     }
 }

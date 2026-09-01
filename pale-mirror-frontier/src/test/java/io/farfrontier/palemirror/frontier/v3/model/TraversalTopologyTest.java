@@ -58,4 +58,29 @@ class TraversalTopologyTest {
         assertTrue(topology.edges().stream().allMatch(edge -> edge.kind() == TraversalKind.PEDESTRIAN
                 && edge.traversableBy(TraversalCapability.PEDESTRIAN) && !edge.traversableBy(TraversalCapability.RAIL_VEHICLE)));
     }
+
+    @Test void declaredReplacementGradeCompilesIntoSupportedThreeWideStepsWithoutTerrainDiscovery() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:topology-stepped-route"), 91L);
+        SubjectId settlement = bootstrap.settlements().getFirst().id();
+        List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);
+        BlockPosition origin = baseline.getFirst();
+        BlockPosition crest = origin.offset(0, 2, 8);
+        java.util.ArrayList<BlockPosition> declared = new java.util.ArrayList<>();
+        declared.add(origin); declared.add(crest); declared.addAll(baseline.subList(1, baseline.size()));
+
+        RouteTopology routes = RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, declared);
+        TraversalTopology topology = routes.supplyTraversalTopology(bootstrap, settlement);
+        BlockPosition stepped = topology.linearCorridorSurfaces().stream().map(SurfaceAnchor::support)
+                .filter(position -> position.y() == origin.y() + 1).findFirst().orElseThrow();
+        BlockPosition lateral = stepped.offset(1, 0, 0);
+
+        assertTrue(topology.edges().stream().anyMatch(edge -> edge.grade() == 1), "the retained graph contains surveyed one-block grade edges");
+        assertTrue(FrontierRouteNetwork.surfaceCells(bootstrap, routes).contains(lateral), "the visible envelope follows the same raised datum as its centreline");
+        assertFalse(FrontierRouteNetwork.affectedTraversalEdges(topology, lateral).isEmpty(), "loss of a raised lateral support blocks only its existing adjacent edge");
+        assertThrows(IllegalArgumentException.class, () -> {
+            java.util.ArrayList<BlockPosition> tooSteep = new java.util.ArrayList<>();
+            tooSteep.add(origin); tooSteep.add(origin.offset(0, 9, 8)); tooSteep.addAll(baseline.subList(1, baseline.size()));
+            RouteTopology.initial().replaceSupplyRoute(bootstrap, settlement, tooSteep);
+        });
+    }
 }

@@ -13,7 +13,8 @@ import java.util.Set;
  * Deterministic physical route graph for the finite bootstrap profile.
  *
  * <p>Operations take their COLD/HOT waypoints from this graph; the graybox compiler expands the
- * same axis-aligned segments into its visible three-cell carriageway. There is no second
+ * same declared orthogonal segments into its visible three-cell carriageway. A segment may
+ * declare a bounded grade; the compiler expands it into surveyed adjacent steps. There is no second
  * hand-authored route for materialization. The centre cell remains the canonical topology;
  * its two lateral cells are the physical envelope needed by a real convoy body formation and
  * cargo carrier.</p>
@@ -52,8 +53,8 @@ public final class FrontierRouteNetwork {
                 || !route.getLast().equals(supplyNest(bootstrap).anchor().offset(4, 0, -4))) throw new IllegalArgumentException("replacement route has invalid endpoints or size");
         for (int index = 1; index < route.size(); index++) {
             BlockPosition from = route.get(index - 1), to = route.get(index);
-            if (!bootstrap.bounds().contains(to) || from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) {
-                throw new IllegalArgumentException("replacement route segment is outside bounds or not axis aligned");
+            if (!bootstrap.bounds().contains(from) || !bootstrap.bounds().contains(to) || !isDeclaredGrade(from, to)) {
+                throw new IllegalArgumentException("replacement route segment is outside bounds, diagonal or too steep");
             }
         }
     }
@@ -159,9 +160,9 @@ public final class FrontierRouteNetwork {
     /**
      * Maps an observed owned graybox carriageway cell to the surveyed centre-line edges it
      * physically supports. This is provider evidence, not a route search: it can only name
-     * existing edge IDs and never creates a detour. A sloped provider must submit the exact
-     * node/edge evidence through its own topology contract; the current graybox covers its
-     * flat three-wide envelope here.
+     * existing edge IDs and never creates a detour. The same declared-grade compiler owns both
+     * the centreline and its three-wide physical envelope, so a lateral support on a step maps
+     * only to the persisted adjacent edges which that step supports.
      */
     public static Set<TraversalEdgeId> affectedTraversalEdges(TraversalTopology topology, BlockPosition physicalSurface) {
         Objects.requireNonNull(topology, "traversal topology"); Objects.requireNonNull(physicalSurface, "physical route surface");
@@ -169,10 +170,7 @@ public final class FrontierRouteNetwork {
         for (TraversalTopology.Edge edge : topology.edges()) {
             BlockPosition from = topology.nodes().get(edge.from()).support();
             BlockPosition to = topology.nodes().get(edge.to()).support();
-            boolean matches = from.y() == to.y()
-                    ? onCarriagewaySegment(physicalSurface, from, to)
-                    : physicalSurface.equals(from) || physicalSurface.equals(to);
-            if (matches) affected.add(edge.id());
+            if (onCarriagewaySegment(physicalSurface, from, to)) affected.add(edge.id());
         }
         return Set.copyOf(affected);
     }
@@ -251,27 +249,52 @@ public final class FrontierRouteNetwork {
     }
 
     private static void addSegment(Set<BlockPosition> cells, BlockPosition from, BlockPosition to) {
-        if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) {
-            throw new IllegalArgumentException("route segment must be horizontal and axis aligned");
-        }
-        int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
-        for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
-            cells.add(new BlockPosition(x, from.y(), z));
-            if (x == to.x() && z == to.z()) return;
-        }
+        forEachSegmentCell(from, to, cells::add);
     }
 
     private static boolean onSegment(BlockPosition position, BlockPosition from, BlockPosition to) {
-        if (position.y() != from.y() || from.y() != to.y()) return false;
-        if (from.x() == to.x()) return position.x() == from.x() && position.z() >= Math.min(from.z(), to.z()) && position.z() <= Math.max(from.z(), to.z());
-        if (from.z() == to.z()) return position.z() == from.z() && position.x() >= Math.min(from.x(), to.x()) && position.x() <= Math.max(from.x(), to.x());
-        throw new IllegalArgumentException("route segment must be axis aligned");
+        int horizontal = horizontalLength(from, to);
+        if (from.x() == to.x() && position.x() == from.x()) {
+            int step = (position.z() - from.z()) * Integer.compare(to.z(), from.z());
+            return step >= 0 && step <= horizontal && position.y() == heightAt(from, to, step, horizontal);
+        }
+        if (from.z() == to.z() && position.z() == from.z()) {
+            int step = (position.x() - from.x()) * Integer.compare(to.x(), from.x());
+            return step >= 0 && step <= horizontal && position.y() == heightAt(from, to, step, horizontal);
+        }
+        return false;
     }
     private static void addSegment(java.util.List<BlockPosition> cells, BlockPosition from, BlockPosition to) {
-        if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("route segment must be horizontal and axis aligned");
+        forEachSegmentCell(from, to, cells::add);
+    }
+
+    /**
+     * Declared terrain geometry only: one horizontal cell per node and at most one vertical
+     * datum change on that edge.  It deliberately has no Minecraft/height-map input.
+     */
+    private static boolean isDeclaredGrade(BlockPosition from, BlockPosition to) {
+        int horizontal = horizontalLength(from, to);
+        return horizontal > 0 && Math.abs(to.y() - from.y()) <= horizontal;
+    }
+
+    private static int horizontalLength(BlockPosition from, BlockPosition to) {
+        int deltaX = Math.abs(to.x() - from.x()), deltaZ = Math.abs(to.z() - from.z());
+        if (deltaX != 0 && deltaZ != 0) throw new IllegalArgumentException("route segment must be axis aligned");
+        return deltaX + deltaZ;
+    }
+
+    private static int heightAt(BlockPosition from, BlockPosition to, int step, int horizontal) {
+        int deltaY = to.y() - from.y();
+        return from.y() + Integer.signum(deltaY) * (step * Math.abs(deltaY) / horizontal);
+    }
+
+    private static void forEachSegmentCell(BlockPosition from, BlockPosition to, java.util.function.Consumer<BlockPosition> consumer) {
+        Objects.requireNonNull(from, "route segment from"); Objects.requireNonNull(to, "route segment to");
+        int horizontal = horizontalLength(from, to);
+        if (!isDeclaredGrade(from, to)) throw new IllegalArgumentException("route segment must be orthogonal with a declared grade of at most one per cell");
         int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
-        for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
-            cells.add(new BlockPosition(x, from.y(), z)); if (x == to.x() && z == to.z()) return;
+        for (int step = 0; step <= horizontal; step++) {
+            consumer.accept(new BlockPosition(from.x() + step * stepX, heightAt(from, to, step, horizontal), from.z() + step * stepZ));
         }
     }
 }
