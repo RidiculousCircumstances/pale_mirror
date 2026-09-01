@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -12,9 +13,29 @@ import java.util.LinkedHashMap;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteConstructionTaskProcessTest {
+    @Test
+    void unreachableExactCrewBlocksConstructionAdmissionWithoutCreatingProject() {
+        FrontierWorldState state = stateWithConfirmedPatrol();
+        StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
+        RouteConstruction viable = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
+                .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
+        SubjectId stranded = viable.team().orElseThrow().memberIds().getFirst();
+        BlockPosition blockedFloor = FrontierGrayboxPlan.currentBodyGeometry(state).stream().findFirst().orElseThrow().offset(0, -1, 0);
+        state = state.withActorLocation(stranded, blockedFloor);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
+
+        assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
+                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.BLOCKED));
+        assertFalse(result.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted),
+                "a topology with no real COLD crew approach must not create an unreachable construction project");
+    }
+
     @Test
     void confirmedPatrolStartsOneExactCrewProjectAndGatesLegacyPlacer() {
         FrontierWorldState state = stateWithConfirmedPatrol();
@@ -54,12 +75,28 @@ class RouteConstructionTaskProcessTest {
                     && EngineeringToolCustody.isTool(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot).findFirst().orElseThrow();
             state = state.withInventory(state.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(member)));
         }
-        assertTrue(RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> assemblyPlan = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L));
+        assertTrue(assemblyPlan.stream()
                 .noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared),
                 "a tool-ready exact crew cannot borrow the legacy autonomous block placer before HOT assembly exists");
+        RouteConstructionAssemblyStarted assemblyStarted = assemblyPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteConstructionAssemblyStarted.class::isInstance).map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(assemblyStarted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(assemblyStarted.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(assemblyStarted)));
+        state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, assemblyStarted);
+        assertFalse(state.routeConstructions().get(project.id()).assembly().orElseThrow().complete());
+        RouteConstructionAssemblyAdvanced assemblyAdvanced = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 300L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyAdvanced.class::isInstance)
+                .map(RouteConstructionAssemblyAdvanced.class::cast).findFirst().orElseThrow();
+        assertEquals(assemblyAdvanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(assemblyAdvanced.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(assemblyAdvanced)));
+        state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, assemblyAdvanced);
+        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
 
-        int requiredCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), project.settlementId(), project.waypoints()).size();
-        RouteConstruction ready = project.withConfirmedCells(requiredCells, RouteConstructionStatus.READY);
+        RouteConstruction activeProject = state.routeConstructions().get(project.id());
+        int requiredCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), activeProject.settlementId(), activeProject.waypoints()).size();
+        RouteConstruction ready = activeProject.withConfirmedCells(requiredCells, RouteConstructionStatus.READY);
         LinkedHashMap<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), ready);
         state = state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects));

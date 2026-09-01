@@ -74,7 +74,8 @@ class RouteTopologyTest {
                 baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4), baseline.get(5));
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:route-1"), settlement, replacement, 0, RouteConstructionStatus.BUILDING);
         FrontierWorldState state = RouteConstructionStateSupport.begin(FrontierWorldState.initial(bootstrap), project);
-        assertEquals(project, state.routeConstructions().get(project.id()));
+        assertEquals(FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement, replacement),
+                state.routeConstructions().get(project.id()).workCells());
         assertEquals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement), state.routeTopology().supplyWaypoints(bootstrap, settlement));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
         assertThrows(IllegalArgumentException.class, () -> RouteConstructionStateSupport.begin(state, project));

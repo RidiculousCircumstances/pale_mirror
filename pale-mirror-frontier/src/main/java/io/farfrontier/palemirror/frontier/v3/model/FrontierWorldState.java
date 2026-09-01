@@ -41,7 +41,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans); Objects.requireNonNull(hiveColony, "hive colony");
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans); Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());

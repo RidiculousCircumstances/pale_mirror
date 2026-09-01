@@ -118,9 +118,13 @@ public final class FrontierRouteNetwork {
                                                  List<BlockPosition> replacement) {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(active, "active topology");
         validateSupplyWaypoints(bootstrap, settlementId, replacement);
-        Set<BlockPosition> current = surfaceCells(bootstrap, active);
-        Set<BlockPosition> target = surfaceCells(bootstrap, active.replaceSupplyRoute(bootstrap, settlementId, replacement));
-        ArrayList<BlockPosition> required = new ArrayList<>(target); required.removeAll(current);
+        // Only this supply route changes. Building both full-world surface sets made a local
+        // construction admission proportional to every settlement corridor and, on recovery,
+        // repeated that work for each retained project. The exact set difference is simply the
+        // replacement's own surface cells that are not already active anywhere in the network.
+        Set<BlockPosition> replacementCells = operationSurfaceCells(replacement);
+        ArrayList<BlockPosition> required = new ArrayList<>();
+        for (BlockPosition cell : replacementCells) if (!isSurfaceCell(bootstrap, active, cell)) required.add(cell);
         required.sort(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z));
         return List.copyOf(required);
     }

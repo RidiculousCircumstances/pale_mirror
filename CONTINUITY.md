@@ -260,9 +260,15 @@
   restart, and the same ID still had that actor custody after restart; its
   clean barrier frame is
   `build/frontier-v3-scenarios/disposable_engineering_equipment_restart-b07ccad0-69ca-421e-86f8-7f3d06664be5-engineering-tool-after-restart.png`.
-  Tool-ready construction is deliberately gated before the former autonomous
-  route placer: the next deliverable is an exact HOT crew-assembly/work-site
-  owner, not an invented block-placement shortcut.
+  Schema 85 retains one immutable bounded COLD approach corridor and cursor per
+  same retained person to distinct work-site columns; each turn may advance one
+  living non-HOT person. Schema 86 additionally persists the accepted ordered
+  replacement-cell plan and uses a fixed bounded public-lane catalogue, so
+  steady ticks/recovery never recompute world route geometry; missing lanes
+  block admission visibly. Full pure suite passes 375 tests. Tool-ready
+  construction remains deliberately gated before the former autonomous route
+  placer: the next deliverable is the exact naturally loaded HOT crew/work-site
+  lease, not an invented block-placement shortcut.
 - `6d8558f` makes the seed territory canonical rather than a visual multiplier: two 3×3 clusters are 18 exact infection cells and materialize as two 12×12 patches. It also gives exact bioforms role-coloured, non-dropping head markers (worker lime, scout cyan, guard purple, bomber red), suppressing vanilla daylight ignition but preserving real fire/explosion observation. Fresh r38 proves no daylight flames, distinct roles, readable organ boards and the 12×12 patch. `804bb16` then derives organ/structure contamination only from semantic-geometry intersection with current canonical infection cells. Same-world r39 correctly exposed a materializer defect: frequent unrelated revisions reset the eight-board cursor at its first board, so later loaded hive boards retained stale long text. `f75ff95` preserves the deterministic cursor position when slots are stable; GameTests prove in-place text update/no duplication and starvation-free revision refresh. `guardrails`, build/package and 229/229 GameTests pass. The SHA-pinned `5cf8d639…` JAR restarted that same r39 world with normal fail-closed UNKNOWN HOT recovery; one visible native pilot loaded the western hive and recorded `visible_hive_west_nest-1e062a79-efd4-4241-b272-6076ba547a5a-hive-west-nest.png`, showing the persistent boards updated to compact `INFECTED / BLOOM|SATURATED` text without overlap or duplicate display. This is narrow visual/restart evidence only; the broader alien-biome/materialization-comprehension gate remains open. The successor admits a two-cell-clear body above a loaded infection-carpet floor without writing the world, exposes its exact read-only admission state, and compiles new hive bioforms into deterministic organ-clear perimeter slots. Pure/NeoForge tests plus full gate pass at 229/229. Same-world r39 proves recovery of the former blocked `west-0` as one HOT UUID; fresh r40 proves the new canonical `west-0` perimeter slot (`-426,64,414`), 12 settlements/48 bioforms/12 sites, and a player-height frame with no zombie on a hive roof. r40 later quarantined on an old harvest observation and is preserved as negative evidence. The successor replaces ambient vanilla navigation (which could route bodies through organ centres) with shared deterministic collision-checked, gravity-enabled role motion around each durable hand-off slot; 230/230 GameTests and Node scenarios pass. Fresh SHA-pinned r41 records `visible_hive_motion_west_nest-235978d1-825a-467d-a333-c2d96eb4573f-*.png`: all visible bioforms remain grounded outside organs and change position over eight seconds, while `bioform:west-0` remains one HOT exact UUID and r41 has no quarantine. r41 is the active disposable world. The r40 quarantine root cause was exact: `ResourceSiteHarvestObservation` existed in the snapshot schema but was omitted from the WAL payload codec, so a confirmed physical harvest failed before acknowledgement; v3 now appends compatible tag 10, pure receipt round-trip coverage and a native harvest scenario that permits blank-ID summary diagnostics. The focused harvest test, 230/230 full critical gate and 8/8 Node tests pass; r41 live observation reset a loaded mature field to `GROWING` stage 0 without a new quarantine. The first capture pair was rejected as visual evidence because its pre-frame was `Loading terrain`; the scenario now adds client render settling and HUD suppression before frames.
 - The pilot no longer relies on per-scenario HUD steps. Every declared frame is an exact local `clean` capture barrier by default: it hides generic HUD/chat, closes incidental screens, waits ten client ticks, emits `frame_ready`, and cannot advance until the X11 helper records `frame_captured`. `presentation: player` remains an explicit opt-in for UI assertions. Native abrupt recovery on disposable world `v3-disposable_redwillow_field_abrupt_re-6b9e0c07` passed after this handshake; its clean post-restart field frame is `build/frontier-v3-scenarios/disposable_redwillow_field_abrupt_restart-be29d6be-b5ab-4fb1-a7ab-b1bf3363ce05-after-abrupt-restart-field.png`. A neutral field is now insufficient to recover: only the matching durable active claim permits the exact full-footprint rebuild; current, rebuilt and foreign paths are covered. Node schema tests pass 17/17 and the full critical gate (guardrails, build/package and 231 GameTests) passes.
 - A canonical READY→HARVESTING hand-off can precede bounded physical crop projection by one materializer turn. The harvest executor now recognizes a complete exact field at its owned ledger stage as `WAITING_FOR_FIELD_PROJECTION`, rather than falsely recording an irreversible conflict; only the field projector advances it, including while the receipt is HARVESTING. Read-only intent diagnostics expose claimed stage, exact match and decision. Fresh isolated native `live_redwillow_harvest` evidence records the wait, then one `CONFIRMED` exact 64-wheat stack in `container:4-depot` and the reset field at epoch 2/stage 0; Node 17/17 and the critical gate (231 GameTests, build/package) pass.
@@ -305,12 +311,15 @@
   replacement. The next human work extends through engineering/recovery and
   medical/evacuation operation/equipment owners while preserving one canonical
   item claim and accounting for physical results.
-- The first engineering/recovery owner is now closed at schema 84: every newly
+- The first engineering/recovery owner begins at schema 84, its exact COLD
+  work-site approach at schema 85 and durable replacement-cell plan at schema
+  86: every newly
   admitted `RouteConstruction` embeds a stable one-to-four-person exact local
   `EngineeringRecoveryTeam`; the same people derive exclusive
   `ENGINEERING_RECOVERY` assignment and are rejected when another active human
   owner already claims them. Its snapshot/WAL value is durable. Historical
   schema-83 construction remains explicit autonomous legacy work rather than
   silently acquiring invented residents. This is intentionally not yet a
-  sapper role, tool issue or physical crew lease; the next slice owns those
-  exact equipment/assembly consequences, followed by medical/evacuation.
+  sapper role or physical crew lease. Exact tool custody and the full bounded
+  COLD approach now exist; the next slice owns the naturally loaded HOT crew
+  lease and physical work consequences, followed by medical/evacuation.

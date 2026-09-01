@@ -10,6 +10,8 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         return switch (event.payload()) {
             case RouteConstructionStarted started -> RouteConstructionStateSupport.reduceStarted(state, event.subject(), started);
             case RouteConstructionMaterialLoaded loaded -> RouteConstructionStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
+            case RouteConstructionAssemblyStarted started -> RouteConstructionStateSupport.reduceAssemblyStarted(state, event.subject(), started);
+            case RouteConstructionAssemblyAdvanced advanced -> RouteConstructionStateSupport.reduceAssemblyAdvanced(state, event.subject(), advanced);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
             case RoutePatrolStarted started -> RoutePatrolProcess.reduceStarted(state, event.subject(), started);
             case RoutePatrolAdvanced advanced -> RoutePatrolProcess.reduceAdvanced(state, event.subject(), advanced);

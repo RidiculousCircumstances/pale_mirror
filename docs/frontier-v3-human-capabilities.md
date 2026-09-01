@@ -274,6 +274,18 @@ such a team is deliberately blocked from the legacy autonomous block placer:
 physical crew assembly, work-site presence and tool loss remain the next owner
 boundary rather than being faked by a tool-ready label.
 
+Before that HOT owner may materialize a worker, schema 85 retains a bounded,
+immutable COLD approach corridor and cursor for every same team member to one
+distinct work-site column beside the exact next route cell. It advances only
+one living, non-HOT member by one adjacent existing corridor cell per turn;
+candidate admission rejects a bypass lacking every retained worker's bounded
+approach. Schema 86 persists the accepted replacement-cell plan and compiles
+the approach through a fixed bounded catalogue of public lanes, so steady
+simulation and recovery do not re-plan the world; no clear retained lane blocks
+the task visibly. This prevents a visible crew from appearing at a repair site
+by teleportation. The next HOT lease must use those arrived identities and
+columns, or defer/conflict visibly.
+
 This boundary reuses the common exact human-equipment protocol rather than
 creating an engineering-only inventory: an issue or return request binds one
 owning operation, one named resident, one existing exact depot stack and (for

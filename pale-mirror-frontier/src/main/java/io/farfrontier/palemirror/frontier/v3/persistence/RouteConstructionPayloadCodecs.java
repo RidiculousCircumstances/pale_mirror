@@ -45,6 +45,24 @@ final class RouteConstructionPayloadCodecs {
             });
         }
     }; }
+    static PayloadCodec assemblyStarted() { return assembly("frontier.route_construction_assembly_started", RouteConstructionAssemblyStarted::new); }
+    static PayloadCodec assemblyAdvanced() { return assembly("frontier.route_construction_assembly_advanced", RouteConstructionAssemblyAdvanced::new); }
+
+    private static PayloadCodec assembly(String type, java.util.function.BiFunction<SubjectId, EngineeringWorkAssembly, FrontierPayload> factory) {
+        return new PayloadCodec() {
+            @Override public String type() { return type; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                SubjectId project; EngineeringWorkAssembly assembly;
+                if (payload instanceof RouteConstructionAssemblyStarted started) { project = started.projectId(); assembly = started.assembly(); }
+                else if (payload instanceof RouteConstructionAssemblyAdvanced advanced) { project = advanced.projectId(); assembly = advanced.assembly(); }
+                else throw new IllegalArgumentException("route construction assembly codec received foreign payload");
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> { FrontierWorldPayloadCodecs.writeSubject(output, project); writeAssembly(output, assembly); });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> factory.apply(FrontierWorldPayloadCodecs.readSubject(input).value(), readAssembly(input)));
+            }
+        };
+    }
     private static void write(DataOutputStream output, RouteConstruction project) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, project.id().value()); FrontierWorldPayloadCodecs.writeString(output, project.settlementId().value());
         output.writeByte(0xFF); output.writeBoolean(project.team().isPresent());
@@ -83,5 +101,33 @@ final class RouteConstructionPayloadCodecs {
         if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) throw new IllegalArgumentException("route construction team payload has invalid size");
         List<SubjectId> members = new ArrayList<>(); for (int index = 0; index < count; index++) members.add(FrontierWorldPayloadCodecs.readSubject(input).value());
         return new EngineeringRecoveryTeam(id, owner, settlement, leader, members);
+    }
+
+    private static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
+        output.writeByte(assembly.members().size());
+        for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
+            EngineeringWorkAssembly.Member member = entry.getValue(); output.writeShort(member.corridor().size());
+            for (BlockPosition cell : member.corridor()) FrontierWorldPayloadCodecs.writePosition(output, cell);
+            output.writeShort(member.cursor());
+        }
+    }
+
+    private static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
+        int count = input.readUnsignedByte();
+        if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) {
+            throw new IllegalArgumentException("route construction assembly payload has invalid size");
+        }
+        java.util.Map<SubjectId, EngineeringWorkAssembly.Member> members = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < count; index++) {
+            SubjectId actor = FrontierWorldPayloadCodecs.readSubject(input).value(); int cells = input.readUnsignedShort();
+            if (cells < 1 || cells > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("route construction assembly payload corridor is invalid");
+            List<BlockPosition> corridor = new ArrayList<>();
+            for (int cell = 0; cell < cells; cell++) corridor.add(FrontierWorldPayloadCodecs.readPosition(input));
+            if (members.put(actor, new EngineeringWorkAssembly.Member(corridor, input.readUnsignedShort())) != null) {
+                throw new IllegalArgumentException("route construction assembly payload has duplicate member");
+            }
+        }
+        return new EngineeringWorkAssembly(members);
     }
 }

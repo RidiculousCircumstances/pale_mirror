@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 84; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D, LEGACY_VERSION = 42; static final int VERSION = 86; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -61,7 +61,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     && version != 64 && version != 65 && version != 66 && version != 67 && version != 68 && version != 69
                     && version != 70 && version != 71 && version != 72 && version != 73 && version != 74 && version != 75
                     && version != 76 && version != 77 && version != 78 && version != 79 && version != 80 && version != 81
-                    && version != 82 && version != 83 && version != VERSION) {
+                    && version != 82 && version != 83 && version != 84 && version != 85 && version != VERSION) {
                 throw new IllegalArgumentException("unknown Frontier v3 state version");
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
@@ -73,15 +73,20 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input, version >= 73, version >= 74, version >= 75);
             EconomicLedger economics = version >= 60 ? readEconomicLedger(input, version >= 63) : EconomicLedger.bootstrap(bootstrap);
             CompanyRegistry companies = version >= 61 ? readCompanyRegistry(input, version >= 62, version >= 64, version >= 65) : CompanyRegistry.empty();
-            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, readInventory(input, economics), readProductionJobs(input, version >= 66),
-                    readContracts(input), readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55, version >= 83),
-                    version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty(),
-                    PhysicalIntentStateCodec.read(input, version >= 82), PhysicalEffectObservationStateCodec.read(input), readSceneLeases(input, version), colony, structureDamage, physicalDeltas,
-                    AmbientLeaseStateCodec.read(input), RouteConstructionStateCodec.read(input, version >= 45, version >= 84), RouteTopologyStateCodec.read(input, bootstrap),
-                    StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version),
-                    HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81),
-                    companies,
-                    ResourceSiteStateCodec.read(input));
+            ExactInventory inventory = readInventory(input, economics); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, version >= 66);
+            Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, version >= 50, version >= 51, version >= 54, version >= 55, version >= 83);
+            LogisticsHistory history = version >= 59 ? readLogisticsHistory(input) : LogisticsHistory.empty();
+            Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, version >= 82);
+            Map<PhysicalObservationId, PhysicalEffectObservation> observations = PhysicalEffectObservationStateCodec.read(input);
+            Map<SceneLeaseId, SceneLease> scenes = readSceneLeases(input, version); Map<SubjectId, AmbientActorLease> ambient = AmbientLeaseStateCodec.read(input);
+            Map<SubjectId, RouteConstruction> constructions = RouteConstructionStateCodec.read(input, version >= 45, version >= 84, version >= 85, version >= 86);
+            RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
+            constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
+            StrategicPlanState plans = StrategicPlanStateCodec.read(input, version < 67, version >= 68, version >= 69, version >= 70, version >= 71, version >= 72, version >= 76, version >= 78, version);
+            HumanPopulation population = HumanPopulationStateCodec.read(input, version >= 47, version >= 48, version >= 57, version >= 58, version >= 81);
+            ResourceSiteState sites = ResourceSiteStateCodec.read(input);
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, contracts, operations, history,
+                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, topology, plans, population, companies, sites);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

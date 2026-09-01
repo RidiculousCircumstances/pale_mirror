@@ -45,7 +45,17 @@ public final class RouteConstructionProcess {
                 && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
         Optional<RouteConstruction> candidate = confirmed ? candidate(state, settlement) : Optional.empty();
         if (candidate.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionStarted(candidate.orElseThrow())));
+        RouteConstruction project = candidate.orElseThrow();
+        try {
+            // This is construction-task admission, not catalogue exploration: compile the
+            // exact crew approach once for the accepted topology. Repeating it for every
+            // speculative spine turned a bounded compiler into an accidental O(candidates)
+            // scan of route geometry.
+            EngineeringWorksite.compile(state, project);
+        } catch (IllegalArgumentException unavailable) {
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
+        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project)));
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -73,10 +83,7 @@ public final class RouteConstructionProcess {
             return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> List.of(new ProposedEvent(current.settlementId(),
                     new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
         }
-        // A retained crew with tools is not yet a physical work scene.  Never let the former
-        // autonomous route executor place a block on its behalf: the next owner must assemble
-        // these exact bodies in a naturally loaded HOT scene before it may request material.
-        if (current.team().isPresent()) return List.of(next);
+        if (current.team().isPresent()) return planEngineeringAssembly(state, current, action, next);
         if (current.cargoId().isEmpty()) {
             Optional<ExactItemStack> material = maintenanceMaterial(state);
             ContainerSurface surface = state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER);
@@ -89,14 +96,36 @@ public final class RouteConstructionProcess {
         ExactItemStack material = state.inventory().items().get(cargo.itemIds().getFirst());
         if (material == null || !material.custody().equals(new InventoryCustody.Cargo(cargoId))
                 || !material.itemKind().equals(GrayboxMaterial.ROUTE.repairItemKind())) return List.of(next);
-        List<BlockPosition> cells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), current.settlementId(), current.waypoints());
-        BlockPosition position = cells.get(current.confirmedCells());
+        BlockPosition position = current.workCells().get(current.confirmedCells());
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + current.id().value().replace(':', '-') + "-" + current.confirmedCells()),
                 PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
                 List.of(FrontierRouteNetwork.OWNER, current.id(), cargoId, material.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new PhysicalIntentPrepared(intent)), next);
+    }
+
+    /**
+     * COLD preserves the exact approach before a future HOT work-site lease may materialize it.
+     * It moves one retained living crew member by one precompiled cell, never spawns a shortcut
+     * at the construction cell and never advances a body already under ambient Minecraft authority.
+     */
+    private static List<ProposedEvent> planEngineeringAssembly(FrontierWorldState state, RouteConstruction project,
+                                                                 ScheduledAction action, ProposedEvent next) {
+        if (project.assembly().isEmpty()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteConstructionAssemblyStarted(project.id(), EngineeringWorksite.compile(state, project))), next);
+        EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
+        if (assembly.complete()) return List.of(next);
+        SubjectId advancing = assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .filter(entry -> !entry.getValue().arrived())
+                .map(java.util.Map.Entry::getKey)
+                .filter(member -> {
+                    AmbientActorLease lease = state.ambientLeases().get(member);
+                    return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
+                }).findFirst().orElse(null);
+        if (advancing == null) return List.of(next);
+        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteConstructionAssemblyAdvanced(project.id(), assembly.advance(advancing))), next);
     }
 
     /**
@@ -113,11 +142,14 @@ public final class RouteConstructionProcess {
             for (int spineX : DETOUR_SPINES) {
                 List<BlockPosition> route = List.of(origin, detourEgress, detourLane, new BlockPosition(spineX, detourLane.y(), detourLane.z()),
                         new BlockPosition(spineX, destination.y(), destination.z()), destination);
-                if (accepts(state, settlement.id(), route)) {
+                Optional<List<BlockPosition>> workCells = acceptedWorkCells(state, settlement.id(), route);
+                if (workCells.isPresent()) {
                     SubjectId projectId = projectId(settlement.id(), state);
                     EngineeringRecoveryTeam team = team(state, settlement.id(), projectId);
-                    if (team != null) return Optional.of(new RouteConstruction(projectId, settlement.id(), route, 0,
-                            RouteConstructionStatus.BUILDING, Optional.empty(), Optional.of(team)));
+                    if (team != null) {
+                        return Optional.of(new RouteConstruction(projectId, settlement.id(), route, workCells.orElseThrow(), 0,
+                                RouteConstructionStatus.BUILDING, Optional.empty(), Optional.of(team), Optional.empty()));
+                    }
                 }
             }
         }
@@ -168,14 +200,15 @@ public final class RouteConstructionProcess {
         return new SubjectId("item:route-build-" + project.id().value().substring("construction:".length()) + "-" + project.confirmedCells());
     }
 
-    private static boolean accepts(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {
+    private static Optional<List<BlockPosition>> acceptedWorkCells(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {
         try {
             RouteTopology topology = state.routeTopology().replaceSupplyRoute(state.bootstrap(), settlementId, route);
-            return FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas())
-                    && !FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), settlementId, route).isEmpty()
-                    && FrontierGrayboxPlan.compile(state.withRouteTopology(topology)).cells().size() > 0;
+            List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), settlementId, route);
+            if (!FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas()) || workCells.isEmpty()
+                    || FrontierGrayboxPlan.compile(state.withRouteTopology(topology)).cells().isEmpty()) return Optional.empty();
+            return Optional.of(workCells);
         } catch (IllegalArgumentException ignored) {
-            return false;
+            return Optional.empty();
         }
     }
 

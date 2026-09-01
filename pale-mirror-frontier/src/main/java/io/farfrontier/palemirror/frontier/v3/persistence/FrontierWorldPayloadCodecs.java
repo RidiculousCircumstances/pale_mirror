@@ -42,7 +42,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             StrategicPlanPayloadCodecs.hiveTerritoryObserved(), StrategicPlanPayloadCodecs.hiveSettlementObserved(),
             StrategicPlanPayloadCodecs.hiveDoctrineSelected(), StrategicPlanPayloadCodecs.hotScoutOperationObserved(), StrategicPlanPayloadCodecs.scoutPatrolAdvanced()))); }
     static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
-            RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RoutePatrolPayloadCodecs.started(),
+            RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
+            RouteConstructionPayloadCodecs.assemblyAdvanced(), RoutePatrolPayloadCodecs.started(),
             RoutePatrolPayloadCodecs.advanced(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed())); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
             StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }

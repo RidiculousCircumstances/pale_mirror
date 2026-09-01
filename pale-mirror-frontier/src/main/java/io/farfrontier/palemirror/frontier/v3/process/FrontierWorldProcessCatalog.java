@@ -77,6 +77,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
+            "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
             "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
             "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed");
     private static final Set<String> STRATEGY = types(
@@ -362,6 +363,7 @@ public final class FrontierWorldProcessCatalog {
             case "infrastructure" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.route_construction_started", "frontier.route_construction_material_loaded", "frontier.route_topology_cutover",
+                    "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
                     "frontier.route_patrol_started", "frontier.route_patrol_advanced", "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

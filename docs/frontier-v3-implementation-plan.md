@@ -423,9 +423,17 @@ remains present because breadth, balance and product comprehension are not done.
   with invented people. It now issues/returns each exact retained member's
   real tagged iron pickaxe through the common durable equipment receipt and
   naturally loaded executor; it deliberately does not yet let that fact invoke
-  the former autonomous route placer. A tool-ready project waits for its next
-  exact HOT crew-assembly/work-site owner, rather than pretending that a label
-  or a COLD cursor placed the block.
+  the former autonomous route placer. Schema 85 additionally retains one
+  bounded immutable COLD approach corridor/cursor per same crew member to a
+  distinct declared work-site column, admitting no bypass for which that
+  approach cannot compile. Schema 86 makes each accepted replacement-cell
+  plan immutable and durable, so neither a COLD tick nor recovery recompiles
+  world route geometry. Engineering uses a small deterministic catalogue of
+  bounded rectilinear public lanes rather than an unbounded general pathfinder;
+  no viable lane visibly blocks task admission. It advances one non-HOT living
+  person by one exact cell per turn and is not itself block placement. The next owner is the exact
+  naturally loaded HOT crew/work-site lease, rather than pretending that a
+  tool-ready label or a COLD cursor placed the block.
 
 ### Verification matrix
 

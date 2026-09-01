@@ -16,7 +16,10 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
+import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
@@ -306,7 +309,8 @@ class FrontierV3DiagnosticJsonTest {
         RouteConstruction project = new RouteConstruction(new SubjectId("construction:diagnostic-route"), settlement,
                 java.util.List.of(waypoints.get(0), waypoints.get(1), waypoints.get(1).offset(-10, 0, 0), waypoints.get(2).offset(-10, 0, 0),
                         waypoints.get(2), waypoints.get(3), waypoints.get(4), waypoints.get(5)), 0, RouteConstructionStatus.BUILDING);
-        FrontierWorldState changed = withRouteConstruction(baseline, project);
+        FrontierWorldState changed = RouteConstructionStateSupport.reduceStarted(baseline, FrontierRouteNetwork.OWNER,
+                new RouteConstructionStarted(project));
 
         String route = FrontierV3DiagnosticJson.render("route_construction", settlement.value(), checkpoint, changed, Optional.empty());
         String missing = FrontierV3DiagnosticJson.render("route_construction", "settlement:missing", checkpoint, changed, Optional.empty());
@@ -314,13 +318,7 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(route.contains("\"status\":\"ok\"") && route.contains("\"project\":\"construction:diagnostic-route\""));
         assertTrue(route.contains("\"phase\":\"BUILDING\"") && route.contains("\"cargoPresent\":false") && route.contains("\"nextCell\":{"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
-        assertTrue(changed.routeConstructions().get(project.id()).equals(project), "read-only route diagnostics never advance a project");
-    }
-
-    private static FrontierWorldState withRouteConstruction(FrontierWorldState state, RouteConstruction project) {
-        return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(),
-                state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(),
-                state.hiveColony(), state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), java.util.Map.of(project.id(), project),
-                state.routeTopology(), state.strategicPlans(), state.humanPopulation(), state.resourceSites());
+        assertTrue(changed.routeConstructions().get(project.id()).confirmedCells() == 0,
+                "read-only route diagnostics never advance a project");
     }
 }
