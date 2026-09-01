@@ -41,19 +41,6 @@ public final class MarketClearingProcess {
         long now = action.dueAt().ticks();
         if (now > demand.expiresAtTick()) return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandExpired(demand.id())),
                 taskTransition(state, demand, StrategicTaskStatus.PENDING, StrategicTaskStatus.BLOCKED));
-        Optional<EmploymentContract> employment = worksEmployment(state, demand.buyerId());
-        if (employment.isEmpty()) return retry(state, demand, action, now);
-        EmploymentContract contract = employment.orElseThrow();
-        Company company = state.companies().companies().get(contract.companyId());
-        Optional<CompanyQuote> existing = state.companies().market().bestCurrentQuote(demand.id(), now);
-        List<ProposedEvent> planned = new ArrayList<>();
-        CompanyQuote quote;
-        if (existing.isEmpty()) {
-            quote = new CompanyQuote(new SubjectId("quote:" + demand.id().value().substring("demand:".length()) + "-" + contract.companyId().value().substring("company:".length())),
-                    demand.id(), company.id(), demand.itemCount(), contract.invoicePerCompletedJob(), now, demand.expiresAtTick());
-        } else {
-            quote = existing.orElseThrow();
-        }
         StrategicTask task = state.strategicPlans().tasks().get(demand.reasonId());
         if (task == null || task.status() != StrategicTaskStatus.PENDING || !task.ownerId().equals(demand.buyerId()) || task.kind() != StrategicTaskKind.PRODUCE_BREAD) {
             return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandCancelled(demand.id(), MarketDemandCancellationReason.TASK_NO_LONGER_PENDING)));
@@ -72,9 +59,23 @@ public final class MarketClearingProcess {
         }
         ProductionJob job = started.job();
         EmploymentContract jobContract = CompanyWorkPaymentProcess.contractFor(state, job).orElse(null);
-        if (jobContract == null || !jobContract.companyId().equals(quote.sellerId()) || !jobContract.invoicePerCompletedJob().equals(quote.totalPrice())) {
-            throw new IllegalStateException("market quote no longer matches its exact production employment terms");
+        // A quote is commercial evidence for one exact prospective job, not an offer from an
+        // arbitrarily selected company founder.  Production chooses the available worker first;
+        // only that worker's active contract can price and reserve the work.  If an old quote
+        // survived while availability or terms changed, retain the open demand and retry rather
+        // than admitting a job whose financial cause cannot be proven.
+        if (jobContract == null) return retry(state, demand, action, now);
+        Company company = state.companies().companies().get(jobContract.companyId());
+        if (company == null || company.status() != CompanyStatus.ACTIVE) return retry(state, demand, action, now);
+        Optional<CompanyQuote> existing = state.companies().market().bestCurrentQuote(demand.id(), now);
+        if (existing.isPresent() && (!jobContract.companyId().equals(existing.orElseThrow().sellerId())
+                || !jobContract.invoicePerCompletedJob().equals(existing.orElseThrow().totalPrice()))) {
+            return retry(state, demand, action, now);
         }
+        List<ProposedEvent> planned = new ArrayList<>();
+        CompanyQuote quote = existing.orElseGet(() -> new CompanyQuote(new SubjectId("quote:"
+                + demand.id().value().substring("demand:".length()) + "-" + jobContract.companyId().value().substring("company:".length())),
+                demand.id(), company.id(), demand.itemCount(), jobContract.invoicePerCompletedJob(), now, demand.expiresAtTick()));
         FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, jobContract);
         MarketWorkOrder order = new MarketWorkOrder(new SubjectId("order:" + job.id().value().substring("job:".length())), demand.id(), quote.id(), quote.sellerId(),
                 task.id(), job.id(), reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
@@ -166,9 +167,6 @@ public final class MarketClearingProcess {
     }
 
 
-    private static Optional<EmploymentContract> worksEmployment(FrontierWorldState state, SubjectId settlementId) {
-        return state.companies().activeWorksCompany(settlementId).flatMap(company -> state.companies().activeEmployment(company.id(), company.founderId()));
-    }
     private static boolean materializedInputMatches(FrontierWorldState state, ProductionJob job) {
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         return input != null && input.economicOwnerId().equals(job.settlementId()) && "minecraft:wheat".equals(input.itemKind())

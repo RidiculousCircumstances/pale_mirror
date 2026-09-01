@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
@@ -419,6 +420,32 @@ class ProductionProcessTest {
         assertEquals(ProductionBlockReason.FINANCE_UNAVAILABLE, block.reason());
         assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(ProductionStarted.class::isInstance));
         assertEquals(state, ProductionProcess.reduceBlocked(state, settlementId, block));
+    }
+
+    @Test
+    void staleMarketQuoteDefersInsteadOfAdmittingAJobWithDifferentExactEmploymentTerms() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-stale-quote"), 91L));
+        SubjectId settlement = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlement, opened);
+        }
+        FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        MarketDemand demand = MarketClearingProcess.foodDemand(state, task, 100L);
+        SubjectId company = CompanyFoundationProcess.companyId(settlement);
+        CompanyQuote stale = new CompanyQuote(new SubjectId("quote:test-stale-worker-terms"), demand.id(), company, demand.itemCount(),
+                FixedScalar.ONE, 100L, demand.expiresAtTick());
+        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand).publish(stale, 100L)));
+
+        List<ProposedEvent> planned = MarketClearingProcess.plan(state, MarketClearingProcess.clear(demand, 1, 200L));
+
+        assertEquals(1, planned.size());
+        ScheduleEffect.Created retry = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
+        assertEquals("frontier.market.clear", retry.action().kind());
+        assertEquals(200L + state.bootstrap().ruleset().cadence().marketRetryInterval(), retry.action().dueAt().ticks());
+        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(ProductionStarted.class::isInstance));
+        assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(MarketWorkOrderAccepted.class::isInstance));
     }
 
     private static FrontierWorldState productionTask(FrontierWorldState state, StrategicTaskStatus status) {
