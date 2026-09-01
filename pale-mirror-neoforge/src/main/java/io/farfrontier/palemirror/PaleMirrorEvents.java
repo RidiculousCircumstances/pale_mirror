@@ -119,7 +119,9 @@ public final class PaleMirrorEvents {
     public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeExplosion(level, event.getExplosion(), event.getAffectedBlocks(), event.getAffectedEntities());
-            SourceGrayboxRuntime.forServer(level.getServer()).captureExternalExplosion(level, event.getAffectedBlocks());
+            if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
+                SourceGrayboxRuntime.forServer(level.getServer()).captureExternalExplosion(level, event.getAffectedBlocks());
+            }
         }
     }
 
@@ -159,7 +161,8 @@ public final class PaleMirrorEvents {
             event.setCanceled(true);
             return;
         }
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+        if (SourceGrayboxRuntime.availableForSelectedLaunch()
+                && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
             SourceGrayboxRuntime.forServer(level.getServer()).observeEntityJoin(level, event.getEntity());
         }
@@ -178,7 +181,8 @@ public final class PaleMirrorEvents {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeEntityLeave(level, event.getEntity());
         }
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+        if (SourceGrayboxRuntime.availableForSelectedLaunch()
+                && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
             SourceGrayboxRuntime.forServer(level.getServer()).observeEntityLeave(level, event.getEntity());
         }
@@ -198,13 +202,15 @@ public final class PaleMirrorEvents {
             if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level
                     && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeLivingDeath(
                     level, event.getEntity(), event.getSource().getEntity())) return;
-            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
-            if (source.activated()) {
-                String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();
-                if (event.getSource().getEntity() instanceof ServerPlayer player) {
-                    source.observeEntityDeathWithReceipt(event.getEntity(), actor).ifPresent(message -> source.presentTransientReceipt(player, message));
-                } else source.observeEntityDeath(event.getEntity(), actor);
-                return;
+            if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
+                SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
+                if (source.activated()) {
+                    String actor = event.getSource().getEntity() == null ? "environment" : event.getSource().getEntity().getUUID().toString();
+                    if (event.getSource().getEntity() instanceof ServerPlayer player) {
+                        source.observeEntityDeathWithReceipt(event.getEntity(), actor).ifPresent(message -> source.presentTransientReceipt(player, message));
+                    } else source.observeEntityDeath(event.getEntity(), actor);
+                    return;
+                }
             }
             PaleMirrorRuntime.forServer(event.getEntity().level().getServer())
                     .recordSettlementDeath(event.getEntity(), event.getSource());
@@ -258,9 +264,11 @@ public final class PaleMirrorEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onFrontierBlockBreak(BlockEvent.BreakEvent event) {
         if (!event.isCanceled() && event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
-            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
-            if (source.activated()) source.observeBlockBreakWithReceipt(level, event.getPos(), "player:" + player.getUUID())
-                    .ifPresent(message -> source.presentTransientReceipt(player, message));
+            if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
+                SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
+                if (source.activated()) source.observeBlockBreakWithReceipt(level, event.getPos(), "player:" + player.getUUID())
+                        .ifPresent(message -> source.presentTransientReceipt(player, message));
+            }
         }
     }
 
@@ -317,11 +325,13 @@ public final class PaleMirrorEvents {
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()) {
-            SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
-            if (source.presentBriefing(player, event.getPos())) {
-                event.setCanceled(true);
-                event.setCancellationResult(InteractionResult.SUCCESS);
-                return;
+            if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
+                SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
+                if (source.presentBriefing(player, event.getPos())) {
+                    event.setCanceled(true);
+                    event.setCancellationResult(InteractionResult.SUCCESS);
+                    return;
+                }
             }
             PaleMirrorRuntime runtime = PaleMirrorRuntime.forServer(player.getServer());
             var transfer = runtime.interactWithSupplyDepot(player, event.getPos());
@@ -353,6 +363,7 @@ public final class PaleMirrorEvents {
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && SourceGrayboxRuntime.availableForSelectedLaunch()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
@@ -387,6 +398,7 @@ public final class PaleMirrorEvents {
         }
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide()
+                && SourceGrayboxRuntime.availableForSelectedLaunch()
                 && SourceGrayboxRuntime.forServer(player.getServer()).presentBriefing(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
@@ -486,7 +498,7 @@ public final class PaleMirrorEvents {
     public static void onChunkLoaded(ChunkEvent.Load event) {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             PaleMirrorRuntime.forServer(level.getServer()).railChunkLoaded(level, event.getChunk().getPos());
-            if (SourceGrayboxRuntime.isGrayboxLevel(level)) {
+            if (SourceGrayboxRuntime.availableForSelectedLaunch() && SourceGrayboxRuntime.isGrayboxLevel(level)) {
                 SourceGrayboxRuntime.forServer(level.getServer()).observeChunkLoaded(level);
             }
         }

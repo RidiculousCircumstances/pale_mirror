@@ -56,7 +56,21 @@ public final class SourceGrayboxRuntime {
     }
 
     public static SourceGrayboxRuntime forServer(MinecraftServer server) {
+        if (!availableForSelectedLaunch()) {
+            throw new IllegalStateException("Frozen source graybox is unavailable while Frontier v3 owns the physical world");
+        }
         return INSTANCES.computeIfAbsent(server, SourceGrayboxRuntime::new);
+    }
+
+    /**
+     * True only when the frozen source-parity runtime is the selected launch owner.
+     *
+     * <p>This gate deliberately precedes SavedData construction. A broad NeoForge callback in a
+     * v3 launch must not deserialize or refresh the old simulation just because a player loaded
+     * a graybox chunk.</p>
+     */
+    public static boolean availableForSelectedLaunch() {
+        return !FrontierV3ServerLifecycle.freezesLegacySourceRuntime();
     }
 
     public static void stop(MinecraftServer server) {

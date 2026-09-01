@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -21,10 +22,18 @@ class FrontierV3LaunchOwnershipTest {
             System.clearProperty(PROPERTY);
             assertFalse(FrontierV3ServerLifecycle.v3LaunchOwnsPhysicalWorld(),
                     "a normal legacy launch may own its legacy graybox");
+            assertFalse(FrontierV3ServerLifecycle.freezesLegacySourceRuntime(),
+                    "a normal legacy launch may construct its selected source graybox runtime");
+            assertTrue(SourceGrayboxRuntime.availableForSelectedLaunch(),
+                    "a normal legacy launch may construct its selected source graybox runtime");
 
             System.setProperty(PROPERTY, "true");
             assertTrue(FrontierV3ServerLifecycle.v3LaunchOwnsPhysicalWorld(),
                     "a v3 launch must exclude v2 even before startup or after a v3 quarantine");
+            assertTrue(FrontierV3ServerLifecycle.freezesLegacySourceRuntime(),
+                    "v3 must freeze the legacy source runtime before any broad callback can hydrate it");
+            assertFalse(SourceGrayboxRuntime.availableForSelectedLaunch(),
+                    "a v3 launch must reject source runtime construction before a chunk callback can deserialize v2");
         } finally {
             if (prior == null) System.clearProperty(PROPERTY);
             else System.setProperty(PROPERTY, prior);

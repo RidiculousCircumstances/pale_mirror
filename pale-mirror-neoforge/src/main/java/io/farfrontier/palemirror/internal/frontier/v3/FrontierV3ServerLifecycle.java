@@ -62,6 +62,14 @@ public final class FrontierV3ServerLifecycle {
     static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
 
     /**
+     * Whether broad server callbacks must leave the frozen source-parity runtime untouched.
+     *
+     * <p>This is a launch selection, not a health check: a quarantined v3 runtime still excludes
+     * v2 construction, SavedData hydration and projection.</p>
+     */
+    public static boolean freezesLegacySourceRuntime() { return v3LaunchOwnsPhysicalWorld(); }
+
+    /**
      * Returns an operator-facing summary of the v3 world selected for this server.
      *
      * <p>In particular, this never delegates to the frozen v2 runtime.  A missing or
