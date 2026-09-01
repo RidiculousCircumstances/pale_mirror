@@ -206,11 +206,11 @@ final class FrontierV3SceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity body = level.getEntity(member.entityId());
             if (!(body instanceof Mob mob) || !mob.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
-            captures.add(new SceneMemberPosition(member.actorId(), new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
+            captures.add(new SceneMemberPosition(member.actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
         }
         if (!captures.isEmpty()) {
             Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
-            captures.forEach(capture -> positions.put(capture.actorId(), new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z())));
+            captures.forEach(capture -> positions.put(capture.actorId(), capture.body()));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_handoff", lease,
                     submit(runtime, "scene-handoff", lease.id().value(), new SceneLeaseHandoff(lease.withMemberPositions(positions).withAmbientHandoff(
                             captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures)));
@@ -636,7 +636,7 @@ final class FrontierV3SceneExecutor {
         SceneMember member = lease.members().stream().filter(candidate -> candidate.entityId().equals(entity.getUUID())).findFirst().orElseThrow();
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         submit(runtime, "scene-death", lease.id().value() + "-" + member.actorId().value(),
-                new ActorDied(lease.id(), member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
+                new ActorDied(lease.id(), member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
         return true;
     }
 
@@ -682,7 +682,7 @@ final class FrontierV3SceneExecutor {
                 conflict(level, runtime, state, lease, "release-body-dead"); return;
             }
             long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
-            positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
+            positions.add(new SceneMemberPosition(member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease,
                 submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions)));
@@ -740,7 +740,7 @@ final class FrontierV3SceneExecutor {
                 forgetLastObserved(runtime, lease.id());
                 return;
             }
-            positions.add(new SceneMemberPosition(member.actorId(), new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), fixed(body.getHealth())));
+            positions.add(new SceneMemberPosition(member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), fixed(body.getHealth())));
         }
         Map<SceneLeaseId, List<SceneMemberPosition>> observations = LAST_OBSERVED.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (observations.size() < MAX_PENDING_DRAINS || observations.containsKey(lease.id())) observations.put(lease.id(), List.copyOf(positions));

@@ -46,8 +46,12 @@ final class FrontierHiveActorSlots {
 
     private static boolean accept(WorldBounds bounds, Set<BlockPosition> occupancy, BlockPosition candidate,
                                   List<BlockPosition> accepted, int count) {
+        // Candidate is the support cell. A standing Zombie's collision volume reaches almost
+        // two full cells above its feet, so reserve support + feet + both head-overlap cells.
+        // Treating only the first two cells as clear produced a physically embedded top ring
+        // beside a tall BROOD organ on the outer perimeter.
         if (!bounds.contains(candidate) || occupancy.contains(candidate) || occupancy.contains(candidate.offset(0, 1, 0))
-                || occupancy.contains(candidate.offset(0, 2, 0))) return false;
+                || occupancy.contains(candidate.offset(0, 2, 0)) || occupancy.contains(candidate.offset(0, 3, 0))) return false;
         accepted.add(candidate); return accepted.size() == count;
     }
 }

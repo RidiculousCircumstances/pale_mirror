@@ -44,8 +44,8 @@ class FrontierBootstrapperTest {
     void bootstrapIsSeedDeterministicAndLocaleIndependent() {
         WorldId world = new WorldId("frontier:bootstrap");
         FrontierBootstrap first = FrontierBootstrapper.create(world, 7L);
-        assertEquals("bd5fbe1346896a0a5f1fc4a527fca44b8b087b54f530295ccd10d6f6b3b46ce7", first.canonicalSha256());
-        assertEquals("5e12d08fa99d7d9ce4c2d8aa86b5ca6ed0dbd5f1cd59f1ffb6d04354b5f51930", FrontierBootstrapper.create(world, 8L).canonicalSha256());
+        assertEquals("d69c03b5859130346b1d793fb537b6e32c9a1ac0ef513d5cd5a97892b209c878", first.canonicalSha256());
+        assertEquals("425afdfa402292ec801d2303889dd5eff2b9d319b8975d09f758e2918b1a5e4f", FrontierBootstrapper.create(world, 8L).canonicalSha256());
         assertEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 7L).canonicalSha256());
         assertNotEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 8L).canonicalSha256());
 

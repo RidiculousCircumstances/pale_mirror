@@ -100,8 +100,8 @@ public final class FrontierSceneBehaviors {
     static StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) {
         return behavior(lease).releasePlans(state, lease);
     }
-    static BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
-        return behavior(lease).releasedPosition(state, lease, actorId, observed);
+    static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+        return behavior(lease).releasedBody(state, lease, actorId, observed);
     }
     /** Cause-owned state that must transition atomically with a recorded scene death. */
     static HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
@@ -139,7 +139,7 @@ public final class FrontierSceneBehaviors {
                                        Map<SubjectId, RouteConstruction> constructions, StrategicPlanState plans, SceneLease lease, Set<SubjectId> leasedOperations);
         StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus);
         StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease);
-        BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed);
+        BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed);
         default HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             return state.humanPopulation();
         }
@@ -213,11 +213,10 @@ public final class FrontierSceneBehaviors {
                         ? state.strategicPlans().transitionEngagement(id, RouteEngagementStatus.COLD_COMBAT) : state.strategicPlans();
             }).orElse(state.strategicPlans());
         }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             RouteOperation operation = state.operations().get(cause(lease).operationId());
             boolean checkpoint = cause(lease).engagementId().isEmpty() && operation != null && operation.stage() == OperationStage.EN_ROUTE && operation.activeTravel().isPresent();
-            return checkpoint ? operation.activeTravel().orElseThrow().formation().get(actorId).supportingSurface().support()
-                    : new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+            return checkpoint ? operation.activeTravel().orElseThrow().formation().get(actorId) : observed;
         }
     }
 
@@ -256,8 +255,8 @@ public final class FrontierSceneBehaviors {
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) {
             return state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).id(), SettlementAssaultStatus.COLD_COMBAT);
         }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
-            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            return observed;
         }
     }
 
@@ -291,8 +290,8 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
-            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            return observed;
         }
     }
 
@@ -329,8 +328,8 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BlockPosition releasedPosition(FrontierWorldState state, SceneLease lease, SubjectId actorId, BlockPosition observed) {
-            return new BodyPosition(observed.x(), observed.y(), observed.z()).supportingSurface().support();
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            return observed;
         }
         @Override public HumanPopulation afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));

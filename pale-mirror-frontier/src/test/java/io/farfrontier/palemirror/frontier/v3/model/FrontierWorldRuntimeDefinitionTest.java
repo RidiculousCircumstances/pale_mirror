@@ -641,8 +641,11 @@ class FrontierWorldRuntimeDefinitionTest {
         SceneLease lease = SceneLease.atExactPositions(leaseId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, handoffInstant,
                 projection.revision().value(), SceneLeaseStatus.PREPARED, Optional.empty(), members,
                 memberPositions);
-        SceneLease legacyUniformLease = new SceneLease(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:legacy-uniform"), before.bootstrap().worldId(),
-                operation.id(), operation.cargoId(), operation.currentPosition(), handoffInstant, projection.revision().value(), SceneLeaseStatus.PREPARED, members);
+        Map<SubjectId, BodyPosition> uniformBodies = new LinkedHashMap<>();
+        members.forEach(member -> uniformBodies.put(member.actorId(), new BodyPosition(operation.currentPosition().x(), operation.currentPosition().y(), operation.currentPosition().z())));
+        SceneLease legacyUniformLease = SceneLease.atExactPositions(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:legacy-uniform"), before.bootstrap().worldId(),
+                operation.id(), operation.cargoId(), operation.currentPosition(), cargoPosition, handoffInstant, projection.revision().value(), SceneLeaseStatus.PREPARED,
+                Optional.empty(), members, uniformBodies);
         SceneLease wrongCargoLease = SceneLease.atExactPositions(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:wrong-cargo"), before.bootstrap().worldId(),
                 operation.id(), operation.cargoId(), operation.currentPosition(), operation.currentPosition(), handoffInstant, projection.revision().value(),
                 SceneLeaseStatus.PREPARED, Optional.empty(), members, memberPositions);
@@ -705,7 +708,7 @@ class FrontierWorldRuntimeDefinitionTest {
                             translateTravel(oneHotCell, Math.min(oneHotCell.nextColdCursor(), oneHotCell.cursor() + 2)))));
         }
         SceneMember deadMember = lease.members().getFirst();
-        ActorDied death = new ActorDied(leaseId, deadMember.actorId(), lease.handoffPosition(), "entity:player-test");
+        ActorDied death = new ActorDied(leaseId, deadMember.actorId(), lease.memberPosition(deadMember.actorId()), "entity:player-test");
         var deathCheckpoint = engine.checkpoint();
         var deathCommand = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-actor-death");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
@@ -717,7 +720,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(before.bootstrap().residentCount() - 1, engine.projection(ProjectionQuery.summary()).residentCount());
         assertEquals(death, FrontierWorldRuntimeDefinition.payloadCodecs().decode(death.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(death)));
         List<SceneMemberPosition> surviving = lease.members().stream().filter(member -> !member.equals(deadMember)).map(member ->
-                new SceneMemberPosition(member.actorId(), lease.handoffPosition())).toList();
+                new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList();
         var releaseCheckpoint = engine.checkpoint();
         var releaseCommand = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:scene-death-release");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(
@@ -730,7 +733,7 @@ class FrontierWorldRuntimeDefinitionTest {
         FrontierWorldState hot = leased.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                new BlockPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()), FixedScalar.whole(7))).toList();
+                new BodyPosition(lease.handoffPosition().x() + 1, lease.handoffPosition().y(), lease.handoffPosition().z()), FixedScalar.whole(7))).toList();
         FrontierWorldState released = draining.releaseSceneLease(leaseId, captured);
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
         assertEquals(hot.operations().get(operation.id()).activeTravel().orElseThrow().formation().get(captured.getFirst().actorId()).supportingSurface().support(),
@@ -743,8 +746,8 @@ class FrontierWorldRuntimeDefinitionTest {
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> retained = new LinkedHashMap<>(before.sceneLeases());
         for (int index = 0; index < 1_024; index++) {
             var oldId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:terminal-" + index);
-            retained.put(oldId, new SceneLease(oldId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), new SimInstant(index), index,
-                    SceneLeaseStatus.CLOSED, operation.participantIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(before.bootstrap().worldId(), actor))).toList()));
+            retained.put(oldId, SceneLease.atExactPositions(oldId, before.bootstrap().worldId(), operation.id(), operation.cargoId(), operation.route().getFirst(), cargoPosition,
+                    new SimInstant(index), index, SceneLeaseStatus.CLOSED, Optional.empty(), members, memberPositions));
         }
         FrontierWorldState retentionState = new FrontierWorldState(before.bootstrap(), before.actorLocations(), before.structureConditions(), before.infection(),
                 before.inventory(), before.productionJobs(), before.contracts(), before.operations(), before.logisticsHistory(), before.physicalIntents(), before.physicalObservations(), retained,

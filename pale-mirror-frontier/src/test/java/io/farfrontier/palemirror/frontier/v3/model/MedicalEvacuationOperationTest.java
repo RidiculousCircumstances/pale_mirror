@@ -242,7 +242,7 @@ class MedicalEvacuationOperationTest {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(started.operation().id()), candidate.infirmaryAnchor(),
                 new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveLegacySupports(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, prepared.intent()));
 
@@ -341,7 +341,7 @@ class MedicalEvacuationOperationTest {
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
         SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(started.operation().id()), candidate.infirmaryAnchor(),
                 new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members,
-                SceneLease.bodiesAboveLegacySupports(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
         return new TreatmentSceneFixture(world, state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), started.operation(), lease);
     }
 

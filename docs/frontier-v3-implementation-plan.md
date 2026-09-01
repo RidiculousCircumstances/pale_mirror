@@ -121,8 +121,8 @@ new movement-bearing scene or transport family is added, close
    before and after HOT/COLD/restart without force-loading.
 
 T0.3 is active: supply routes, active `OperationTravel` cursors and each active
-`OperationAssembly` member retain their own persisted topology. Current snapshot schema 95
-and persistence-envelope v5 retain typed `BodyPosition` formation cells,
+`OperationAssembly` member retain their own persisted topology. Current snapshot schema 97
+and persistence-envelope v6 retain typed `BodyPosition` formation cells,
 `TransportAnchor` and assembly `SurfaceAnchor` routes.
 Any other snapshot or WAL envelope is rejected fail-closed; v3 worlds are
 disposable and recreated for a new format. This is deliberately not T0.4

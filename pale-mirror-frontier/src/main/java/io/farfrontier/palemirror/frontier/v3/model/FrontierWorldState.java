@@ -898,9 +898,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         ActorLocation current = actorLocations.get(death.actorId());
         if (current.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("actor death is already recorded");
-        FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.position());
+        FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.body().supportingSurface().support());
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        nextActors.put(death.actorId(), current.deadAt(BodyPosition.above(new SurfaceAnchor(death.position()))));
+        nextActors.put(death.actorId(), current.deadAt(death.body()));
         HumanPopulation nextPopulation = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick); return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(nextPopulation));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }

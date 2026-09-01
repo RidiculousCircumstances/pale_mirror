@@ -192,7 +192,8 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             java.util.Set<BlockPosition> positions = new java.util.HashSet<>();
             settlement.residents().forEach(resident -> {
-                BlockPosition position = FrontierTestPositions.bodyCellOf(state.actorLocations().get(resident.id()));
+                BodyPosition body = state.actorLocations().get(resident.id()).body();
+                BlockPosition position = new BlockPosition(body.x(), body.y(), body.z());
                 assertTrue(positions.add(position), "resident slots must not overlap: " + resident.id());
                 GrayboxCell foot = plan.cells().get(position);
                 assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
@@ -209,7 +210,8 @@ class FrontierGrayboxPlanTest {
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
 
         state.bootstrap().hive().bioforms().forEach(bioform -> {
-            BlockPosition position = FrontierTestPositions.bodyCellOf(state.actorLocations().get(bioform.id()));
+            BodyPosition body = state.actorLocations().get(bioform.id()).body();
+            BlockPosition position = new BlockPosition(body.x(), body.y(), body.z());
             GrayboxCell foot = plan.cells().get(position);
             assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
                     "bioform foot cell must stay outside hive organ geometry: " + bioform.id());

@@ -130,7 +130,7 @@ class RouteSceneReturnRepairTest {
 
     private static List<SceneMemberPosition> memberPositions(RouteOperation operation) {
         return operation.activeTravel().orElseThrow().formation().entrySet().stream()
-                .map(entry -> new SceneMemberPosition(entry.getKey(), entry.getValue().supportingSurface().support())).toList();
+                .map(entry -> new SceneMemberPosition(entry.getKey(), entry.getValue())).toList();
     }
 
     private static void advanceHot(FrontierEngine<FrontierWorldProjection> engine, WorldId world, SubjectId operationId) {

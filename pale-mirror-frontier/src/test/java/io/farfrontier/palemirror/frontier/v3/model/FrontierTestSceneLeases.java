@@ -28,6 +28,6 @@ final class FrontierTestSceneLeases {
                 : operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(demand);
         return SceneLease.atExactPositions(id, state.bootstrap().worldId(), operationId, cargoId, demand,
                 cargoPosition, instant, revision, SceneLeaseStatus.PREPARED, engagementId, members,
-                SceneLease.bodiesAboveLegacySupports(positions));
+                SceneLease.bodiesAboveSupportCells(positions));
     }
 }

@@ -97,7 +97,7 @@ final class MedicalTreatmentScenePayloadCodecs {
     private static void writeMembers(DataOutputStream output, List<SceneMemberPosition> members) throws IOException {
         output.writeByte(members.size());
         for (SceneMemberPosition member : members) {
-            FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); writePosition(output, member.position());
+            FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); writeBody(output, member.body());
             output.writeLong(member.health().raw());
         }
     }
@@ -105,7 +105,7 @@ final class MedicalTreatmentScenePayloadCodecs {
     private static List<SceneMemberPosition> readMembers(DataInputStream input) throws IOException {
         List<SceneMemberPosition> members = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            members.add(new SceneMemberPosition(FrontierWorldPayloadCodecs.readSubject(input).value(), readPosition(input),
+            members.add(new SceneMemberPosition(FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input),
                     new FixedScalar(input.readLong())));
         }
         return members;
@@ -116,5 +116,11 @@ final class MedicalTreatmentScenePayloadCodecs {
     }
     private static BlockPosition readPosition(DataInputStream input) throws IOException {
         return new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+    }
+    private static void writeBody(DataOutputStream output, BodyPosition body) throws IOException {
+        output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z());
+    }
+    private static BodyPosition readBody(DataInputStream input) throws IOException {
+        return new BodyPosition(input.readInt(), input.readInt(), input.readInt());
     }
 }

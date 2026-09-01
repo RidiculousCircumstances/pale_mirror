@@ -298,13 +298,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             SceneLeaseHandoff handoff = (SceneLeaseHandoff) payload; writeSceneLease(output, handoff.lease()); output.writeByte(handoff.ambientMembers().size());
             for (SceneMemberPosition member : handoff.ambientMembers()) {
-                writeSubject(output, member.actorId()); output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z()); output.writeLong(member.health().raw());
+                writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y()); output.writeInt(member.body().z()); output.writeLong(member.health().raw());
             }
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SceneLease lease = readSceneLease(input); java.util.ArrayList<SceneMemberPosition> members = new java.util.ArrayList<>();
             for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-                members.add(new SceneMemberPosition(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()),
+                members.add(new SceneMemberPosition(readSubject(input).value(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
                         new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
             }
             return new SceneLeaseHandoff(lease, members);
@@ -340,7 +340,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SceneLeaseReleased released = (SceneLeaseReleased) payload; writeString(output, released.leaseId().value()); output.writeByte(released.members().size());
             for (SceneMemberPosition member : released.members()) {
                 writeSubject(output, member.actorId());
-                output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z());
+                output.writeInt(member.body().x()); output.writeInt(member.body().y()); output.writeInt(member.body().z());
                 output.writeLong(member.health().raw());
             }
         }); }
@@ -348,8 +348,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)); java.util.ArrayList<SceneMemberPosition> members = new java.util.ArrayList<>();
             for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
                 var actor = readSubject(input).value();
-                BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-                members.add(new SceneMemberPosition(actor, position, new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
+                BodyPosition body = new BodyPosition(input.readInt(), input.readInt(), input.readInt());
+                members.add(new SceneMemberPosition(actor, body, new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
             }
             return new SceneLeaseReleased(id, members);
         }); }
@@ -358,11 +358,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public String type() { return "frontier.actor_died"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             ActorDied death = (ActorDied) payload; writeString(output, death.leaseId().value()); writeSubject(output, death.actorId());
-            output.writeInt(death.position().x()); output.writeInt(death.position().y()); output.writeInt(death.position().z()); writeString(output, death.cause());
+            output.writeInt(death.body().x()); output.writeInt(death.body().y()); output.writeInt(death.body().z()); writeString(output, death.cause());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new ActorDied(
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)), readSubject(input).value(),
-                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
+                new BodyPosition(input.readInt(), input.readInt(), input.readInt()), readString(input))); }
     }
     private static final class AmbientActorDiedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_actor_died"; }
@@ -797,13 +797,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException {
         output.writeByte(values.size()); for (SceneMemberPosition member : values) {
-            writeSubject(output, member.actorId()); output.writeInt(member.position().x()); output.writeInt(member.position().y()); output.writeInt(member.position().z()); output.writeLong(member.health().raw());
+            writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y()); output.writeInt(member.body().z()); output.writeLong(member.health().raw());
         }
     }
     private static java.util.List<SceneMemberPosition> readMemberPositions(DataInputStream input) throws IOException {
         java.util.ArrayList<SceneMemberPosition> values = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) values.add(new SceneMemberPosition(readSubject(input).value(),
-                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
+                new BodyPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
         return values;
     } static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }

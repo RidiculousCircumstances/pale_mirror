@@ -79,7 +79,7 @@ public final class FrontierV3SceneDeathGameTests {
                 helper.assertValueEqual(afterDeaths.actorLocations().get(second.actorId()).condition().status(), ActorLifeStatus.DEAD, "second death must be canonical");
                 helper.assertValueEqual(afterDeaths.sceneLeases().get(leaseId).status(), SceneLeaseStatus.DRAINING, "no invalid second transition may occur");
                 List<SceneMemberPosition> survivors = lease.members().stream().filter(member -> !member.equals(first) && !member.equals(second))
-                        .map(member -> new SceneMemberPosition(member.actorId(), candidate.handoffPosition())).toList();
+                        .map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList();
                 FrontierV3CommandSubmission.submit(runtime, "scene-deaths-release", leaseId.value(), new SceneLeaseReleased(leaseId, survivors));
                 helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
                         "release must capture only canonical survivors without quarantining the runtime");

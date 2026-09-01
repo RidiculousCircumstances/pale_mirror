@@ -19,8 +19,7 @@ final class FrontierTestPositions {
         return location.supportingSurface().support();
     }
 
-    static BlockPosition bodyCellOf(ActorLocation location) {
-        BodyPosition body = location.body();
-        return new BlockPosition(body.x(), body.y(), body.z());
+    static BodyPosition bodyCellOf(ActorLocation location) {
+        return location.body();
     }
 }

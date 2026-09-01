@@ -66,7 +66,7 @@ class SceneCausePersistenceTest {
                 new SettlementAssaultSceneCause(new SubjectId("assault:scene-cause-wal"), new SubjectId("settlement:northwatch")),
                 new BlockPosition(8, 64, 8), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
                 List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveLegacySupport(new BlockPosition(8, 64, 8))), Set.of(), Optional.empty());
+                Map.of(actor, BodyPosition.aboveSupportCell(new BlockPosition(8, 64, 8))), Set.of(), Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().encode(new SceneLeasePrepared(assault)));
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(assault);
@@ -80,7 +80,7 @@ class SceneCausePersistenceTest {
                 new EngineeringWorkSceneCause(new SubjectId("construction:engineering-wal"), 3),
                 new BlockPosition(8, 64, 8), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
                 List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
-                Map.of(actor, BodyPosition.aboveLegacySupport(new BlockPosition(7, 64, 7))), Set.of(), Optional.empty());
+                Map.of(actor, BodyPosition.aboveSupportCell(new BlockPosition(7, 64, 7))), Set.of(), Optional.empty());
 
         EngineeringWorkSceneLeasePrepared payload = new EngineeringWorkSceneLeasePrepared(lease);
         EngineeringWorkSceneLeasePrepared decoded = assertInstanceOf(EngineeringWorkSceneLeasePrepared.class,

@@ -7,11 +7,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Immutable evidence that an exact HOT actor died through a real Minecraft death event. */
-public record ActorDied(SceneLeaseId leaseId, SubjectId actorId, BlockPosition position, String cause) implements FrontierPayload {
+public record ActorDied(SceneLeaseId leaseId, SubjectId actorId, BodyPosition body, String cause) implements FrontierPayload {
     public ActorDied {
         Objects.requireNonNull(leaseId, "scene lease id");
         Objects.requireNonNull(actorId, "actor id");
-        Objects.requireNonNull(position, "death position");
+        Objects.requireNonNull(body, "death body");
         Objects.requireNonNull(cause, "death cause");
         if (cause.isBlank() || cause.length() > 160) throw new IllegalArgumentException("death cause must be a bounded non-blank observation");
     }

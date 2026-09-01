@@ -95,14 +95,14 @@ final class EngineeringWorkScenePayloadCodecs {
     private static void writeMembers(DataOutputStream output, List<SceneMemberPosition> members) throws IOException {
         output.writeByte(members.size());
         for (SceneMemberPosition member : members) {
-            FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); writePosition(output, member.position()); output.writeLong(member.health().raw());
+            FrontierWorldPayloadCodecs.writeSubject(output, member.actorId()); writeBody(output, member.body()); output.writeLong(member.health().raw());
         }
     }
 
     private static List<SceneMemberPosition> readMembers(DataInputStream input) throws IOException {
         List<SceneMemberPosition> members = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
-            members.add(new SceneMemberPosition(FrontierWorldPayloadCodecs.readSubject(input).value(), readPosition(input),
+            members.add(new SceneMemberPosition(FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input),
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
         }
         return members;
@@ -110,4 +110,6 @@ final class EngineeringWorkScenePayloadCodecs {
 
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
+    private static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
+    private static BodyPosition readBody(DataInputStream input) throws IOException { return new BodyPosition(input.readInt(), input.readInt(), input.readInt()); }
 }

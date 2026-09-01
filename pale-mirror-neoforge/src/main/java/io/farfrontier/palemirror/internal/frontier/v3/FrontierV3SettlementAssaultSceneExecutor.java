@@ -111,7 +111,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         if (captures.isEmpty()) return;
         Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
         captures.forEach(capture -> positions.put(capture.actorId(),
-                new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z())));
+                capture.body()));
         SceneLease handed = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
                 .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,
@@ -335,7 +335,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 submit(runtime, "settlement-assault-conflict", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }
 
-    private static BlockPosition at(Entity entity) { return new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
+    private static BodyPosition at(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
     private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
     private static boolean isAssault(SceneLease lease) { return io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease); }
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase,

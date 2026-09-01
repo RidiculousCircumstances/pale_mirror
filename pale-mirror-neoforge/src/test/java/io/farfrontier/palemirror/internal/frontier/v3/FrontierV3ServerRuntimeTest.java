@@ -138,7 +138,7 @@ class FrontierV3ServerRuntimeTest {
         SceneLease lease = FrontierV3TestSceneLeases.exact(overlapped, checkpoint,
                 new SceneLeaseId("lease:ambient-transfer-r" + checkpoint.revision().value()), operation.id(), operation.cargoId(),
                 operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
-        SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(12, 64, -12),
+        SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(12, 64, -12),
                 overlapped.actorLocations().get(participant).condition().health());
         lease = lease.withAmbientHandoff(java.util.Set.of(participant));
         SceneLeaseHandoff handoff = new SceneLeaseHandoff(lease, List.of(capture));
@@ -146,12 +146,12 @@ class FrontierV3ServerRuntimeTest {
 
         assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
         assertThrows(IllegalArgumentException.class, () -> overlapped.handoffAmbientScene(new SceneLeaseHandoff(handoffLease,
-                List.of(new SceneMemberPosition(operation.participantIds().getLast(), capture.position(), capture.health())))));
+                List.of(new SceneMemberPosition(operation.participantIds().getLast(), capture.body(), capture.health())))));
         submitAmbient(runtime, world, handoff, "command:ambient-scene-transfer");
 
         FrontierWorldState transferred = worldState(runtime);
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
-        assertEquals(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(capture.position().x(), capture.position().y(), capture.position().z()),
+        assertEquals(capture.body(),
                 transferred.actorLocations().get(participant).body(),
                 "a captured Minecraft feet cell must return to its exact canonical body location");
         assertEquals(lease, transferred.sceneLeases().get(lease.id()));
@@ -399,7 +399,7 @@ class FrontierV3ServerRuntimeTest {
         CheckpointImage draining = recovered.checkpointImage().orElseThrow();
         SceneLeaseReleased released = new SceneLeaseReleased(leaseId, lease.members().stream().map(member -> {
             var body = lease.memberPosition(member.actorId());
-            return new SceneMemberPosition(member.actorId(), new BlockPosition(body.x(), body.y(), body.z()));
+            return new SceneMemberPosition(member.actorId(), body);
         }).toList());
         CommandId releaseCommand = new CommandId("command:scene-recovery-release");
         assertInstanceOf(CommandResult.Accepted.class, recovered.submit(new FrontierCommand(1, releaseCommand, world, draining.revision(), draining.instant(),

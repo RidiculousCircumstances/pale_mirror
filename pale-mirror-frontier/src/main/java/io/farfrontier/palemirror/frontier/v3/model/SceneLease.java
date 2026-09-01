@@ -50,30 +50,6 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         }
     }
 
-    /** Compatibility constructor for snapshots and WAL records written before typed scene causes. */
-    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
-                      BlockPosition cargoPosition, SimInstant handoffInstant, long revision, SceneLeaseStatus status,
-                      Optional<SubjectId> engagementId, List<SceneMember> members, Map<SubjectId, BlockPosition> memberPositions,
-                      Set<SubjectId> ambientHandoffActorIds, Optional<SceneRecoveryEvidence> recoveryEvidence) {
-        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition), handoffPosition, handoffInstant,
-                revision, status, members, bodiesAtLegacyFeet(memberPositions), ambientHandoffActorIds, recoveryEvidence);
-    }
-
-    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
-                      SimInstant handoffInstant, long revision, SceneLeaseStatus status, List<SceneMember> members) {
-        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, Optional.empty(), handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), Set.of(), Optional.empty());
-    }
-    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
-                      SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members) {
-        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), Set.of(), Optional.empty());
-    }
-
-    public SceneLease(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId, BlockPosition handoffPosition,
-                      SimInstant handoffInstant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
-                      Set<SubjectId> ambientHandoffActorIds) {
-        this(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, handoffPosition), handoffPosition, handoffInstant, revision, status, members, positions(members, handoffPosition), ambientHandoffActorIds, Optional.empty());
-    }
-
     public static SceneLease atExactPositions(SceneLeaseId id, WorldId worldId, SubjectId operationId, SubjectId cargoId,
                                               BlockPosition handoffPosition, BlockPosition cargoPosition, SimInstant handoffInstant, long revision,
                                               SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
@@ -133,17 +109,6 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
                 ambientHandoffActorIds, Optional.of(Objects.requireNonNull(evidence, "scene recovery evidence")));
     }
     public BodyPosition memberPosition(SubjectId actorId) { return memberPositions.get(Objects.requireNonNull(actorId, "scene actor")); }
-    private static Map<SubjectId, BodyPosition> positions(List<SceneMember> members, BlockPosition handoffPosition) {
-        Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
-        members.forEach(member -> result.put(member.actorId(), new BodyPosition(handoffPosition.x(), handoffPosition.y(), handoffPosition.z())));
-        return Map.copyOf(result);
-    }
-    /** Historical scene leases already persisted feet-air cells, unlike actor records and assembly slots. */
-    private static Map<SubjectId, BodyPosition> bodiesAtLegacyFeet(Map<SubjectId, BlockPosition> feet) {
-        Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
-        feet.forEach((actor, position) -> result.put(actor, new BodyPosition(position.x(), position.y(), position.z())));
-        return Map.copyOf(result);
-    }
     /** Converts current-domain support cells supplied by scene candidates to exact body cells. */
     public static Map<SubjectId, BodyPosition> bodiesAboveSupportCells(Map<SubjectId, BlockPosition> supports) {
         Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
@@ -151,9 +116,4 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         return Map.copyOf(result);
     }
 
-    /** @deprecated Source-only transition alias; persisted formats never use this path. */
-    @Deprecated(forRemoval = true)
-    public static Map<SubjectId, BodyPosition> bodiesAboveLegacySupports(Map<SubjectId, BlockPosition> supports) {
-        return bodiesAboveSupportCells(supports);
-    }
 }

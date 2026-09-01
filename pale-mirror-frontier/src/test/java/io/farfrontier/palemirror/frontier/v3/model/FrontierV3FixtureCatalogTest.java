@@ -142,7 +142,7 @@ class FrontierV3FixtureCatalogTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-draining", new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING)));
         List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                candidate.memberPositions().get(member.actorId()).offset(0, 1, 0), FixedScalar.whole(20))).toList();
+                BodyPosition.above(new SurfaceAnchor(candidate.memberPositions().get(member.actorId()))), FixedScalar.whole(20))).toList();
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-release", new SceneLeaseReleased(leaseId, captured)));
         FrontierWorldState closed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

@@ -223,8 +223,11 @@ class HiveRouteEngagementProcessTest {
         List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         SceneLeaseId incompleteLeaseId = new SceneLeaseId("lease:hive-cold-combat-incomplete");
         List<SceneMember> incompleteMembers = candidate.actorIds().stream().limit(2).map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
-        SceneLease incomplete = new SceneLease(incompleteLeaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
-                new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers);
+        FrontierWorldState incompleteState = state;
+        SceneLease incomplete = SceneLease.atExactPositions(incompleteLeaseId, world, candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
+                candidate.cargoPosition(), new SimInstant(3_001L), 1L, SceneLeaseStatus.PREPARED, Optional.of(candidate.engagementId()), incompleteMembers,
+                incompleteMembers.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId,
+                        member -> incompleteState.actorLocations().get(member.actorId()).body(), (left, right) -> left, java.util.LinkedHashMap::new)));
         FrontierWorldState coldBeforeLease = state;
         assertThrows(IllegalArgumentException.class, () -> coldBeforeLease.prepareSceneLease(incomplete));
         SceneLease lease = FrontierTestSceneLeases.exact(state, leaseId, candidate.operationId(), candidate.cargoId(),
@@ -246,7 +249,7 @@ class HiveRouteEngagementProcessTest {
                 FixedScalar.whole(20), FixedScalar.ZERO);
         FrontierWorldState struck = hot.preparePhysicalIntent(strikeIntent)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
-                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).supportingSurface().support(), "scene-strike-test"), 0L)
+                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).body(), "scene-strike-test"), 0L)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
         assertEquals(strikeReceipt, struck.physicalObservations().get(strikeReceipt.id()));
@@ -265,7 +268,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
         SubjectId deadActor = candidate.actorIds().stream().filter(actor -> !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
-        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).supportingSurface().support(), "restart-fixture"), 0L);
+        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).body(), "restart-fixture"), 0L);
         List<SceneMemberPosition> surviving = candidate.actorIds().stream().filter(actor -> !actor.equals(deadActor))
                 .map(actor -> {
                     ActorLocation location = afterRecordedDeath.actorLocations().get(actor);
@@ -277,7 +280,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(SceneLeaseStatus.CLOSED, drainedRecovery.sceneLeases().get(leaseId).status());
         List<SceneMemberPosition> captured = candidate.actorIds().stream().map(actor -> {
             ActorLocation location = hot.actorLocations().get(actor);
-            return new SceneMemberPosition(actor, new BlockPosition(location.body().x(), location.body().y(), location.body().z()), location.condition().health());
+            return new SceneMemberPosition(actor, location.body(), location.condition().health());
         }).toList();
         state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);
         assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());

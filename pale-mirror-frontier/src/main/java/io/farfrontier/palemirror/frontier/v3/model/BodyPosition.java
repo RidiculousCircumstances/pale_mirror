@@ -16,12 +16,6 @@ public record BodyPosition(int x, int y, int z) {
         return above(new SurfaceAnchor(support));
     }
 
-    /** @deprecated Source-only transition alias; persisted formats never use this path. */
-    @Deprecated(forRemoval = true)
-    public static BodyPosition aboveLegacySupport(BlockPosition support) {
-        return aboveSupportCell(support);
-    }
-
     /** The one support column directly below this feet-air cell. */
     public SurfaceAnchor supportingSurface() {
         return SurfaceAnchor.at(x, Math.subtractExact(y, 1), z);

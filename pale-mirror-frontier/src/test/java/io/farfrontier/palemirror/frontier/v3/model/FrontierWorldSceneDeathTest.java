@@ -37,16 +37,16 @@ class FrontierWorldSceneDeathTest {
         submit(engine, world, "hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
 
         SceneMember first = lease.members().getFirst(), second = lease.members().get(1), third = lease.members().get(2);
-        submit(engine, world, "first-death", new ActorDied(leaseId, first.actorId(), lease.handoffPosition(), "explosion:test"));
+        submit(engine, world, "first-death", new ActorDied(leaseId, first.actorId(), lease.memberPosition(first.actorId()), "explosion:test"));
         assertEquals(SceneLeaseStatus.DRAINING, state(engine).sceneLeases().get(leaseId).status());
 
-        submit(engine, world, "second-death", new ActorDied(leaseId, second.actorId(), lease.handoffPosition(), "explosion:test"));
+        submit(engine, world, "second-death", new ActorDied(leaseId, second.actorId(), lease.memberPosition(second.actorId()), "explosion:test"));
         FrontierWorldState afterDeaths = state(engine);
         assertEquals(ActorLifeStatus.DEAD, afterDeaths.actorLocations().get(first.actorId()).condition().status());
         assertEquals(ActorLifeStatus.DEAD, afterDeaths.actorLocations().get(second.actorId()).condition().status());
         assertEquals(SceneLeaseStatus.DRAINING, afterDeaths.sceneLeases().get(leaseId).status());
 
-        submit(engine, world, "third-death", new ActorDied(leaseId, third.actorId(), lease.handoffPosition(), "explosion:test"));
+        submit(engine, world, "third-death", new ActorDied(leaseId, third.actorId(), lease.memberPosition(third.actorId()), "explosion:test"));
         assertEquals(ActorLifeStatus.DEAD, state(engine).actorLocations().get(third.actorId()).condition().status());
 
         submit(engine, world, "release", new SceneLeaseReleased(leaseId, List.of()));

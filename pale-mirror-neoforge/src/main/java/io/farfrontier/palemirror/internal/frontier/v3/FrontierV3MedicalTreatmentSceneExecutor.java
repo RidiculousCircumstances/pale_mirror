@@ -167,7 +167,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
-            BlockPosition observed = new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            BodyPosition observed = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
             captures.add(new SceneMemberPosition(member.actorId(), observed,
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))));
         }

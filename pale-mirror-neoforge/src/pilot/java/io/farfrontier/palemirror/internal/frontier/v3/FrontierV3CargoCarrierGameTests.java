@@ -354,7 +354,7 @@ public final class FrontierV3CargoCarrierGameTests {
         return SceneLease.atExactPositions(new SceneLeaseId(id), state.bootstrap().worldId(), candidate.operationId(), candidate.cargoId(), handoff,
                 new BlockPosition(cargo.getX(), cargo.getY(), cargo.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members,
                 members.stream().collect(java.util.stream.Collectors.toMap(SceneMember::actorId,
-                        ignored -> BodyPosition.aboveLegacySupport(handoff), (left, right) -> left, java.util.LinkedHashMap::new)));
+                        ignored -> BodyPosition.aboveSupportCell(handoff), (left, right) -> left, java.util.LinkedHashMap::new)));
     }
     private static void prepareFloor(ServerLevel level, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

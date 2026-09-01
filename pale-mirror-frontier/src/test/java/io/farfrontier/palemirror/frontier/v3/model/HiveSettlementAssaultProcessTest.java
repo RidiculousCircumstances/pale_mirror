@@ -211,7 +211,7 @@ class HiveSettlementAssaultProcessTest {
                 SceneLease.deterministicEntityId(positioned.bootstrap().worldId(), actor))).toList();
         SceneLease lease = SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:assault-hot"), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), assault.settlementAnchor(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(400L),
-                7L, SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveLegacySupports(positions), java.util.Set.of(), java.util.Optional.empty());
+                7L, SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(positions), java.util.Set.of(), java.util.Optional.empty());
         SettlementAssaultSceneLeasePrepared payload = new SettlementAssaultSceneLeasePrepared(lease);
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
         FrontierWorldState unknown = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
@@ -221,7 +221,7 @@ class HiveSettlementAssaultProcessTest {
         state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
         FrontierWorldState draining = state;
         List<SceneMemberPosition> captured = members.stream().map(member -> {
-            ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), new BlockPosition(actor.body().x(), actor.body().y(), actor.body().z()), actor.condition().health());
+            ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), actor.body(), actor.condition().health());
         }).toList();
         state = state.releaseSceneLease(lease.id(), captured);
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, state.strategicPlans().settlementAssaults().get(assault.id()).status());

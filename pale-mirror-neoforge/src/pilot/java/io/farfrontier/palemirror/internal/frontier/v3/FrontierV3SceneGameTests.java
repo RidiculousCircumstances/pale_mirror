@@ -156,7 +156,7 @@ public final class FrontierV3SceneGameTests {
     public static void logisticsSceneNeverAcquiresCombatAuthorityWithoutAnEngagement(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
         SceneLease logistics = lease(origin);
-        SceneLease engagement = new SceneLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(),
+        SceneLease engagement = fixtureLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(),
                 FrontierSceneBehaviors.logistics(logistics).operationId(), FrontierSceneBehaviors.logistics(logistics).cargoId(),
                 logistics.handoffPosition(), logistics.handoffInstant(), logistics.revision(), logistics.status(), Optional.of(new SubjectId("engagement:scene-combat-authority-game-test")), logistics.members());
         helper.assertFalse(FrontierV3SceneExecutor.combatEnabled(logistics),
@@ -237,7 +237,7 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
                 FrontierV3CommandSubmission.submit(runtime, "scene-admission-proof-close", leaseId.value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased(leaseId,
-                        lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), candidate.handoffPosition())).toList()));
+                        lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
                 Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
                 helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
@@ -278,8 +278,8 @@ public final class FrontierV3SceneGameTests {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-bioform-test"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-bioform-test");
         SubjectId bioform = new SubjectId("bioform:west-0");
-        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-bioform-test"), new SubjectId("cargo:frontier-v3-bioform-test"),
-                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+        SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-bioform-test"), new SubjectId("cargo:frontier-v3-bioform-test"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
 
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
@@ -300,7 +300,7 @@ public final class FrontierV3SceneGameTests {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(24, 8, 0)); prepareFloor(level, origin); prepareFloor(level, origin.east(2));
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:engagement-scene-bodies"), 91L));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-engagement-bodies"); SubjectId resident = new SubjectId("resident:1-1"), bioform = new SubjectId("bioform:west-0");
-        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
+        SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-engagement-bodies"), new SubjectId("cargo:frontier-v3-engagement-bodies"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
                 Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)),
                         new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
@@ -351,8 +351,8 @@ public final class FrontierV3SceneGameTests {
                 "the HOT ambient resident must be present before transfer");
         Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-ambient-transfer");
-        SceneLease lease = new SceneLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-ambient-transfer"), new SubjectId("cargo:frontier-v3-ambient-transfer"),
-                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+        SceneLease lease = fixtureLease(id, state.bootstrap().worldId(), new SubjectId("operation:frontier-v3-ambient-transfer"), new SubjectId("cargo:frontier-v3-ambient-transfer"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident))));
 
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
@@ -637,8 +637,17 @@ public final class FrontierV3SceneGameTests {
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-game-test");
         WorldId world = new WorldId("frontier:scene-game-test");
         List<SceneMember> members = List.of(member(world, "resident:frontier-v3-test-hauler"), member(world, "resident:frontier-v3-test-guard"));
-        return new SceneLease(id, world, new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
-                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, members);
+        return fixtureLease(id, world, new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
+                new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members);
+    }
+    private static SceneLease fixtureLease(SceneLeaseId id, WorldId world, SubjectId operation, SubjectId cargo, BlockPosition handoff,
+                                           SimInstant instant, long revision, SceneLeaseStatus status, Optional<SubjectId> engagement,
+                                           List<SceneMember> members) {
+        java.util.Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.BodyPosition> bodies = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < members.size(); index++) {
+            bodies.put(members.get(index).actorId(), new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(handoff.x() + index * 2, handoff.y(), handoff.z()));
+        }
+        return SceneLease.atExactPositions(id, world, operation, cargo, handoff, handoff, instant, revision, status, engagement, members, bodies);
     }
     private static SceneMember member(WorldId world, String actorId) {
         SubjectId actor = new SubjectId(actorId);
