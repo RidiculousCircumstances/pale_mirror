@@ -29,4 +29,14 @@ public final class PaleMirrorCommandGameTests {
                 "the native pilot's route-construction diagnostic must be executable through the registered command tree");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-diagnostics-command", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v3MedicalDiagnosticIsPresentInTheRegisteredCommandTree(GameTestHelper helper) {
+        var root = PaleMirrorCommandRegistrar.commandTree().build();
+        var v3 = root.getChild("v3");
+        var inspect = v3 == null ? null : v3.getChild("inspect");
+        helper.assertTrue(inspect != null && inspect.getChild("medical") != null,
+                "the native pilot's medical diagnostic must be executable through the registered command tree");
+        helper.succeed();
+    }
 }

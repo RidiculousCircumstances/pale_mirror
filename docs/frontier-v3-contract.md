@@ -145,6 +145,49 @@ physical-delta index records scars, obstructions, craters, player construction
 and infection overlays without copying the entire Minecraft world into
 canonical state.
 
+### Terrain, traversal and facility ports
+
+The flat graybox is a development provider, not the spatial model. Production
+movement must remain valid on slopes, terraces, stairs, bridges, tunnels and
+buildings whose entrances and working floors have different elevations.
+
+- Spatial values are role-specific. A semantic surface/support anchor, a
+  body's feet position, a facility entrance/threshold, an interaction or work
+  station and a transport node are distinct typed values. A generic
+  `BlockPosition` may not silently stand for several of them.
+- Canonical movement retains one bounded immutable three-dimensional traversal
+  topology. Every edge has stable identity, exact endpoints, traversal kind,
+  grade and clearance, required mobility capabilities, provenance, revision
+  and explicit `OPEN`, `BLOCKED`, `DAMAGED` or `UNKNOWN` availability.
+- A facility exposes one or more semantic ports. A port owns orientation,
+  exterior approach, threshold/throat volume, interior connector, bounded
+  work/formation stations and its capability requirements. A structure centre,
+  fixed compass direction or coordinate offset is never an implicit entrance.
+- Pedestrians, ordinary ground bioforms, heavy bioforms, flying bioforms and
+  rail vehicles consume different capability views of topology. Sharing an
+  endpoint does not grant a vehicle permission to use a pedestrian edge.
+- COLD advances only the exact retained topology edge and cursor. HOT delegates
+  local path execution to a registered Minecraft movement provider for the same
+  next node and advances the canonical cursor only after observed arrival. A
+  local navigator may not teleport, choose a hidden entrance or create a second
+  route truth.
+- Loaded obstruction, destroyed threshold, crater, fluid, infection or player
+  construction becomes typed edge/port evidence. The owner may wait,
+  deterministically replan over known topology or schedule exact engineering
+  work; desired-state materialization never clears or bypasses the condition.
+- Settlement and facility placement compiles an immutable terrain adaptation
+  plan: local datums, bounded cut/fill, foundations, stairs/ramps, retaining
+  structures and connections to public circulation. Runtime movement does not
+  repeatedly query a heightmap to invent geometry.
+- Long movement uses a compact strategic graph and bounded local corridors;
+  it does not retain the entire Minecraft world as nodes or run an unbounded
+  global search per actor.
+
+The current flat provider may set every traversable datum to the same height,
+but it must implement these interfaces and pass non-flat and blocked-port
+fixtures. This preserves one movement contract for later real-terrain and
+Create-backed providers without making either provider canonical authority.
+
 ## Time and event execution
 
 `SimInstant` is a monotonic signed 64-bit integer. One normal simulation unit is

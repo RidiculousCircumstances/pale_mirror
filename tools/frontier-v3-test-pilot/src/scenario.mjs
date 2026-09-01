@@ -42,6 +42,14 @@ export function pilotServerPid(output, runId) {
   return match === null ? undefined : Number(match[1]);
 }
 
+/**
+ * A disposable server is usable only after its own exact JVM marker is visible.
+ * `Done` plus the generic v3 startup line can arrive one stdout chunk earlier.
+ */
+export function pilotServerReady(output, runId) {
+  return output.includes('Done') && output.includes('Frontier v3') && Number.isInteger(pilotServerPid(output, runId));
+}
+
 export async function loadScenario(path) {
   const source = await readFile(path, 'utf8');
   const scenario = JSON.parse(source);
@@ -186,7 +194,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace', 'transit'].includes(assertion.view)
+        || !['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (!['summary', 'performance'].includes(assertion.view) && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -259,7 +267,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'physical_delta', 'scene', 'intent', 'trace', 'transit'].includes(value.view)
+  return ['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance'].includes(value.view) || Boolean(value.id));
 }
 

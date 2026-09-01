@@ -438,6 +438,29 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Read-only HOT-treatment boundary. One already infected resident, one real local medic and
+     * one exact honey bottle are retained canonically, but neither a medical operation, scene
+     * lease nor physical chest/body is pre-created. An ordinary visit must first materialize
+     * the depot; the retained future review can then admit care, assemble the same people and
+     * produce the exact consumption/recovery receipt.
+     */
+    static MedicalTreatmentFixture medicalTreatmentFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        HumanPopulation population = state.humanPopulation();
+        SubjectId patient = settlement.residents().stream().map(Resident::id).sorted()
+                .filter(id -> population.resident(id).profession() != ResidentProfession.MEDICAL_WORKER).findFirst()
+                .orElseThrow(() -> new IllegalStateException("medical fixture needs one non-medic patient"));
+        SubjectId supply = new SubjectId("item:development-medical-remedy");
+        ExactInventory inventory = state.inventory().store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1,
+                        new InventoryCustody.ContainerSlot(depot, 1)));
+        state = state.withInventory(inventory).withHumanPopulation(state.humanPopulation()
+                .transitionHealth(patient, ResidentHealthStatus.EXPOSED, 1L)
+                .transitionHealth(patient, ResidentHealthStatus.INFECTED, 2L));
+        return new MedicalTreatmentFixture(state, SimInstant.ZERO, List.of(StrategicObjectiveProcess.review(settlement.id(), 1, 1_000L)));
+    }
+
+    /**
      * Read-only starting condition for one real displaced resident.  The fixture creates the
      * ordinary bounded route and its exact bed reservation, but deliberately owns no HOT body:
      * a visiting player must cause the normal ambient executor to materialize and advance it.
@@ -554,6 +577,12 @@ final class FrontierDevelopmentScenarios {
     record HealthQuarantineFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                    SubjectId settlementId, InfectionCell contact) {
         HealthQuarantineFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record MedicalTreatmentFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
+        MedicalTreatmentFixture {
             schedules = List.copyOf(schedules);
         }
     }

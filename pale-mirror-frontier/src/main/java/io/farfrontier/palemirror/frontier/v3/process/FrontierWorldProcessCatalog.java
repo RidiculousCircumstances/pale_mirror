@@ -244,7 +244,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_scene_lease_handoff",
             "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff"); }
     private static Set<String> populationCommands() { return types(
-            "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced"); }
+            "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
+            "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered"); }
     private static Set<String> strategyCommands() { return Set.of(); }
@@ -387,6 +388,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
                     "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
+                    "frontier.physical_intent_prepared",
                     "frontier.settlement_infection_observed", "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition",
                     "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed", "frontier.hive_growth_completed",
                     "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started", "frontier.hive_nutrient_transfer_advanced",

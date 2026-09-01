@@ -15,9 +15,10 @@ public final class FrontierMedicalTreatmentSceneSupport {
 
     public static Optional<Candidate> candidate(FrontierWorldState state, MedicalEvacuationOperation operation) {
         if (hasScene(state, operation.id())) return Optional.empty();
-        Optional<Candidate> candidate = preparedCandidate(state, operation);
-        if (candidate.isEmpty() || !FrontierSceneAdmission.available(state, candidate.orElseThrow().memberPositions().keySet())) return Optional.empty();
-        return candidate;
+        // An existing HOT ambient lease is not a reason to hide a medically ready operation.
+        // The physical scene executor owns the explicit ambient -> scene hand-off before it
+        // prepares the scene; suppressing this candidate would make that hand-off unreachable.
+        return preparedCandidate(state, operation);
     }
 
     /** Validates the retained people/building/supply independently of ambient-to-scene transfer. */

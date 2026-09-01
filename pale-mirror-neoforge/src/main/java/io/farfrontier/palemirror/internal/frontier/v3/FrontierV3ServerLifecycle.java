@@ -262,7 +262,9 @@ public final class FrontierV3ServerLifecycle {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                 FrontierV3PhysicalExecutors.registry().tick(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
-                advanceQueuedCanonicalTime(server, runtime);
+                // A due action may itself fail closed.  Do not mask that primary quarantine by
+                // asking the now-unavailable runtime for a second fast-forward state image.
+                if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
             }
         } catch (RuntimeException error) {
             PaleMirrorMod.LOGGER.error("Frontier v3 server tick failed before quarantine", error);

@@ -52,6 +52,22 @@ World differences are findings, not repair authority. A player edit therefore
 appears as physical drift and remains governed by the normal parcel/provenance
 rules.
 
+## Frontier v3 terrain-topology gate
+
+`V3-AUD-019` extends Foundry's structural role to the provider-neutral v3
+movement contract. The flat graybox is audited as a uniform-datum provider;
+later terrain and rail providers must publish the same typed evidence rather
+than letting a runtime navigator infer entrances or grades.
+
+At `COMPILED`, Foundry must be able to locate each semantic facility port,
+prove its exterior approach, threshold/throat clearance, interior connector
+and public-topology connection, and validate every declared traversal edge's
+grade, clearance, support and capability class. At `SETTLED` and `RELOADED`, it
+observes only loaded cells and reports blocked/damaged/unknown ports or edges;
+it never opens a door, clears a path, chooses an alternate entrance or changes
+canonical availability. Non-flat, blocked-entrance and bridge/rail-grade
+fixtures are mandatory exit evidence for the T0 foundation gate.
+
 ## Operator commands
 
 All commands require permission level 4. A settlement object ID or region ID

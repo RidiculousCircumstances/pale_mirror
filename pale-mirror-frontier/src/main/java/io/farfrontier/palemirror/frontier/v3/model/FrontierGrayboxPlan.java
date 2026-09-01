@@ -259,16 +259,25 @@ public final class FrontierGrayboxPlan {
             case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
         };
         SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
+        SettlementInfirmaryTreatmentPort treatment = structure.kind() == StructureKind.INFIRMARY ? SettlementInfirmaryTreatmentPort.forInfirmary(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             if (visitor.visit(structure.anchor().offset(x, 0, z), GrayboxSemanticPart.FOUNDATION)) return true;
             for (int y = 1; y < height; y++) if (x == -width / 2 || x == (width - 1) / 2 || z == -depth / 2 || z == (depth - 1) / 2) {
                 BlockPosition wall = structure.anchor().offset(x, y, z);
-                if ((access == null || !access.throatAirCells().contains(wall)) && visitor.visit(wall, GrayboxSemanticPart.WALL)) return true;
+                if ((access == null || !access.throatAirCells().contains(wall))
+                        && (treatment == null || !treatment.throatAirCells().contains(wall))
+                        && visitor.visit(wall, GrayboxSemanticPart.WALL)) return true;
             }
-            if (visitor.visit(structure.anchor().offset(x, height, z), GrayboxSemanticPart.ROOF)) return true;
+            BlockPosition roof = structure.anchor().offset(x, height, z);
+            if ((access == null || !access.throatAirCells().contains(roof))
+                    && (treatment == null || !treatment.throatAirCells().contains(roof))
+                    && visitor.visit(roof, GrayboxSemanticPart.ROOF)) return true;
         }
         if (access != null) for (BlockPosition surface : access.ownedSurfaceCells()) {
             if (visitor.visit(surface, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
+        }
+        if (treatment != null) for (SurfaceAnchor surface : treatment.ownedAccessSurfaces()) {
+            if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         return false;
     }

@@ -46,6 +46,7 @@ JFR, restart or player-visible gates in the implementation plan.
 | V3-AUD-016 | P1 | Confirmed defect | After V3-AUD-015 selected r41's legacy bootstrap correctly, the same real snapshot exposed an internally inconsistent schema-79 lineage: its raw strategic ordinal `8` retained a field target and therefore meant harvest in the pre-assault layout, while the current stable decoder read it as route-bypass construction. Quarantine preserved the world but made recovery incomplete. |
 | V3-AUD-017 | P1 | Confirmed defect | `RoutePatrol` persists exactly one `guardId`; `RouteOperation` persists an index-derived pair and `FrontierWorldState` rejects every shape other than one logistician plus one guard. This contradicts the accepted exact-person patrol/scout and separately owned cargo-escort contract. |
 | V3-AUD-018 | P1 | Confirmed defect | A real retained-r41 restart left ambient HOT leases `UNKNOWN_AFTER_RESTART`. In a naturally loaded actor column with no saved exact UUID, the executor retained UNKNOWN forever instead of recording the loaded negative postcondition and returning the unchanged canonical actor to ordinary materialization. This made a living world appear empty. |
+| V3-AUD-019 | P1 | Structural debt | Movement corridors and several validation rules are horizontally adjacent at one Y level; `BlockPosition` still mixes semantic floor/support and feet-air meanings; current facility ports derive compass-specific coordinate offsets; HOT controlled motion steers only in X/Z. The flat graybox works, but another terrain provider cannot preserve the same HOT/COLD cursor across slopes, entrances and future rail grades. |
 
 ## Remediation status
 
@@ -73,8 +74,52 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-016 | CLOSED | Versioned strategic hydration recognizes the pre-assault r41 ordinal layout only from its unambiguous raw field-target evidence, uses explicit objective/task maps and retains the normal schema-78/79 assault layout otherwise. An old-byte regression and full critical gate pass; the same deployed r41 snapshot and WAL replayed on SHA-512 `61e5d3c0…c71c1d0`, reached `Frontier v3 runtime started`, and remained healthy on port 25565. |
 | V3-AUD-017 | CLOSED | `RoutePatrol` and `RouteOperation` now solely own one immutable exact `RouteUnitManifest`, with stable explicit duty tags and no global roster. New patrols retain one leader plus one to three scouts; new cargo operations retain one logistic crew member plus two to four separately named escorts. Schema-82 snapshot and historical WAL patrol bytes decode only to explicit understrength legacy manifests, never a fabricated replacement. Focused admission, assignment, COLD formation, death/loss and byte-recovery tests pass. Native HOT cargo and route-return scenarios prove the exact named three-person caravan before and after ordinary unload/reload. |
 | V3-AUD-018 | CLOSED | `AmbientLeaseRestartAbsenceObserved` is the sole typed evidence for a naturally loaded exact hand-off column that lacks its expected UUID after restart. It validates UNKNOWN status plus exact canonical/lease position, closes only that physical lease and never infers death or moves the actor; the ordinary next demand prepares the same deterministic UUID. Pure normal/forged evidence tests and the 29/29 HOT/COLD GameTest slice pass. |
+| V3-AUD-019 | IN PROGRESS | T0.1/T0.2 have a first medical-scene implementation: typed support/body values, a semantic oriented infirmary port, an immutable grade-checked path and observed HOT cursor. The focused pure/Scene tests and the native medical HOT/COLD/restart scenario pass. The debt remains open until all movement owners retain persisted topology edges/cursors, blocked/damaged evidence and the rail-grade/Foundry evidence close T0.3–T0.5. |
 
 ## Findings and required corrections
+
+### V3-AUD-019 — movement and facility access assume a flat coordinate plane
+
+The current graybox is intentionally flat, but reusable movement state has
+absorbed that implementation detail. Several corridors require equal Y and add
+only X/Z steps; the controlled HOT primitive aims horizontally; facility
+approaches can be derived from fixed compass offsets; and `BlockPosition` is
+still used for both support-floor and feet-air conventions. This is sufficient
+for a flat test world but cannot represent a hillside street, stepped entrance,
+bridge approach, multi-datum facility or grade-constrained railway without
+either teleporting, recomputing a second HOT path or inventing physical
+geometry at runtime.
+
+Correction: separate typed spatial roles; compile each facility's oriented
+exterior approach, threshold, interior connector and stations; and introduce a
+bounded immutable 3D topology whose stable edges carry traversal capability,
+grade, clearance, provenance, revision and availability. Canonical route owners
+retain the sole edge/cursor truth. COLD advances that cursor; HOT executes the
+same next node through a registered Minecraft movement provider and reports
+arrival or obstruction. Player/world changes update topology through typed
+evidence and may cause a bounded canonical replan or engineering task, never a
+hidden sidestep or desired-state repair. Pedestrian/bioform and rail graphs are
+distinct capability views. The flat graybox implements the same contract as a
+uniform-datum provider rather than remaining the domain model.
+
+Exit evidence: old movement bytes recover through an explicit migration;
+source/architecture guards reject new constant-Y/fixed-compass route APIs;
+compiled ports prove supported connectivity and two-body clearance; focused
+fixtures cover a stepped or ramped path, another facility datum, a blocked or
+destroyed entrance and a bridge/rail-grade edge; a native HOT/COLD/restart
+scenario retains the same actor IDs, topology edge and cursor without
+force-loading; Foundry passes the relevant `COMPILED`, `SETTLED` and `RELOADED`
+rules.
+
+Current implementation boundary: this correction must not be misreported as
+complete merely because the medical scene now traverses a non-flat port. Its
+`TraversalPath` is a small immutable value proving the spatial type and
+observed-arrival rule; it is not yet the persisted capability topology required
+by all route, transit, assault and rail owners. The generic closed-scene cleanup
+does now run before every registered behavior, preventing historical lease tags
+from leaking from the medical path into another scene family; the terminal
+diagnostic reports such a released historical lease as `CLOSED`, not a false
+duplicate-UUID conflict. The remaining exit gates above are mandatory.
 
 ### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
 

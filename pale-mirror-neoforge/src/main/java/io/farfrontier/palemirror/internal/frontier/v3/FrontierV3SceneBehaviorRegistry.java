@@ -47,6 +47,8 @@ final class FrontierV3SceneBehaviorRegistry {
     }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state != null) FrontierV3SceneExecutor.cleanClosedBodies(level, state);
         for (Behavior behavior : CURRENT.ordered) {
             if (behavior.tick().tick(level, runtime)) return;
         }

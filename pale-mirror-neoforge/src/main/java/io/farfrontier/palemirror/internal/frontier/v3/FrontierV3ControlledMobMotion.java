@@ -17,10 +17,15 @@ import java.util.List;
  * decision outside the physical-intent boundary.</p>
  */
 final class FrontierV3ControlledMobMotion {
-    private static final double RESIDENT_SPEED = 0.055D;
-    private static final double BIOFORM_SPEED = 0.075D;
+    // The registered physical executor runs one bounded scene slice every four server ticks.
+    // These are per-slice distances, calibrated to native walking-scale visible motion rather
+    // than a four-times-slower stop-motion procession. Collision remains Minecraft-authoritative.
+    private static final double RESIDENT_SPEED = 0.20D;
+    private static final double BIOFORM_SPEED = 0.26D;
     private static final double ARRIVAL_DISTANCE = 0.35D;
     private static final double THIN_SURFACE_STEP = 0.125D;
+    private static final double MAX_WALK_GRADE = 1.0D;
+    private static final double VERTICAL_SPEED = 0.125D;
 
     private FrontierV3ControlledMobMotion() { }
 
@@ -31,11 +36,20 @@ final class FrontierV3ControlledMobMotion {
         actor.setNoGravity(false);
         actor.getNavigation().stop();
         Vec3 delta = target.subtract(actor.position());
-        double distance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (distance <= ARRIVAL_DISTANCE) return;
+        double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) return;
+        // A HOT adapter may only follow the next retained pedestrian edge.  Existing callers
+        // that still use same-level local goals remain unaffected; a larger vertical gap is not
+        // a licence to fly or to infer a route and is therefore left for the canonical planner.
+        double vertical = Math.abs(delta.y) <= MAX_WALK_GRADE + ARRIVAL_DISTANCE
+                ? Math.copySign(Math.min(Math.abs(delta.y), VERTICAL_SPEED), delta.y) : 0.0D;
         double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
-        Vec3 direct = new Vec3(delta.x / distance * speed, 0.0D, delta.z / distance * speed);
-        for (Vec3 step : List.of(direct, new Vec3(-direct.z, 0.0D, direct.x), new Vec3(direct.z, 0.0D, -direct.x))) {
+        if (horizontalDistance <= 1.0E-8D) {
+            if (vertical != 0.0D) actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
+            return;
+        }
+        Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
+        for (Vec3 step : List.of(direct, new Vec3(-direct.z, vertical, direct.x), new Vec3(direct.z, vertical, -direct.x))) {
             Vec3 before = actor.position();
             // Entity.move is Minecraft's collision authority.  A speculative noCollision check
             // rejects legitimate low steps (carpets, snow layers, slabs) before that authority

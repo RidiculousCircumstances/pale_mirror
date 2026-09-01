@@ -89,6 +89,45 @@ Hardening completion requires:
 - focused negative tests reject duplicate/missing process or executor owners;
 - the critical-code gate passes before the hardening milestone commit.
 
+## Terrain-aware movement foundation gate
+
+The current flat graybox has exposed an architectural mismatch: historical
+movement values mix support blocks and body positions, corridors assume one Y
+level, and facility approaches can encode a compass-specific offset. Before a
+new movement-bearing scene or transport family is added, close
+`V3-AUD-019` in this order:
+
+1. **T0.1 — typed spatial values.** Introduce distinct immutable surface anchor,
+   body position, facility-port station and transport-node values. Version the
+   persisted movement values explicitly; old bytes recover through one named
+   migration and are never interpreted opportunistically from surrounding
+   blocks.
+2. **T0.2 — semantic facility ports.** Compile orientation, exterior approach,
+   threshold/throat clearance, interior connector and bounded work/formation
+   stations from the owning building plan. Remove structure-centre and
+   fixed-west/fixed-offset entrance assumptions from reusable movement code.
+3. **T0.3 — bounded 3D capability topology.** Retain stable nodes/edges with
+   grade, clearance, traversal kind, mobility requirements, provenance,
+   revision and explicit availability. Keep pedestrian/bioform and rail views
+   distinct; use a compact strategic graph plus bounded local corridors.
+4. **T0.4 — one HOT/COLD cursor.** COLD advances only retained topology edges.
+   A registered HOT movement provider executes the same next-node goal through
+   Minecraft collision/navigation and submits only observed arrival,
+   obstruction or damage. Replanning is canonical and bounded; the adapter may
+   not sidestep or select a hidden entrance.
+5. **T0.5 — physical consequence and recovery proof.** Add non-flat fixtures
+   for a stepped/ramped approach, a facility on another datum and a bridge or
+   rail-grade edge. Add blocked/destroyed entrance, changed edge and restart
+   cases. A disposable player scenario must show the same actor/route cursor
+   before and after HOT/COLD/restart without force-loading.
+
+The first implementation may keep the graybox physically flat by providing a
+uniform-datum topology. It is not required to build the production terrain
+surveyor, settlement earthworks or Create provider in this gate. Completion
+means domain and scene code can no longer tell that the provider is flat, and
+Foundry can audit compiled port connectivity, two-body clearance, supported
+surface and permitted grade at `COMPILED`, `SETTLED` and `RELOADED` phases.
+
 ## Target dependency graph
 
 ```text

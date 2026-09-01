@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_medical_treatment_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "medical-treatment" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "UNMATERIALIZED" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -326 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 30000 },
+    { "type": "fast_forward", "ticks": 1000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "medical:1-1", "expect": { "status": "ok", "sceneKind": "MEDICAL_TREATMENT", "leaseStatus": "PREPARED" }, "timeoutMs": 30000 },
+    { "type": "wait", "ms": 20000 },
+    { "type": "inspect", "view": "scene", "id": "medical:1-1" },
+    { "type": "wait_until_diagnostic", "view": "medical", "id": "medical:1-1", "expect": { "status": "ok", "patientHealth": "RECOVERING", "medicalStatus": "COMPLETED", "intentStatus": "CONFIRMED" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "scene", "id": "medical:1-1" },
+    { "type": "look", "at": { "x": -360, "y": 66, "z": -322 } },
+    { "type": "inspect", "view": "medical", "id": "medical:1-1" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 8,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -326 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 7, "view": "medical", "id": "medical:1-1", "expect": { "status": "ok", "patientHealth": "RECOVERING", "medicalStatus": "COMPLETED", "intentStatus": "CONFIRMED" } },
+    { "after": 8, "view": "scene", "id": "medical:1-1", "expect": { "status": "ok", "sceneKind": "MEDICAL_TREATMENT", "leaseStatus": "CLOSED", "physicalReadiness": { "bodies": "CLOSED" } } },
+    { "after": 10, "view": "medical", "id": "medical:1-1", "expect": { "status": "ok", "patientHealth": "RECOVERING", "medicalStatus": "COMPLETED", "intentStatus": "CONFIRMED" } }
+  ],
+  "frames": [
+    { "after": 4, "name": "northwatch-medical-assembly" },
+    { "after": 9, "name": "northwatch-medical-aftercare" }
+  ]
+}

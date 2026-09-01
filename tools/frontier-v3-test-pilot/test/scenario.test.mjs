@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotDiagnosticActionStep, pilotServerPid, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotDiagnosticActionStep, pilotServerPid, pilotServerReady, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 
 const scenario = {
   schema: 1,
@@ -87,6 +87,7 @@ test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'operation-assembly' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-provision' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'health-quarantine' } }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'medical-treatment' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'resident-transit' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'production-worker-death' } }));
   assert.throws(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'arbitrary-fixture' } }), /profile/);
@@ -219,6 +220,12 @@ test('abrupt recovery resolves only the JVM that echoed its exact disposable non
   const runId = '05e2ad0c-69d1-45af-8d3c-4d7908a4a63d';
   assert.equal(pilotServerPid(`other output\nPMV3_PILOT_SERVER runId=${runId} pid=12345\n`, runId), 12345);
   assert.equal(pilotServerPid('PMV3_PILOT_SERVER runId=foreign pid=98765', runId), undefined);
+});
+
+test('isolated runner waits for its exact server marker rather than generic startup output', () => {
+  const runId = '9f4809f5-16e2-43f6-a4f5-fc0404a4e0dd';
+  assert.equal(pilotServerReady('Done\nFrontier v3 runtime started', runId), false);
+  assert.equal(pilotServerReady(`Done\nFrontier v3 runtime started\nPMV3_PILOT_SERVER runId=${runId} pid=12345`, runId), true);
 });
 
 test('JFR evidence is opt-in, bounded and confined to the disposable build profile directory', () => {

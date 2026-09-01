@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HumanHealthProcess;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -156,12 +158,55 @@ class MedicalEvacuationOperationTest {
                 .assignment(unknownStart.operation().team().leaderId()).kind());
     }
 
+    @Test void activeMedicalOperationExclusivelyOwnsItsPatientHealthUntilItsReceiptResolves() {
+        FrontierWorldState state = treatmentReadyState();
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = MedicalTreatmentProcess.planStart(state, settlement.id(), 1);
+        MedicalTreatmentStarted started = planned.stream().map(event -> event.payload()).filter(MedicalTreatmentStarted.class::isInstance)
+                .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
+
+        long ordinaryRecoveryTick = 200L + state.bootstrap().ruleset().cadence().humanHealthProgressionDelay();
+        assertFalse(HumanHealthProcess.assess(state, settlement, ordinaryRecoveryTick).stream().map(event -> event.payload())
+                .filter(ResidentHealthTransition.class::isInstance).map(ResidentHealthTransition.class::cast)
+                .anyMatch(transition -> transition.residentId().equals(started.operation().patientId())));
+    }
+
+    @Test void hotAmbientTreatmentMembersRemainCandidatesForTheExplicitSceneHandoff() {
+        FrontierWorldState state = treatmentReadyState();
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = MedicalTreatmentProcess.planStart(state, settlement.id(), 1);
+        MedicalTreatmentStarted started = planned.stream().map(event -> event.payload()).filter(MedicalTreatmentStarted.class::isInstance)
+                .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+
+        LinkedHashMap<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>();
+        candidate.memberPositions().forEach((actor, position) -> ambient.put(actor, new AmbientActorLease(actor, position,
+                new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, position)));
+        FrontierWorldState hotAmbient = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(ambient));
+
+        assertFalse(FrontierSceneAdmission.available(hotAmbient, candidate.memberPositions().keySet()));
+        assertEquals(started.operation().id(), FrontierMedicalTreatmentSceneSupport.nextCandidate(hotAmbient).orElseThrow().operationId());
+        var population = FrontierWorldProcessCatalog.descriptors().stream()
+                .filter(descriptor -> descriptor.id().equals("population")).findFirst().orElseThrow();
+        assertTrue(population.commandPayloadTypes().contains("frontier.medical_treatment_scene_lease_prepared"));
+        assertTrue(population.commandPayloadTypes().contains("frontier.medical_treatment_scene_lease_handoff"));
+    }
+
     @Test void settlementHealthReviewAdmitsOneExactTreatmentButRejectsConsumptionOutsideHotInfirmaryScene() {
         WorldId world = new WorldId("frontier:medical-scheduled");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 42L);
         FrontierWorldState active = treatmentReadyState(world);
         SubjectId settlement = active.bootstrap().settlements().getFirst().id();
-        var review = StrategicObjectiveProcess.plan(active, StrategicObjectiveProcess.review(settlement, 1, 300L));
+        var scheduledReview = StrategicObjectiveProcess.review(settlement, 1, 300L);
+        var review = StrategicObjectiveProcess.plan(active, scheduledReview);
+        assertTrue(FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), active, scheduledReview, false).stream()
+                .map(event -> event.payload()).anyMatch(PhysicalIntentPrepared.class::isInstance));
         MedicalTreatmentStarted startedEvent = review.stream().map(event -> event.payload()).filter(MedicalTreatmentStarted.class::isInstance)
                 .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
         var preparedEvent = MedicalTreatmentProcess.planStart(active, settlement, 1).stream().map(event -> event.payload())

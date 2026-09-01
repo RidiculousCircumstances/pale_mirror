@@ -97,7 +97,15 @@ final class FrontierV3SceneExecutor {
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
 
     /** Read-only materialization preflight; never creates, moves, claims or loads a body. */
-    record Readiness(String bodies, String carrier) { }
+    /**
+     * Bounded read-only loaded-world preflight. Member positions make a paused PREPARED scene
+     * diagnosable without granting the diagnostic any movement or materialization authority.
+     */
+    record Readiness(String bodies, String carrier, List<String> members) {
+        Readiness {
+            members = List.copyOf(members);
+        }
+    }
 
     private FrontierV3SceneExecutor() { }
 
@@ -110,9 +118,6 @@ final class FrontierV3SceneExecutor {
         FrontierWorldState state = state(runtime);
         if (state == null) return false;
         forgetInactiveDemand(runtime, state);
-        // A COLD continuation can leave a HOT projection in vanilla's unloaded chunk NBT. On
-        // ordinary return, remove that stale projection before any new scene claims its actor.
-        cleanReleasedBodies(level, state);
         Optional<SceneEngagementCandidate> engagement = state.coldEngagementSceneCandidates().stream()
                 .filter(candidate -> state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).noneMatch(lease -> FrontierSceneBehaviors.logistics(lease).engagementId().filter(candidate.engagementId()::equals).isPresent()
                         && lease.status() != SceneLeaseStatus.CLOSED))
@@ -326,7 +331,7 @@ final class FrontierV3SceneExecutor {
         if (lease == null) return Optional.empty();
         String carrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)
                 ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name() : "NOT_APPLICABLE";
-        return Optional.of(new Readiness(bodyReadiness(level, state, lease), carrier));
+        return Optional.of(new Readiness(bodyReadiness(level, state, lease), carrier, observedMembers(level, lease)));
     }
 
     /**
@@ -343,6 +348,11 @@ final class FrontierV3SceneExecutor {
     }
 
     private static String bodyReadiness(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        // A CLOSED lease is retained canonical history, not a claimant over its former Minecraft
+        // bodies.  Its tags can still be present for a tick while the normal cleanup/ambient
+        // hand-off runs; treating that expected release window as a UUID conflict made the
+        // read-only diagnostic falsely imply duplicate actor ownership.
+        if (lease.status() == SceneLeaseStatus.CLOSED) return "CLOSED";
         boolean allCurrent = true;
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index); Entity existing = level.getEntity(member.entityId());
@@ -358,6 +368,14 @@ final class FrontierV3SceneExecutor {
             if (FrontierV3StandingPosition.aboveFloor(level, candidate) == null) return "BLOCKED";
         }
         return allCurrent ? "CURRENT" : "READY";
+    }
+
+    private static List<String> observedMembers(ServerLevel level, SceneLease lease) {
+        return lease.members().stream().map(member -> {
+            Entity entity = level.getEntity(member.entityId());
+            if (entity == null) return member.actorId().value() + "@absent";
+            return member.actorId().value() + "@" + entity.getBlockX() + "," + entity.getBlockY() + "," + entity.getBlockZ();
+        }).toList();
     }
 
     /**
@@ -599,10 +617,22 @@ final class FrontierV3SceneExecutor {
         forgetLeaseTransient(runtime, lease.id());
     }
 
-    private static void cleanReleasedBodies(ServerLevel level, FrontierWorldState state) {
+    /**
+     * Removes only stale closed-scene projections before any behavior receives its turn.
+     *
+     * <p>This is deliberately shared registry lifecycle work, rather than logistics work:
+     * every typed scene can close, and a higher-priority active behavior must not leave a
+     * former medical/engineering/assault body permanently tagged by its old lease.</p>
+     */
+    static void cleanClosedBodies(ServerLevel level, FrontierWorldState state) {
         state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED).forEach(lease -> lease.members().forEach(member -> {
             Entity entity = level.getEntity(member.entityId());
-            if (owned(entity, state, lease, member)) entity.discard();
+            // A CLOSED lease is historical state, and its former projection may have an older
+            // hand-off revision than the retained record. Here the closed lease ID, exact UUID,
+            // actor ID and expected body type are the complete safe identity; relaxing the
+            // revision check is confined to deletion of that stale projection and never to
+            // admission or mutation.
+            if (ownedByClosedLease(entity, state, lease, member)) entity.discard();
         }));
         // Only logistics scenes have a cargo carrier.  A typed assault is deliberately
         // cargo-free; asking its typed cause for a legacy cargo ID would turn normal cleanup
@@ -753,6 +783,13 @@ final class FrontierV3SceneExecutor {
                 && member.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && lease.revision() == entity.getPersistentData().getLong(REVISION_KEY);
     }
+
+    /** Only stale closed-projection cleanup may relax the historical lease revision. */
+    private static boolean ownedByClosedLease(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
+        return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved()
+                && member.entityId().equals(entity.getUUID()) && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
+                && member.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY));
+    }
     private static boolean bioform(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .anyMatch(bioform -> bioform.id().equals(actorId));
@@ -767,7 +804,7 @@ final class FrontierV3SceneExecutor {
     /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                  SceneLease lease, String cause) {
-        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name());
+        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name(), observedMembers(level, lease));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_conflict:" + cause + ":" + readiness.bodies() + ":" + readiness.carrier(), lease,
                 submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }

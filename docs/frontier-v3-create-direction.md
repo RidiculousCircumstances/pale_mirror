@@ -88,6 +88,12 @@ must avoid assumptions which would force Create into the domain later:
 - recipes reserve and transform exact identified input/output items;
 - route topology owns stable rail segments, junctions, stations, bridges,
   tunnels and loading ports independently of a future Create graph object;
+- rail topology is a typed three-dimensional capability graph with exact
+  grades, clearances, support class and bridge/tunnel provenance; it is not a
+  constant-Y route, a pedestrian corridor or a live Create path cache;
+- stations expose semantic exterior, platform, loading and maintenance ports
+  connected to settlement circulation at compiled terrain datums; a settlement
+  anchor never doubles as a station entrance;
 - every train-equivalent operation owns one exact vehicle/carrier identity,
   wagon/cargo membership, route cursor and execution lease;
 - physical executors and capability providers are closed registered

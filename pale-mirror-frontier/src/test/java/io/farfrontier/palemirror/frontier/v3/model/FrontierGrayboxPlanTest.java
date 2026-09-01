@@ -75,6 +75,35 @@ class FrontierGrayboxPlanTest {
     }
 
     @Test
+    void everyInfirmaryCompilesAnOpenTreatmentPortAndReachableBoundedCareFormation() {
+        FrontierWorldState state = initial(); FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().settlements().forEach(settlement -> {
+            SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
+            SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
+            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), infirmary.id(), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
+                    plan.cells().get(surface.support()), "treatment access walk must retain exact infirmary provenance"));
+            port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
+                    "infirmary throat must retain two body-clear cells: " + infirmary.id()));
+            assertEquals(2, port.ingressSurfaces().size() - 1, "treatment ingress must retain two adjacent portal transitions");
+            for (int index = 1; index < port.arrivalSurfaces().size(); index++) {
+                SurfaceAnchor previous = port.arrivalSurfaces().get(index - 1), current = port.arrivalSurfaces().get(index);
+                assertEquals(1, Math.abs(previous.x() - current.x()) + Math.abs(previous.z() - current.z()),
+                        "treatment arrival must remain a contiguous semantic path: " + infirmary.id());
+                assertTrue(Math.abs(previous.y() - current.y()) <= 1,
+                        "treatment arrival may use only declared walkable grades: " + infirmary.id());
+            }
+            for (int ordinal = 0; ordinal < 3; ordinal++) {
+                SurfaceAnchor floor = port.treatmentSurface(ordinal);
+                assertEquals(new GrayboxCell(floor.support(), infirmary.id(), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.FOUNDATION), plan.cells().get(floor.support()),
+                        "treatment position must be a retained infirmary floor: " + infirmary.id());
+                assertEquals(null, plan.cells().get(floor.support().offset(0, 1, 0)), "treatment body clearance must stay open: " + infirmary.id());
+                assertEquals(null, plan.cells().get(floor.support().offset(0, 2, 0)), "treatment head clearance must stay open: " + infirmary.id());
+            }
+        });
+    }
+
+    @Test
     void everyBootstrapContainerHasOnePlannedProvenanceSupportSocket() {
         FrontierWorldState state = initial();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);

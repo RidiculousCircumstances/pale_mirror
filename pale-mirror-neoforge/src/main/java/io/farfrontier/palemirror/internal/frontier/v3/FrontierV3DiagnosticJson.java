@@ -27,6 +27,8 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.MedicalEvacuationOperation;
+import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause;
 
@@ -93,6 +95,7 @@ final class FrontierV3DiagnosticJson {
             case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> routeConstruction(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
+            case "medical" -> medical(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness);
             case "trace" -> trace(id, checkpoint, trace);
@@ -369,6 +372,21 @@ final class FrontierV3DiagnosticJson {
                 + quote(FrontierV3DiagnosticTrace.physicalDeltaCorrelation(position)) + "\"}";
     }
 
+    /** One exact medical owner, including its patient, retained team and physical remedy receipt. */
+    private static String medical(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        MedicalEvacuationOperation operation = subject == null ? null : state.humanPopulation().medicalOperations().get(subject);
+        if (operation == null) return unavailable("medical", id, checkpoint, "not_found");
+        PhysicalIntent intent = state.physicalIntents().get(operation.consumptionIntentId());
+        String team = operation.team().memberIds().stream().sorted().map(member -> "\"" + quote(member.value()) + "\"")
+                .reduce((left, right) -> left + "," + right).orElse("");
+        return base("medical", id, checkpoint) + ",\"status\":\"ok\",\"settlement\":\"" + quote(operation.settlementId().value())
+                + "\",\"patient\":\"" + quote(operation.patientId().value()) + "\",\"patientHealth\":\""
+                + state.humanPopulation().health(operation.patientId()).status() + "\",\"team\":[" + team + "]"
+                + ",\"medicalStatus\":\"" + operation.status() + "\",\"intent\":\"" + quote(operation.consumptionIntentId().value())
+                + "\",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status()) + "\"}";
+    }
+
     /** One stable typed-scene view for player-piloted physical-scene evidence. */
     private static String scene(String id, CheckpointImage checkpoint, FrontierWorldState state,
                                 Optional<FrontierV3SceneExecutor.Readiness> readiness) {
@@ -382,6 +400,8 @@ final class FrontierV3DiagnosticJson {
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.settlementAssault(lease) : null;
         EngineeringWorkSceneCause engineering = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isEngineeringWorksite(lease)
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.engineeringWorksite(lease) : null;
+        MedicalTreatmentSceneCause medical = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isMedicalTreatment(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.medicalTreatment(lease) : null;
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
@@ -394,10 +414,11 @@ final class FrontierV3DiagnosticJson {
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
-                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT" : "ENGINEERING_WORKSITE")
+                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT" : engineering != null ? "ENGINEERING_WORKSITE" : "MEDICAL_TREATMENT")
                 + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
                 + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
                 + "\",\"project\":\"" + quote(engineering == null ? "" : engineering.projectId().value())
+                + "\",\"medical\":\"" + quote(medical == null ? "" : medical.operationId().value())
                 + "\",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
@@ -417,7 +438,8 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String sceneReadiness(FrontierV3SceneExecutor.Readiness value) {
-        return ",\"physicalReadiness\":{\"bodies\":\"" + quote(value.bodies()) + "\",\"carrier\":\"" + quote(value.carrier()) + "\"}";
+        return ",\"physicalReadiness\":{\"bodies\":\"" + quote(value.bodies()) + "\",\"carrier\":\"" + quote(value.carrier())
+                + "\",\"members\":" + strings(value.members()) + "}";
     }
 
     private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,

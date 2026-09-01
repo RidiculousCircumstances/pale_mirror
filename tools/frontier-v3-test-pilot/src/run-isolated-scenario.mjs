@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultPilotProfile, jfrCaptureRequest, loadScenario, logOffsetAfterMarker, pilotServerPid, restartSegments } from './scenario.mjs';
+import { defaultPilotProfile, jfrCaptureRequest, loadScenario, logOffsetAfterMarker, pilotServerPid, pilotServerReady, restartSegments } from './scenario.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -134,7 +134,7 @@ function waitForServer(session, timeoutMs) {
   return new Promise((resolveReady, reject) => {
     let settled = false;
     const settle = (callback, value) => { if (!settled) { settled = true; clearInterval(timer); clearTimeout(alarm); callback(value); } };
-    const timer = setInterval(() => { if (session.output().includes('Done') && session.output().includes('Frontier v3')) settle(resolveReady); }, 100);
+    const timer = setInterval(() => { if (pilotServerReady(session.output(), session.serverRunId)) settle(resolveReady); }, 100);
     const alarm = setTimeout(() => settle(reject, new Error(`disposable v3 server did not become ready within ${timeoutMs}ms`)), timeoutMs);
     session.child.once('exit', (code) => settle(reject, new Error(`disposable v3 server exited before ready (${code})`)));
   });

@@ -79,7 +79,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
-        if (!atInfirmary(level, runtime, lease)) return;
+        if (!atInfirmary(level, runtime, state, lease)) return;
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "medical_treatment_hot", lease,
                 submit(runtime, "medical-scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
@@ -123,26 +123,37 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
     }
 
-    private static boolean atInfirmary(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+    private static boolean atInfirmary(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                       FrontierWorldState state, SceneLease lease) {
+        MedicalEvacuationOperation operation = FrontierMedicalTreatmentSceneSupport.require(state, FrontierSceneBehaviors.medicalTreatment(lease));
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), operation.settlementId());
+        SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.id().equals(operation.infirmaryId()))
+                .findFirst().orElseThrow(() -> new IllegalStateException("medical operation infirmary is absent from its settlement"));
+        SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
+        boolean allPresent = true;
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index); Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !FrontierV3SceneExecutor.recognizes(runtime, body) || !body.isAlive()) return false;
-            BlockPos standing = FrontierV3StandingPosition.aboveFloor(level, treatmentSlot(lease.handoffPosition(), index));
-            if (standing == null) return false;
-            Vec3 target = new Vec3(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
-            FrontierV3ControlledMobMotion.moveToward(level, body, target);
-            if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) return false;
+            List<SurfaceAnchor> route = new ArrayList<>(port.arrivalSurfaces()); route.add(port.treatmentSurface(index));
+            List<Vec3> targets = new ArrayList<>();
+            List<BodyPosition> targetBodies = new ArrayList<>();
+            for (SurfaceAnchor surface : route) {
+                // Both public approach and facility cells are declared semantic support surfaces.
+                // A missing/altered support stays a visible deferral; neither the executor nor a
+                // heightmap lookup may choose a substitute column or a hidden level path.
+                BlockPos standing = FrontierV3StandingPosition.aboveExactFloor(level, surface.support());
+                if (standing == null) return false;
+                targets.add(new Vec3(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D));
+                targetBodies.add(new BodyPosition(standing.getX(), standing.getY(), standing.getZ()));
+            }
+            BodyPosition observed = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            Vec3 target = targets.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0));
+            if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) {
+                FrontierV3ControlledMobMotion.moveToward(level, body, target);
+                allPresent = false;
+            }
         }
-        return true;
-    }
-
-    private static BlockPosition treatmentSlot(BlockPosition anchor, int ordinal) {
-        return switch (ordinal) {
-            case 0 -> anchor.offset(0, 0, 2);
-            case 1 -> anchor.offset(-2, 0, 1);
-            case 2 -> anchor.offset(2, 0, 1);
-            default -> throw new IllegalArgumentException("medical scene exceeds bounded treatment formation");
-        };
+        return allPresent;
     }
 
     /** Transfers only observed ambient Villagers, preserving their UUID and current position. */

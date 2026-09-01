@@ -79,6 +79,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsOneReadOnlyExactMedicalTreatmentDiagnostic() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"medical","id":"medical:1-1",
+                "expect":{"medicalStatus":"COMPLETED"},"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+    }
+
+    @Test
     void acceptsOnlyBoundedWholeTickFastForwardActions() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"fast_forward","ticks":24000}]}""");

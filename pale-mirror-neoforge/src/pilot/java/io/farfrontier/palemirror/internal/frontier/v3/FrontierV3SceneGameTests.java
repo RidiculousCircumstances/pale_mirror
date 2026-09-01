@@ -199,6 +199,9 @@ public final class FrontierV3SceneGameTests {
                 Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
                 helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
+                FrontierV3SceneExecutor.cleanClosedBodies(level, state(runtime));
+                helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) == null,
+                        "the shared scene lifecycle must discard a closed projection before another behavior can inherit its lease tag");
                 helper.succeed();
             } finally {
                 lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });

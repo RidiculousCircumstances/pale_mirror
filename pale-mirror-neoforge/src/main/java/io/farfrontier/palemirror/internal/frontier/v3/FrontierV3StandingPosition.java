@@ -24,8 +24,27 @@ final class FrontierV3StandingPosition {
 
     static BlockPos aboveFloor(ServerLevel level, BlockPos anchor) {
         if (!level.hasChunkAt(anchor)) return null;
-        int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
-        for (int y = surface; y <= surface + MAX_VERTICAL_SEARCH; y++) {
+        BlockPos direct = aboveExactFloor(level, anchor);
+        if (direct != null) return direct;
+        // Historical ambient/scene inputs still contain retained feet-air terrain positions.
+        // The compatibility read is same-column only and is not permitted for new semantic
+        // facility ports; those call aboveExactFloor and defer until their owned floor exists.
+        return firstStandingPosition(level, anchor, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                anchor.getX(), anchor.getZ()));
+    }
+
+    /** Resolves only the two-cell-clear position directly above an exact semantic floor cell. */
+    static BlockPos aboveExactFloor(ServerLevel level, BlockPosition anchor) {
+        return aboveExactFloor(level, new BlockPos(anchor.x(), anchor.y(), anchor.z()));
+    }
+
+    static BlockPos aboveExactFloor(ServerLevel level, BlockPos anchor) {
+        if (!level.hasChunkAt(anchor)) return null;
+        return firstStandingPosition(level, anchor, anchor.getY() + 1);
+    }
+
+    private static BlockPos firstStandingPosition(ServerLevel level, BlockPos anchor, int startY) {
+        for (int y = startY; y <= startY + MAX_VERTICAL_SEARCH; y++) {
             BlockPos candidate = new BlockPos(anchor.getX(), y, anchor.getZ());
             if (!level.hasChunkAt(candidate)) return null;
             // A thin route or infection surface is not a full sturdy face, but it is still

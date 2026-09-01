@@ -326,6 +326,49 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneExactMedicalOwnerAndItsTypedSceneWithoutTreatingItAsLogistics(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.medicalTreatmentConfiguration(new WorldId("frontier:diagnostic-medical-scene-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState initial = runtime.decodedState().orElseThrow();
+        SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        FrontierWorldState state = initial.withInventory(initial.inventory()
+                .withSurfaceStatus(depot, io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE));
+        java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned =
+                io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess.planStart(state, settlement, 1);
+        var started = planned.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
+        var prepared = planned.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess.reduceStarted(state, settlement, started)
+                .preparePhysicalIntent(prepared.intent());
+        var operation = state.humanPopulation().medicalOperations().values().iterator().next();
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-medical-r0");
+        var members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(actor,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), leaseId, actor))).toList();
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
+                checkpoint.instant(), checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED,
+                members, candidate.memberPositions(), java.util.Set.of(), Optional.empty());
+        FrontierWorldState diagnosticState = state.prepareSceneLease(lease);
+
+        String medical = FrontierV3DiagnosticJson.render("medical", operation.id().value(), checkpoint, diagnosticState, Optional.empty());
+        String scene = FrontierV3DiagnosticJson.render("scene", operation.id().value(), checkpoint, diagnosticState, Optional.empty());
+
+        assertTrue(medical.contains("\"status\":\"ok\"") && medical.contains("\"patientHealth\":\"INFECTED\""));
+        assertTrue(medical.contains("\"medicalStatus\":\"PREPARED\"") && medical.contains("\"intentStatus\":\"PREPARED\""));
+        assertTrue(scene.contains("\"sceneKind\":\"MEDICAL_TREATMENT\"") && scene.contains("\"medical\":\"" + operation.id().value() + "\""));
+        assertTrue(runtime.decodedState().orElseThrow().equals(initial), "read-only medical diagnostics must not create a lease or mutate treatment state");
+        runtime.shutdown();
+    }
+
+    @Test
     void keepsPhysicalReadinessScopedToHarvestIntents(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-readiness-test"), 94L),

@@ -58,6 +58,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("hotScoutPatrolRecovery", FrontierV3FixtureCatalog::hotScoutPatrolRecoveryConfiguration),
             Map.entry("operationAssembly", FrontierV3FixtureCatalog::operationAssemblyConfiguration),
             Map.entry("healthQuarantine", FrontierV3FixtureCatalog::healthQuarantineConfiguration),
+            Map.entry("medicalTreatment", FrontierV3FixtureCatalog::medicalTreatmentConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration));
@@ -184,6 +185,11 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> healthQuarantineConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HealthQuarantineFixture fixture = FrontierDevelopmentScenarios.healthQuarantineFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> medicalTreatmentConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.MedicalTreatmentFixture fixture = FrontierDevelopmentScenarios.medicalTreatmentFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentTransitConfiguration(WorldId worldId, long seed) {

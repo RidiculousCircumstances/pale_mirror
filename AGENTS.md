@@ -146,6 +146,26 @@ never add an ad-hoc HUD toggle to a scenario.
   reproducible same-seed JFR capture and a causal proof of operation → lease →
   actor/cargo ownership. TPS alone is not acceptance evidence.
 
+## Frontier v3 terrain and movement discipline
+
+- New canonical movement state must use typed surface/body/port/topology values;
+  do not extend the historical convention where one `BlockPosition` may mean a
+  support block, feet-air cell, facility anchor or transport node.
+- A new route, assembly, migration or scene approach may not assume constant Y,
+  a fixed compass-facing entrance or an offset from a structure centre. It must
+  consume a bounded immutable three-dimensional traversal topology and a
+  semantic facility port compiled by the owning plan.
+- COLD advances only a retained topology edge/cursor. HOT delegates local
+  collision and navigation to the registered physical movement provider and
+  advances that same cursor only from observed arrival; it may not invent a
+  sidestep, teleport or hidden alternate entrance.
+- Every movement-bearing extension needs a focused non-flat fixture plus a
+  blocked or damaged edge/entrance case. The flat graybox is one provider test,
+  not evidence that the architecture supports real terrain.
+- Pedestrian/bioform traversal and rail topology are distinct capability
+  graphs. Future Create integration may implement the rail physical provider,
+  but may not introduce a second route, cargo or movement authority.
+
 ## Frontier v3 extension discipline
 
 - `docs/frontier-v3-architecture-audit.md` is the active defect register and

@@ -71,6 +71,8 @@ public final class HumanHealthProcess {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> state.humanPopulation().medicalOperations().values().stream()
+                        .noneMatch(operation -> operation.active() && operation.patientId().equals(resident.id())))
                 .filter(resident -> eligible(state, state.humanPopulation().health(resident.id()), contaminated, now))
                 .sorted(Comparator.comparing((ResidentProfile resident) -> priority(state, state.humanPopulation().health(resident.id()), contaminated, now))
                         .thenComparing(ResidentProfile::id))

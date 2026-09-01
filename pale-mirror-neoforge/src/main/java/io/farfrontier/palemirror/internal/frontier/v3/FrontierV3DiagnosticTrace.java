@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
+import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import net.minecraft.server.MinecraftServer;
@@ -72,6 +73,13 @@ final class FrontierV3DiagnosticTrace {
         if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
             var engineering = FrontierSceneBehaviors.engineeringWorksite(lease);
             record(server, "engineering:" + engineering.projectId().value(), kind, engineering.projectId(), result,
+                    new Context("", lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+            return;
+        }
+        if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
+            MedicalTreatmentSceneCause medical = FrontierSceneBehaviors.medicalTreatment(lease);
+            record(server, "medical:" + medical.operationId().value(), kind, medical.operationId(), result,
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
             return;

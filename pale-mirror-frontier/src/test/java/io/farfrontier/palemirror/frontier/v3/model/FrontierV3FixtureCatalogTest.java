@@ -22,7 +22,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(21, profiles.size());
+        assertEquals(22, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -54,6 +54,18 @@ class FrontierV3FixtureCatalogTest {
         assertEquals("minecraft:iron_sword", sword.itemKind());
         assertTrue(state.physicalIntents().isEmpty(), "the fixture may declare canonical preconditions but may not pre-issue the hand-off");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.population.defender_equipment.review")));
+    }
+
+    @Test
+    void medicalTreatmentFixtureStartsBeforeItsDepotAndCareOperationExist() {
+        var configuration = FrontierV3FixtureCatalog.medicalTreatmentConfiguration(new WorldId("frontier:medical-treatment-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        SubjectId depot = new SubjectId("container:1-depot");
+        ExactItemStack remedy = state.inventory().items().get(new SubjectId("item:development-medical-remedy"));
+        assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(depot).status());
+        assertEquals("minecraft:honey_bottle", remedy.itemKind());
+        assertTrue(state.humanPopulation().medicalOperations().isEmpty(), "the fixture must not fabricate an active treatment before its actual depot exists");
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.objective.review") && action.dueAt().ticks() == 1_000L));
     }
 
     @Test
