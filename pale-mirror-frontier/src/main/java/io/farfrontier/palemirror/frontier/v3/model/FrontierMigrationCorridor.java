@@ -39,7 +39,7 @@ public final class FrontierMigrationCorridor {
         state.actorLocations().entrySet().stream()
                 .filter(entry -> !entry.getKey().equals(residentId))
                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
-                .map(entry -> entry.getValue().position())
+                .map(entry -> entry.getValue().supportingSurface().support())
                 .filter(position -> !position.equals(arrival))
                 .forEach(blocked::add);
         List<BlockPosition> anchors = new ArrayList<>();

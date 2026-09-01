@@ -52,7 +52,7 @@ class RoutePatrolProcessTest {
         java.util.List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startPatrol(new RoutePatrol(taskId, settlement.id(), RouteUnitManifest.patrol(taskId, guard, java.util.List.of(scout)), route, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty())))
-                .withActorLocation(guard, route.getFirst()).withActorLocation(scout, route.getFirst());
+                .withActorBody(guard, FrontierTestPositions.bodyAboveSupport(route.getFirst())).withActorBody(scout, FrontierTestPositions.bodyAboveSupport(route.getFirst()));
 
         SubjectId selected = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
 
@@ -85,9 +85,9 @@ class RoutePatrolProcessTest {
                 && task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS).findFirst().orElseThrow();
         assertEquals(StrategicTaskStatus.ACTIVE, construction.status());
         assertEquals(java.util.List.of(patrol.taskId()), construction.dependencies());
-        assertEquals(patrol.route().get(patrol.routeIndex()), after.actorLocations().get(patrol.guardId()).position());
+        assertEquals(patrol.route().get(patrol.routeIndex()), FrontierTestPositions.supportOf(after.actorLocations().get(patrol.guardId())));
         assertEquals(2, patrol.memberIds().size());
         assertFalse(patrol.unit().legacyUnderstrength());
-        assertTrue(patrol.memberIds().stream().allMatch(member -> after.actorLocations().get(member).position().equals(patrol.route().get(patrol.routeIndex()))));
+        assertTrue(patrol.memberIds().stream().allMatch(member -> FrontierTestPositions.supportOf(after.actorLocations().get(member)).equals(patrol.route().get(patrol.routeIndex()))));
     }
 }

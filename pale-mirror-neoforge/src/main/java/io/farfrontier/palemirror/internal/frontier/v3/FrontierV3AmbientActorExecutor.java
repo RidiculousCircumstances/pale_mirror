@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
@@ -132,7 +133,7 @@ final class FrontierV3AmbientActorExecutor {
                 if (stale != null && owned(stale, actorId, bioform(state, actorId))) stale.discard();
                 forgetObserved(runtime, actorId);
             }
-            boolean demanded = demand(level, location.position());
+            boolean demanded = demand(level, location.supportingSurface().support());
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
@@ -158,7 +159,7 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             if (lease.status() == AmbientLeaseStatus.PREPARED) {
-                Result result = materialize(level, runtime, state, actorId, lease.handoffPosition());
+                Result result = materialize(level, runtime, state, actorId, lease.handoffBody());
                 if (result == Result.APPLIED || result == Result.CURRENT || result == Result.PENDING) {
                     if (result != Result.PENDING) submit(runtime, "ambient-hot", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
@@ -177,7 +178,7 @@ final class FrontierV3AmbientActorExecutor {
                     // the failed HOT hand-off, retaining the canonical living actor for the
                     // ordinary next PREPARED -> HOT admission.
                     submit(runtime, "ambient-restart-absence", actorId.value(),
-                            new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffPosition()));
+                            new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffBody()));
                     admitted++;
                 }
                 continue;
@@ -195,7 +196,7 @@ final class FrontierV3AmbientActorExecutor {
         }
     }
 
-    static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
+    static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) {
@@ -209,8 +210,8 @@ final class FrontierV3AmbientActorExecutor {
             }
             return Result.CURRENT;
         }
-        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, canonicalPosition);
-        if (position == null) return Result.DEFERRED;
+        BlockPos position = minecraftBody(canonicalBody);
+        if (!level.hasChunkAt(position) || !FrontierV3StandingPosition.hasExactHeadroom(level, canonicalBody.supportingSurface().support())) return Result.DEFERRED;
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
@@ -237,10 +238,10 @@ final class FrontierV3AmbientActorExecutor {
     }
 
     private static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                      FrontierWorldState state, SubjectId actorId, BlockPosition canonicalPosition) {
+                                      FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         PendingAdmission pending = pending(runtime, entityId(state, actorId));
         if (pending != null && owned(pending.entity(), actorId, bioform(state, actorId))) return Result.PENDING;
-        return materialize(level, state, actorId, canonicalPosition);
+        return materialize(level, state, actorId, canonicalBody);
     }
 
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
@@ -254,8 +255,8 @@ final class FrontierV3AmbientActorExecutor {
         var location = state.actorLocations().get(actorId);
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
                 && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
-                && location.position().equals(lease.handoffPosition())
-                && level.hasChunkAt(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z()))
+                && location.body().equals(lease.handoffBody())
+                && level.hasChunkAt(minecraftBody(lease.handoffBody()))
                 && level.getEntity(entityId(state, actorId)) == null;
     }
 
@@ -277,11 +278,10 @@ final class FrontierV3AmbientActorExecutor {
                     new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ()))
                     : AdmissionDiagnostic.conflict(expectedId);
         }
-        BlockPos anchor = new BlockPos(location.position().x(), location.position().y(), location.position().z());
+        BlockPos anchor = minecraftBody(location.body());
         if (!level.hasChunkAt(anchor)) return AdmissionDiagnostic.unloaded(expectedId);
-        BlockPos position = FrontierV3StandingPosition.aboveFloor(level, location.position());
-        if (position == null) return AdmissionDiagnostic.blocked(expectedId, new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
-        return AdmissionDiagnostic.ready(expectedId, new BlockPosition(position.getX(), position.getY(), position.getZ()));
+        if (!FrontierV3StandingPosition.hasExactHeadroom(level, location.supportingSurface().support())) return AdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
+        return AdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
 
     /**
@@ -379,7 +379,7 @@ final class FrontierV3AmbientActorExecutor {
                 || !entityId(state, actorId).equals(entity.getUUID()) || !owned(entity, actorId, bioform(state, actorId))) return false;
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         submit(runtime, "ambient-death", actorId.value(),
-                new AmbientActorDied(actorId, new BlockPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
+                new AmbientActorDied(actorId, observedBody(entity), cause));
         return true;
     }
     /**
@@ -456,16 +456,16 @@ final class FrontierV3AmbientActorExecutor {
         if (lease.goal() == AmbientGoalKind.TRANSIT) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
             if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
-                    || !lease.goalPosition().equals(journey.nextColdPosition())) {
+                    || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition())))) {
                 body.getNavigation().stop();
                 return false;
             }
         }
-        if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalPosition().equals(state.actorLocations().get(actorId).position())) {
+        if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
             // The command reducer owns the cursor transition; movement may only approach the
             // exact next lease target, never choose a local substitute after COLD hand-off.
-            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
-            if (physicalTarget == null) {
+            BlockPos physicalTarget = minecraftBody(lease.goalBody());
+            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactHeadroom(level, lease.goalBody().supportingSurface().support())) {
                 body.getNavigation().stop();
                 return false;
             }
@@ -496,9 +496,9 @@ final class FrontierV3AmbientActorExecutor {
                 body.getNavigation().stop();
                 return false;
             }
-            BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalPosition());
+            BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalBody().supportingSurface().support());
             if (obstruction != null) {
-                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, new SurfaceAnchor(lease.goalPosition()), new SurfaceAnchor(obstruction),
+                OperationAssemblyDeferral deferral = new OperationAssemblyDeferral(actorId, lease.goalBody().supportingSurface(), new SurfaceAnchor(obstruction),
                         OperationAssemblyDeferral.Reason.LOADED_WORLD_OBSTRUCTION);
                 if (!assembly.deferral().filter(deferral::equals).isPresent()) {
                     io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
@@ -510,8 +510,8 @@ final class FrontierV3AmbientActorExecutor {
                 body.getNavigation().stop();
                 return false;
             }
-            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
-            if (physicalTarget == null) {
+            BlockPos physicalTarget = minecraftBody(lease.goalBody());
+            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactHeadroom(level, lease.goalBody().supportingSurface().support())) {
                 body.getNavigation().stop();
                 return false;
             }
@@ -533,8 +533,8 @@ final class FrontierV3AmbientActorExecutor {
                 body.getNavigation().stop();
                 return false;
             }
-            BlockPos physicalTarget = FrontierV3StandingPosition.aboveFloor(level, lease.goalPosition());
-            if (physicalTarget == null) {
+            BlockPos physicalTarget = minecraftBody(lease.goalBody());
+            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactHeadroom(level, lease.goalBody().supportingSurface().support())) {
                 body.getNavigation().stop();
                 return false;
             }
@@ -548,14 +548,14 @@ final class FrontierV3AmbientActorExecutor {
 
     static Vec3 localTarget(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease, long gameTime) {
         if (directedGoal(lease)) {
-            BlockPosition target = lease.goalPosition();
+            BlockPosition target = lease.goalBody().supportingSurface().support();
             return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
         }
         LocalBrain brain = localBrain(state, actorId);
         long cycle = Math.floorMod(gameTime, brain.periodTicks());
         double phase = (cycle / (double) brain.periodTicks()) + (brain.identityPhase() / 16.0D);
         double angle = phase * Math.PI * 2.0D;
-        BlockPosition anchor = lease.handoffPosition();
+        BlockPosition anchor = lease.handoffBody().supportingSurface().support();
         return new Vec3(anchor.x() + 0.5D + Math.cos(angle) * brain.radius(), anchor.y(), anchor.z() + 0.5D + Math.sin(angle) * brain.radius());
     }
 
@@ -592,27 +592,29 @@ final class FrontierV3AmbientActorExecutor {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(body.getUUID())
                 || !owned(body, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
                 || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
-        BlockPosition position = new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+        BodyPosition position = observedBody(body);
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.TRANSIT) {
-            if (journey == null || !sameColumn(position, journey.currentPosition())) return false;
-            // Canonical Transit positions use the entity's feet-cell convention.  Keep the
-            // durable cursor authoritative rather than deriving a new vertical datum on drain.
-            position = journey.currentPosition();
+            if (journey == null) return false;
+            BodyPosition cursor = BodyPosition.above(new SurfaceAnchor(journey.currentPosition()));
+            if (!position.equals(cursor)) return false;
+            position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, state.ambientLeases().get(actorId));
-            if (member == null || !(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, member.currentSurface().support())) return false;
-            position = member.currentSurface().support();
+            BodyPosition cursor = member == null ? null : member.currentSurface().standingBody();
+            if (cursor == null || !position.equals(cursor)) return false;
+            position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, state.ambientLeases().get(actorId));
-            if (member == null || !(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, member.currentPosition())) return false;
-            position = member.currentPosition();
+            BodyPosition cursor = member == null ? null : BodyPosition.above(new SurfaceAnchor(member.currentPosition()));
+            if (cursor == null || !position.equals(cursor)) return false;
+            position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
-            if (!(body.level() instanceof ServerLevel level) || !sameFloorAnchor(level, position, current.position())) return false;
-            position = current.position();
+            if (!position.equals(current.body())) return false;
+            position = current.body();
         }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
         submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
@@ -663,7 +665,7 @@ final class FrontierV3AmbientActorExecutor {
         long started = absentSince.computeIfAbsent(actorId, ignored -> level.getGameTime());
         AmbientObserved observed = lastObserved(runtime, actorId);
         if (observed == null || level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS
-                || playerWithin(level, new BlockPos(observed.position().x(), observed.position().y(), observed.position().z()), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
+                || playerWithin(level, minecraftBody(observed.body()), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
         // The state reducer independently proves cursor identity for Transit, operation and
         // engineering movement. A stale cached body is therefore rejected rather than changing
         // the canonical actor's position.
@@ -671,7 +673,7 @@ final class FrontierV3AmbientActorExecutor {
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
         if (!(draining instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult released = submit(runtime, "ambient-release-unloaded", actorId.value(),
-                new AmbientLeaseReleased(actorId, observed.position(), observed.health()));
+                new AmbientLeaseReleased(actorId, observed.body(), observed.health()));
         if (released instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
             forgetObserved(runtime, actorId); absentSince.remove(actorId);
             if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
@@ -687,9 +689,8 @@ final class FrontierV3AmbientActorExecutor {
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
-                || !lease.goalPosition().equals(journey.nextColdPosition())) return false;
-        BlockPosition position = new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
-        if (!sameColumn(position, journey.nextColdPosition())) return false;
+                || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition())))) return false;
+        if (!observedBody(body).equals(lease.goalBody())) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-transit", actorId.value(),
                 new ResidentTransitAdvanced(actorId, journey.nextRouteIndex()));
         FrontierV3DiagnosticTrace.record(level.getServer(), "resident-transit:" + actorId.value(), "resident_transit_advanced", actorId, result);
@@ -698,7 +699,7 @@ final class FrontierV3AmbientActorExecutor {
     private static boolean observeAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
         OperationAssembly.Member member = assemblyMember(state, actorId, lease);
-        if (member == null || member.arrived() || !sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        if (member == null || member.arrived() || !observedBody(body).equals(lease.goalBody())) return false;
         RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) {
             body.getNavigation().stop();
@@ -714,7 +715,7 @@ final class FrontierV3AmbientActorExecutor {
         EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
         RouteConstruction project = engineeringProject(state, actorId);
         if (project == null || member == null || member.arrived()
-                || !sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+                || !observedBody(body).equals(lease.goalBody())) return false;
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-engineering-assembly", actorId.value(),
@@ -725,21 +726,21 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static boolean observeScoutPatrolArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                       SubjectId actorId, Mob body, AmbientActorLease lease) {
-        BlockPosition current = state.actorLocations().get(actorId).position();
-        if (!sameFloorAnchor(level, new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), lease.goalPosition())) return false;
+        BlockPosition current = state.actorLocations().get(actorId).supportingSurface().support();
+        if (!observedBody(body).equals(lease.goalBody())) return false;
         BlockPosition expected = HiveScoutPatrolProcess.nextPosition(state, actorId, current);
-        if (!lease.goalPosition().equals(expected)) {
+        if (!lease.goalBody().supportingSurface().support().equals(expected)) {
             // A persisted pre-cursor lease may still name an old target.  The body has reached
             // that exact owned target, so record the observed hand-off and establish the only
             // following cursor; do not forge an ordinary advance to a non-next position.
             io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol-recover", actorId.value(),
-                    new ScoutPatrolLeaseRecovered(actorId, current, lease.goalPosition(),
-                            HiveScoutPatrolProcess.nextPosition(state, actorId, lease.goalPosition())));
+                    new ScoutPatrolLeaseRecovered(actorId, current, lease.goalBody().supportingSurface().support(),
+                            HiveScoutPatrolProcess.nextPosition(state, actorId, lease.goalBody().supportingSurface().support())));
             FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_lease_recovered", actorId, result);
             return true;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol", actorId.value(),
-                new ScoutPatrolAdvanced(actorId, runtime.checkpointImage().orElseThrow().instant().ticks(), lease.goalPosition(), java.util.Optional.of(current)));
+                new ScoutPatrolAdvanced(actorId, runtime.checkpointImage().orElseThrow().instant().ticks(), lease.goalBody().supportingSurface().support(), java.util.Optional.of(current)));
         FrontierV3DiagnosticTrace.record(level.getServer(), "scout-patrol:" + actorId.value(), "scout_patrol_advanced", actorId, result);
         return true;
     }
@@ -792,7 +793,7 @@ final class FrontierV3AmbientActorExecutor {
         if (operation == null || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY) return null;
         OperationAssembly.Member member = operation.activeAssembly().orElseThrow().members().get(actorId);
         SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
-        return lease.goalPosition().equals(expected.support()) ? member : null;
+        return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
     private static RouteConstruction engineeringProject(FrontierWorldState state, SubjectId actorId) {
         return state.routeConstructions().values().stream()
@@ -804,12 +805,10 @@ final class FrontierV3AmbientActorExecutor {
         if (project == null || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return null;
         EngineeringWorkAssembly.Member member = project.assembly().orElseThrow().members().get(actorId);
         BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-        return lease.goalPosition().equals(expected) ? member : null;
+        return lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(expected))) ? member : null;
     }
-    private static boolean sameColumn(BlockPosition physicalBodyCell, BlockPosition canonicalFloorCell) {
-        return physicalBodyCell.x() == canonicalFloorCell.x() && physicalBodyCell.y() == canonicalFloorCell.y()
-                && physicalBodyCell.z() == canonicalFloorCell.z();
-    }
+    private static BlockPos minecraftBody(BodyPosition body) { return new BlockPos(body.x(), body.y(), body.z()); }
+    private static BodyPosition observedBody(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
     /** A Scout cursor is a semantic floor anchor; a Minecraft body's feet must stand above it. */
     private static boolean sameFloorAnchor(ServerLevel level, BlockPosition physicalBodyCell, BlockPosition canonicalFloorAnchor) {
         BlockPos expected = FrontierV3StandingPosition.aboveFloor(level, canonicalFloorAnchor);
@@ -825,7 +824,7 @@ final class FrontierV3AmbientActorExecutor {
     private static void rememberObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId, Mob body) {
         Map<SubjectId, AmbientObserved> observations = LAST_OBSERVED.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (observations.size() < MAX_PENDING_ADMISSIONS || observations.containsKey(actorId)) observations.put(actorId,
-                new AmbientObserved(new BlockPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+                new AmbientObserved(observedBody(body),
                         new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))));
     }
     private static AmbientObserved lastObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
@@ -846,7 +845,7 @@ final class FrontierV3AmbientActorExecutor {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
     private record PendingAdmission(Entity entity, long expiresAtGameTime) { }
-    private record AmbientObserved(BlockPosition position, FixedScalar health) { }
+    private record AmbientObserved(BodyPosition body, FixedScalar health) { }
     private record ReservationCache(FrontierWorldState state, java.util.Set<SubjectId> actors) { }
     private record SightedCarrier(MinecartChest carrier, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) { }
     private record LocalBrain(double radius, long periodTicks, int identityPhase) { }

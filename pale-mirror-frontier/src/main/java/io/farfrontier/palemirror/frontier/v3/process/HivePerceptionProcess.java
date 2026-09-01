@@ -18,7 +18,7 @@ public final class HivePerceptionProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         for (RouteOperation operation : state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).sorted(Comparator.comparing(RouteOperation::id)).toList()) {
             BlockPosition carrierPosition = carrierPosition(operation);
-            Bioform scout = scouts(state).stream().filter(value -> nearby(state, state.actorLocations().get(value.id()).position(), carrierPosition))
+            Bioform scout = scouts(state).stream().filter(value -> nearby(state, state.actorLocations().get(value.id()).supportingSurface().support(), carrierPosition))
                     .min(Comparator.comparing(Bioform::id)).orElse(null);
             if (scout == null) continue;
             HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, now);
@@ -35,7 +35,7 @@ public final class HivePerceptionProcess {
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), sighting.scoutId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || scout.role() != BioformRole.SCOUT
                 || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
-                || !carrierPosition(operation).equals(sighting.position()) || !nearby(state, state.actorLocations().get(scout.id()).position(), sighting.position())) {
+                || !carrierPosition(operation).equals(sighting.position()) || !nearby(state, state.actorLocations().get(scout.id()).supportingSurface().support(), sighting.position())) {
             throw new IllegalArgumentException("hive sighting lacks a nearby living scout and current caravan");
         }
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -59,7 +59,7 @@ public final class HivePerceptionProcess {
                 || !FrontierSceneBehaviors.logistics(scene).operationId().equals(operation.id()) || !FrontierSceneBehaviors.logistics(scene).cargoId().equals(operation.cargoId())
                 || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(operation.activeTravel().orElseThrow().cargoAnchor().surface().support())
                 || !FrontierSceneBehaviors.logistics(scene).cargoPosition().equals(observed.seenCarrierPosition())
-                || !nearby(state, state.actorLocations().get(scout.id()).position(), observed.seenCarrierPosition())) {
+                || !nearby(state, state.actorLocations().get(scout.id()).supportingSurface().support(), observed.seenCarrierPosition())) {
             throw new IllegalArgumentException("HOT hive sighting lacks its living patrol Scout and current physical caravan scene");
         }
         if (!shouldRefresh(state, operation.id(), scout.id(), observed.seenCarrierPosition(), observed.observedAt())) {

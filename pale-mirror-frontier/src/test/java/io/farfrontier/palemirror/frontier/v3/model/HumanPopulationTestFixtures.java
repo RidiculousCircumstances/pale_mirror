@@ -10,7 +10,7 @@ final class HumanPopulationTestFixtures {
 
     static FrontierWorldState withResident(FrontierWorldState state, ResidentProfile resident, BlockPosition position) {
         var actors = new LinkedHashMap<SubjectId, ActorLocation>(state.actorLocations());
-        actors.put(resident.id(), new ActorLocation(position));
+        actors.put(resident.id(), new ActorLocation(FrontierTestPositions.bodyAboveSupport(position), ActorCondition.HEALTHY));
         return new FrontierWorldState(state.bootstrap(), actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.contracts(), state.operations(), state.logisticsHistory(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases(), state.routeConstructions(), state.routeTopology(), state.strategicPlans(),

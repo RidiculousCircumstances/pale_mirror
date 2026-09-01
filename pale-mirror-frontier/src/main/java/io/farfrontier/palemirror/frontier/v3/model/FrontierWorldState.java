@@ -49,7 +49,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) continue;
                 EngineeringWorkAssembly.Member cursor = member.getValue();
                 BlockPosition expected = cursor.arrived() ? cursor.currentPosition() : cursor.corridor().get(cursor.cursor() + 1);
-                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !lease.goalPosition().equals(expected)) {
+                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !lease.goalBody().supportingSurface().support().equals(expected)) {
                     throw new IllegalArgumentException("active engineering assembly lease must retain its one exact next cursor");
                 }
             }
@@ -103,12 +103,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 throw new IllegalArgumentException("resident account must have one employment contract");
             }
         }
-        for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.position());
+        for (ActorLocation location : actorLocations.values()) FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), location.supportingSurface().support());
         Map<SubjectId, SupplyContract> validatedContracts = contracts;
         StrategicPlanState validatedPlans = strategicPlans;
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
             ActorLocation actor = actorLocations.get(journey.residentId());
-            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(journey.currentPosition())) {
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(journey.currentPosition())) {
                 throw new IllegalArgumentException("migration journey must retain one living resident at its exact route cursor");
             }
             journey.route().forEach(position -> FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position));
@@ -137,7 +137,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (actorLocations.get(lease.actorId()).condition().status() != ActorLifeStatus.ALIVE && lease.status() != AmbientLeaseStatus.CLOSED) {
                 throw new IllegalArgumentException("dead actor cannot retain an active ambient lease");
             }
-            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffPosition()); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalPosition());
+            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffBody().supportingSurface().support()); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalBody().supportingSurface().support());
             if (lease.status() != AmbientLeaseStatus.CLOSED && !activelyAmbientLeased.add(lease.actorId())) {
                 throw new IllegalArgumentException("actor cannot retain multiple active ambient leases");
             }
@@ -267,7 +267,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 }
                 if (operation.stage() != OperationStage.COMPLETED && operation.stage() != OperationStage.FAILED && operation.stage() != OperationStage.INTERRUPTED && actorLocations.get(participant).condition().status() == ActorLifeStatus.ALIVE
                         && !leaseHistoryOperations.contains(operation.id())
-                        && !actorLocations.get(participant).position().equals(operation.activeTravel().map(travel -> travel.formation().get(participant).supportingSurface().support())
+                        && !actorLocations.get(participant).supportingSurface().support().equals(operation.activeTravel().map(travel -> travel.formation().get(participant).supportingSurface().support())
                         .orElseGet(() -> operation.activeAssembly().map(assembly -> assembly.positions().get(participant).support()).orElseGet(operation::currentPosition)))) {
                     throw new IllegalArgumentException("active route operation participant must be at its canonical travel position");
                 }
@@ -509,11 +509,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState cancelResidentBirth(SubjectId jobId) { return HumanPopulationStateSupport.cancelBirth(this, jobId); }
     public List<SceneEngagementCandidate> coldEngagementSceneCandidates() { return FrontierSceneEngagementSupport.candidates(this); }
     public List<SettlementAssaultSceneCandidate> coldSettlementAssaultSceneCandidates() { return FrontierSettlementAssaultSceneSupport.candidates(this); }
-    public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position) { return withActorLocation(actor, position, strategicPlans); }
-    public FrontierWorldState withActorLocation(SubjectId actor, BlockPosition position, StrategicPlanState nextPlans) {
-        Objects.requireNonNull(actor, "actor"); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
+    public FrontierWorldState withActorBody(SubjectId actor, BodyPosition body) { return withActorBody(actor, body, strategicPlans); }
+    public FrontierWorldState withActorBody(SubjectId actor, BodyPosition body, StrategicPlanState nextPlans) {
+        Objects.requireNonNull(actor, "actor"); Objects.requireNonNull(body, "actor body"); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), body.supportingSurface().support());
         if (!actorLocations.containsKey(actor)) throw new IllegalArgumentException("unknown actor: " + actor.value());
-        Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations); next.put(actor, actorLocations.get(actor).withPosition(position));
+        Map<SubjectId, ActorLocation> next = new LinkedHashMap<>(actorLocations); next.put(actor, actorLocations.get(actor).withBody(body));
         return withChanges(FrontierWorldStateUpdate.begin().actorLocations(next).strategicPlans(nextPlans));
     }
     public FrontierWorldState withStructureCondition(SubjectId structure, StructureCondition condition) {
@@ -694,7 +694,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         RouteOperation started = operation.startTravel(Objects.requireNonNull(travel, "operation travel"));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), started);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position.supportingSurface().support())));
+        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position)));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
@@ -707,7 +707,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         RouteOperation advanced = operation.withTravel(travel); Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), advanced);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position.supportingSurface().support())));
+        travel.formation().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position)));
         Map<SceneLeaseId, SceneLease> nextLeases = sceneLeases;
         SceneLease activeScene = sceneLeases.values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(lease -> FrontierSceneBehaviors.logistics(lease).operationId().equals(operation.id()))
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).findFirst().orElse(null);
@@ -727,13 +727,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         OperationAssembly advanced = operation.activeAssembly().orElseThrow().advance(Objects.requireNonNull(assembly, "operation assembly").members());
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), operation.withAssembly(advanced));
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        advanced.positions().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withPosition(position.support())));
+        advanced.positions().forEach((actor, position) -> nextActors.put(actor, actorLocations.get(actor).withBody(position.standingBody())));
         Map<SubjectId, AmbientActorLease> nextAmbient = new LinkedHashMap<>(ambientLeases);
         advanced.members().forEach((actor, member) -> {
             AmbientActorLease lease = nextAmbient.get(actor);
             if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
                 SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
-                nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.support()));
+                nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.standingBody()));
             }
         });
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
@@ -900,7 +900,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (current.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("actor death is already recorded");
         FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.position());
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
-        nextActors.put(death.actorId(), current.deadAt(death.position()));
+        nextActors.put(death.actorId(), current.deadAt(BodyPosition.above(new SurfaceAnchor(death.position()))));
         HumanPopulation nextPopulation = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick); return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(nextPopulation));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
@@ -927,7 +927,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.addOrgan(organ), structureDamage, physicalDeltas, ambientLeases);
     } public FrontierWorldState spawnBioform(Bioform bioform) {
         Objects.requireNonNull(bioform, "bioform"); if (actorLocations.containsKey(bioform.id())) throw new IllegalArgumentException("spawned bioform collides with actor identity");
-        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations); nextActors.put(bioform.id(), new ActorLocation(bioform.position()));
+        Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations); nextActors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position())));
         return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony.spawn(bioform), structureDamage, physicalDeltas, ambientLeases);
     }

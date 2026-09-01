@@ -35,7 +35,7 @@ class RouteConstructionTaskProcessTest {
                 .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
         SubjectId stranded = viable.team().orElseThrow().memberIds().getFirst();
         BlockPosition blockedFloor = FrontierGrayboxPlan.currentBodyGeometry(state).stream().findFirst().orElseThrow().offset(0, -1, 0);
-        state = state.withActorLocation(stranded, blockedFloor);
+        state = state.withActorBody(stranded, FrontierTestPositions.bodyAboveSupport(blockedFloor));
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
 
@@ -189,7 +189,7 @@ class RouteConstructionTaskProcessTest {
                 "COLD must not compile from an actor whose physical predecessor lease still owns its final floor");
 
         state = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
-        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, ordinary.handoffPosition(), FixedScalar.whole(8)));
+        state = AmbientLeaseStateProcess.release(state, new AmbientLeaseReleased(member, ordinary.handoffBody(), FixedScalar.whole(8)));
         RouteConstructionAssemblyStarted started = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 400L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
                 .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
@@ -199,7 +199,7 @@ class RouteConstructionTaskProcessTest {
         assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, engineering.goal());
         EngineeringWorkAssembly assembly = state.routeConstructions().get(project.id()).assembly().orElseThrow();
         EngineeringWorkAssembly.Member before = assembly.members().get(member);
-        assertEquals(before.corridor().get(before.cursor() + 1), engineering.goalPosition());
+        assertEquals(before.corridor().get(before.cursor() + 1), engineering.goalBody().supportingSurface().support());
         state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, engineering), member, AmbientLeaseStatus.HOT);
 
         EngineeringWorkAssembly advanced = assembly.advance(member);
@@ -208,16 +208,16 @@ class RouteConstructionTaskProcessTest {
         EngineeringWorkAssembly.Member after = state.routeConstructions().get(project.id()).assembly().orElseThrow().members().get(member);
         AmbientActorLease retargeted = state.ambientLeases().get(member);
         BlockPosition expectedGoal = after.arrived() ? after.currentPosition() : after.corridor().get(after.cursor() + 1);
-        assertEquals(expectedGoal, retargeted.goalPosition(), "HOT arrival must advance and retarget the same retained COLD cursor");
+        assertEquals(expectedGoal, retargeted.goalBody().supportingSurface().support(), "HOT arrival must advance and retarget the same retained COLD cursor");
 
         FrontierWorldState releaseState = AmbientLeaseStateProcess.transition(state, member, AmbientLeaseStatus.DRAINING);
         assertThrows(IllegalArgumentException.class, () -> AmbientLeaseStateProcess.release(releaseState,
-                new AmbientLeaseReleased(member, before.currentPosition(), FixedScalar.whole(8))),
+                new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(before.currentPosition()), FixedScalar.whole(8))),
                 "a HOT body may not silently return the assembly to a stale predecessor position");
         FrontierWorldState released = AmbientLeaseStateProcess.release(releaseState,
-                new AmbientLeaseReleased(member, after.currentPosition(), FixedScalar.whole(8)));
+                new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(after.currentPosition()), FixedScalar.whole(8)));
         assertEquals(AmbientLeaseStatus.CLOSED, released.ambientLeases().get(member).status());
-        assertEquals(after.currentPosition(), released.actorLocations().get(member).position());
+        assertEquals(after.currentPosition(), FrontierTestPositions.supportOf(released.actorLocations().get(member)));
     }
 
     private static FrontierWorldState stateWithConfirmedPatrol() {

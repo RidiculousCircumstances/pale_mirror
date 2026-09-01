@@ -188,7 +188,7 @@ final class FrontierV3SceneExecutor {
 
     private static Map<SubjectId, BodyPosition> positions(FrontierWorldState state, List<SceneMember> members) {
         Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
-        for (SceneMember member : members) positions.put(member.actorId(), BodyPosition.aboveSupportCell(state.actorLocations().get(member.actorId()).position()));
+        for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).body());
         return Map.copyOf(positions);
     }
 

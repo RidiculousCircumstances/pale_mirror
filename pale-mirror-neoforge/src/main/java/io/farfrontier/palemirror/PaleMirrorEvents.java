@@ -6,6 +6,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.adapter.VanillaAnchorAdapter;
 import io.farfrontier.palemirror.internal.adapter.ActorDamageResult;
@@ -102,6 +103,15 @@ public final class PaleMirrorEvents {
         AmbientSpawnThrottle.tick(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.tick(event.getServer());
         PaleMirrorRuntime.forServer(event.getServer()).tick();
+    }
+
+    /** Runs before a server Mob tick, so v3 local motion is visible to the normal tracker pass. */
+    @SubscribeEvent
+    public static void onEntityTickPre(EntityTickEvent.Pre event) {
+        if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
+                && mob.level() instanceof net.minecraft.server.level.ServerLevel) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.advanceControlledMob(mob);
+        }
     }
 
     /** External explosions use their real Minecraft geometry, then reconcile exact changed PM claims. */

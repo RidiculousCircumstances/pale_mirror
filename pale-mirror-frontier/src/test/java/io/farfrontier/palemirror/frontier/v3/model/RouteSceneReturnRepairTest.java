@@ -125,7 +125,7 @@ class RouteSceneReturnRepairTest {
     }
 
     private static List<SceneMemberPosition> memberPositions(FrontierWorldState state, RouteOperation operation) {
-        return operation.participantIds().stream().map(actor -> new SceneMemberPosition(actor, state.actorLocations().get(actor).position())).toList();
+        return operation.participantIds().stream().map(actor -> new SceneMemberPosition(actor, FrontierTestPositions.bodyCellOf(state.actorLocations().get(actor)))).toList();
     }
 
     private static List<SceneMemberPosition> memberPositions(RouteOperation operation) {

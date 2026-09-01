@@ -37,7 +37,7 @@ class HotScoutOperationObservationTest {
 
         // A test fixture may only capture the ordinary unleased actor position first; the next
         // two commands are the production PREPARED -> HOT hand-off, not a test-only lease edit.
-        submit(engine, world, new AmbientActorObserved(scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
+        submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
         AmbientActorLease scoutLease = AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant());
         submit(engine, world, new AmbientLeasePrepared(scoutLease));
         submit(engine, world, new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
@@ -104,10 +104,10 @@ class HotScoutOperationObservationTest {
         RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
         var selected = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.role() == BioformRole.BOMBER || value.role() == BioformRole.GUARD)
-                .sorted(java.util.Comparator.comparingLong((Bioform value) -> distance(state.actorLocations().get(value.id()).position(), operation.currentPosition()))
+                .sorted(java.util.Comparator.comparingLong((Bioform value) -> distance(FrontierTestPositions.supportOf(state.actorLocations().get(value.id())), operation.currentPosition()))
                         .thenComparing(Bioform::id)).limit(3).toList();
         assertEquals(3, selected.size());
-        assertEquals(3L, selected.stream().map(value -> state.actorLocations().get(value.id()).position()).distinct().count(),
+        assertEquals(3L, selected.stream().map(value -> FrontierTestPositions.supportOf(state.actorLocations().get(value.id()))).distinct().count(),
                 "the pilot fixture must not make vanilla entity cramming into an invented combat outcome");
         assertEquals(1L, selected.stream().filter(value -> value.role() == BioformRole.BOMBER).count());
         assertEquals(2L, selected.stream().filter(value -> value.role() == BioformRole.GUARD).count());
@@ -125,7 +125,7 @@ class HotScoutOperationObservationTest {
         RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation-negative"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
-        submit(engine, world, new AmbientActorObserved(scout, FrontierSceneBehaviors.logistics(lease).cargoPosition(), state(engine).actorLocations().get(scout).condition().health()));
+        submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));
         submit(engine, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(state(engine), scout, engine.checkpoint().instant())));
         submit(engine, world, new AmbientLeaseTransition(scout, AmbientLeaseStatus.HOT));
         submit(engine, world, new SceneLeasePrepared(lease));

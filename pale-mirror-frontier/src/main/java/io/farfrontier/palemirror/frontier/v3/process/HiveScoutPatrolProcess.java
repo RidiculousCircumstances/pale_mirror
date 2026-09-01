@@ -33,7 +33,7 @@ public final class HiveScoutPatrolProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         AmbientActorLease lease = state.ambientLeases().get(scout.id());
         if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
-            BlockPosition prior = state.actorLocations().get(scout.id()).position();
+            BlockPosition prior = state.actorLocations().get(scout.id()).supportingSurface().support();
             events.add(new ProposedEvent(state.bootstrap().hive().id(), new ScoutPatrolAdvanced(scout.id(), action.dueAt().ticks(),
                     nextPosition(state, scout, prior), java.util.Optional.of(prior))));
         }
@@ -46,20 +46,20 @@ public final class HiveScoutPatrolProcess {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("scout patrol has a foreign owner");
         Bioform scout = scout(state, advanced.scoutId());
         AmbientActorLease lease = state.ambientLeases().get(scout.id());
-        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();
         if (state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
                 || advanced.priorPosition().isPresent() && !advanced.priorPosition().orElseThrow().equals(current)) {
             throw new IllegalArgumentException("scout patrol advance is not a current unleased perimeter step");
         }
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
             if (lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.SCOUT_PATROL
-                    || advanced.priorPosition().isEmpty() || !lease.goalPosition().equals(advanced.position())
+                    || advanced.priorPosition().isEmpty() || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(advanced.position())))
                     || !nextPosition(state, scout, current).equals(advanced.position())) {
                 throw new IllegalArgumentException("HOT scout patrol advance lacks its exact cursor lease");
             }
             FrontierWorldState retargeted = AmbientLeaseStateProcess.retarget(state, scout.id(), AmbientGoalKind.SCOUT_PATROL,
-                    nextPosition(state, scout, advanced.position()));
-            return retargeted.withActorLocation(scout.id(), advanced.position());
+                    BodyPosition.above(new SurfaceAnchor(nextPosition(state, scout, advanced.position()))));
+            return retargeted.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(advanced.position())));
         }
         if (advanced.priorPosition().isPresent() && !nextPosition(state, scout, current).equals(advanced.position())) {
             throw new IllegalArgumentException("COLD scout patrol advance skips its exact next cursor");
@@ -67,7 +67,7 @@ public final class HiveScoutPatrolProcess {
         if (advanced.priorPosition().isEmpty() && !legacyPerimeter(state, scout).contains(advanced.position())) {
             throw new IllegalArgumentException("legacy scout patrol advance is outside its own recorded perimeter");
         }
-        return state.withActorLocation(scout.id(), advanced.position());
+        return state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(advanced.position())));
     }
 
     /**
@@ -78,19 +78,19 @@ public final class HiveScoutPatrolProcess {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("scout patrol recovery has a foreign owner");
         Bioform scout = scout(state, recovered.scoutId());
         AmbientActorLease lease = state.ambientLeases().get(scout.id());
-        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();
         if (state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE || lease == null
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.SCOUT_PATROL
-                || !recovered.priorCanonicalPosition().equals(current) || !recovered.observedLeasePosition().equals(lease.goalPosition())
+                || !recovered.priorCanonicalPosition().equals(current) || !recovered.observedLeasePosition().equals(lease.goalBody().supportingSurface().support())
                 || !nextPosition(state, scout, recovered.observedLeasePosition()).equals(recovered.nextGoalPosition())) {
             throw new IllegalArgumentException("scout patrol recovery lacks one observed obsolete HOT lease cursor");
         }
-        FrontierWorldState observed = state.withActorLocation(scout.id(), recovered.observedLeasePosition());
-        return AmbientLeaseStateProcess.retarget(observed, scout.id(), AmbientGoalKind.SCOUT_PATROL, recovered.nextGoalPosition());
+        FrontierWorldState observed = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(recovered.observedLeasePosition())));
+        return AmbientLeaseStateProcess.retarget(observed, scout.id(), AmbientGoalKind.SCOUT_PATROL, BodyPosition.above(new SurfaceAnchor(recovered.nextGoalPosition())));
     }
 
     public static BlockPosition nextPosition(FrontierWorldState state, Bioform scout) {
-        return nextPosition(state, scout, state.actorLocations().get(scout.id()).position());
+        return nextPosition(state, scout, state.actorLocations().get(scout.id()).supportingSurface().support());
     }
 
     /** Exact adapter-facing cursor lookup; it does not mutate state or inspect Minecraft. */

@@ -95,7 +95,7 @@ class OperationAssemblyTest {
 
         TraversalTopology corridor = OperationAssemblyCorridor.compile(state, new SubjectId("operation:test"), hauler, new SurfaceAnchor(access.assemblyFloor()));
 
-        assertEquals(state.actorLocations().get(hauler).position(), corridor.linearCorridorSurfaces().getFirst().support());
+        assertEquals(FrontierTestPositions.supportOf(state.actorLocations().get(hauler)), corridor.linearCorridorSurfaces().getFirst().support());
         assertEquals(access.assemblyFloor(), corridor.linearCorridorSurfaces().getLast().support());
     }
 

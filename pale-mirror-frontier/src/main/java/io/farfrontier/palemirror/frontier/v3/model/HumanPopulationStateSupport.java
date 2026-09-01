@@ -19,7 +19,7 @@ public final class HumanPopulationStateSupport {
                 && operation.participantIds().contains(migration.residentId()))) throw new IllegalArgumentException("resident assigned to an active operation cannot migrate");
         ResidentProfile current = state.humanPopulation().resident(migration.residentId());
         ResidentMigrationJourney journey = state.humanPopulation().migration(migration.residentId());
-        if (journey == null || !journey.arriving() || !actor.position().equals(journey.currentPosition())
+        if (journey == null || !journey.arriving() || !actor.supportingSurface().support().equals(journey.currentPosition())
                 || !journey.destinationHouseholdId().equals(migration.destinationHouseholdId())
                 || !journey.destinationSettlementId().equals(migration.destinationSettlementId()) || !journey.currentPosition().equals(migration.destination())) {
             throw new IllegalArgumentException("resident migration must complete one exact arrived journey");
@@ -30,7 +30,7 @@ public final class HumanPopulationStateSupport {
         if (!current.settlementId().equals(migration.destinationSettlementId()) && !hasReservedHousing(state, migration.destinationSettlementId())) {
             throw new IllegalArgumentException("resident migration lost its reserved operational housing");
         }
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withPosition(migration.destination()));
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(migration.residentId(), actor.withBody(BodyPosition.above(new SurfaceAnchor(migration.destination()))));
         return copy(state, actors, state.humanPopulation().completeMigration(migration.residentId(), migration.destinationHouseholdId(), migration.destinationSettlementId()));
     }
 
@@ -38,7 +38,7 @@ public final class HumanPopulationStateSupport {
         Objects.requireNonNull(journey, "migration journey");
         ActorLocation actor = state.actorLocations().get(journey.residentId()); ResidentProfile resident = state.humanPopulation().resident(journey.residentId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || resident == null || !resident.settlementId().equals(journey.originSettlementId())
-                || !actor.position().equals(journey.currentPosition()) || !coldAvailable(state, journey.residentId())) {
+                || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, journey.residentId())) {
             throw new IllegalArgumentException("migration journey must start from one available living COLD resident");
         }
         if (!canReserveHousing(state, journey.destinationSettlementId())) {
@@ -53,11 +53,11 @@ public final class HumanPopulationStateSupport {
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() <= journey.routeIndex()
                 || advanced.nextRouteIndex() > journey.routeIndex() + ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS
                 || advanced.nextRouteIndex() >= journey.route().size()
-                || actor == null || !actor.position().equals(journey.currentPosition()) || !coldAvailable(state, advanced.residentId())) {
+                || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || !coldAvailable(state, advanced.residentId())) {
             throw new IllegalArgumentException("migration advancement lacks its exact COLD hand-off");
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(advanced.residentId(), actor.withPosition(journey.route().get(advanced.nextRouteIndex())));
+        actors.put(advanced.residentId(), actor.withBody(BodyPosition.above(new SurfaceAnchor(journey.route().get(advanced.nextRouteIndex())))));
         return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
     }
 
@@ -65,12 +65,12 @@ public final class HumanPopulationStateSupport {
         ResidentMigrationJourney journey = requireJourney(state, advanced.residentId());
         ActorLocation actor = state.actorLocations().get(advanced.residentId()); AmbientActorLease lease = state.ambientLeases().get(advanced.residentId());
         if (journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving() || advanced.nextRouteIndex() != journey.nextRouteIndex()
-                || actor == null || !actor.position().equals(journey.currentPosition()) || lease == null || lease.status() != AmbientLeaseStatus.HOT
-                || lease.goal() != AmbientGoalKind.TRANSIT || !lease.goalPosition().equals(journey.nextColdPosition())) {
+                || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()) || lease == null || lease.status() != AmbientLeaseStatus.HOT
+                || lease.goal() != AmbientGoalKind.TRANSIT || !lease.goalBody().supportingSurface().support().equals(journey.nextColdPosition())) {
             throw new IllegalArgumentException("HOT transit observation lacks its exact leased segment");
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(advanced.residentId(), actor.withPosition(journey.nextColdPosition()));
+        actors.put(advanced.residentId(), actor.withBody(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition()))));
         return copy(state, actors, state.humanPopulation().advanceMigration(advanced.residentId(), advanced.nextRouteIndex()));
     }
 
@@ -113,7 +113,7 @@ public final class HumanPopulationStateSupport {
         if (SettlementFacilityCapability.livingResidents(state, job.settlementId()) >= SettlementFacilityCapability.housingCapacity(state, job.settlementId())) {
             throw new IllegalArgumentException("resident birth lost required housing before completion");
         }
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), new ActorLocation(job.position()));
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position())));
         return copy(state, actors, state.humanPopulation().completeBirth(job.id()));
     }
 

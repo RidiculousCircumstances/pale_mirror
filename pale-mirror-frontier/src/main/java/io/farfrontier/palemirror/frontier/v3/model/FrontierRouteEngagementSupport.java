@@ -52,7 +52,7 @@ final class FrontierRouteEngagementSupport {
                         || engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART
                         || engagement.status() == RouteEngagementStatus.CONFLICT;
                 if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
-                        && !location.position().equals(attacker.position())) {
+                        && !location.supportingSurface().support().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD engagement attacker must retain its exact route position");
                 }
                 if (active && !activeAttackers.add(attackerId)) throw new IllegalArgumentException("bioform cannot join multiple active route engagements");

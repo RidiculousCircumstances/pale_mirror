@@ -24,7 +24,7 @@ public final class FrontierEngineeringWorkSceneSupport {
                 || project.confirmedCells() >= project.workCells().size()) return Optional.empty();
         Map<SubjectId, BlockPosition> positions = assembly.positions();
         if (!positions.keySet().equals(Set.copyOf(team.memberIds())) || positions.entrySet().stream()
-                .anyMatch(entry -> !state.actorLocations().get(entry.getKey()).position().equals(entry.getValue()))) return Optional.empty();
+                .anyMatch(entry -> !state.actorLocations().get(entry.getKey()).supportingSurface().support().equals(entry.getValue()))) return Optional.empty();
         return Optional.of(new EngineeringWorkSceneCandidate(project.id(), project.confirmedCells(),
                 EngineeringWorksite.workCell(state.bootstrap(), state.routeTopology(), project), positions));
     }

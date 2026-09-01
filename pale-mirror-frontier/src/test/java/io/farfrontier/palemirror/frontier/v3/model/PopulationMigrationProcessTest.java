@@ -44,7 +44,7 @@ class PopulationMigrationProcessTest {
             ResidentMigrationAdvanced advanced = payload(events, ResidentMigrationAdvanced.class);
             ResidentMigrationJourney prior = state.humanPopulation().migration(before.id());
             state = HumanPopulationStateSupport.advanceMigration(state, advanced);
-            assertEquals(prior.nextColdPosition(), state.actorLocations().get(before.id()).position());
+            assertEquals(prior.nextColdPosition(), state.actorLocations().get(before.id()).supportingSurface().support());
             assertEquals(before, state.humanPopulation().resident(before.id()), "membership remains with the origin while in transit");
             progress = scheduled(events, "frontier.population.migration.progress");
         }
@@ -54,7 +54,7 @@ class PopulationMigrationProcessTest {
         state = state.recordResidentMigration(migration);
         assertEquals(migration.destinationSettlementId(), state.humanPopulation().resident(before.id()).settlementId());
         assertEquals(migration.destinationHouseholdId(), state.humanPopulation().resident(before.id()).householdId());
-        assertEquals(migration.destination(), state.actorLocations().get(before.id()).position());
+        assertEquals(migration.destination(), state.actorLocations().get(before.id()).supportingSurface().support());
         assertEquals(null, state.humanPopulation().migration(before.id()));
         assertTrue(!state.humanPopulation().residents().values().stream().anyMatch(person -> person.id().equals(before.id()) && person.settlementId().equals(source.id())));
     }
@@ -66,14 +66,14 @@ class PopulationMigrationProcessTest {
         state = HumanPopulationStateSupport.startMigration(state, started.journey());
         state = state.withHumanPopulation(state.humanPopulation().transitionQuarantine(started.journey().destinationSettlementId(), SettlementQuarantineStatus.QUARANTINED, 101L));
         ResidentProfile before = state.humanPopulation().resident(started.journey().residentId());
-        BlockPosition position = state.actorLocations().get(before.id()).position();
+        BlockPosition position = state.actorLocations().get(before.id()).supportingSurface().support();
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = PopulationMigrationProcess.planProgress(state,
                 scheduled(PopulationMigrationProcess.planReview(displaced(), PopulationMigrationProcess.review(1, 100L)), "frontier.population.migration.progress"));
         ResidentMigrationBlocked blocked = payload(events, ResidentMigrationBlocked.class);
         assertEquals(ResidentMigrationBlockReason.QUARANTINE, blocked.reason());
         state = HumanPopulationStateSupport.blockMigration(state, blocked);
         assertEquals(ResidentMigrationStatus.BLOCKED, state.humanPopulation().migration(before.id()).status());
-        assertEquals(position, state.actorLocations().get(before.id()).position());
+        assertEquals(position, state.actorLocations().get(before.id()).supportingSurface().support());
         assertEquals(before, state.humanPopulation().resident(before.id()));
     }
 
@@ -101,7 +101,7 @@ class PopulationMigrationProcessTest {
         FrontierWorldState afterProgress = decode(recovered.checkpoint());
         ResidentMigrationJourney advanced = afterProgress.humanPopulation().migration(journey.residentId());
         assertEquals(journey.nextRouteIndex(), advanced.routeIndex());
-        assertEquals(journey.nextColdPosition(), afterProgress.actorLocations().get(journey.residentId()).position());
+        assertEquals(journey.nextColdPosition(), afterProgress.actorLocations().get(journey.residentId()).supportingSurface().support());
     }
 
     @Test
@@ -158,7 +158,7 @@ class PopulationMigrationProcessTest {
             FrontierWorldState displaced = initial.withStructureCondition(housing, StructureCondition.DESTROYED);
             ResidentMigrationStarted started = payload(PopulationMigrationProcess.planReview(displaced, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
             assertTrue(started.journey().route().size() <= ResidentMigrationJourney.MAX_WAYPOINTS);
-            assertEquals(started.journey().route().getFirst(), displaced.actorLocations().get(started.journey().residentId()).position());
+            assertEquals(started.journey().route().getFirst(), displaced.actorLocations().get(started.journey().residentId()).supportingSurface().support());
             var graybox = FrontierGrayboxPlan.compile(displaced).cells();
             assertTrue(started.journey().route().stream().anyMatch(position -> FrontierRouteNetwork.isSurfaceCell(displaced.bootstrap(), displaced.routeTopology(), position)),
                     "the migration corridor must use the visible route network instead of a hidden direct line");
@@ -168,7 +168,7 @@ class PopulationMigrationProcessTest {
                 assertTrue(displaced.actorLocations().entrySet().stream()
                                 .filter(entry -> !entry.getKey().equals(started.journey().residentId()))
                                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
-                                .noneMatch(entry -> entry.getValue().position().equals(position)),
+                                .noneMatch(entry -> entry.getValue().supportingSurface().support().equals(position)),
                         () -> "migration corridor enters another actor hand-off cell at " + position);
             }
         }
@@ -182,7 +182,7 @@ class PopulationMigrationProcessTest {
         SubjectId resident = started.journey().residentId();
         AmbientActorLease prepared = AmbientActorProcess.nextLease(state, resident, new SimInstant(101L));
         assertEquals(AmbientGoalKind.TRANSIT, prepared.goal());
-        assertEquals(started.journey().nextColdPosition(), prepared.goalPosition());
+        assertEquals(started.journey().nextColdPosition(), prepared.goalBody().supportingSurface().support());
         state = AmbientLeaseStateProcess.prepare(state, prepared);
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
         FrontierWorldState hot = state;
@@ -195,17 +195,17 @@ class PopulationMigrationProcessTest {
         state = PopulationMigrationProcess.reduceHotAdvance(state, first);
         ResidentMigrationJourney after = state.humanPopulation().migration(resident);
         assertEquals(before.nextRouteIndex(), after.routeIndex());
-        assertEquals(after.currentPosition(), state.actorLocations().get(resident).position());
+        assertEquals(after.currentPosition(), state.actorLocations().get(resident).supportingSurface().support());
         assertEquals(AmbientLeaseStatus.HOT, state.ambientLeases().get(resident).status());
         assertEquals(AmbientGoalKind.TRANSIT, state.ambientLeases().get(resident).goal());
-        assertEquals(after.nextColdPosition(), state.ambientLeases().get(resident).goalPosition());
+        assertEquals(after.nextColdPosition(), state.ambientLeases().get(resident).goalBody().supportingSurface().support());
 
         while (state.humanPopulation().migration(resident) != null) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(resident);
             state = PopulationMigrationProcess.reduceHotAdvance(state, new ResidentTransitAdvanced(resident, journey.nextRouteIndex()));
         }
         assertEquals(started.journey().destinationSettlementId(), state.humanPopulation().resident(resident).settlementId());
-        assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).position());
+        assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).supportingSurface().support());
         assertNotEquals(AmbientGoalKind.TRANSIT, state.ambientLeases().get(resident).goal());
     }
 
@@ -217,7 +217,7 @@ class PopulationMigrationProcessTest {
         SubjectId resident = started.journey().residentId();
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, resident, new SimInstant(101L)));
         state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
-        state = AmbientLeaseStateProcess.recordDeath(state, new AmbientActorDied(resident, state.actorLocations().get(resident).position(), "test:transit-death"));
+        state = AmbientLeaseStateProcess.recordDeath(state, new AmbientActorDied(resident, state.actorLocations().get(resident).body(), "test:transit-death"));
 
         assertEquals(null, state.humanPopulation().migration(resident));
         assertEquals(0L, state.humanPopulation().inboundHousingReservations(started.journey().destinationSettlementId()));

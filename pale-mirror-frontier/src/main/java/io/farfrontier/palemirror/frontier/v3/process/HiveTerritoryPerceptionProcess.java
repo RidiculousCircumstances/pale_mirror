@@ -82,7 +82,7 @@ public final class HiveTerritoryPerceptionProcess {
         if (scout.role() != BioformRole.SCOUT) {
             throw new IllegalArgumentException("hive territory observer is not a scout");
         }
-        return location.position();
+        return location.supportingSurface().support();
     }
 
     private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
@@ -104,7 +104,7 @@ public final class HiveTerritoryPerceptionProcess {
         if (organ != null) return organ.kind() == HiveOrganKind.HEART && state.isHiveOrganOperational(organ.id()) && organ.anchor().equals(belief.sensorPosition());
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), observer);
         if (scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) return false;
-        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();
         return current.equals(belief.sensorPosition()) || HiveScoutPatrolProcess.nextPosition(state, scout, belief.sensorPosition()).equals(current);
     }
 

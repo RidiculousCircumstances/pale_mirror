@@ -37,7 +37,7 @@ final class FrontierSettlementAssaultSupport {
                 boolean approachOwnsPosition = assault.status() == SettlementAssaultStatus.APPROACHING
                         || assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE;
                 if (approachOwnsPosition && location.condition().status() == ActorLifeStatus.ALIVE
-                        && !location.position().equals(attacker.position())) {
+                        && !location.supportingSurface().support().equals(attacker.position())) {
                     throw new IllegalArgumentException("COLD assault attacker must retain its exact approach position");
                 }
                 if (active && (!activeAttackers.add(attacker.actorId()) || routeAttackers.contains(attacker.actorId()))) {

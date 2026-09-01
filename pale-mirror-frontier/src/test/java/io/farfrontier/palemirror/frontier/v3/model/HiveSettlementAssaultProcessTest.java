@@ -111,7 +111,7 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState state = fixture.state();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), fixture.sighting().settlementAnchor().offset(-1, 0, 0));
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
         }
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
@@ -161,7 +161,7 @@ class HiveSettlementAssaultProcessTest {
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
         SettlementAssault started = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
         FrontierWorldState startedState = state;
-        java.util.Set<BlockPosition> defenderFloors = started.defenderIds().stream().map(id -> startedState.actorLocations().get(id).position())
+        java.util.Set<BlockPosition> defenderFloors = started.defenderIds().stream().map(id -> startedState.actorLocations().get(id).supportingSurface().support())
                 .collect(java.util.stream.Collectors.toSet());
         assertEquals(started.attackers().size(), started.attackers().stream().map(attacker -> attacker.route().getLast()).distinct().count());
         assertTrue(started.attackers().stream().map(attacker -> attacker.route().getLast()).noneMatch(defenderFloors::contains));
@@ -180,7 +180,7 @@ class HiveSettlementAssaultProcessTest {
         }
         assertEquals(SettlementAssaultStatus.WAITING_FOR_BATTLE, state.strategicPlans().settlementAssaults().get(started.id()).status());
         SubjectId defender = started.defenderIds().getFirst();
-        state = state.withActorLocation(defender, started.settlementAnchor().offset(33, 0, 0));
+        state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(33, 0, 0))));
         List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
         assertEquals(List.of(new SettlementAssaultTransition(started.id(), SettlementAssaultStatus.CONFLICT)),
                 conflict.stream().map(ProposedEvent::payload).toList());
@@ -221,7 +221,7 @@ class HiveSettlementAssaultProcessTest {
         state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
         FrontierWorldState draining = state;
         List<SceneMemberPosition> captured = members.stream().map(member -> {
-            ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), actor.position(), actor.condition().health());
+            ActorLocation actor = draining.actorLocations().get(member.actorId()); return new SceneMemberPosition(member.actorId(), new BlockPosition(actor.body().x(), actor.body().y(), actor.body().z()), actor.condition().health());
         }).toList();
         state = state.releaseSceneLease(lease.id(), captured);
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, state.strategicPlans().settlementAssaults().get(assault.id()).status());
@@ -232,7 +232,7 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assault-process-" + territory), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), settlement.anchor());
+        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         StrategicPlanState plans = StrategicPlanState.empty().withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
                 .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L));

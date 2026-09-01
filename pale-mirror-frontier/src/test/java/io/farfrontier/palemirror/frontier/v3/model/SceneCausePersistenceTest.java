@@ -93,13 +93,13 @@ class SceneCausePersistenceTest {
     @Test void currentStateRejectsATypeWhoseOwnerValidatorDoesNotExistYet() {
         FrontierWorldState state = FrontierDevelopmentScenarios.hotSceneStrikeState(new WorldId("frontier:scene-cause-owner"), 91L);
         SubjectId actor = state.bootstrap().hive().bioforms().getFirst().id();
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
-        positions.put(actor, state.actorLocations().get(actor).position());
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        positions.put(actor, state.actorLocations().get(actor).body());
         SceneLease assault = SceneLease.forCause(new SceneLeaseId("lease:assault-owner"), state.bootstrap().worldId(),
                 new SettlementAssaultSceneCause(new SubjectId("assault:owner"), new SubjectId("settlement:northwatch")),
-                state.actorLocations().get(actor).position(), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
+                FrontierTestPositions.supportOf(state.actorLocations().get(actor)), new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
                 List.of(new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor))),
-                SceneLease.bodiesAboveLegacySupports(positions), Set.of(), Optional.empty());
+                positions, Set.of(), Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> state.prepareSceneLease(assault));
     }

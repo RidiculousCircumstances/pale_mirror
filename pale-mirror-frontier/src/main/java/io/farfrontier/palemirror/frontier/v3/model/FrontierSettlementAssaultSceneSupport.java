@@ -49,7 +49,7 @@ public final class FrontierSettlementAssaultSceneSupport {
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
             BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
-            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.position().equals(floor)
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(floor)
                     || !floor.equals(candidate.memberPositions().get(member.actorId()))
                     || !actual.add(member.actorId()) || !floors.add(floor) || !near(assault.settlementAnchor(), floor)) {
                 throw new IllegalArgumentException("assault scene needs exact living actors at distinct local hand-off floors");

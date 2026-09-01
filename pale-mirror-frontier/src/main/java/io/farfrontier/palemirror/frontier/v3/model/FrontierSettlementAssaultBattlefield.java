@@ -27,7 +27,7 @@ public final class FrontierSettlementAssaultBattlefield {
         for (SubjectId defender : defenderIds) {
             ActorLocation location = state.actorLocations().get(defender);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.position()) || !occupied.add(location.position())) return Optional.empty();
+                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) return Optional.empty();
         }
         List<BlockPosition> choices = FrontierSettlementActorSlots.slots(state.bootstrap().bounds(), settlement.anchor(), structureCells,
                 attackerCount + occupied.size() + 16).stream().filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, position))
@@ -48,7 +48,7 @@ public final class FrontierSettlementAssaultBattlefield {
         for (SubjectId member : members) {
             ActorLocation location = state.actorLocations().get(member);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.position()) || positions.put(member, location.position()) != null) {
+                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
                 return Optional.empty();
             }
         }

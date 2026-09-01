@@ -29,12 +29,12 @@ class HiveScoutPatrolProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveScoutPatrolProcess.plan(state, action);
         ScoutPatrolAdvanced advanced = (ScoutPatrolAdvanced) events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
                 .filter(ScoutPatrolAdvanced.class::isInstance).findFirst().orElseThrow();
-        assertEquals(state.actorLocations().get(scout.id()).position(), advanced.priorPosition().orElseThrow());
+        assertEquals(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), advanced.priorPosition().orElseThrow());
         assertEquals(HiveScoutPatrolProcess.nextPosition(state, scout), advanced.position());
         assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)));
 
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
-        assertEquals(advanced.position(), moved.actorLocations().get(scout.id()).position());
+        assertEquals(advanced.position(), FrontierTestPositions.supportOf(moved.actorLocations().get(scout.id())));
         assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));
         ScheduleEffect.Created next = (ScheduleEffect.Created) events.getLast().payload();
         assertEquals(action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveScoutPatrolInterval(), next.action().dueAt().ticks());
@@ -65,8 +65,8 @@ class HiveScoutPatrolProcessTest {
     @Test void expandedScoutingCircuitCanNaturallyReachTheNearestSettlementSensorRange() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-discovery"), 92L));
         Bioform scout = scout(state); Settlement nearest = state.bootstrap().settlements().stream()
-                .min(java.util.Comparator.comparingLong(value -> distanceSquared(state.actorLocations().get(scout.id()).position(), value.anchor()))).orElseThrow();
-        BlockPosition position = state.actorLocations().get(scout.id()).position(); boolean reached = false;
+                .min(java.util.Comparator.comparingLong(value -> distanceSquared(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), value.anchor()))).orElseThrow();
+        BlockPosition position = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())); boolean reached = false;
         for (int step = 0; step < 96; step++) {
             position = HiveScoutPatrolProcess.nextPosition(state, scout, position);
             int radius = state.bootstrap().ruleset().spatial().hiveSettlementSightRadius();
@@ -92,41 +92,41 @@ class HiveScoutPatrolProcessTest {
 
     @Test void aHotScoutAdvancesTheSameCursorAndRetargetsOnlyItsExactNextStep() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-cursor"), 91L));
-        Bioform scout = scout(state); BlockPosition prior = state.actorLocations().get(scout.id()).position();
+        Bioform scout = scout(state); BlockPosition prior = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()));
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
         assertEquals(AmbientGoalKind.SCOUT_PATROL, lease.goal());
         state = AmbientLeaseStateProcess.prepare(state, lease);
         state = AmbientLeaseStateProcess.transition(state, scout.id(), AmbientLeaseStatus.HOT);
-        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(scout.id(), 1L, lease.goalPosition(), java.util.Optional.of(prior));
+        ScoutPatrolAdvanced advanced = new ScoutPatrolAdvanced(scout.id(), 1L, lease.goalBody().supportingSurface().support(), java.util.Optional.of(prior));
 
         FrontierWorldState moved = HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced);
-        assertEquals(lease.goalPosition(), moved.actorLocations().get(scout.id()).position());
+        assertEquals(lease.goalBody().supportingSurface().support(), FrontierTestPositions.supportOf(moved.actorLocations().get(scout.id())));
         assertEquals(AmbientGoalKind.SCOUT_PATROL, moved.ambientLeases().get(scout.id()).goal());
-        assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalPosition());
+        assertEquals(HiveScoutPatrolProcess.nextPosition(moved, scout), moved.ambientLeases().get(scout.id()).goalBody().supportingSurface().support());
     }
 
     @Test void observedObsoleteHotLeaseTargetRebasesOnceWithoutForgingAnOrdinaryPatrolStep() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scout-patrol-recovery"), 91L));
-        Bioform scout = scout(state); BlockPosition prior = state.actorLocations().get(scout.id()).position();
+        Bioform scout = scout(state); BlockPosition prior = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()));
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
         state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);
         // The deployed r41 failure case: a pre-cursor HOT lease still points at the Scout's
         // current canonical floor.  Minecraft has not moved the body, so recovery may only
         // durably retarget that same owned body to the deterministic next perimeter cursor.
-        state = AmbientLeaseStateProcess.retarget(state, scout.id(), AmbientGoalKind.SCOUT_PATROL, prior);
+        state = AmbientLeaseStateProcess.retarget(state, scout.id(), AmbientGoalKind.SCOUT_PATROL, FrontierTestPositions.bodyAboveSupport(prior));
         ScoutPatrolLeaseRecovered recovered = new ScoutPatrolLeaseRecovered(scout.id(), prior, prior,
                 HiveScoutPatrolProcess.nextPosition(state, scout, prior));
 
         FrontierWorldState rebased = HiveScoutPatrolProcess.reduceLeaseRecovered(state, state.bootstrap().hive().id(), recovered);
-        assertEquals(prior, rebased.actorLocations().get(scout.id()).position());
-        assertEquals(recovered.nextGoalPosition(), rebased.ambientLeases().get(scout.id()).goalPosition());
+        assertEquals(prior, FrontierTestPositions.supportOf(rebased.actorLocations().get(scout.id())));
+        assertEquals(recovered.nextGoalPosition(), rebased.ambientLeases().get(scout.id()).goalBody().supportingSurface().support());
         assertEquals(recovered, FrontierWorldRuntimeDefinition.payloadCodecs().decode(recovered.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(recovered)));
         assertEquals(rebased, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(rebased)));
         FrontierWorldState stale = state;
         BlockPosition forgedObserved = HiveScoutPatrolProcess.nextPosition(stale, scout, prior);
         assertThrows(IllegalArgumentException.class, () -> HiveScoutPatrolProcess.reduceLeaseRecovered(stale, stale.bootstrap().hive().id(),
-                new ScoutPatrolLeaseRecovered(scout.id(), prior, forgedObserved, lease.goalPosition())),
+                new ScoutPatrolLeaseRecovered(scout.id(), prior, forgedObserved, lease.goalBody().supportingSurface().support())),
                 "a recovery must bind the observed old lease target and its one deterministic successor");
     }
 
@@ -145,7 +145,7 @@ class HiveScoutPatrolProcessTest {
         ScoutPatrolAdvanced decoded = (ScoutPatrolAdvanced) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.scout_patrol_advanced",
                 deployedLegacyBytes);
         assertEquals(java.util.Optional.empty(), decoded.priorPosition());
-        assertEquals(legacyPosition, HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), decoded).actorLocations().get(scout.id()).position());
+        assertEquals(legacyPosition, FrontierTestPositions.supportOf(HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), decoded).actorLocations().get(scout.id())));
 
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
         FrontierWorldState hot = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), scout.id(), AmbientLeaseStatus.HOT);

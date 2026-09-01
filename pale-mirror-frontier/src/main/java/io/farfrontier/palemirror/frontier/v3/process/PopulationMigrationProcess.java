@@ -88,7 +88,7 @@ public final class PopulationMigrationProcess {
                     journey.destinationSettlementId(), journey.currentPosition()));
         }
         AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId());
-        return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), goal.position());
+        return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
     private static Optional<Candidate> candidate(FrontierWorldState state, Settlement source) {
@@ -116,7 +116,7 @@ public final class PopulationMigrationProcess {
 
     private static ResidentMigrationJourney journey(FrontierWorldState state, ResidentProfile resident, Settlement source, Household household,
                                                     Settlement destination, BlockPosition arrival) {
-        List<BlockPosition> route = FrontierMigrationCorridor.compile(state, resident.id(), state.actorLocations().get(resident.id()).position(), source, destination, arrival);
+        List<BlockPosition> route = FrontierMigrationCorridor.compile(state, resident.id(), state.actorLocations().get(resident.id()).supportingSurface().support(), source, destination, arrival);
         if (!FrontierRouteNetwork.isPassable(state.bootstrap(), route, state.physicalDeltas())) {
             throw new IllegalArgumentException("migration corridor has a known physical obstruction");
         }

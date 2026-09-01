@@ -91,7 +91,7 @@ class CargoCarrierReleaseStateTest {
         assertEquals(unknown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown)));
         assertThrows(IllegalArgumentException.class, () -> unknown.transitionSceneLease(leaseId, SceneLeaseStatus.HOT));
         List<SceneMemberPosition> bodies = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                unknown.actorLocations().get(member.actorId()).position(), unknown.actorLocations().get(member.actorId()).condition().health())).toList();
+                FrontierTestPositions.bodyCellOf(unknown.actorLocations().get(member.actorId())), unknown.actorLocations().get(member.actorId()).condition().health())).toList();
         FrontierWorldState closed = unknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, bodies);
         assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(leaseId).status());
         assertEquals(RouteEngagementOutcome.ABORTED, closed.strategicPlans().routeEngagements().get(candidate.engagementId()).outcome().orElseThrow());
@@ -120,7 +120,7 @@ class CargoCarrierReleaseStateTest {
         assertEquals(SceneLeaseStatus.DRAINING, interrupted.sceneLeases().get(leaseId).status());
 
         List<SceneMemberPosition> survivors = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                interrupted.actorLocations().get(member.actorId()).position(),
+                FrontierTestPositions.bodyCellOf(interrupted.actorLocations().get(member.actorId())),
                 interrupted.actorLocations().get(member.actorId()).condition().health())).toList();
         submit(engine, world, "drain", new SceneLeaseReleased(leaseId, survivors));
 

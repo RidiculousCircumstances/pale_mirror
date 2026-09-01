@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 95; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 96; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -104,7 +104,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeActors(DataOutputStream output, Map<SubjectId, ActorLocation> values) throws IOException {
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, ActorLocation> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); writePosition(output, entry.getValue().position());
+            writeString(output, entry.getKey().value()); writeBody(output, entry.getValue().body());
             output.writeByte(entry.getValue().condition().status().wireTag()); output.writeLong(entry.getValue().condition().health().raw());
         }
     }
@@ -112,14 +112,16 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, ActorLocation> values = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
-            BlockPosition position = readPosition(input); int status = input.readUnsignedByte();
+            BodyPosition body = readBody(input); int status = input.readUnsignedByte();
             if (status >= ActorLifeStatus.values().length
-                    || values.put(id, new ActorLocation(position, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())))) != null) {
+                    || values.put(id, new ActorLocation(body, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());
             }
         }
         return values;
     }
+    private static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
+    private static BodyPosition readBody(DataInputStream input) throws IOException { return new BodyPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeStructures(DataOutputStream output, Map<SubjectId, StructureCondition> values) throws IOException {
         writeCount(output, values.size());
         for (Map.Entry<SubjectId, StructureCondition> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {

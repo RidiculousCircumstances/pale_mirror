@@ -87,7 +87,7 @@ class ProductionProcessTest {
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         assertInstanceOf(CommandResult.Accepted.class, submitTransition(engine, world, "worker-running-before-death", prepared.intent().id(),
                 PhysicalIntentStatus.RUNNING, Optional.empty()));
-        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:production-worker-died-after-effect-prepared");
 
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
@@ -127,7 +127,7 @@ class ProductionProcessTest {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
-        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:cold-production-worker-died");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(deathId),
@@ -149,7 +149,7 @@ class ProductionProcessTest {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, prepared.state(), SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
-        BlockPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).position();
+        BodyPosition position = prepared.state().actorLocations().get(prepared.job().workerId()).body();
         CommandId deathId = new CommandId("command:prepared-production-worker-died");
 
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, deathId, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
@@ -176,10 +176,10 @@ class ProductionProcessTest {
         BlockPosition target = new BlockPosition(-480, 64, -480);
 
         assertEquals(new SubjectId("resident:1-15"), worker);
-        assertEquals(target, state.actorLocations().get(worker).position());
+        assertEquals(target, FrontierTestPositions.supportOf(state.actorLocations().get(worker)));
         assertTrue(state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(worker))
-                .noneMatch(entry -> Math.max(Math.abs(entry.getValue().position().x() - target.x()),
-                        Math.abs(entry.getValue().position().z() - target.z())) <= 96));
+                .noneMatch(entry -> Math.max(Math.abs(FrontierTestPositions.supportOf(entry.getValue()).x() - target.x()),
+                        Math.abs(FrontierTestPositions.supportOf(entry.getValue()).z() - target.z())) <= 96));
     }
 
     @Test
@@ -214,7 +214,7 @@ class ProductionProcessTest {
         ColdMarketJob prepared = coldMarketJob(); FrontierWorldState state = prepared.state();
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), prepared.settlementId());
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), settlement.anchor());
+        state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:defence-interrupt"), hive,

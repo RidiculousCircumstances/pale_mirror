@@ -29,8 +29,8 @@ public final class FrontierRouteEngagementStateSupport {
         ActorLocation target = state.actorLocations().get(strike.targetId());
         FixedScalar remaining = target.condition().health().minus(strike.damage());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.position())
-                : new ActorLocation(target.position(), target.condition().withHealth(remaining)));
+        actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.body())
+                : new ActorLocation(target.body(), target.condition().withHealth(remaining)));
         StrategicPlanState plans = state.strategicPlans().replaceEngagement(engagement.afterStrike(strike.epoch()));
         return copy(state, actors, state.operations(), plans);
     }

@@ -16,7 +16,7 @@ class HiveSettlementPerceptionProcessTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-settlement-local"), 451L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), settlement.anchor());
+        state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
 
         HiveSettlementPerceptionProcess.Refresh refresh = HiveSettlementPerceptionProcess.refresh(state, 100L);
 
@@ -24,7 +24,7 @@ class HiveSettlementPerceptionProcessTest {
         HiveSettlementObserved observed = refresh.events().stream().map(event -> event.payload()).filter(HiveSettlementObserved.class::isInstance)
                 .map(HiveSettlementObserved.class::cast).findFirst().orElseThrow();
         state = HiveSettlementPerceptionProcess.reduce(state, state.bootstrap().hive().id(), observed);
-        state = state.withActorLocation(scout.id(), state.bootstrap().hive().seedNests().getFirst().anchor());
+        state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(state.bootstrap().hive().seedNests().getFirst().anchor()));
 
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(state.strategicPlans().hiveSettlementKnowledge(), restored.strategicPlans().hiveSettlementKnowledge());

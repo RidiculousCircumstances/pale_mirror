@@ -21,7 +21,7 @@ public final class OperationAssemblyCorridor {
 
     public static TraversalTopology compile(FrontierWorldState state, SubjectId operationId, SubjectId actorId, SurfaceAnchor destination) {
         Objects.requireNonNull(state, "assembly state"); Objects.requireNonNull(operationId, "assembly operation"); Objects.requireNonNull(actorId, "assembly actor"); Objects.requireNonNull(destination, "assembly destination");
-        SurfaceAnchor start = new SurfaceAnchor(Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").position());
+        SurfaceAnchor start = Objects.requireNonNull(state.actorLocations().get(actorId), "assembly actor location").supportingSurface();
         Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);
         Set<BlockPosition> occupiedFloors = new LinkedHashSet<>();
         // COLD records are not physical obstacles. Only an actor which already owns a live
@@ -31,7 +31,7 @@ public final class OperationAssemblyCorridor {
                 .filter(entry -> entry.getValue().status() != AmbientLeaseStatus.CLOSED)
                 .map(Map.Entry::getKey).map(state.actorLocations()::get)
                 .filter(java.util.Objects::nonNull).filter(location -> location.condition().status() == ActorLifeStatus.ALIVE)
-                .map(ActorLocation::position).forEach(occupiedFloors::add);
+                .map(ActorLocation::supportingSurface).map(SurfaceAnchor::support).forEach(occupiedFloors::add);
         if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, start.support())
                 || !traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, destination.support())) {
             throw new IllegalArgumentException("operation assembly has no clear actor or port endpoint");

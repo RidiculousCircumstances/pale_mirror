@@ -186,8 +186,8 @@ class MedicalEvacuationOperationTest {
         FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
 
         LinkedHashMap<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>();
-        candidate.memberPositions().forEach((actor, position) -> ambient.put(actor, new AmbientActorLease(actor, position,
-                new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, position)));
+        candidate.memberPositions().forEach((actor, position) -> ambient.put(actor, new AmbientActorLease(actor, FrontierTestPositions.bodyAboveSupport(position),
+                new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, FrontierTestPositions.bodyAboveSupport(position))));
         FrontierWorldState hotAmbient = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(ambient));
 
         assertFalse(FrontierSceneAdmission.available(hotAmbient, candidate.memberPositions().keySet()));
@@ -273,7 +273,7 @@ class MedicalEvacuationOperationTest {
                 List.of(), base.transactionCommitter()));
         SceneMember dead = fixture.lease().members().getFirst();
         CommandResult result = engine.submit(command(fixture.world(), engine, "command:medical-participant-death",
-                new ActorDied(fixture.lease().id(), dead.actorId(), fixture.state().actorLocations().get(dead.actorId()).position(), "test:medical-death")));
+                new ActorDied(fixture.lease().id(), dead.actorId(), FrontierTestPositions.bodyCellOf(fixture.state().actorLocations().get(dead.actorId())), "test:medical-death")));
         assertInstanceOf(CommandResult.Accepted.class, result, result::toString);
 
         FrontierWorldState afterDeath = state(engine);
@@ -287,7 +287,7 @@ class MedicalEvacuationOperationTest {
                 new PhysicalIntentTransition(operation.consumptionIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty()))));
 
         List<SceneMemberPosition> survivors = fixture.lease().members().stream().filter(member -> !member.equals(dead))
-                .map(member -> new SceneMemberPosition(member.actorId(), afterDeath.actorLocations().get(member.actorId()).position())).toList();
+                .map(member -> new SceneMemberPosition(member.actorId(), FrontierTestPositions.bodyCellOf(afterDeath.actorLocations().get(member.actorId())))).toList();
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(fixture.world(), engine, "command:medical-death-release",
                 new SceneLeaseReleased(fixture.lease().id(), survivors))));
         FrontierWorldState released = state(engine);
@@ -299,7 +299,7 @@ class MedicalEvacuationOperationTest {
     @Test void preEffectInfirmarySceneMayDrainAndLaterBeReadmittedWithoutReplacingAnyone() {
         TreatmentSceneFixture fixture = hotTreatmentFixture(new WorldId("frontier:medical-drain"));
         List<SceneMemberPosition> observed = fixture.lease().members().stream().map(member -> new SceneMemberPosition(member.actorId(),
-                fixture.state().actorLocations().get(member.actorId()).position())).toList();
+                FrontierTestPositions.bodyCellOf(fixture.state().actorLocations().get(member.actorId())))).toList();
         FrontierWorldState released = fixture.state().transitionSceneLease(fixture.lease().id(), SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(fixture.lease().id(), observed);
 

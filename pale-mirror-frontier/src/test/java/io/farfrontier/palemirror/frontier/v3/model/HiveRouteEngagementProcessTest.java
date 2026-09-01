@@ -72,7 +72,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), intercept.offset(-16, 0, 0));
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-16, 0, 0))));
         }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept"), state.bootstrap().hive().id(),
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
@@ -107,7 +107,7 @@ class HiveRouteEngagementProcessTest {
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(started.engagement().id());
         assertEquals(RouteEngagementStatus.COLD_COMBAT, engagement.status());
         FrontierWorldState completed = state;
-        assertTrue(engagement.attackers().stream().allMatch(attacker -> completed.actorLocations().get(attacker.actorId()).position().equals(intercept)));
+        assertTrue(engagement.attackers().stream().allMatch(attacker -> completed.actorLocations().get(attacker.actorId()).supportingSurface().support().equals(intercept)));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -117,7 +117,7 @@ class HiveRouteEngagementProcessTest {
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), intercept);
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-scene-conflict"), hive,
@@ -192,7 +192,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), intercept);
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-combat"), hive,
@@ -246,7 +246,7 @@ class HiveRouteEngagementProcessTest {
                 FixedScalar.whole(20), FixedScalar.ZERO);
         FrontierWorldState struck = hot.preparePhysicalIntent(strikeIntent)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
-                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).position(), "scene-strike-test"), 0L)
+                .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).supportingSurface().support(), "scene-strike-test"), 0L)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
         assertEquals(strikeReceipt, struck.physicalObservations().get(strikeReceipt.id()));
@@ -254,7 +254,10 @@ class HiveRouteEngagementProcessTest {
         PhysicalIntentTransition strikeTransition = new PhysicalIntentTransition(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
         assertEquals(strikeTransition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(strikeTransition.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(strikeTransition)));
         List<SceneMemberPosition> postStrikeSurvivors = candidate.actorIds().stream().filter(actor -> !actor.equals(target))
-                .map(actor -> new SceneMemberPosition(actor, struck.actorLocations().get(actor).position(), struck.actorLocations().get(actor).condition().health())).toList();
+                .map(actor -> {
+                    ActorLocation location = struck.actorLocations().get(actor);
+                    return new SceneMemberPosition(actor, FrontierTestPositions.bodyCellOf(location), location.condition().health());
+                }).toList();
         FrontierWorldState closedStrike = struck.releaseSceneLease(leaseId, postStrikeSurvivors);
         assertEquals(strikeReceipt, closedStrike.physicalObservations().get(strikeReceipt.id()));
         FrontierWorldState recovered = hot.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
@@ -262,15 +265,20 @@ class HiveRouteEngagementProcessTest {
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.HOT, recovered.sceneLeases().get(leaseId).status());
         SubjectId deadActor = candidate.actorIds().stream().filter(actor -> !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
-        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).position(), "restart-fixture"), 0L);
+        FrontierWorldState afterRecordedDeath = hot.recordActorDeath(new ActorDied(leaseId, deadActor, hot.actorLocations().get(deadActor).supportingSurface().support(), "restart-fixture"), 0L);
         List<SceneMemberPosition> surviving = candidate.actorIds().stream().filter(actor -> !actor.equals(deadActor))
-                .map(actor -> new SceneMemberPosition(actor, afterRecordedDeath.actorLocations().get(actor).position(), afterRecordedDeath.actorLocations().get(actor).condition().health())).toList();
+                .map(actor -> {
+                    ActorLocation location = afterRecordedDeath.actorLocations().get(actor);
+                    return new SceneMemberPosition(actor, FrontierTestPositions.bodyCellOf(location), location.condition().health());
+                }).toList();
         FrontierWorldState drainedRecovery = afterRecordedDeath.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, surviving);
         assertEquals(RouteEngagementStatus.COLD_COMBAT, drainedRecovery.strategicPlans().routeEngagements().get(engagementId).status());
         assertEquals(SceneLeaseStatus.CLOSED, drainedRecovery.sceneLeases().get(leaseId).status());
-        List<SceneMemberPosition> captured = candidate.actorIds().stream().map(actor -> new SceneMemberPosition(actor, hot.actorLocations().get(actor).position(),
-                hot.actorLocations().get(actor).condition().health())).toList();
+        List<SceneMemberPosition> captured = candidate.actorIds().stream().map(actor -> {
+            ActorLocation location = hot.actorLocations().get(actor);
+            return new SceneMemberPosition(actor, new BlockPosition(location.body().x(), location.body().y(), location.body().z()), location.condition().health());
+        }).toList();
         state = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING).releaseSceneLease(leaseId, captured);
         assertEquals(RouteEngagementStatus.COLD_COMBAT, state.strategicPlans().routeEngagements().get(engagementId).status());
 
@@ -306,7 +314,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), intercept);
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-exclusive"), hive,
@@ -339,7 +347,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
-            state = state.withActorLocation(bioform.id(), intercept);
+            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-ambient-recovery-exclusive"), hive,
@@ -419,7 +427,7 @@ class HiveRouteEngagementProcessTest {
     private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
         BlockPosition carrierPosition = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(operation.currentPosition());
-        state = state.withActorLocation(scout.id(), carrierPosition);
+        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(carrierPosition)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }

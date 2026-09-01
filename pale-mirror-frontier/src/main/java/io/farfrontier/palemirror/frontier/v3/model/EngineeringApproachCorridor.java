@@ -33,7 +33,7 @@ final class EngineeringApproachCorridor {
     static List<List<BlockPosition>> candidates(FrontierWorldState state, SubjectId actorId, BlockPosition destination) {
         Objects.requireNonNull(state, "engineering approach state"); Objects.requireNonNull(actorId, "engineering approach actor");
         Objects.requireNonNull(destination, "engineering approach destination");
-        BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "engineering approach actor location").position();
+        BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "engineering approach actor location").supportingSurface().support();
         if (start.y() != destination.y()) throw new IllegalArgumentException("engineering approach changes its canonical anchor plane");
         Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);
         Set<BlockPosition> occupiedFloors = occupiedFloors(state, actorId);
@@ -54,7 +54,7 @@ final class EngineeringApproachCorridor {
         state.ambientLeases().entrySet().stream().filter(entry -> !entry.getKey().equals(actorId))
                 .filter(entry -> entry.getValue().status() != AmbientLeaseStatus.CLOSED).map(Map.Entry::getKey)
                 .map(state.actorLocations()::get).filter(Objects::nonNull)
-                .filter(location -> location.condition().status() == ActorLifeStatus.ALIVE).map(ActorLocation::position).forEach(occupied::add);
+                .filter(location -> location.condition().status() == ActorLifeStatus.ALIVE).map(ActorLocation::supportingSurface).map(SurfaceAnchor::support).forEach(occupied::add);
         return occupied;
     }
 

@@ -151,8 +151,9 @@ class FrontierV3ServerRuntimeTest {
 
         FrontierWorldState transferred = worldState(runtime);
         assertEquals(AmbientLeaseStatus.CLOSED, transferred.ambientLeases().get(participant).status());
-        assertEquals(capture.position().offset(0, -1, 0), transferred.actorLocations().get(participant).position(),
-                "a captured Minecraft feet cell must return to canonical support-cell location");
+        assertEquals(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(capture.position().x(), capture.position().y(), capture.position().z()),
+                transferred.actorLocations().get(participant).body(),
+                "a captured Minecraft feet cell must return to its exact canonical body location");
         assertEquals(lease, transferred.sceneLeases().get(lease.id()));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
     }
@@ -338,7 +339,7 @@ class FrontierV3ServerRuntimeTest {
         submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease)); submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
         FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER)
                 .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
-        var point = hot.actorLocations().get(bomber).position(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
+        var point = hot.actorLocations().get(bomber).body(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
         PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, candidate.engagementId()),
                 new FixedPosition(FixedScalar.whole(point.x()), FixedScalar.whole(point.y()), FixedScalar.whole(point.z())), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
         submitWorld(runtime, "prepare-explosion", new PhysicalIntentPrepared(intent)); submitWorld(runtime, "run-explosion", new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()));

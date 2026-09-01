@@ -20,7 +20,7 @@ class HiveTerritoryPerceptionProcessTest {
     void livingScoutPersistsOnlyItsLocallyObservedInfection() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-territory-local"), 401L));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        InfectionCell local = InfectionCell.at(state.actorLocations().get(scout.id()).position());
+        InfectionCell local = InfectionCell.at(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())));
         InfectionCell remote = new InfectionCell(local.x() + (local.x() > 0 ? -20 : 20), local.z() + (local.z() > 0 ? -20 : 20));
         state = state.withInfection(local, new FixedRatio(new FixedScalar(500_000L)))
                 .withInfection(remote, new FixedRatio(new FixedScalar(750_000L)));
@@ -37,11 +37,11 @@ class HiveTerritoryPerceptionProcessTest {
     void forgedRemoteObservationIsRejectedEvenWhenTheCellExistsCanonically() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-territory-forged"), 402L));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        InfectionCell remote = InfectionCell.at(state.actorLocations().get(scout.id()).position()).equals(new InfectionCell(90, 90))
+        InfectionCell remote = InfectionCell.at(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()))).equals(new InfectionCell(90, 90))
                 ? new InfectionCell(-90, -90) : new InfectionCell(90, 90);
         state = state.withInfection(remote, new FixedRatio(new FixedScalar(500_000L)));
         HiveTerritoryObserved forged = new HiveTerritoryObserved(new HiveTerritoryKnowledge.Belief(remote,
-                state.infection().get(remote), scout.id(), state.actorLocations().get(scout.id()).position(), 100L));
+                state.infection().get(remote), scout.id(), FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), 100L));
 
         FrontierWorldState finalState = state;
         assertThrows(IllegalArgumentException.class, () -> HiveTerritoryPerceptionProcess.reduce(finalState, finalState.bootstrap().hive().id(), forged));
@@ -51,10 +51,10 @@ class HiveTerritoryPerceptionProcessTest {
     void beliefSurvivesCodecButExpiresFromStrategicTargeting() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-territory-codec"), 403L));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        InfectionCell local = InfectionCell.at(state.actorLocations().get(scout.id()).position());
+        InfectionCell local = InfectionCell.at(FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())));
         state = state.withInfection(local, new FixedRatio(new FixedScalar(500_000L)));
         HiveTerritoryObserved observed = new HiveTerritoryObserved(new HiveTerritoryKnowledge.Belief(local, state.infection().get(local), scout.id(),
-                state.actorLocations().get(scout.id()).position(), 10L));
+                FrontierTestPositions.supportOf(state.actorLocations().get(scout.id())), 10L));
         state = HiveTerritoryPerceptionProcess.reduce(state, state.bootstrap().hive().id(), observed);
 
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));

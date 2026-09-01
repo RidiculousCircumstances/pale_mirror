@@ -6,8 +6,9 @@ import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.IdentityHashMap;
 import java.util.List;
-
+import java.util.Map;
 /**
  * The small, deterministic physical-motion primitive shared by v3 HOT bodies.
  *
@@ -17,15 +18,18 @@ import java.util.List;
  * decision outside the physical-intent boundary.</p>
  */
 final class FrontierV3ControlledMobMotion {
-    // The registered physical executor runs one bounded scene slice every four server ticks.
-    // These are per-slice distances, calibrated to native walking-scale visible motion rather
-    // than a four-times-slower stop-motion procession. Collision remains Minecraft-authoritative.
+    // These are per-tick distances, applied at EntityTickEvent.Pre.  The v3 executor chooses
+    // an intent after a canonical tick, then this narrow actuator moves it before Minecraft's
+    // entity tracking publishes the next position to remote players.
     private static final double RESIDENT_SPEED = 0.20D;
     private static final double BIOFORM_SPEED = 0.26D;
     private static final double ARRIVAL_DISTANCE = 0.35D;
     private static final double THIN_SURFACE_STEP = 0.125D;
     private static final double MAX_WALK_GRADE = 1.0D;
     private static final double VERTICAL_SPEED = 0.125D;
+    private static final int MAX_PENDING_INTENTS = 4_096;
+    /** Ephemeral one-tick physical intents; canonical goals/cursors remain in the domain. */
+    private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
 
     private FrontierV3ControlledMobMotion() { }
 
@@ -37,32 +41,44 @@ final class FrontierV3ControlledMobMotion {
         actor.getNavigation().stop();
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) return;
+        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { stop(actor); return; }
         // A HOT adapter may only follow the next retained pedestrian edge.  Existing callers
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
-        double vertical = Math.abs(delta.y) <= MAX_WALK_GRADE + ARRIVAL_DISTANCE
-                ? Math.copySign(Math.min(Math.abs(delta.y), VERTICAL_SPEED), delta.y) : 0.0D;
-        double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
-        if (horizontalDistance <= 1.0E-8D) {
-            if (vertical != 0.0D) actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
-            return;
+        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
+        if (PENDING.size() < MAX_PENDING_INTENTS || PENDING.containsKey(actor)) {
+            PENDING.put(actor, new MotionIntent(level.getGameTime() + 1L, target));
         }
+    }
+
+    /** Runs from the normal server entity-tick boundary, before tracker replication. */
+    static void advance(Mob actor) {
+        MotionIntent intent = PENDING.get(actor);
+        if (intent == null) return;
+        if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); return; }
+        if (level.getGameTime() < intent.applyAtGameTime()) return;
+        PENDING.remove(actor);
+        apply(level, actor, intent.target());
+    }
+
+    static void stop(Mob actor) {
+        PENDING.remove(actor);
+        actor.stopInPlace();
+    }
+
+    private static void apply(ServerLevel level, Mob actor, Vec3 target) {
+        Vec3 delta = target.subtract(actor.position());
+        double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
+        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE || horizontalDistance <= 1.0E-8D) return;
+        double vertical = Math.copySign(Math.min(Math.abs(delta.y), VERTICAL_SPEED), delta.y);
+        double speed = actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED;
         Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
         for (Vec3 step : List.of(direct, new Vec3(-direct.z, vertical, direct.x), new Vec3(direct.z, vertical, -direct.x))) {
             Vec3 before = actor.position();
-            // Entity.move is Minecraft's collision authority.  A speculative noCollision check
-            // rejects legitimate low steps (carpets, snow layers, slabs) before that authority
-            // can apply normal step-up.  Accept only an actual horizontal displacement, so a
-            // wall still yields no path and never becomes a pass-through.
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
             if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) {
-                // A canonical grid column may have a thin physical surface (carpet, snow or
-                // an infection overlay) at the feet datum.  The first collision-authoritative
-                // horizontal move can legitimately reject it, even though a normal mob may
-                // step onto it.  Only after that exact move fails, try one bounded low-step
-                // candidate.  It neither changes the X/Z target nor bypasses full blocks.
                 Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
                 if (!level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
                 before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
@@ -73,4 +89,6 @@ final class FrontierV3ControlledMobMotion {
             return;
         }
     }
+
+    private record MotionIntent(long applyAtGameTime, Vec3 target) { }
 }

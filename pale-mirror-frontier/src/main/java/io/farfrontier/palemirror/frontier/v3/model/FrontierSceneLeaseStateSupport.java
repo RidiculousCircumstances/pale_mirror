@@ -26,8 +26,8 @@ public final class FrontierSceneLeaseStateSupport {
         if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
         }
-        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).position()
-                .equals(lease.memberPosition(member.actorId()).supportingSurface().support()))) {
+        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).body()
+                .equals(lease.memberPosition(member.actorId())))) {
             throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
         }
         FrontierSceneBehaviors.validatePrepared(state, lease);
@@ -63,7 +63,7 @@ public final class FrontierSceneLeaseStateSupport {
             }
             FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), capture.position());
             BodyPosition body = new BodyPosition(capture.position().x(), capture.position().y(), capture.position().z());
-            actors.put(capture.actorId(), new ActorLocation(body.supportingSurface().support(), actor.condition().withHealth(capture.health())));
+            actors.put(capture.actorId(), new ActorLocation(body, actor.condition().withHealth(capture.health())));
             ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         }
         return copy(state, actors, withPreparedLease(state, handoff.lease()), ambient, state.strategicPlans());
@@ -113,7 +113,7 @@ public final class FrontierSceneLeaseStateSupport {
             // halfway through ordinary Minecraft movement when its chunk vanished, but that
             // transient sub-cell location must not become a second strategic travel state.
             BlockPosition canonical = FrontierSceneBehaviors.releasedPosition(state, current, position.actorId(), position.position());
-            actors.put(position.actorId(), new ActorLocation(canonical, currentActor.condition().withHealth(position.health())));
+            actors.put(position.actorId(), new ActorLocation(BodyPosition.above(new SurfaceAnchor(canonical)), currentActor.condition().withHealth(position.health())));
         }
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));

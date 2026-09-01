@@ -18,12 +18,12 @@ class AmbientActorProcessTest {
         var worldId = new WorldId("frontier:ambient-observation");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         SubjectId resident = new SubjectId("resident:1-1");
-        AmbientActorObserved observation = new AmbientActorObserved(resident, new BlockPosition(64, 65, 64), FixedScalar.whole(7));
+        AmbientActorObserved observation = new AmbientActorObserved(resident, new BodyPosition(64, 65, 64), FixedScalar.whole(7));
         var checkpoint = engine.checkpoint();
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-observation");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(command(worldId, checkpoint, commandId, observation)));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(observation.position(), state.actorLocations().get(resident).position());
+        assertEquals(observation.body(), state.actorLocations().get(resident).body());
         assertEquals(observation.health(), state.actorLocations().get(resident).condition().health());
         assertEquals(observation, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observation.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(observation)));
     }
@@ -34,7 +34,7 @@ class AmbientActorProcessTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         SubjectId resident = new SubjectId("resident:1-1");
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        AmbientActorDied death = new AmbientActorDied(resident, before.actorLocations().get(resident).position(), "entity:test-player");
+        AmbientActorDied death = new AmbientActorDied(resident, before.actorLocations().get(resident).body(), "entity:test-player");
         var checkpoint = engine.checkpoint();
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-death");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, engine.submit(command(worldId, checkpoint, commandId, death)));
@@ -59,15 +59,15 @@ class AmbientActorProcessTest {
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-hot"), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT))));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-bad-observation"),
-                        new AmbientActorObserved(resident, lease.handoffPosition(), FixedScalar.whole(8)))));
-        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BlockPosition(65, 64, 64), FixedScalar.whole(8));
+                        new AmbientActorObserved(resident, lease.handoffBody(), FixedScalar.whole(8)))));
+        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BodyPosition(65, 64, 64), FixedScalar.whole(8));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-draining"), new AmbientLeaseTransition(resident, AmbientLeaseStatus.DRAINING))));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-release"), release)));
         FrontierWorldState closed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(AmbientLeaseStatus.CLOSED, closed.ambientLeases().get(resident).status());
-        assertEquals(release.position(), closed.actorLocations().get(resident).position());
+        assertEquals(release.body(), closed.actorLocations().get(resident).body());
         assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
     }
 
@@ -81,7 +81,7 @@ class AmbientActorProcessTest {
         submitAccepted(engine, worldId, "prepare", new AmbientLeasePrepared(lease));
         submitAccepted(engine, worldId, "hot", new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
         submitAccepted(engine, worldId, "unknown", new AmbientLeaseTransition(resident, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
-        AmbientLeaseRestartAbsenceObserved absence = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffPosition());
+        AmbientLeaseRestartAbsenceObserved absence = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffBody());
         submitAccepted(engine, worldId, "absence", absence);
 
         FrontierWorldState closed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -89,7 +89,7 @@ class AmbientActorProcessTest {
         assertEquals(initial.actorLocations().get(resident), closed.actorLocations().get(resident));
         assertEquals(absence, FrontierWorldRuntimeDefinition.payloadCodecs().decode(absence.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(absence)));
 
-        AmbientLeaseRestartAbsenceObserved forged = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffPosition().offset(1, 0, 0));
+        AmbientLeaseRestartAbsenceObserved forged = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffBody().offset(1, 0, 0));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:absence-forged"), forged)));
     }

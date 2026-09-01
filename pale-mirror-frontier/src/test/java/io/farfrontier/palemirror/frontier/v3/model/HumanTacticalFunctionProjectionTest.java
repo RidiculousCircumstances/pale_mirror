@@ -122,7 +122,7 @@ class HumanTacticalFunctionProjectionTest {
         state = state.withInventory(state.inventory().destroyObservedItem(leaderSword, new InventoryCustody.Actor(leader)));
         ActorLocation leaderLocation = state.actorLocations().get(leader);
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(leader, new ActorLocation(leaderLocation.position(), ActorCondition.dead()));
+        actors.put(leader, new ActorLocation(leaderLocation.body(), ActorCondition.dead()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         assertEquals(SettlementDefenderReadinessStatus.DEGRADED, SettlementDefenderReadinessProjection.derive(state, assault).status());
         assertEquals(FixedScalar.ONE, RouteEngagementCombatRules.damage(state, fighter), "leader loss degrades survivors without replacing them");
@@ -180,7 +180,7 @@ class HumanTacticalFunctionProjectionTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:tactical-function"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), settlement.anchor());
+        state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());
         FixedRatio intensity = new FixedRatio(FixedScalar.ONE);

@@ -6,10 +6,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Immutable evidence that one loaded, non-leased ambient actor actually died in Minecraft. */
-public record AmbientActorDied(SubjectId actorId, BlockPosition position, String cause) implements FrontierPayload {
+public record AmbientActorDied(SubjectId actorId, BodyPosition body, String cause) implements FrontierPayload {
     public AmbientActorDied {
         Objects.requireNonNull(actorId, "actor id");
-        Objects.requireNonNull(position, "position");
+        Objects.requireNonNull(body, "body");
         if (cause == null || cause.isBlank()) throw new IllegalArgumentException("death cause must not be blank");
     }
 

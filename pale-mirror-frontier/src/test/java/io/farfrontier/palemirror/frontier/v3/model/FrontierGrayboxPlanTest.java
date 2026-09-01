@@ -53,7 +53,7 @@ class FrontierGrayboxPlanTest {
     void structuralInputIgnoresActorMotionButInvalidatesOnSilhouetteChange() {
         FrontierWorldState state = initial();
         var actor = state.actorLocations().keySet().iterator().next();
-        FrontierWorldState moved = state.withActorLocation(actor, state.actorLocations().get(actor).position().offset(1, 0, 0));
+        FrontierWorldState moved = state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0));
         FrontierWorldState damaged = state.withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"),
                 StructureCondition.DAMAGED);
 
@@ -192,7 +192,7 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             java.util.Set<BlockPosition> positions = new java.util.HashSet<>();
             settlement.residents().forEach(resident -> {
-                BlockPosition position = state.actorLocations().get(resident.id()).position();
+                BlockPosition position = FrontierTestPositions.bodyCellOf(state.actorLocations().get(resident.id()));
                 assertTrue(positions.add(position), "resident slots must not overlap: " + resident.id());
                 GrayboxCell foot = plan.cells().get(position);
                 assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
@@ -209,7 +209,7 @@ class FrontierGrayboxPlanTest {
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
 
         state.bootstrap().hive().bioforms().forEach(bioform -> {
-            BlockPosition position = state.actorLocations().get(bioform.id()).position();
+            BlockPosition position = FrontierTestPositions.bodyCellOf(state.actorLocations().get(bioform.id()));
             GrayboxCell foot = plan.cells().get(position);
             assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
                     "bioform foot cell must stay outside hive organ geometry: " + bioform.id());

@@ -131,7 +131,7 @@ public final class HiveSettlementAssaultProcess {
         }
         SettlementAssault next = assault.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
         SettlementAssaultAttacker attacker = next.attackers().stream().filter(value -> value.actorId().equals(advanced.attackerId())).findFirst().orElseThrow();
-        return state.withActorLocation(attacker.actorId(), attacker.position(), state.strategicPlans().replaceSettlementAssault(next));
+        return state.withActorBody(attacker.actorId(), BodyPosition.above(new SurfaceAnchor(attacker.position())), state.strategicPlans().replaceSettlementAssault(next));
     }
 
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, SettlementAssaultTransition transition) {
@@ -159,8 +159,8 @@ public final class HiveSettlementAssaultProcess {
         ActorLocation target = state.actorLocations().get(strike.targetId());
         FixedScalar remaining = target.condition().health().minus(strike.damage());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.position())
-                : new ActorLocation(target.position(), target.condition().withHealth(remaining)));
+        actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.body())
+                : new ActorLocation(target.body(), target.condition().withHealth(remaining)));
         return copy(state, actors, state.strategicPlans().replaceSettlementAssault(assault.afterStrike(strike.epoch())));
     }
 
@@ -186,7 +186,7 @@ public final class HiveSettlementAssaultProcess {
     private static SettlementAssault assault(FrontierWorldState state, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) {
         List<Bioform> eligible = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> alive(state, value.id())).filter(value -> availableBioform(state, value.id(), null))
-                .sorted(Comparator.comparingLong((Bioform value) -> distanceSquared(state.actorLocations().get(value.id()).position(), sighting.settlementAnchor()))
+                .sorted(Comparator.comparingLong((Bioform value) -> distanceSquared(state.actorLocations().get(value.id()).supportingSurface().support(), sighting.settlementAnchor()))
                         .thenComparing(Bioform::id)).toList();
         List<Bioform> selected = new ArrayList<>();
         eligible.stream().filter(value -> value.role() == BioformRole.BOMBER).limit(1).forEach(selected::add);
@@ -206,7 +206,7 @@ public final class HiveSettlementAssaultProcess {
         if (floors == null) return null;
         return new SettlementAssault(new SubjectId("assault:" + task.id().value().substring("task:".length())), task.id(), task.ownerId(), sighting,
                 java.util.stream.IntStream.range(0, selected.size()).mapToObj(index -> new SettlementAssaultAttacker(selected.get(index).id(),
-                        approach(state, state.actorLocations().get(selected.get(index).id()).position(), floors.get(index)), 0)).toList(),
+                        approach(state, state.actorLocations().get(selected.get(index).id()).supportingSurface().support(), floors.get(index)), 0)).toList(),
                 defenders, SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
     }
 

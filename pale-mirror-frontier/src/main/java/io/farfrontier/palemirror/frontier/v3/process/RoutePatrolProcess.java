@@ -67,7 +67,7 @@ public final class RoutePatrolProcess {
             throw new IllegalArgumentException("route patrol start has a foreign owner or duplicate task");
         }
         FrontierWorldState next = state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
-        for (SubjectId member : patrol.memberIds()) next = next.withActorLocation(member, patrol.route().getFirst());
+        for (SubjectId member : patrol.memberIds()) next = next.withActorBody(member, BodyPosition.above(new SurfaceAnchor(patrol.route().getFirst())));
         return next;
     }
 
@@ -76,7 +76,7 @@ public final class RoutePatrolProcess {
         if (patrol == null || !subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route patrol advancement has a foreign owner");
         RoutePatrol next = patrol.advance(advanced.routeIndex());
         FrontierWorldState updated = state.withStrategicPlans(state.strategicPlans().advancePatrol(advanced.taskId(), advanced.routeIndex()));
-        for (SubjectId member : patrol.memberIds()) updated = updated.withActorLocation(member, next.route().get(next.routeIndex()));
+        for (SubjectId member : patrol.memberIds()) updated = updated.withActorBody(member, BodyPosition.above(new SurfaceAnchor(next.route().get(next.routeIndex()))));
         return updated;
     }
 

@@ -30,7 +30,7 @@ public final class AmbientActorProcess {
 
     public static CommandPlan plan(FrontierWorldState state, AmbientActorObserved observation) {
         try {
-            validate(state, observation.actorId(), observation.position());
+            validate(state, observation.actorId(), observation.body());
             requireUnleased(state, observation.actorId());
         } catch (IllegalArgumentException invalid) {
             return rejected(invalid);
@@ -70,7 +70,7 @@ public final class AmbientActorProcess {
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         AmbientGoal goal = goalFor(state, actorId);
-        return new AmbientActorLease(actorId, actor.position(), instant, revision, AmbientLeaseStatus.PREPARED, goal.kind(), goal.position());
+        return new AmbientActorLease(actorId, actor.body(), instant, revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorDied death) {
@@ -79,16 +79,16 @@ public final class AmbientActorProcess {
         AmbientActorLease lease = state.ambientLeases().get(death.actorId());
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) return AmbientLeaseStateProcess.recordDeath(state, death);
         var nextActors = new LinkedHashMap<>(state.actorLocations());
-        nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.position()));
+        nextActors.put(death.actorId(), state.actorLocations().get(death.actorId()).deadAt(death.body()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorObserved observation) {
-        validate(state, observation.actorId(), observation.position());
+        validate(state, observation.actorId(), observation.body());
         requireUnleased(state, observation.actorId());
         if (!subject.equals(owner(state, observation.actorId()))) throw new IllegalArgumentException("ambient actor observation lacks its canonical owner");
         var nextActors = new LinkedHashMap<>(state.actorLocations());
-        nextActors.put(observation.actorId(), new ActorLocation(observation.position(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health())));
+        nextActors.put(observation.actorId(), new ActorLocation(observation.body(), state.actorLocations().get(observation.actorId()).condition().withHealth(observation.health())));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors));
     }
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, SimInstant instant, AmbientLeasePrepared prepared) {
@@ -120,7 +120,7 @@ public final class AmbientActorProcess {
     }
 
     private static void validate(FrontierWorldState state, AmbientActorDied death) {
-        validate(state, death.actorId(), death.position());
+        validate(state, death.actorId(), death.body());
     }
     private static void requireUnleased(FrontierWorldState state, SubjectId actorId) {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
@@ -129,7 +129,7 @@ public final class AmbientActorProcess {
         }
     }
 
-    private static void validate(FrontierWorldState state, SubjectId actorId, BlockPosition position) {
+    private static void validate(FrontierWorldState state, SubjectId actorId, BodyPosition body) {
         ActorLocation current = state.actorLocations().get(actorId);
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("ambient actor observation is not evidence for a living canonical actor");
@@ -138,7 +138,7 @@ public final class AmbientActorProcess {
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))) {
             throw new IllegalArgumentException("leased actor observation must use its scene lease evidence");
         }
-        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), position);
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), body.supportingSurface().support());
         if (owner(state, actorId) == null) throw new IllegalArgumentException("ambient actor has no canonical owner");
     }
 

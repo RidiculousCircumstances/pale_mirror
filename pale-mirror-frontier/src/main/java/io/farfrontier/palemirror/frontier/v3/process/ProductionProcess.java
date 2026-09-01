@@ -79,7 +79,7 @@ public final class ProductionProcess {
         }
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-" + job.id().value().substring("job:".length())),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
-                fixed(state.actorLocations().get(job.workerId()).position()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+                fixed(state.actorLocations().get(job.workerId()).supportingSurface().support()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
         return List.of(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
     }
 

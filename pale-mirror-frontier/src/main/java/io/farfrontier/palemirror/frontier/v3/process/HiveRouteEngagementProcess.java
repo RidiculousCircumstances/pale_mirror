@@ -147,7 +147,7 @@ public final class HiveRouteEngagementProcess {
         if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) throw new IllegalArgumentException("COLD engagement cannot advance an ambient-leased actor");
         RouteEngagement next = engagement.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
         EngagementAttacker attacker = next.attackers().stream().filter(value -> value.actorId().equals(advanced.attackerId())).findFirst().orElseThrow();
-        return state.withActorLocation(attacker.actorId(), attacker.position(), state.strategicPlans().replaceEngagement(next));
+        return state.withActorBody(attacker.actorId(), BodyPosition.above(new SurfaceAnchor(attacker.position())), state.strategicPlans().replaceEngagement(next));
     }
 
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, RouteEngagementTransition transition) {
@@ -184,7 +184,7 @@ public final class HiveRouteEngagementProcess {
                 && engagement.status() != RouteEngagementStatus.RESOLVED);
     }
     private static List<EngagementAttacker> attackers(FrontierWorldState state, BlockPosition intercept) {
-        java.util.Comparator<Bioform> nearest = Comparator.comparingLong((Bioform bioform) -> distanceSquared(state.actorLocations().get(bioform.id()).position(), intercept))
+        java.util.Comparator<Bioform> nearest = Comparator.comparingLong((Bioform bioform) -> distanceSquared(state.actorLocations().get(bioform.id()).supportingSurface().support(), intercept))
                 .thenComparing(Bioform::id);
         List<Bioform> eligible = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
@@ -192,7 +192,7 @@ public final class HiveRouteEngagementProcess {
                 .sorted(nearest).toList();
         return java.util.stream.Stream.concat(eligible.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).limit(1),
                         eligible.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2))
-                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state, state.actorLocations().get(bioform.id()).position(), intercept), 0)).toList();
+                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state, state.actorLocations().get(bioform.id()).supportingSurface().support(), intercept), 0)).toList();
     }
     private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {
         if (start.equals(end)) return List.of(start);

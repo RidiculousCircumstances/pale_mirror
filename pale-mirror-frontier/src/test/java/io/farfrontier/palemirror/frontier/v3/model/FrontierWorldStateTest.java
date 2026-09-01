@@ -59,15 +59,15 @@ class FrontierWorldStateTest {
         SubjectId structure = new SubjectId("structure:1-hall");
         InfectionCell cell = InfectionCell.at(new BlockPosition(-1, 64, -1));
 
-        FrontierWorldState changed = state.withActorLocation(resident, new BlockPosition(-10, 64, -10))
+        FrontierWorldState changed = state.withActorBody(resident, FrontierTestPositions.bodyAboveSupport(new BlockPosition(-10, 64, -10)))
                 .withStructureCondition(structure, StructureCondition.DAMAGED)
                 .withInfection(cell, HALF);
-        assertEquals(new BlockPosition(-10, 64, -10), changed.actorLocations().get(resident).position());
+        assertEquals(new BlockPosition(-10, 64, -10), FrontierTestPositions.supportOf(changed.actorLocations().get(resident)));
         assertEquals(StructureCondition.DAMAGED, changed.structureConditions().get(structure));
         assertEquals(HALF, changed.infection().get(cell));
         assertEquals(new InfectionCell(-1, -1), cell);
         assertEquals(18, changed.withInfection(cell, new FixedRatio(FixedScalar.ZERO)).infection().size());
-        assertThrows(IllegalArgumentException.class, () -> state.withActorLocation(resident, new BlockPosition(512, 64, 0)));
+        assertThrows(IllegalArgumentException.class, () -> state.withActorBody(resident, FrontierTestPositions.bodyAboveSupport(new BlockPosition(512, 64, 0))));
         assertThrows(IllegalArgumentException.class, () -> state.withStructureCondition(new SubjectId("structure:missing"), StructureCondition.DESTROYED));
     }
 
@@ -96,7 +96,7 @@ class FrontierWorldStateTest {
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), wheat, new ProductionInputHold.Cold(heldWheat),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
-        FrontierWorldState source = baseline.withInventory(inventory).withActorLocation(new SubjectId("bioform:west-0"), new BlockPosition(-400, 64, 400))
+        FrontierWorldState source = baseline.withInventory(inventory).withActorBody(new SubjectId("bioform:west-0"), FrontierTestPositions.bodyAboveSupport(new BlockPosition(-400, 64, 400)))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
                 .withInfection(new InfectionCell(-100, 100), HALF).startProductionJob(activeJob, wheat);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
@@ -126,7 +126,7 @@ class FrontierWorldStateTest {
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
 
         assertEquals(OperationStage.ASSEMBLING, operation.stage());
-        assertTrue(operation.participantIds().stream().allMatch(actor -> before.actorLocations().get(actor).position()
+        assertTrue(operation.participantIds().stream().allMatch(actor -> FrontierTestPositions.supportOf(before.actorLocations().get(actor))
                 .equals(assembly.positions().get(actor).support())), "creation and recovery retain each actual person, not a route-anchor teleport");
         assertEquals(before, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(before)));
         assertThrows(IllegalArgumentException.class, () -> before.startOperationTravel(operation.id(), new OperationTravel(
@@ -152,8 +152,8 @@ class FrontierWorldStateTest {
 
         FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()));
 
-        assertEquals(current.nextSurface().support(), advanced.actorLocations().get(hauler).position());
-        assertEquals(initial.members().get(operation.participantIds().get(1)).currentSurface().support(), advanced.actorLocations().get(operation.participantIds().get(1)).position());
+        assertEquals(current.nextSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(hauler)));
+        assertEquals(initial.members().get(operation.participantIds().get(1)).currentSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(operation.participantIds().get(1))));
         assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, advanced.ambientLeases().get(hauler).goal());
         assertEquals(advanced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced)));
     }
@@ -255,7 +255,7 @@ class FrontierWorldStateTest {
                 .withInfection(InfectionCell.at(new BlockPosition(420, 64, 428)), HALF);
         assertEquals(organ, grown.hiveColony().addedOrgans().get(organ.id()));
         assertEquals(bioform, grown.hiveColony().spawnedBioforms().get(bioform.id()));
-        assertEquals(bioform.position(), grown.actorLocations().get(bioform.id()).position());
+        assertEquals(bioform.position(), FrontierTestPositions.supportOf(grown.actorLocations().get(bioform.id())));
         assertEquals(grown, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(grown)));
         assertThrows(IllegalArgumentException.class, () -> grown.spawnBioform(bioform));
         assertThrows(IllegalArgumentException.class, () -> baseline.addHiveOrgan(new HiveOrgan(organ.id(), hive, eastNest, HiveOrganKind.HEART,
@@ -296,7 +296,7 @@ class FrontierWorldStateTest {
         assertTrue(completed.hiveColony().growthJobs().isEmpty());
         assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
         assertEquals(job.bioform(), completed.hiveColony().spawnedBioforms().get(job.bioform().id()));
-        assertEquals(job.bioform().position(), completed.actorLocations().get(job.bioform().id()).position());
+        assertEquals(job.bioform().position(), FrontierTestPositions.supportOf(completed.actorLocations().get(job.bioform().id())));
     }
 
     @Test

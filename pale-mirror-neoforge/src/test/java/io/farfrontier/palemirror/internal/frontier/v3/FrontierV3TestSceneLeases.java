@@ -29,7 +29,7 @@ final class FrontierV3TestSceneLeases {
         List<SceneMember> members = actorIds.stream().sorted().map(actor -> {
             var location = state.actorLocations().get(actor);
             if (location == null) throw new IllegalArgumentException("test scene actor is not canonical: " + actor.value());
-            positions.put(actor, BodyPosition.aboveSupportCell(location.position()));
+            positions.put(actor, location.body());
             return new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor));
         }).toList();
         BlockPosition cargo = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(demand);

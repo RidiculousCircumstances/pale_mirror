@@ -29,10 +29,10 @@ final class FrontierV3GameTestSceneLeases {
                 .orElseThrow(() -> new IllegalStateException("GameTest scene operation has no exact cargo anchor"));
         List<SceneMember> members = candidate.actorIds().stream()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
-        for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).position());
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
+        for (SceneMember member : members) positions.put(member.actorId(), state.actorLocations().get(member.actorId()).body());
         return SceneLease.atExactPositions(id, checkpoint.worldId(), candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
                 cargoPosition, checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
-                Optional.of(candidate.engagementId()), members, SceneLease.bodiesAboveLegacySupports(positions));
+                Optional.of(candidate.engagementId()), members, positions);
     }
 }

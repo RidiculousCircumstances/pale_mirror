@@ -17,7 +17,7 @@ class HiveDoctrineProcessTest {
         FrontierWorldState state = initial("frontier:hive-doctrine-freshness", 801L);
         SubjectId hive = state.bootstrap().hive().id();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        BlockPosition scoutPosition = state.actorLocations().get(scout.id()).position();
+        BlockPosition scoutPosition = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(new SubjectId("operation:seen"), scout.id(), scoutPosition, 100L);
         HiveTerritoryKnowledge.Belief belief = new HiveTerritoryKnowledge.Belief(InfectionCell.at(scoutPosition),
                 new FixedRatio(new FixedScalar(500_000L)), scout.id(), scoutPosition, 100L);
@@ -40,7 +40,7 @@ class HiveDoctrineProcessTest {
         FrontierWorldState state = initial("frontier:hive-doctrine-rejection", 802L);
         SubjectId hive = state.bootstrap().hive().id();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        BlockPosition position = state.actorLocations().get(scout.id()).position();
+        BlockPosition position = FrontierTestPositions.supportOf(state.actorLocations().get(scout.id()));
         HiveTerritoryKnowledge.Belief belief = new HiveTerritoryKnowledge.Belief(InfectionCell.at(position),
                 new FixedRatio(new FixedScalar(500_000L)), scout.id(), position, 100L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveTerritoryKnowledge(HiveTerritoryKnowledge.empty().observe(belief)));

@@ -37,28 +37,30 @@ final class AmbientLeasePayloadCodecs {
     private static final class ReleasedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_released"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { AmbientLeaseReleased release = (AmbientLeaseReleased) payload;
-            FrontierWorldPayloadCodecs.writeSubject(output, release.actorId()); FrontierWorldPayloadCodecs.writePosition(output, release.position()); output.writeLong(release.health().raw()); }); }
+            FrontierWorldPayloadCodecs.writeSubject(output, release.actorId()); writeBody(output, release.body()); output.writeLong(release.health().raw()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeaseReleased(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input), new FixedScalar(input.readLong()))); }
+                FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input), new FixedScalar(input.readLong()))); }
     }
     private static final class RestartAbsenceObservedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_restart_absence_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             AmbientLeaseRestartAbsenceObserved absence = (AmbientLeaseRestartAbsenceObserved) payload;
-            FrontierWorldPayloadCodecs.writeSubject(output, absence.actorId()); FrontierWorldPayloadCodecs.writePosition(output, absence.position());
+            FrontierWorldPayloadCodecs.writeSubject(output, absence.actorId()); writeBody(output, absence.body());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeaseRestartAbsenceObserved(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input))); }
+                FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input))); }
     }
     private static void writeLease(DataOutputStream output, AmbientActorLease lease) throws IOException {
-        FrontierWorldPayloadCodecs.writeSubject(output, lease.actorId()); FrontierWorldPayloadCodecs.writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks());
-        output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.goal().wireTag()); FrontierWorldPayloadCodecs.writePosition(output, lease.goalPosition());
+        FrontierWorldPayloadCodecs.writeSubject(output, lease.actorId()); writeBody(output, lease.handoffBody()); output.writeLong(lease.handoffInstant().ticks());
+        output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.goal().wireTag()); writeBody(output, lease.goalBody());
     }
     private static AmbientActorLease readLease(DataInputStream input) throws IOException {
-        var actor = FrontierWorldPayloadCodecs.readSubject(input); BlockPosition handoff = FrontierWorldPayloadCodecs.readPosition(input);
+        var actor = FrontierWorldPayloadCodecs.readSubject(input); BodyPosition handoff = readBody(input);
         long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte(); int goal = input.readUnsignedByte();
-        BlockPosition goalPosition = FrontierWorldPayloadCodecs.readPosition(input);
+        BodyPosition goalBody = readBody(input);
         if (status >= AmbientLeaseStatus.values().length || goal >= AmbientGoalKind.values().length) throw new IllegalArgumentException("unknown ambient lease value");
-        return new AmbientActorLease(actor.value(), handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalPosition);
+        return new AmbientActorLease(actor.value(), handoff, new SimInstant(instant), revision, FrontierWireTags.require(AmbientLeaseStatus.class, status), FrontierWireTags.require(AmbientGoalKind.class, goal), goalBody);
     }
+    private static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
+    private static BodyPosition readBody(DataInputStream input) throws IOException { return new BodyPosition(input.readInt(), input.readInt(), input.readInt()); }
 }

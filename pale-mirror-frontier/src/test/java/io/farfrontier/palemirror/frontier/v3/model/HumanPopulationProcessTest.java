@@ -87,7 +87,7 @@ class HumanPopulationProcessTest {
                 "a new resident may use a route surface but must not be born inside structure geometry");
         assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 1, 0)));
         assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 2, 0)));
-        assertTrue(active.actorLocations().values().stream().noneMatch(actor -> actor.position().equals(birthPosition)),
+        assertTrue(active.actorLocations().values().stream().noneMatch(actor -> FrontierTestPositions.supportOf(actor).equals(birthPosition)),
                 "the next resident slot must not overlap an existing exact actor");
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started);
@@ -104,7 +104,7 @@ class HumanPopulationProcessTest {
         ResidentBorn born = (ResidentBorn) completion.getFirst().payload();
         FrontierWorldState completed = PopulationBirthProcess.reduceBorn(active, started.job().settlementId(), born);
         assertEquals(born.resident(), completed.humanPopulation().resident(born.resident().id()));
-        assertEquals(born.position(), completed.actorLocations().get(born.resident().id()).position());
+        assertEquals(born.position(), FrontierTestPositions.supportOf(completed.actorLocations().get(born.resident().id())));
         assertEquals(63, completed.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(completed.humanPopulation().birthJobs().isEmpty());
         assertEquals(born, FrontierWorldRuntimeDefinition.payloadCodecs().decode(born.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(born)));

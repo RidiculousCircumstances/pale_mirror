@@ -431,7 +431,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         AmbientActorLease lease = state.ambientLeases().get(observed);
         OperationAssembly.Member arrived = next.members().get(observed);
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
-                || !lease.goalPosition().equals(arrived.currentSurface().support())) {
+                || !lease.goalBody().equals(arrived.currentSurface().standingBody())) {
             throw new IllegalArgumentException("HOT assembly observation lacks its exact active actor lease");
         }
     }
@@ -446,7 +446,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SettlementAccessPort access = SettlementAccessPort.forHall(hall);
         if (member == null || member.arrived() || !member.nextSurface().equals(deferral.target())
                 || lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.OPERATION_ASSEMBLY
-                || !lease.goalPosition().equals(deferral.target().support())
+                || !lease.goalBody().equals(deferral.target().standingBody())
                 || (!deferral.obstructionSurface().equals(deferral.target()) && !deferral.obstructionSurface().equals(access.throatSurface()))) {
             throw new IllegalArgumentException("HOT assembly deferral lacks its exact active actor lease");
         }

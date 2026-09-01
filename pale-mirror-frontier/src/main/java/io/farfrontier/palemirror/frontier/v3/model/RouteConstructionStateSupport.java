@@ -36,7 +36,7 @@ public final class RouteConstructionStateSupport {
             EngineeringWorksite.validate(bootstrap, topology, project);
             project.assembly().ifPresent(assembly -> assembly.positions().forEach((member, position) -> {
                 ActorLocation actor = actors.get(member);
-                if (actor == null || !actor.position().equals(position)) {
+                if (actor == null || !actor.supportingSurface().support().equals(position)) {
                     throw new IllegalArgumentException("engineering assembly must retain each member's exact canonical position");
                 }
             }));
@@ -270,7 +270,7 @@ public final class RouteConstructionStateSupport {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         ActorLocation prior = actors.get(moved);
         if (prior == null || prior.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("engineering assembly advances a nonliving member");
-        actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentPosition(), prior.condition()));
+        actors.put(moved, new ActorLocation(BodyPosition.above(new SurfaceAnchor(advanced.assembly().members().get(moved).currentPosition())), prior.condition()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAdvancedAssembly(advanced.assembly()));
         Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
@@ -278,7 +278,7 @@ public final class RouteConstructionStateSupport {
         if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
             BlockPosition target = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
-            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target));
+            ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, BodyPosition.above(new SurfaceAnchor(target))));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).routeConstructions(projects).ambientLeases(ambient));
     }

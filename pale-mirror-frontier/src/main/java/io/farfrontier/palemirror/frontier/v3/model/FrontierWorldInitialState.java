@@ -13,8 +13,8 @@ final class FrontierWorldInitialState {
 
     static FrontierWorldState create(FrontierBootstrap bootstrap) {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(); HumanPopulation population = HumanPopulation.bootstrap(bootstrap);
-        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), new ActorLocation(resident.home()))));
-        bootstrap.hive().bioforms().forEach(bioform -> actors.put(bioform.id(), new ActorLocation(bioform.position())));
+        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home())))));
+        bootstrap.hive().bioforms().forEach(bioform -> actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()))));
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();

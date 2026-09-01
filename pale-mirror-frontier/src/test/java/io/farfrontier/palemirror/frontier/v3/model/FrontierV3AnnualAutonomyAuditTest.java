@@ -227,7 +227,7 @@ class FrontierV3AnnualAutonomyAuditTest {
     private static String annualFailure(long seed, CheckpointImage checkpoint, io.farfrontier.palemirror.frontier.v3.api.AdvanceResult result) {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
         String operations = state.operations().values().stream().sorted(java.util.Comparator.comparing(RouteOperation::id)).map(operation -> {
-            String actors = operation.participantIds().stream().map(actor -> actor.value() + "=" + state.actorLocations().get(actor).position()).collect(java.util.stream.Collectors.joining(","));
+            String actors = operation.participantIds().stream().map(actor -> actor.value() + "=" + state.actorLocations().get(actor).body()).collect(java.util.stream.Collectors.joining(","));
             String travel = operation.activeTravel().map(value -> "cursor=" + value.cursor() + "/" + (value.corridor().size() - 1)
                     + " formation=" + value.formation()).orElse("none");
             return operation.id().value() + "[" + operation.stage() + ",route=" + operation.routeIndex() + "," + travel + ",actors=" + actors + "]";

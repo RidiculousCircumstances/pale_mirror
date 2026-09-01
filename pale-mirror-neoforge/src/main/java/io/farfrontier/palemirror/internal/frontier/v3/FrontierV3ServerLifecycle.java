@@ -584,5 +584,8 @@ public final class FrontierV3ServerLifecycle {
         }
     }
 
+    /** Delegates only a previously registered v3 local movement intent at the normal entity tick. */
+    public static void advanceControlledMob(net.minecraft.world.entity.Mob mob) { FrontierV3ControlledMobMotion.advance(mob); }
+
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }
 }

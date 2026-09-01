@@ -37,7 +37,7 @@ final class FrontierDevelopmentScenarios {
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorLocation(bioform.id(), intercept);
+            if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,
@@ -47,7 +47,7 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
-        state = state.withActorLocation(scout.id(), intercept);
+        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
         ScheduledAction action = HiveRouteEngagementProcess.start(task, 2_600L);
@@ -199,7 +199,7 @@ final class FrontierDevelopmentScenarios {
         compiled.members().forEach((member, approach) -> {
             EngineeringWorkAssembly.Member arrived = new EngineeringWorkAssembly.Member(approach.corridor(), approach.corridor().size() - 1);
             completed.put(member, arrived);
-            locations.put(member, new ActorLocation(arrived.currentPosition(), locations.get(member).condition()));
+            locations.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(arrived.currentPosition())), locations.get(member).condition()));
         });
         RouteConstruction ready = new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
                 project.status(), java.util.Optional.of(cargo.id()), project.team(), java.util.Optional.of(new EngineeringWorkAssembly(completed)));
@@ -213,7 +213,7 @@ final class FrontierDevelopmentScenarios {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture needs one Scout"));
-        state = state.withActorLocation(scout.id(), settlement.anchor());
+        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());
         FixedRatio intensity = new FixedRatio(FixedScalar.ONE);
@@ -291,7 +291,7 @@ final class FrontierDevelopmentScenarios {
         Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
                 .filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
-        FrontierWorldState state = base.state().withActorLocation(scout.id(), operation.activeTravel().orElseThrow().cargoAnchor().surface().support());
+        FrontierWorldState state = base.state().withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(operation.activeTravel().orElseThrow().cargoAnchor().surface().support())));
         // This isolated proof must demonstrate physical HOT perception only.  Retain every
         // ordinary route/actor schedule, but remove the one pre-existing COLD hive-review that
         // could derive knowledge before a player loads the scene.
@@ -322,9 +322,9 @@ final class FrontierDevelopmentScenarios {
         if (guards.size() != 2) throw new IllegalStateException("hot scout intercept fixture has fewer than two guards");
         // These three exact bodies get distinct nearby starts.  Co-locating every eligible hive
         // attacker would invoke vanilla entity cramming and turn a causal fixture into deaths.
-        state = state.withActorLocation(bomber.id(), intercept.offset(-1, 0, 0));
-        state = state.withActorLocation(guards.getFirst().id(), intercept.offset(1, 0, 0));
-        state = state.withActorLocation(guards.getLast().id(), intercept.offset(0, 0, -1));
+        state = state.withActorBody(bomber.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-1, 0, 0))));
+        state = state.withActorBody(guards.getFirst().id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(1, 0, 0))));
+        state = state.withActorBody(guards.getLast().id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(0, 0, -1))));
         return new RouteSceneReturnFixture(state, base.instant(), base.schedules());
     }
 
@@ -339,10 +339,10 @@ final class FrontierDevelopmentScenarios {
         Bioform scout = state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.id().equals(new SubjectId("bioform:west-1"))).findFirst()
                 .orElseThrow(() -> new IllegalStateException("scout patrol recovery fixture requires west Scout"));
-        BlockPosition current = state.actorLocations().get(scout.id()).position();
+        BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();
         AmbientActorLease generated = AmbientActorProcess.nextLease(state, scout.id(), SimInstant.ZERO);
-        AmbientActorLease legacyPrepared = new AmbientActorLease(scout.id(), generated.handoffPosition(), generated.handoffInstant(),
-                generated.revision(), AmbientLeaseStatus.PREPARED, AmbientGoalKind.SCOUT_PATROL, current);
+        AmbientActorLease legacyPrepared = new AmbientActorLease(scout.id(), generated.handoffBody(), generated.handoffInstant(),
+                generated.revision(), AmbientLeaseStatus.PREPARED, AmbientGoalKind.SCOUT_PATROL, BodyPosition.above(new SurfaceAnchor(current)));
         state = AmbientLeaseStateProcess.prepare(state, legacyPrepared);
         return new AmbientScoutPatrolFixture(state, SimInstant.ZERO, List.of(), scout.id(), current,
                 HiveScoutPatrolProcess.nextPosition(state, scout, current));
@@ -526,7 +526,7 @@ final class FrontierDevelopmentScenarios {
         MaterializedProductionFixture base = materializedProductionInputTheftFixture(worldId, seed);
         SubjectId jobId = new SubjectId("job:development-production-input-theft");
         SubjectId worker = base.state().productionJobs().get(jobId).workerId();
-        FrontierWorldState isolated = base.state().withActorLocation(worker, new BlockPosition(-480, 64, -480));
+        FrontierWorldState isolated = base.state().withActorBody(worker, BodyPosition.above(new SurfaceAnchor(new BlockPosition(-480, 64, -480))));
         return new MaterializedProductionFixture(isolated, base.instant(), base.schedules(), base.orderId());
     }
 

@@ -20,7 +20,7 @@ final class FrontierTestSceneLeases {
         List<SceneMember> members = actorIds.stream().sorted().map(actor -> {
             ActorLocation location = state.actorLocations().get(actor);
             if (location == null) throw new IllegalArgumentException("test scene actor is not canonical: " + actor.value());
-            positions.put(actor, location.position());
+            positions.put(actor, FrontierTestPositions.supportOf(location));
             return new SceneMember(actor, SceneLease.deterministicEntityId(state.bootstrap().worldId(), actor));
         }).toList();
         RouteOperation operation = state.operations().get(operationId);

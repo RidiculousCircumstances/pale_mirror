@@ -29,7 +29,7 @@ public final class EngineeringWorksite {
         Map<SubjectId, List<List<BlockPosition>>> candidates = new LinkedHashMap<>();
         for (int index = 0; index < team.memberIds().size(); index++) {
             SubjectId member = team.memberIds().get(index);
-            BlockPosition start = Objects.requireNonNull(state.actorLocations().get(member), "engineering work-site member location").position();
+            BlockPosition start = Objects.requireNonNull(state.actorLocations().get(member), "engineering work-site member location").supportingSurface().support();
             BlockPosition destination = slots.get(index);
             try {
                 List<List<BlockPosition>> memberCandidates = EngineeringApproachCorridor.candidates(state, member, destination);

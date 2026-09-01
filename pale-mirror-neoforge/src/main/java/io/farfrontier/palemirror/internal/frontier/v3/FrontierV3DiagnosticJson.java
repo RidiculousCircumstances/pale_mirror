@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
@@ -227,10 +228,10 @@ final class FrontierV3DiagnosticJson {
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         var lease = state.ambientLeases().get(subject);
         String ambientGoal = lease == null ? "NONE" : lease.goal().name();
-        String goalPosition = lease == null ? "null" : position(lease.goalPosition());
+        String goalPosition = lease == null ? "null" : position(lease.goalBody().supportingSurface().support());
         return base("actor", id, checkpoint) + ",\"status\":\"ok\",\"actorKind\":\"" + (resident != null ? "RESIDENT" : "BIOFORM")
                 + "\",\"owner\":\"" + quote(owner) + "\",\"role\":\"" + role + "\",\"life\":\"" + location.condition().status()
-                + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.position())
+                + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(location.body())
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition
@@ -245,7 +246,7 @@ final class FrontierV3DiagnosticJson {
         String next = journey.arriving() ? "null" : position(journey.nextColdPosition());
         var lease = state.ambientLeases().get(subject);
         String goal = lease == null ? "NONE" : lease.goal().name();
-        String goalPosition = lease == null ? "null" : position(lease.goalPosition());
+        String goalPosition = lease == null ? "null" : position(lease.goalBody().supportingSurface().support());
         return base("transit", id, checkpoint) + ",\"status\":\"ok\",\"journeyStatus\":\"" + journey.status()
                 + "\",\"origin\":\"" + quote(journey.originSettlementId().value()) + "\",\"destination\":\""
                 + quote(journey.destinationSettlementId().value()) + "\",\"routeIndex\":" + journey.routeIndex()
@@ -429,7 +430,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"length\":" + member.corridor().size() + ",\"arrived\":" + member.arrived()
                 + ",\"next\":" + next + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
                 + "\",\"ambientGoal\":\"" + quote(lease == null ? "NONE" : lease.goal().name())
-                + "\",\"leaseTarget\":" + (lease == null ? "null" : position(lease.goalPosition())) + "}";
+                + "\",\"leaseTarget\":" + (lease == null ? "null" : position(lease.goalBody().supportingSurface().support())) + "}";
     }
 
     /** One exact durable world-change fact, keyed by a canonical x,y,z cell rather than a player identity. */
@@ -581,6 +582,7 @@ final class FrontierV3DiagnosticJson {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream()).filter(value -> value.id().equals(id)).findFirst();
     }
     private static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    private static String position(BodyPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
     private static String nullablePosition(BlockPosition position) { return position == null ? "null" : position(position); }
     private static String nullablePosition(FrontierV3AmbientActorExecutor.ObservedPosition position) {
         return position == null ? "null" : "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}";

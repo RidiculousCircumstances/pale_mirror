@@ -70,7 +70,7 @@ class FrontierWorldProcessCatalogTest {
                 "kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative")),
                 "physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty()),
-                "ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BlockPosition(1, 64, 1), FixedScalar.ONE),
+                "ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE),
                 "logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT),
                 "population", new ResidentMigrationBlocked(new SubjectId("resident:representative"), ResidentMigrationBlockReason.QUARANTINE),
                 "economy", new MarketDemandExpired(new SubjectId("demand:representative")),

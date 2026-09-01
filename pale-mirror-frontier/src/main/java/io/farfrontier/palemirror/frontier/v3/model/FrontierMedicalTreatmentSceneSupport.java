@@ -31,8 +31,8 @@ public final class FrontierMedicalTreatmentSceneSupport {
         if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED || state.structureConditions().get(infirmary.id()) == StructureCondition.DESTROYED
                 || state.actorLocations().get(operation.patientId()).condition().status() != ActorLifeStatus.ALIVE
                 || members.stream().anyMatch(id -> state.actorLocations().get(id).condition().status() != ActorLifeStatus.ALIVE)) return Optional.empty();
-        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(); positions.put(operation.patientId(), state.actorLocations().get(operation.patientId()).position());
-        members.stream().sorted().forEach(id -> positions.put(id, state.actorLocations().get(id).position()));
+        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>(); positions.put(operation.patientId(), state.actorLocations().get(operation.patientId()).supportingSurface().support());
+        members.stream().sorted().forEach(id -> positions.put(id, state.actorLocations().get(id).supportingSurface().support()));
         return Optional.of(new Candidate(operation.id(), infirmary.anchor(), Map.copyOf(positions)));
     }
 

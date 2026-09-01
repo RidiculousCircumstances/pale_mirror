@@ -282,7 +282,7 @@ public final class SupplyOperationProcess {
     }
     private static java.util.Map<SubjectId, BodyPosition> participantBodies(FrontierWorldState state, RouteOperation operation) {
         java.util.Map<SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
-        operation.participantIds().forEach(actor -> formation.put(actor, BodyPosition.aboveSupportCell(state.actorLocations().get(actor).position())));
+        operation.participantIds().forEach(actor -> formation.put(actor, state.actorLocations().get(actor).body()));
         return java.util.Map.copyOf(formation);
     }
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {

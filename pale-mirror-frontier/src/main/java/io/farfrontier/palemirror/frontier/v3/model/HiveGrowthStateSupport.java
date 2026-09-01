@@ -22,7 +22,7 @@ final class HiveGrowthStateSupport {
     static FrontierWorldState complete(FrontierWorldState state, SubjectId jobId) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "hive growth job id"));
         if (job == null || state.actorLocations().containsKey(job.bioform().id())) throw new IllegalArgumentException("hive growth completion is invalid");
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.bioform().id(), new ActorLocation(job.bioform().position()));
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.bioform().id(), ActorLocation.standingOn(new SurfaceAnchor(job.bioform().position())));
         return state.next(actors, state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }

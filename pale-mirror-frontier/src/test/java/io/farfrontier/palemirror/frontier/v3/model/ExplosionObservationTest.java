@@ -85,7 +85,7 @@ class ExplosionObservationTest {
     }
 
     private static FixedPosition position(FrontierWorldState state, SubjectId actorId) {
-        BlockPosition value = state.actorLocations().get(actorId).position();
+        BlockPosition value = FrontierTestPositions.bodyCellOf(state.actorLocations().get(actorId));
         return new FixedPosition(FixedScalar.whole(value.x()), FixedScalar.whole(value.y()), FixedScalar.whole(value.z()));
     }
 

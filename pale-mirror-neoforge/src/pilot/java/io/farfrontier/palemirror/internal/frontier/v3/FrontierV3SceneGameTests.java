@@ -319,10 +319,10 @@ public final class FrontierV3SceneGameTests {
         BlockPos residentSpot = helper.absolutePos(new BlockPos(4, 8, 0)); BlockPos bioformSpot = helper.absolutePos(new BlockPos(8, 8, 0));
         prepareFloor(level, residentSpot); prepareFloor(level, bioformSpot);
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
-                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an exact resident receives one owned Villager body");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, bioform,
-                        new BlockPosition(bioformSpot.getX(), bioformSpot.getY(), bioformSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(bioformSpot.getX(), bioformSpot.getY(), bioformSpot.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an exact hive bioform receives one owned Zombie body");
         helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident)) instanceof Villager, "resident identity maps to Villager");
         helper.assertTrue(level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform)) instanceof net.minecraft.world.entity.monster.Zombie, "bioform identity maps to Zombie");
@@ -331,10 +331,10 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(!((Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform))).getItemBySlot(EquipmentSlot.HEAD).isEmpty(),
                 "an ambient bioform has a physical role marker that suppresses vanilla daylight flames");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
-                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "a repeated loaded-chunk pass never duplicates the exact resident");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, new SubjectId("resident:unknown"),
-                        new BlockPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CONFLICT,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(residentSpot.getX(), residentSpot.getY(), residentSpot.getZ())), FrontierV3AmbientActorExecutor.Result.CONFLICT,
                 "an unknown canonical identity is never converted into a new Villager body");
         level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident)).discard();
         level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, bioform)).discard();
@@ -347,7 +347,7 @@ public final class FrontierV3SceneGameTests {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-handoff-body-test"), 91L));
         SubjectId resident = new SubjectId("resident:1-1");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, resident,
-                        new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "the HOT ambient resident must be present before transfer");
         Entity original = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, resident));
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-ambient-transfer");
@@ -394,7 +394,7 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "loaded-world reclaim must make the same canonical lease HOT");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
-                        new BlockPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "reclaim must retain the existing body instead of creating another one");
         helper.assertTrue(level.getEntity(restored.getUUID()) == restored, "the observed restored body remains the sole UUID owner");
         FrontierV3AmbientActorExecutor.forget(runtime);
