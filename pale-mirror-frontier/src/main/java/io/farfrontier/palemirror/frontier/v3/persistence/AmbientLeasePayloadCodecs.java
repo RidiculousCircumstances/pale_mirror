@@ -17,6 +17,7 @@ final class AmbientLeasePayloadCodecs {
     static PayloadCodec prepared() { return new PreparedCodec(); }
     static PayloadCodec transition() { return new TransitionCodec(); }
     static PayloadCodec released() { return new ReleasedCodec(); }
+    static PayloadCodec restartAbsenceObserved() { return new RestartAbsenceObservedCodec(); }
 
     private static final class PreparedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_prepared"; }
@@ -39,6 +40,15 @@ final class AmbientLeasePayloadCodecs {
             FrontierWorldPayloadCodecs.writeSubject(output, release.actorId()); FrontierWorldPayloadCodecs.writePosition(output, release.position()); output.writeLong(release.health().raw()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeaseReleased(
                 FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input), new FixedScalar(input.readLong()))); }
+    }
+    private static final class RestartAbsenceObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ambient_lease_restart_absence_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            AmbientLeaseRestartAbsenceObserved absence = (AmbientLeaseRestartAbsenceObserved) payload;
+            FrontierWorldPayloadCodecs.writeSubject(output, absence.actorId()); FrontierWorldPayloadCodecs.writePosition(output, absence.position());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeaseRestartAbsenceObserved(
+                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readPosition(input))); }
     }
     private static void writeLease(DataOutputStream output, AmbientActorLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.actorId()); FrontierWorldPayloadCodecs.writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks());

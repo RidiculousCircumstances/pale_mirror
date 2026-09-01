@@ -50,11 +50,16 @@ public final class AmbientActorProcess {
         try { AmbientLeaseStateProcess.release(state, release); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, release.actorId()), release)));
     }
+    public static CommandPlan plan(FrontierWorldState state, AmbientLeaseRestartAbsenceObserved absence) {
+        try { AmbientLeaseStateProcess.resolveRestartAbsence(state, absence); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, absence.actorId()), absence)));
+    }
     public static CommandPlan planLease(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return switch (payload) {
             case AmbientLeasePrepared prepared -> plan(state, prepared);
             case AmbientLeaseTransition transition -> plan(state, transition);
             case AmbientLeaseReleased release -> plan(state, release);
+            case AmbientLeaseRestartAbsenceObserved absence -> plan(state, absence);
             default -> throw new IllegalArgumentException("payload is not an ambient lease transition");
         };
     }
@@ -100,11 +105,16 @@ public final class AmbientActorProcess {
         if (!subject.equals(owner(state, release.actorId()))) throw new IllegalArgumentException("ambient lease release lacks its canonical owner");
         return AmbientLeaseStateProcess.release(state, release);
     }
+    public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientLeaseRestartAbsenceObserved absence) {
+        if (!subject.equals(owner(state, absence.actorId()))) throw new IllegalArgumentException("ambient restart absence lacks its canonical owner");
+        return AmbientLeaseStateProcess.resolveRestartAbsence(state, absence);
+    }
     public static FrontierWorldState reduceLease(FrontierWorldState state, SubjectId subject, SimInstant instant, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return switch (payload) {
             case AmbientLeasePrepared prepared -> reduce(state, subject, instant, prepared);
             case AmbientLeaseTransition transition -> reduce(state, subject, transition);
             case AmbientLeaseReleased release -> reduce(state, subject, release);
+            case AmbientLeaseRestartAbsenceObserved absence -> reduce(state, subject, absence);
             default -> throw new IllegalArgumentException("payload is not an ambient lease transition");
         };
     }

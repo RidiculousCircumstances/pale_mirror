@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
@@ -98,6 +99,42 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
                 "a graceful shutdown retains the HOT lease for exact UUID recovery after restart");
         body.discard(); carpetBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-restart-absence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void loadedAbsentHotBodyBecomesAVisibleFreshAdmissionAfterRestartRecovery(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-restart-absence-game-test"), 91L), new EphemeralStore(), 10_000);
+        SubjectId resident = new SubjectId("resident:1-1");
+        FrontierWorldState initial = state(runtime);
+        BlockPosition anchor = initial.actorLocations().get(resident).position();
+        prepareFloor(level, new BlockPos(anchor.x(), anchor.y(), anchor.z()));
+        AmbientActorLease lease = new AmbientActorLease(resident, anchor, runtime.checkpointImage().orElseThrow().instant(), 1L,
+                AmbientLeaseStatus.PREPARED, AmbientGoalKind.WORK, anchor);
+        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-prepare", resident.value(), new AmbientLeasePrepared(lease));
+        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-hot", resident.value(), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+        helper.assertValueEqual(FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
+                "an active body becomes explicitly unknown at restart");
+        FrontierWorldState unknown = state(runtime);
+        helper.assertTrue(FrontierV3AmbientActorExecutor.restartAbsenceIsObserved(level, unknown, resident, unknown.ambientLeases().get(resident)),
+                "only the loaded exact hand-off column may prove the pre-restart body absent");
+        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-observed", resident.value(),
+                new AmbientLeaseRestartAbsenceObserved(resident, anchor));
+        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.CLOSED,
+                "absence closes the failed HOT hand-off without inferring a death");
+        AmbientActorLease fresh = AmbientActorProcess.nextLease(state(runtime), resident, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-fresh", resident.value(), new AmbientLeasePrepared(fresh));
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "the retained exact resident must be eligible for ordinary re-materialization after absence recovery");
+        helper.runAfterDelay(1L, () -> {
+            try {
+                Entity recovered = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
+                helper.assertTrue(recovered instanceof Villager && FrontierV3AmbientActorExecutor.recognizes(runtime, recovered),
+                        "re-materialization retains the one exact UUID and normal ownership proof");
+                recovered.discard(); helper.succeed();
+            } finally { FrontierV3AmbientActorExecutor.forget(runtime); }
+        });
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

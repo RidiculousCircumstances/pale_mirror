@@ -38,7 +38,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_carrier_released");
     private static final Set<String> AMBIENT = types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
-            "frontier.ambient_lease_released", "frontier.ambient_lease_transition");
+            "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed");
     private static final Set<String> LOGISTICS = types(
             "frontier.supply_contract_created", "frontier.supply_contract_abandoned", "frontier.cargo_loaded",
             "frontier.cargo_delivered", "frontier.operation_created", "frontier.operation_advanced",
@@ -235,7 +235,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_carrier_released"); }
     private static Set<String> ambientCommands() { return types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
-            "frontier.ambient_lease_released", "frontier.ambient_lease_transition"); }
+            "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed"); }
     private static Set<String> logisticsCommands() { return types(
             "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred",
             "frontier.operation_travel_segment_completed", "frontier.operation_travel_advanced", "frontier.operation_travel_started",
@@ -301,7 +301,7 @@ public final class FrontierWorldProcessCatalog {
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
-                    "frontier.ambient_lease_transition", "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
+                    "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed", "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
                     "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled",
                     "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
             case "logistics-scenes" -> types(

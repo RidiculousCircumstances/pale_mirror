@@ -361,6 +361,15 @@ through the lifecycle.
   authority, so an ambient-to-scene hand-off adopts the same body rather than
   cloning or recreating it. Missing, duplicated or obstructed bodies fail
   visibly and do not imply death.
+- An ambient body whose HOT lease was made `UNKNOWN_AFTER_RESTART` is recovered
+  only from a naturally loaded exact hand-off column. An owned saved UUID
+  returns that same lease to HOT. If that loaded column proves the UUID absent,
+  the runtime records a typed restart-absence observation, closes only the
+  failed physical lease and retains the living canonical actor unchanged; a
+  later ordinary demand prepares its same UUID again. An unloaded column or a
+  foreign/mismatched UUID remains explicit UNKNOWN/CONFLICT and is never
+  replaced. A normal player-caused death is still its own durable death
+  observation, never an absence inference.
 - If a naturally loaded player-demand point disproves recovery of a logistics
   scene's complete exact body set or cargo carrier, the runtime persists the
   exact missing identities as recovery evidence and blocks that delivery. It

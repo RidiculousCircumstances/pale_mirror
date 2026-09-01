@@ -59,6 +59,26 @@ public final class AmbientLeaseStateProcess {
         return copy(state, actors, leases);
     }
 
+    /**
+     * A naturally loaded anchor proved that the one expected pre-restart body is absent.
+     * The canonical actor remains alive; this only completes the failed physical hand-off so
+     * ordinary demand can make a fresh PREPARED lease.  It deliberately does not infer death
+     * or synthesize a position/health observation.
+     */
+    public static FrontierWorldState resolveRestartAbsence(FrontierWorldState state, AmbientLeaseRestartAbsenceObserved absence) {
+        Objects.requireNonNull(absence, "restart absence");
+        AmbientActorLease current = state.ambientLeases().get(absence.actorId());
+        ActorLocation actor = state.actorLocations().get(absence.actorId());
+        if (current == null || current.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
+                || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !actor.position().equals(absence.position()) || !current.handoffPosition().equals(absence.position())) {
+            throw new IllegalArgumentException("restart absence must bind the living unknown lease's exact hand-off position");
+        }
+        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases());
+        leases.put(absence.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
+        return copy(state, state.actorLocations(), leases);
+    }
+
     public static FrontierWorldState recordDeath(FrontierWorldState state, AmbientActorDied death) {
         Objects.requireNonNull(death, "ambient actor death"); AmbientActorLease lease = state.ambientLeases().get(death.actorId());
         if (lease == null || (lease.status() != AmbientLeaseStatus.HOT && lease.status() != AmbientLeaseStatus.DRAINING)) throw new IllegalArgumentException("ambient death is not evidence for an active ambient lease");

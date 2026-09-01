@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
@@ -150,6 +151,15 @@ final class FrontierV3AmbientActorExecutor {
                 if (body != null && owned(body, actorId, bioform(state, actorId))) {
                     submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
+                } else if (body == null && restartAbsenceIsObserved(level, state, actorId, lease)) {
+                    // This is a loaded-world negative postcondition, not a desired-state
+                    // overwrite.  A normal player death is already observed before its body
+                    // disappears; after restart an absent exact body therefore closes only
+                    // the failed HOT hand-off, retaining the canonical living actor for the
+                    // ordinary next PREPARED -> HOT admission.
+                    submit(runtime, "ambient-restart-absence", actorId.value(),
+                            new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffPosition()));
+                    admitted++;
                 }
                 continue;
             }
@@ -214,6 +224,20 @@ final class FrontierV3AmbientActorExecutor {
     }
 
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
+
+    /**
+     * The only legal absence proof is the exact canonical hand-off column in a naturally
+     * loaded chunk.  An unloaded chunk stays UNKNOWN; a mismatched loaded entity stays a
+     * conflict path and is never replaced here.
+     */
+    static boolean restartAbsenceIsObserved(ServerLevel level, FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+        var location = state.actorLocations().get(actorId);
+        return location != null && location.condition().status() == ActorLifeStatus.ALIVE
+                && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
+                && location.position().equals(lease.handoffPosition())
+                && level.hasChunkAt(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z()))
+                && level.getEntity(entityId(state, actorId)) == null;
+    }
 
     /**
      * Read-only loaded-world admission evidence for one canonical ambient actor.  This must not
