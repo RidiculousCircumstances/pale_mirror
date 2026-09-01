@@ -2,8 +2,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /** State mutation contract for failure of an exact en-route operation. */
@@ -52,4 +57,43 @@ final class FrontierOperationStateSupport {
         if (operation.stage() == OperationStage.FAILED && contract.status() == ContractStatus.INTERRUPTED) return TerminalLogisticsReceipt.TerminalLogisticsOutcome.FAILED;
         throw new IllegalArgumentException("operation and contract are not a compactable terminal pair");
     }
+
+    /**
+     * Terminal history replaces these two delivery-local physical receipts.  They cannot remain
+     * after their route/contract owners are removed: CARGO_HANDOFF validation deliberately
+     * resolves its live route operation, and keeping it would turn a successful compaction into
+     * a later fail-closed quarantine.  This is intentionally narrower than a subject-id sweep:
+     * an unrelated confirmed world effect must retain its own lifecycle/history owner.
+     */
+    static RetiredPhysicalReceipts retireConfirmedDeliveryReceipts(FrontierWorldState state, RouteOperation operation,
+                                                                    SupplyContract contract) {
+        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
+        for (PhysicalIntent intent : state.physicalIntents().values()) {
+            if (!ownedConfirmedDeliveryReceipt(intent, operation, contract)) continue;
+            PhysicalObservationId observationId = intent.postconditionObservationId()
+                    .orElseThrow(() -> new IllegalArgumentException("confirmed terminal receipt lacks observation identity"));
+            if (observations.remove(observationId) == null) {
+                throw new IllegalArgumentException("confirmed terminal receipt lacks retained observation");
+            }
+            intents.remove(intent.id());
+        }
+        return new RetiredPhysicalReceipts(Map.copyOf(intents), Map.copyOf(observations));
+    }
+
+    private static boolean ownedConfirmedDeliveryReceipt(PhysicalIntent intent, RouteOperation operation, SupplyContract contract) {
+        if (intent.status() != PhysicalIntentStatus.CONFIRMED) return false;
+        return switch (intent.kind()) {
+            case CARGO_HANDOFF -> intent.causeSubjectId().equals(operation.id())
+                    && intent.subjectIds().equals(java.util.List.of(operation.id(), operation.cargoId()));
+            case CARGO_LOADING -> intent.causeSubjectId().equals(contract.id())
+                    && intent.subjectIds().size() == 3
+                    && intent.subjectIds().getFirst().equals(contract.id())
+                    && intent.subjectIds().get(1).equals(operation.cargoId());
+            default -> false;
+        };
+    }
+
+    record RetiredPhysicalReceipts(Map<PhysicalIntentId, PhysicalIntent> intents,
+                                   Map<PhysicalObservationId, PhysicalEffectObservation> observations) { }
 }

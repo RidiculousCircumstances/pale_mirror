@@ -911,7 +911,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.remove(operation.id());
         Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts); nextContracts.remove(contract.id());
         LogisticsHistory nextHistory = logisticsHistory.record(receipt);
-        return withChanges(FrontierWorldStateUpdate.begin().contracts(nextContracts).operations(nextOperations).logisticsHistory(nextHistory));
+        FrontierOperationStateSupport.RetiredPhysicalReceipts retired = FrontierOperationStateSupport.retireConfirmedDeliveryReceipts(this, operation, contract);
+        return withChanges(FrontierWorldStateUpdate.begin().contracts(nextContracts).operations(nextOperations).logisticsHistory(nextHistory)
+                .physicalIntents(retired.intents()).physicalObservations(retired.observations()));
     }
     public boolean canCompactTerminalLogistics(SubjectId operationId) {
         try { FrontierOperationStateSupport.terminalLogisticsReceipt(this, operationId, 0L); return true; }

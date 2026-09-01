@@ -6,6 +6,14 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
@@ -65,7 +73,7 @@ class TerminalLogisticsProcessTest {
         WorldId world = new WorldId("frontier:terminal-logistics-recovery");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
                 FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L);
-        FrontierWorldState settled = completedDelivery(world);
+        FrontierWorldState settled = completedDeliveryWithConfirmedHandoff(world);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =
                 new FrontierEngineConfiguration<>(world, settled, SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(),
                         base.reducer(),
@@ -80,11 +88,63 @@ class TerminalLogisticsProcessTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpoint().canonicalState());
 
         assertFalse(state.operations().containsKey(new SubjectId("operation:supply-1-2")));
+        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
+        assertFalse(state.physicalObservations().containsKey(new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff")));
         assertEquals(1L, state.logisticsHistory().deliveredCount());
         assertEquals(beforeRecovery, recovered.checkpoint());
     }
 
+    @Test
+    void terminalCompactionRetiresOnlyTheConfirmedPhysicalReceiptsOwnedByThatDelivery() {
+        FrontierWorldState settled = completedDeliveryWithConfirmedHandoff();
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
+        PhysicalObservationId observationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff");
+        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-2");
+        PhysicalObservationId loadingObservationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-loading");
+
+        FrontierWorldState detached = settled.compactTerminalLogistics(new SubjectId("operation:supply-1-2"), 1_000L);
+
+        assertFalse(detached.physicalIntents().containsKey(intentId));
+        assertFalse(detached.physicalObservations().containsKey(observationId));
+        assertFalse(detached.physicalIntents().containsKey(loadingIntentId));
+        assertFalse(detached.physicalObservations().containsKey(loadingObservationId));
+        assertEquals(detached, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(detached)));
+    }
+
     private static FrontierWorldState completedDelivery() { return completedDelivery(new WorldId("frontier:terminal-logistics")); }
+
+    private static FrontierWorldState completedDeliveryWithConfirmedHandoff() {
+        return completedDeliveryWithConfirmedHandoff(new WorldId("frontier:terminal-logistics"));
+    }
+
+    private static FrontierWorldState completedDeliveryWithConfirmedHandoff(WorldId world) {
+        FrontierWorldState delivered = completedDelivery(world);
+        SubjectId operationId = new SubjectId("operation:supply-1-2");
+        SubjectId cargoId = new SubjectId("cargo:supply-1-2");
+        SubjectId itemId = new SubjectId("item:production-1-1-bread");
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
+        PhysicalObservationId observationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff");
+        CargoHandoffObservation observation = new CargoHandoffObservation(observationId, intentId, cargoId, List.of(
+                new CargoHandoffPlacement(itemId, new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED,
+                operationId, List.of(operationId, cargoId), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
+                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observationId));
+        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(delivered.physicalIntents()); intents.put(intentId, intent);
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(delivered.physicalObservations()); observations.put(observationId, observation);
+        PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-2");
+        PhysicalObservationId loadingObservationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-loading");
+        CargoLoadObservation loading = new CargoLoadObservation(loadingObservationId, loadingIntentId, new SubjectId("contract:supply-1-2"), cargoId, itemId, 1);
+        intents.put(loadingIntentId, new PhysicalIntent(loadingIntentId, PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED,
+                new SubjectId("contract:supply-1-2"), List.of(new SubjectId("contract:supply-1-2"), cargoId, itemId),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED)
+                .withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(loadingObservationId)));
+        observations.put(loadingObservationId, loading);
+        return new FrontierWorldState(delivered.bootstrap(), delivered.actorLocations(), delivered.structureConditions(), delivered.infection(), delivered.inventory(),
+                delivered.productionJobs(), delivered.contracts(), delivered.operations(), delivered.logisticsHistory(), intents, observations, delivered.sceneLeases(),
+                delivered.hiveColony(), delivered.structureDamage(), delivered.physicalDeltas(), delivered.ambientLeases(), delivered.routeConstructions(), delivered.routeTopology(),
+                delivered.strategicPlans(), delivered.humanPopulation(), delivered.companies(), delivered.resourceSites());
+    }
+
     private static FrontierWorldState completedDelivery(WorldId world) {
         FrontierWorldState state = initial(world); RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
         SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-2"));
