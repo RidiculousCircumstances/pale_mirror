@@ -59,7 +59,7 @@ public final class FrontierV3CargoCarrierGameTests {
         prepareSupport(level, cargoPosition(origin, lease));
         var expected = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().stream().map(state.inventory().items()::get)
                 .sorted(java.util.Comparator.comparing(value -> value.id())).toList();
-        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a prepared loaded scene must create one exact cargo carrier");
         helper.runAfterDelay(1L, () -> {
             try {
@@ -68,7 +68,7 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.owned(carrier, lease, expected), "the carrier must hold only canonical tagged cargo");
                 helper.assertTrue(FrontierV3CargoCarrierPresentation.attached(carrier, lease),
                         "one exact local caption must ride with the real cargo carrier rather than becoming a detached HUD");
-                helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                         "recovery must reuse the exact carrier rather than duplicate cargo");
                 helper.assertValueEqual(level.getEntitiesOfClass(MinecartChest.class, carrier.getBoundingBox().inflate(8.0D),
                                 candidate -> FrontierV3CargoCarrierExecutor.owned(candidate, lease, expected)).size(), 1,
@@ -87,7 +87,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-deck-test");
         BlockPos deck = cargoPosition(origin, lease); prepareSupport(level, deck); level.setBlock(deck, Blocks.GRAY_CARPET.defaultBlockState(), 3);
 
-        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded thin route surface may occupy strategic hand-off height without blocking the exact cargo carrier");
         helper.runAfterDelay(1L, () -> {
             try {
@@ -108,7 +108,7 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-raised-grade-test");
         BlockPos start = cargoPosition(origin, lease); BlockPos raised = start.offset(1, 1, 0);
         prepareSupport(level, start); prepareSupport(level, raised);
-        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "one exact cargo carrier must materialize above its retained start support");
         helper.runAfterDelay(1L, () -> {
             try {
@@ -138,7 +138,7 @@ public final class FrontierV3CargoCarrierGameTests {
         helper.assertTrue(level.addFreshEntity(foreign), "the foreign carrier fixture must enter the loaded world");
         helper.runAfterDelay(1L, () -> {
             try {
-                helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materialize(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
+                helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
                         "an unowned carrier UUID is visible conflict evidence and may never be claimed");
                 helper.assertTrue(!foreign.isRemoved(), "the foreign carrier must remain untouched");
                 foreign.discard(); runtime.shutdown(); helper.succeed();

@@ -183,7 +183,9 @@ public final class FrontierV3SceneGameTests {
                         members.getLast().actorId(), new BodyPosition(origin.getX() + 2, origin.getY(), origin.getZ())));
 
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertFalse(FrontierV3SceneExecutor.entityStorageReady(true, false),
+                "a production scene must wait for saved entity storage before admitting deterministic body UUIDs");
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded thin route surface must materialize each deterministic Villager body exactly once");
         for (SceneMember member : lease.members()) {
             Villager body = (Villager) level.getEntity(member.entityId());
@@ -264,7 +266,7 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(level.addFreshEntity(foreign), "the foreign body fixture must enter the loaded world");
 
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-conflict-test"), 91L));
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
                 "an unowned body with a leased UUID is a visible conflict, never a body the executor claims");
         helper.assertTrue(level.getEntity(foreign.getUUID()) == foreign, "the foreign body must remain untouched");
         foreign.discard();
@@ -282,7 +284,7 @@ public final class FrontierV3SceneGameTests {
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
 
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a canonical hive participant must materialize as its graybox Zombie, never as a Villager");
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         helper.assertTrue(entity instanceof Zombie, "the scene body must retain the canonical bioform kind");
@@ -304,7 +306,7 @@ public final class FrontierV3SceneGameTests {
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
                 Optional.of(new SubjectId("engagement:frontier-v3-game-test")), List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)),
                         new SceneMember(bioform, SceneLease.deterministicEntityId(state.bootstrap().worldId(), bioform))));
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a loaded engagement scene must materialize both exact human and hive members without a second actor set");
         helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) instanceof Villager, "engagement resident remains one Villager");
         helper.assertTrue(level.getEntity(lease.members().getLast().entityId()) instanceof Zombie, "engagement bioform remains one Zombie");
@@ -355,7 +357,7 @@ public final class FrontierV3SceneGameTests {
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(),
                 List.of(new SceneMember(resident, SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident))));
 
-        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodies(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a prepared scene must adopt its exact ambient body rather than recreate it");
         Entity transferred = level.getEntity(lease.members().getFirst().entityId());
         helper.assertTrue(transferred == original, "the transferred Villager must keep its exact Minecraft entity instance and UUID");

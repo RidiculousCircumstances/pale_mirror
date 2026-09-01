@@ -34,6 +34,16 @@ final class FrontierV3CargoCarrierExecutor {
     private FrontierV3CargoCarrierExecutor() { }
 
     static FrontierV3SceneExecutor.BodyMaterialization materialize(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        return materialize(level, state, lease, false);
+    }
+
+    /** Isolated GameTest fixture entry point; production code must use {@link #materialize}. */
+    static FrontierV3SceneExecutor.BodyMaterialization materializeForFixture(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        return materialize(level, state, lease, true);
+    }
+
+    private static FrontierV3SceneExecutor.BodyMaterialization materialize(ServerLevel level, FrontierWorldState state, SceneLease lease,
+                                                                             boolean knownFixtureColumns) {
         CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         List<ExactItemStack> items = items(state, cargo);
@@ -45,7 +55,10 @@ final class FrontierV3CargoCarrierExecutor {
             return FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
         }
         BlockPos candidate = spawnCandidate(lease);
-        if (!level.hasChunkAt(candidate)) return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
+        if (!knownFixtureColumns && !FrontierV3SceneExecutor.entityStorageReady(level, candidate)) {
+            return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
+        }
+        if (knownFixtureColumns && !level.hasChunkAt(candidate)) return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
         BlockPos position = FrontierV3StandingPosition.aboveExactFloor(level, candidate);
         if (position == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         MinecartChest cart = EntityType.CHEST_MINECART.create(level);

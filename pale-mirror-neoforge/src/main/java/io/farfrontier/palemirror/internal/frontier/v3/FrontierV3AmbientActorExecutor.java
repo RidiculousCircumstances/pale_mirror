@@ -59,6 +59,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -217,7 +218,8 @@ final class FrontierV3AmbientActorExecutor {
             return Result.CURRENT;
         }
         BlockPos position = minecraftBody(canonicalBody);
-        if (!level.hasChunkAt(position) || !FrontierV3StandingPosition.hasExactHeadroom(level, canonicalBody.supportingSurface().support())) return Result.DEFERRED;
+        if (!level.hasChunkAt(position)
+                || !FrontierV3StandingPosition.hasExactHeadroom(level, canonicalBody.supportingSurface().support())) return Result.DEFERRED;
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
@@ -247,10 +249,23 @@ final class FrontierV3AmbientActorExecutor {
                               FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         PendingAdmission pending = pending(runtime, entityId(state, actorId));
         if (pending != null && owned(pending.entity(), actorId, bioform(state, actorId))) return Result.PENDING;
+        // A chunk can expose blocks before PersistentEntitySectionManager has finished restoring
+        // saved entities. Creating our deterministic UUID in that interval races the ordinary
+        // saved-body join and can briefly surface a duplicate to players. This read-only proof
+        // neither loads a chunk nor interprets absence as death. Production callers must use this
+        // runtime overload; the state-only overload is retained for isolated GameTest fixtures.
+        BlockPos position = minecraftBody(canonicalBody);
+        if (!mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)),
+                FrontierV3StandingPosition.hasExactHeadroom(level, canonicalBody.supportingSurface().support()))) return Result.DEFERRED;
         return materialize(level, state, actorId, canonicalBody);
     }
 
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
+
+    /** Pure gate retained for the negative admission regression. */
+    static boolean mayCreateFreshBody(boolean chunkLoaded, boolean entitiesLoaded, boolean exactHeadroom) {
+        return chunkLoaded && entitiesLoaded && exactHeadroom;
+    }
 
     /**
      * The only legal absence proof is the exact canonical hand-off column in a naturally
@@ -297,6 +312,8 @@ final class FrontierV3AmbientActorExecutor {
                 new ObservedPosition(pending.entity().getX(), pending.entity().getY(), pending.entity().getZ()));
         BlockPos anchor = minecraftBody(location.body());
         if (!level.hasChunkAt(anchor)) return AdmissionDiagnostic.unloaded(expectedId);
+        if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return AdmissionDiagnostic.entityStoragePending(expectedId,
+                new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         if (!FrontierV3StandingPosition.hasExactHeadroom(level, location.supportingSurface().support())) return AdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
         return AdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
@@ -896,6 +913,9 @@ final class FrontierV3AmbientActorExecutor {
             return new AdmissionDiagnostic("PENDING_UNINDEXED", entityId, true, null, observedPosition, observedExact);
         }
         private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null, null, null); }
+        private static AdmissionDiagnostic entityStoragePending(UUID entityId, BlockPosition placement) {
+            return new AdmissionDiagnostic("ENTITY_STORAGE_PENDING", entityId, false, placement, null, null);
+        }
         private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement, null, null); }
         private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement, null, null); }
     }

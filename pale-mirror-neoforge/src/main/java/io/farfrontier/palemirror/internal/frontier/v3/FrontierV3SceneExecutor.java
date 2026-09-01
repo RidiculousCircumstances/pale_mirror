@@ -55,6 +55,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -340,6 +341,32 @@ final class FrontierV3SceneExecutor {
     }
 
     static BodyMaterialization materializeBodies(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        // Blocks become available before Minecraft has necessarily restored the saved entity
+        // columns. A deterministic body UUID must never be admitted into that interval: a saved
+        // scene member could still join with the same identity. This only reads readiness; it
+        // neither force-loads nor treats absence as death.
+        if (lease.members().stream().map(member -> lease.memberPosition(member.actorId()))
+                .anyMatch(body -> !entityStorageReady(level, new BlockPos(body.x(), body.y() - 1, body.z())))) {
+            return BodyMaterialization.DEFERRED;
+        }
+        return materializeBodiesInReadyColumns(level, state, lease);
+    }
+
+    /** Isolated GameTest fixture entry point; production code must use {@link #materializeBodies}. */
+    static BodyMaterialization materializeBodiesForFixture(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        return materializeBodiesInReadyColumns(level, state, lease);
+    }
+
+    static boolean entityStorageReady(ServerLevel level, BlockPos position) {
+        return entityStorageReady(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)));
+    }
+
+    /** Pure admission gate retained for the storage-restoration negative regression. */
+    static boolean entityStorageReady(boolean chunkLoaded, boolean entitiesLoaded) {
+        return chunkLoaded && entitiesLoaded;
+    }
+
+    private static BodyMaterialization materializeBodiesInReadyColumns(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());

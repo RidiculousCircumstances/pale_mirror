@@ -170,8 +170,10 @@ public final class FrontierV3AmbientActorGameTests {
                 "absence closes the failed HOT hand-off without inferring a death");
         AmbientActorLease fresh = AmbientActorProcess.nextLease(state(runtime), resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-fresh", resident.value(), new AmbientLeasePrepared(fresh));
+        helper.assertFalse(FrontierV3AmbientActorExecutor.mayCreateFreshBody(true, false, true),
+                "production admission must defer while Minecraft has loaded blocks but is still restoring entity storage");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
-                "the retained exact resident must be eligible for ordinary re-materialization after absence recovery");
+                "the isolated fixture may admit its known-empty test chunk exactly once");
         helper.runAfterDelay(1L, () -> {
             try {
                 Entity recovered = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
