@@ -258,10 +258,11 @@ final class FrontierV3DiagnosticJson {
     private static String admission(FrontierV3AmbientActorExecutor.AdmissionDiagnostic value) {
         String placement = value.placement() == null ? "null" : position(value.placement());
         String observedPosition = value.observedPosition() == null ? "null" : position(value.observedPosition());
+        String observedExact = nullablePosition(value.observedExact());
         String entityId = value.entityId() == null ? "" : value.entityId().toString();
         return ",\"physicalAdmission\":{\"status\":\"" + quote(value.status()) + "\",\"entityUuid\":\""
                 + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement
-                + ",\"observedPosition\":" + observedPosition + "}";
+                + ",\"observedPosition\":" + observedPosition + ",\"observedExact\":" + observedExact + "}";
     }
 
     private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {

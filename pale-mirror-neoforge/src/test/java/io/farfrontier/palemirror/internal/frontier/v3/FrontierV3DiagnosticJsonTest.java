@@ -127,12 +127,13 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
         var evidence = new FrontierV3AmbientActorExecutor.AdmissionDiagnostic("BLOCKED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee1"), false,
-                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8), null);
+                new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8), null, null);
 
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
 
         assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"BLOCKED\""));
         assertTrue(actorJson.contains("\"placement\":{\"x\":4,\"y\":65,\"z\":8}"));
+        assertTrue(actorJson.contains("\"observedExact\":null"));
     }
 
     @Test

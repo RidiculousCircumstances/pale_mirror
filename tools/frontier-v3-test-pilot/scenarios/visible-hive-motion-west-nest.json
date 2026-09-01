@@ -12,14 +12,23 @@
     { "type": "wait", "ms": 5000 },
     { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
     { "type": "look", "at": { "x": -420, "y": 64, "z": 420 } },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
     { "type": "wait", "ms": 1000 },
-    { "type": "wait", "ms": 8000 }
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" }
   ],
   "assertions": [
-    { "after": 2, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT" } }
+    { "after": 2, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT" } },
+    { "after": 5, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } },
+    { "after": 7, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } },
+    { "after": 9, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } }
   ],
   "frames": [
-    { "after": 4, "name": "hive-west-nest-before-motion" },
-    { "after": 5, "name": "hive-west-nest-after-motion" }
+    { "after": 3, "name": "hive-west-nest-before-motion" },
+    { "after": 11, "name": "hive-west-nest-after-motion" }
   ]
 }

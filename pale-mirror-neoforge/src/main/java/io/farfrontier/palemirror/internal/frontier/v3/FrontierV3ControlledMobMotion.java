@@ -99,6 +99,13 @@ final class FrontierV3ControlledMobMotion {
             }
             actor.setYRot((float) Math.toDegrees(Math.atan2(-moved.x, moved.z)));
             actor.yBodyRot = actor.getYRot();
+            // Entity.move updates the authoritative server position but, unlike vanilla AI
+            // travel, does not itself request an immediate tracker update.  A Zombie's normal
+            // tracker interval then coalesces several 20 Hz PM steps into one client-visible
+            // jump.  This is presentation replication only: the accepted collision result
+            // above remains the sole physical fact, while the normal tracker publishes it on
+            // this same tick to every observing player.
+            actor.hasImpulse = true;
             return;
         }
     }

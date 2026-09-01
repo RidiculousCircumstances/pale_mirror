@@ -37,6 +37,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -200,6 +201,18 @@ public final class FrontierV3AmbientActorGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 45)
+    public static void continuousPatrolAdvancesOnEveryLoadedServerTick(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos floor = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, floor, 3);
+        Zombie body = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create continuous patrol bioform");
+        body.setPos(floor.getX() + 0.5D, floor.getY(), floor.getZ() + 0.5D); body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the continuous-patrol fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> driveContinuousPatrolSamples(helper, level, body, floor, 18, new ArrayList<>(), () -> {
+            body.discard(); helper.succeed();
+        }));
+    }
+
     @GameTest(batch = "pm-frontier-v3-scout-patrol-cursor", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
     public static void hotScoutFollowsItsLeasedCanonicalPatrolStepRatherThanASeparateLocalCircle(GameTestHelper helper) {
         // Keep this footprint inside the stock template's isolated test cell: the full suite
@@ -228,6 +241,27 @@ public final class FrontierV3AmbientActorGameTests {
                         "the HOT scout must approach its one canonical next cursor without vanilla AI or a local substitute; body="
                                 + body.position() + " target=" + target);
                 body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
+            });
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void controlledMotionMarksEachAcceptedStepForImmediateTrackerReplication(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos floor = helper.absolutePos(new BlockPos(0, 8, 0)); prepareSquareFloor(level, floor, 2);
+        Zombie body = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create replication-motion bioform");
+        body.setPos(floor.getX() + 0.5D, floor.getY(), floor.getZ() + 0.5D); body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the replication-motion fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> {
+            FrontierV3ControlledMobMotion.followContinuously(level, body,
+                    new Vec3(floor.getX() + 1.5D, floor.getY(), floor.getZ() + 0.5D));
+            helper.runAfterDelay(1L, () -> {
+                // Invoke the registered actuator directly at its ordinary entity-tick boundary,
+                // before the tracker clears hasImpulse after publishing the position packet.
+                FrontierV3ControlledMobMotion.advance(body);
+                helper.assertTrue(body.getX() > floor.getX() + 0.5D && body.hasImpulse,
+                        "every accepted PM step must request same-tick client replication instead of tracker coalescing");
+                body.discard(); helper.succeed();
             });
         });
     }
@@ -310,6 +344,27 @@ public final class FrontierV3AmbientActorGameTests {
         if (remaining == 0) { complete.run(); return; }
         FrontierV3ControlledMobMotion.moveToward(level, body, target);
         helper.runAfterDelay(1L, () -> driveMotion(helper, level, body, target, remaining - 1, complete));
+    }
+    private static void driveContinuousPatrolSamples(GameTestHelper helper, ServerLevel level, Zombie body, BlockPos floor,
+                                                      int remaining, List<Double> positions, Runnable complete) {
+        if (remaining == 0) {
+            // The target keeps advancing by a small amount.  Once the first intent is applied,
+            // every loaded server tick must produce an observed physical delta; a retained
+            // intent or normal arrival radius must never reintroduce a stop/go animation.
+            for (int index = 1; index < positions.size(); index++) {
+                double delta = positions.get(index) - positions.get(index - 1);
+                helper.assertTrue(delta > 0.005D && delta <= 0.27D,
+                        "continuous patrol must advance once per loaded tick, sample " + index + " had delta " + delta);
+            }
+            complete.run(); return;
+        }
+        int sample = positions.size();
+        FrontierV3ControlledMobMotion.followContinuously(level, body,
+                new Vec3(floor.getX() + 1.5D + sample * 0.02D, floor.getY(), floor.getZ() + 0.5D));
+        helper.runAfterDelay(1L, () -> {
+            positions.add(body.getX());
+            driveContinuousPatrolSamples(helper, level, body, floor, remaining - 1, positions, complete);
+        });
     }
     private static void drivePursuit(GameTestHelper helper, ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                      FrontierWorldState state, SubjectId actor, net.minecraft.world.entity.Mob body, AmbientActorLease lease,

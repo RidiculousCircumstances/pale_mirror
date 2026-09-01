@@ -275,7 +275,8 @@ final class FrontierV3AmbientActorExecutor {
         if (existing != null) {
             return owned(existing, actorId, bioform(state, actorId))
                     ? AdmissionDiagnostic.indexed(expectedId, pending(runtime, expectedId) != null,
-                    new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ()))
+                    new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ()),
+                    new ObservedPosition(existing.getX(), existing.getY(), existing.getZ()))
                     : AdmissionDiagnostic.conflict(expectedId);
         }
         BlockPos anchor = minecraftBody(location.body());
@@ -849,13 +850,22 @@ final class FrontierV3AmbientActorExecutor {
     private record ReservationCache(FrontierWorldState state, java.util.Set<SubjectId> actors) { }
     private record SightedCarrier(MinecartChest carrier, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) { }
     private record LocalBrain(double radius, long periodTicks, int identityPhase) { }
-    record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement, BlockPosition observedPosition) {
-        private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null, null); }
-        private static AdmissionDiagnostic indexed(UUID entityId, boolean pending, BlockPosition observedPosition) { return new AdmissionDiagnostic("INDEXED", entityId, pending, null, observedPosition); }
-        private static AdmissionDiagnostic conflict(UUID entityId) { return new AdmissionDiagnostic("UUID_CONFLICT", entityId, false, null, null); }
-        private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null, null); }
-        private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement, null); }
-        private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement, null); }
+    /**
+     * Bounded observed-world evidence only.  {@code observedExact} deliberately supplements,
+     * rather than replaces, the block position: the latter explains admission topology while
+     * the former lets an operator distinguish a continuous physical actor from a visible
+     * stop-and-go cadence without turning Minecraft coordinates into canonical state.
+     */
+    record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement,
+                               BlockPosition observedPosition, ObservedPosition observedExact) {
+        private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null, null, null); }
+        private static AdmissionDiagnostic indexed(UUID entityId, boolean pending, BlockPosition observedPosition, ObservedPosition observedExact) {
+            return new AdmissionDiagnostic("INDEXED", entityId, pending, null, observedPosition, observedExact);
+        }
+        private static AdmissionDiagnostic conflict(UUID entityId) { return new AdmissionDiagnostic("UUID_CONFLICT", entityId, false, null, null, null); }
+        private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null, null, null); }
+        private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement, null, null); }
+        private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement, null, null); }
     }
     record AssemblyReadiness(List<AssemblyMemberReadiness> members) {
         AssemblyReadiness { members = List.copyOf(members); }
