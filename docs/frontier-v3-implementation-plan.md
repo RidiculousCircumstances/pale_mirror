@@ -128,6 +128,16 @@ migration. This is deliberately not T0.4 completion: migration and assembly
 cursors, observed edge damage and the physical restart proof remain separate
 owners and gates.
 
+The partial implementation still has one non-negotiable migration boundary:
+`TraversalTopology` nodes are typed support surfaces, while the historical
+`OperationTravel` formation and cargo values are still raw `BlockPosition`s.
+No executor may treat the latter as both a support column and a body/cargo
+position. Before a non-flat operation route, assembly or transit cursor is
+accepted, move these values to their role-specific persisted types and make
+the physical adapter prove the exact support-to-feet conversion once at scene
+admission. This rules out a superficially passing stair test whose body has
+actually been spawned, compared or recovered at the support-block datum.
+
 The first implementation may keep the graybox physically flat by providing a
 uniform-datum topology. It is not required to build the production terrain
 surveyor, settlement earthworks or Create provider in this gate. Completion

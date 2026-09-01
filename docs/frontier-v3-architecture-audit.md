@@ -135,6 +135,26 @@ formation and cargo position. Migration and assembly still retain historical
 lists, and no caller may claim a new rail route or runtime replan from this
 partial implementation.
 
+Native route-return evidence additionally exposed the remaining semantic seam:
+the topology is a support-surface graph, but legacy `OperationTravel`
+formation/cargo values and the scene executor still use raw `BlockPosition`.
+The executor's standing-position resolver can therefore reinterpret one value
+as a floor column at materialization while later HOT observation compares it as
+a body location. That is not a harmless flat-world representation detail; on a
+slope it can produce a one-block datum error, ambiguous cargo/body clearance or
+a false observed-arrival failure. The failed 2026-09-01 disposable route-return
+attempt is retained as boundary evidence, not treated as a test-pilot fault.
+
+Required correction before T0.4: `OperationTravel`, `OperationAssembly`, scene
+leases and their codecs must retain role-specific support, body-feet and cargo
+anchor values. Scene admission performs the one deterministic support → first
+two-cell-clear feet conversion and persists/observes that result; local motion
+and recovery compare only body-feet values. Cargo uses its own transport anchor
+and cannot share a physical column with a body merely because its raw Y differs.
+The focused regression must cover a grade edge, an unchanged flat edge, a
+blocked port and HOT/COLD/restart recovery. Only then may the route-return
+scenario become T0.4 evidence rather than a presentation of the old ambiguity.
+
 ### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
 
 The accepted human-capability contract distinguishes exact crew members from
