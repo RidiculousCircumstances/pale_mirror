@@ -670,7 +670,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
-        output.writeShort(travel.corridor().size()); for (BlockPosition point : travel.corridor()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
+        // 0xffff cannot be a historic corridor length (the canonical cap is 4,096), so it is a
+        // stable envelope marker for the typed topology without changing old WAL payload bytes.
+        output.writeShort(0xffff); TraversalTopologyStateCodec.write(output, travel.topology());
         output.writeShort(travel.cursor()); output.writeByte(travel.formation().size());
         for (var entry : travel.formation().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             writeSubject(output, entry.getKey()); output.writeInt(entry.getValue().x());
@@ -679,10 +681,19 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeInt(travel.cargoAnchor().x()); output.writeInt(travel.cargoAnchor().y()); output.writeInt(travel.cargoAnchor().z());
     }
     private static OperationTravel readOperationTravel(DataInputStream input) throws IOException {
-        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        int envelope = input.readUnsignedShort();
+        if (envelope == 0xffff) return readOperationTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
+        if (envelope > OperationTravel.MAX_CELLS) throw new IllegalArgumentException("legacy operation travel corridor is out of bounds");
+        java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>(); for (int index = 0; index < envelope; index++) corridor.add(new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
         return new OperationTravel(corridor, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+    }
+
+    private static OperationTravel readOperationTravelWithTopology(DataInputStream input, TraversalTopology topology) throws IOException {
+        int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) formation.put(readSubject(input).value(), new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
+        return new OperationTravel(topology, cursor, formation, new BlockPosition(input.readInt(), input.readInt(), input.readInt()));
     }
     private static void writeOperationAssembly(DataOutputStream output, OperationAssembly assembly) throws IOException {
         writeSubject(output, assembly.cargoCarrierId()); output.writeByte(assembly.members().size());

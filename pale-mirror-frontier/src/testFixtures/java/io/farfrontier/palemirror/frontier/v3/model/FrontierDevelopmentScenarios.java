@@ -429,10 +429,9 @@ final class FrontierDevelopmentScenarios {
         Settlement settlement = bootstrap.settlements().getFirst();
         SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
                 .findFirst().orElseThrow(() -> new IllegalStateException("health fixture needs one infirmary"));
-        InfectionCell contact = FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .filter(cell -> cell.ownerId().equals(infirmary.id())).map(cell -> InfectionCell.at(cell.position()))
-                .sorted(java.util.Comparator.comparingInt(InfectionCell::x).thenComparingInt(InfectionCell::z)).findFirst()
-                .orElseThrow(() -> new IllegalStateException("health fixture infirmary lacks semantic contact"));
+        // Health contact is defined against the structure's semantic foundation, not its
+        // decorative projection (signs and trim may extend beyond that foundation).
+        InfectionCell contact = InfectionCell.at(infirmary.anchor());
         state = state.withInfection(contact, new FixedRatio(new FixedScalar(FixedScalar.SCALE)));
         return new HealthQuarantineFixture(state, SimInstant.ZERO, List.of(StrategicObjectiveProcess.review(settlement.id(), 1, 1L)), settlement.id(), contact);
     }

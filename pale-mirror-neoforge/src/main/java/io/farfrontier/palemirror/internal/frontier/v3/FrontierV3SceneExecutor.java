@@ -501,8 +501,8 @@ final class FrontierV3SceneExecutor {
             if (operation != null && operation.activeTravel().isPresent()) {
                 OperationTravel travel = operation.activeTravel().orElseThrow();
                 if (!travel.arrived()) {
-                    BlockPosition target = translateTravel(travel, travel.nextHotCursor()).formation().get(actor.member().actorId());
-                    return new Vec3(target.x() + 0.5D, actor.entity().getY(), target.z() + 0.5D);
+                    BlockPosition target = operationTravelTargetPosition(travel, actor.member().actorId());
+                    return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
                 }
             }
         }
@@ -534,9 +534,18 @@ final class FrontierV3SceneExecutor {
 
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
         BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
-        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
-        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, 0, deltaZ));
+        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); Map<SubjectId, BlockPosition> formation = new LinkedHashMap<>();
+        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
+        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, deltaY, deltaZ));
+    }
+
+    /** Exact feet target for the next retained edge; package-visible for the terrain regression. */
+    static BlockPosition operationTravelTargetPosition(OperationTravel travel, SubjectId actorId) {
+        BlockPosition target = translateTravel(travel, travel.nextHotCursor()).formation().get(actorId);
+        if (target == null) throw new IllegalArgumentException("operation travel has no formation target for " + actorId);
+        // Formation cells are exact feet positions.  Retaining their Y datum is essential: the
+        // motion provider may traverse only the next surveyed topology edge, including grade.
+        return target;
     }
 
     private static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {

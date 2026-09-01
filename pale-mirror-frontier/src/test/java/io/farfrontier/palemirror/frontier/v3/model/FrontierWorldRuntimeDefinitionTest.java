@@ -292,6 +292,8 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(SettlementQuarantineStatus.NORMAL, before.humanPopulation().quarantine(settlement.id()).status());
         assertEquals(0, before.humanPopulation().activeCases(settlement.id()));
         assertEquals(19, before.infection().size(), "the fixture adds one settlement contact to the eighteen bootstrap hive cells, not a completed disease result");
+        assertTrue(HumanHealthProcess.localExposure(before, settlement),
+                "the fixture contact must reach ordinary health assessment before its scheduled review");
 
         engine.advanceTo(new SimInstant(1L), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

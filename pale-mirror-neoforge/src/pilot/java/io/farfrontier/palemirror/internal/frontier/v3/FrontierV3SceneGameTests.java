@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
+import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
@@ -30,6 +31,11 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalKind;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalTopology;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalTopologyId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
@@ -68,6 +74,20 @@ import java.util.function.Consumer;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3SceneGameTests {
     private FrontierV3SceneGameTests() { }
+
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void hotTravelTargetRetainsTheSurveyedOneBlockGrade(GameTestHelper helper) {
+        SubjectId hauler = new SubjectId("resident:grade-hauler");
+        TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:scene-grade"), 1L,
+                new SubjectId("route:frontier-network"), TraversalKind.PEDESTRIAN,
+                java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
+                List.of(SurfaceAnchor.at(4, 63, 8), SurfaceAnchor.at(5, 64, 8)));
+        OperationTravel travel = new OperationTravel(topology, 0, java.util.Map.of(hauler, new BlockPosition(4, 64, 9)), new BlockPosition(4, 63, 9));
+
+        helper.assertValueEqual(FrontierV3SceneExecutor.operationTravelTargetPosition(travel, hauler), new BlockPosition(5, 65, 9),
+                "the HOT adapter must retain the next canonical grade instead of flattening its target Y");
+        helper.succeed();
+    }
 
     @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void declaredPhysicalExecutionOrderIsBoundedAndReadOnly(GameTestHelper helper) {

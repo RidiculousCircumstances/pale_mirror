@@ -188,7 +188,13 @@ public final class FrontierWireTags {
                     tag(0, StructureCondition.INTACT), tag(1, StructureCondition.DAMAGED), tag(2, StructureCondition.DESTROYED)),
             entry(TerminalLogisticsReceipt.TerminalLogisticsOutcome.class,
                     tag(0, TerminalLogisticsReceipt.TerminalLogisticsOutcome.DELIVERED), tag(1, TerminalLogisticsReceipt.TerminalLogisticsOutcome.FAILED),
-                    tag(2, TerminalLogisticsReceipt.TerminalLogisticsOutcome.INTERRUPTED))
+                    tag(2, TerminalLogisticsReceipt.TerminalLogisticsOutcome.INTERRUPTED)),
+            entry(TraversalAvailability.class,
+                    tag(0, TraversalAvailability.OPEN), tag(1, TraversalAvailability.BLOCKED), tag(2, TraversalAvailability.DAMAGED), tag(3, TraversalAvailability.UNKNOWN)),
+            entry(TraversalCapability.class,
+                    tag(0, TraversalCapability.PEDESTRIAN), tag(1, TraversalCapability.GROUND_BIOFORM), tag(2, TraversalCapability.RAIL_VEHICLE)),
+            entry(TraversalKind.class,
+                    tag(0, TraversalKind.PEDESTRIAN), tag(1, TraversalKind.GROUND_BIOFORM), tag(2, TraversalKind.RAIL))
 );
 
     private FrontierWireTags() { }

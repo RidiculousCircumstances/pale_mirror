@@ -241,7 +241,11 @@ public final class SupplyOperationProcess {
         int next = operation.stage() == OperationStage.ARRIVED || operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
         if (next < 0 || next >= operation.route().size()) throw new IllegalArgumentException("operation has no next travel segment");
         List<BlockPosition> corridor = adjacentSegment(operation.route().get(operation.routeIndex()), operation.route().get(next));
-        return new OperationTravel(corridor, 0, formation, cargoAnchor);
+        TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:operation:" + operation.id().value() + ":segment:" + operation.routeIndex()),
+                operation.routeIndex(), FrontierRouteNetwork.OWNER, TraversalKind.PEDESTRIAN,
+                java.util.Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM),
+                corridor.stream().map(SurfaceAnchor::new).toList());
+        return new OperationTravel(topology, 0, formation, cargoAnchor);
     }
 
     /**
@@ -259,12 +263,13 @@ public final class SupplyOperationProcess {
     }
     private static OperationTravel translateTravel(OperationTravel travel, int nextCursor) {
         BlockPosition from = travel.currentPosition(), to = travel.corridor().get(nextCursor);
-        int deltaX = to.x() - from.x(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
-        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, 0, deltaZ)));
-        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, 0, deltaZ));
+        int deltaX = to.x() - from.x(), deltaY = to.y() - from.y(), deltaZ = to.z() - from.z(); java.util.Map<SubjectId, BlockPosition> formation = new java.util.LinkedHashMap<>();
+        travel.formation().forEach((actor, position) -> formation.put(actor, position.offset(deltaX, deltaY, deltaZ)));
+        return travel.advance(nextCursor, formation, travel.cargoAnchor().offset(deltaX, deltaY, deltaZ));
     }
     private static List<BlockPosition> adjacentSegment(BlockPosition from, BlockPosition to) {
-        if (from.y() != to.y() || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("operation route segment must be horizontal and axis aligned");
+        if (Math.abs(from.y() - to.y()) > 1 || (from.x() != to.x() && from.z() != to.z())) throw new IllegalArgumentException("operation route segment must be axis aligned with grade at most one");
+        if (from.y() != to.y()) return List.of(from, to);
         List<BlockPosition> corridor = new ArrayList<>(); int deltaX = Integer.compare(to.x(), from.x()), deltaZ = Integer.compare(to.z(), from.z());
         for (BlockPosition cursor = from;; cursor = cursor.offset(deltaX, 0, deltaZ)) { corridor.add(cursor); if (cursor.equals(to)) return List.copyOf(corridor); }
     }

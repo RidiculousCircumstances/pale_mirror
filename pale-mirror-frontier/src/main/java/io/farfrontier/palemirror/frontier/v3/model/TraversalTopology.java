@@ -81,6 +81,22 @@ public record TraversalTopology(TraversalTopologyId id, long revision, SubjectId
         return new TraversalTopology(id, revision, provenance, nodes, edges);
     }
 
+    /**
+     * Returns the one ordered path only when this topology is a linear corridor.
+     * Branching terrain graphs require a separately retained route and may not be flattened here.
+     */
+    public List<SurfaceAnchor> linearCorridorSurfaces() {
+        if (edges.size() != nodes.size() - 1) throw new IllegalStateException("traversal topology is not a linear corridor");
+        List<SurfaceAnchor> result = new ArrayList<>();
+        TraversalNodeId expected = edges.getFirst().from(); result.add(nodes.get(expected));
+        for (Edge edge : edges) {
+            if (!expected.equals(edge.from())) throw new IllegalStateException("traversal topology edge order is not one corridor");
+            result.add(nodes.get(edge.to())); expected = edge.to();
+        }
+        if (new LinkedHashSet<>(result).size() != nodes.size()) throw new IllegalStateException("traversal topology corridor omits or repeats a node");
+        return List.copyOf(result);
+    }
+
     public record Edge(TraversalEdgeId id, TraversalNodeId from, TraversalNodeId to, TraversalKind kind,
                        Set<TraversalCapability> capabilities, int grade, int clearance, long revision,
                        TraversalAvailability availability) {

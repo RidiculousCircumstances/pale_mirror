@@ -121,6 +121,13 @@ new movement-bearing scene or transport family is added, close
    cases. A disposable player scenario must show the same actor/route cursor
    before and after HOT/COLD/restart without force-loading.
 
+T0.3 is active: supply routes and their active `OperationTravel` cursors retain
+the same persisted topology (snapshot schema 91 and a versioned WAL envelope).
+Historic corridor bytes recover through one deterministic legacy-topology
+migration. This is deliberately not T0.4 completion: migration and assembly
+cursors, observed edge damage and the physical restart proof remain separate
+owners and gates.
+
 The first implementation may keep the graybox physically flat by providing a
 uniform-datum topology. It is not required to build the production terrain
 surveyor, settlement earthworks or Create provider in this gate. Completion
