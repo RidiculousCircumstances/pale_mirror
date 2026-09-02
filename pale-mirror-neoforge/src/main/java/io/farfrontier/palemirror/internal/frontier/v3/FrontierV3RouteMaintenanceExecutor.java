@@ -32,7 +32,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /** Repairs one retained route-loss cell from one separately observed maintenance-depot unit. */
@@ -41,16 +41,49 @@ final class FrontierV3RouteMaintenanceExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
-                .filter(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
-                .filter(intent -> pending(intent)).findFirst().ifPresentOrElse(intent -> loadMaterial(level, runtime, state, intent), () ->
-                        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
-                                .filter(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE).filter(FrontierV3RouteMaintenanceExecutor::pending)
-                                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent)));
+        // A remote maintenance depot is allowed to be COLD.  Its naturally unloaded pickup
+        // is a deferral, never a family-wide lock that prevents a different loaded repair from
+        // consuming its own exact source/target pair.  Invalid entries still remain selected so
+        // the owner records visible UNKNOWN/conflict evidence rather than hiding corruption.
+        Optional<PhysicalIntent> material = FrontierV3PhysicalIntentScheduling.firstActionable(materialIntents(state),
+                intent -> materialReadiness(level, state, intent));
+        if (material.isPresent()) { loadMaterial(level, runtime, state, material.orElseThrow()); return; }
+        FrontierV3PhysicalIntentScheduling.firstActionable(workIntents(state), intent -> workReadiness(level, state, intent))
+                .ifPresent(intent -> execute(level, runtime, state, intent));
     }
 
     private static boolean pending(PhysicalIntent intent) {
         return intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING;
+    }
+
+    static List<PhysicalIntent> materialIntents(FrontierWorldState state) {
+        return state.physicalIntents().values().stream()
+                .filter(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
+                .filter(FrontierV3RouteMaintenanceExecutor::pending).toList();
+    }
+
+    static List<PhysicalIntent> workIntents(FrontierWorldState state) {
+        return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE)
+                .filter(FrontierV3RouteMaintenanceExecutor::pending).toList();
+    }
+
+    private static FrontierV3PhysicalIntentScheduling.Readiness materialReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null || materialTarget(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+        BlockPos position = new BlockPos(origin.x(), origin.y(), origin.z());
+        if (!level.hasChunkAt(position)) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+    }
+
+    private static FrontierV3PhysicalIntentScheduling.Readiness workReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null || target(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) {
+            return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        }
+        return FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)
+                ? FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE
+                : FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -59,8 +92,11 @@ final class FrontierV3RouteMaintenanceExecutor {
         // UNKNOWN_AFTER_RESTART.  Do not let a newly loaded target spend the cargo before the
         // same lease/body set has reclaimed HOT authority.
         if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) return;
-        BlockPosition raw = wholeBlock(intent); if (raw == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(raw.x(), raw.y(), raw.z()))) return;
-        Target target = target(state, intent); if (target == null) return;
+        BlockPosition raw = wholeBlock(intent);
+        if (raw == null) { unknown(runtime, intent.id(), "canonical-origin-conflict"); return; }
+        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(raw.x(), raw.y(), raw.z()))) return;
+        Target target = target(state, intent);
+        if (target == null) { unknown(runtime, intent.id(), "canonical-target-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!repairOne(level, FrontierV3GrayboxLedger.get(level), target.position(), target.cell())) {
@@ -119,8 +155,11 @@ final class FrontierV3RouteMaintenanceExecutor {
     }
 
     private static void loadMaterial(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
-        BlockPosition origin = wholeBlock(intent); if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
-        MaterialTarget target = materialTarget(state, intent); if (target == null) return;
+        BlockPosition origin = wholeBlock(intent);
+        if (origin == null) { unknown(runtime, intent.id(), "material-canonical-origin-conflict"); return; }
+        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
+        MaterialTarget target = materialTarget(state, intent);
+        if (target == null) { unknown(runtime, intent.id(), "material-canonical-target-conflict"); return; }
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
                 new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "material-chest-conflict"); return; }

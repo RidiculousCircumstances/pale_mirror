@@ -46,8 +46,26 @@ class FrontierV3PhysicalIntentSchedulingTest {
                 "UNKNOWN_AFTER_RESTART is a recovery state, not a silently terminal queue state");
     }
 
+    @Test
+    void unloadedRouteMaintenancePickupDoesNotStarveALaterLoadedRepair() {
+        PhysicalIntent deferredPickup = intent("1", PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING);
+        PhysicalIntent runnablePickup = intent("4", PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING);
+
+        assertEquals(runnablePickup, FrontierV3PhysicalIntentScheduling.firstActionable(List.of(runnablePickup, deferredPickup), candidate ->
+                candidate.equals(deferredPickup) ? FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED
+                        : FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE).orElseThrow(),
+                "a naturally COLD source may defer only its own exact repair, never all route maintenance");
+    }
+
     private static PhysicalIntent intent(String suffix, PhysicalIntentKind kind) {
         SubjectId owner = new SubjectId("owner:" + suffix);
+        if (kind == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
+            return new PhysicalIntent(new PhysicalIntentId("intent:maintenance-load-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
+                    List.of(new SubjectId("route:" + suffix), owner, new SubjectId("cargo:" + suffix), new SubjectId("cargo-item:" + suffix),
+                            new SubjectId("source-item:" + suffix)),
+                    new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                    PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED);
+        }
         PhysicalPostcondition postcondition = kind == PhysicalIntentKind.EQUIPMENT_ISSUE
                 ? PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED : PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED;
         if (kind == PhysicalIntentKind.EQUIPMENT_RETURN) {
