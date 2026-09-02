@@ -43,7 +43,10 @@ final class TraversalTopologyStateCodec {
         TraversalTopologyId id = new TraversalTopologyId(FrontierWorldStateCodec.readString(input)); long revision = input.readLong(); SubjectId provenance = new SubjectId(FrontierWorldStateCodec.readString(input));
         Map<TraversalNodeId, SurfaceAnchor> nodes = new LinkedHashMap<>();
         int nodeCount = FrontierWorldStateCodec.readCount(input);
-        if (nodeCount < 2 || nodeCount > TraversalTopology.MAX_NODES) throw new IllegalArgumentException("traversal topology node count is invalid");
+        // A retained approach may consist of its one current/arrival surface.  The domain
+        // topology deliberately models that stationary case with zero edges, so recovery
+        // must accept the same lower bound that construction and writing already accept.
+        if (nodeCount < 1 || nodeCount > TraversalTopology.MAX_NODES) throw new IllegalArgumentException("traversal topology node count is invalid");
         for (int index = 0; index < nodeCount; index++) {
             if (nodes.put(new TraversalNodeId(FrontierWorldStateCodec.readString(input)), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input))) != null) {
                 throw new IllegalArgumentException("duplicate traversal topology node");
@@ -51,7 +54,8 @@ final class TraversalTopologyStateCodec {
         }
         var edges = new ArrayList<TraversalTopology.Edge>();
         int edgeCount = FrontierWorldStateCodec.readCount(input);
-        if (edgeCount < 1 || edgeCount > TraversalTopology.MAX_EDGES) throw new IllegalArgumentException("traversal topology edge count is invalid");
+        if (edgeCount > TraversalTopology.MAX_EDGES || (edgeCount == 0 && nodeCount != 1)
+                || (edgeCount != 0 && nodeCount == 1)) throw new IllegalArgumentException("traversal topology edge count is invalid");
         for (int index = 0; index < edgeCount; index++) {
             TraversalEdgeId edgeId = new TraversalEdgeId(FrontierWorldStateCodec.readString(input));
             TraversalNodeId from = new TraversalNodeId(FrontierWorldStateCodec.readString(input));
