@@ -69,6 +69,34 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-route-maintenance", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void exactSourceDecrementRejectsAChangedKindEvenWhenItsCopiedIdentityMatches(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(2, 8, 0));
+        level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
+        SubjectId container = new SubjectId("container:route-maintenance-decrement");
+        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.ownedChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(position, container));
+        ExactItemStack source = new ExactItemStack(new SubjectId("item:route-maintenance-source"), new SubjectId("route:frontier-network"),
+                "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(container, 0));
+        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(source));
+        helper.assertTrue(FrontierV3RouteConstructionExecutor.extractOne(chest, 0, source),
+                "one exact source extraction leaves an inspectable exact remainder");
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(chest.getItem(0), source),
+                "a retained source remainder must preserve its exact kind, count and ID");
+
+        net.minecraft.world.item.ItemStack forged = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 1);
+        FrontierV3CargoHandoffExecutor.bindExactItemId(forged, source.id()); chest.setItem(0, forged);
+        helper.assertFalse(FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(chest.getItem(0), source),
+                "a copied exact ID on a foreign item kind is conflict evidence, never a restart confirmation");
+
+        ExactItemStack finalUnit = new ExactItemStack(new SubjectId("item:route-maintenance-final"), new SubjectId("route:frontier-network"),
+                "minecraft:gray_concrete", 1, new InventoryCustody.ContainerSlot(container, 1));
+        chest.setItem(1, FrontierV3CargoHandoffExecutor.materializedStack(finalUnit)); chest.getItem(1).shrink(1);
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(chest.getItem(1), finalUnit),
+                "an empty slot is the sole valid postcondition after extracting an exact final unit");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-cargo-conflict", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void cargoReceiverNeverClaimsAnExistingPlayerChest(GameTestHelper helper) {

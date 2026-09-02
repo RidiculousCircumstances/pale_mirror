@@ -192,8 +192,7 @@ final class FrontierV3RouteMaintenanceExecutor {
     private static void inspectMaterialLoading(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                                MaterialTarget target, ChestBlockEntity chest) {
         ItemStack stack = chest.getItem(target.slot());
-        if (stack.getCount() == target.sourceRemainingCount() && (stack.isEmpty()
-                || FrontierV3CargoHandoffExecutor.itemId(stack).equals(Optional.of(target.sourceMaterial().id())))) {
+        if (FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(stack, target.sourceMaterial())) {
             confirmMaterialLoading(level, runtime, intent, target);
         } else unknown(runtime, intent.id(), "material-restart-postcondition-conflict");
     }

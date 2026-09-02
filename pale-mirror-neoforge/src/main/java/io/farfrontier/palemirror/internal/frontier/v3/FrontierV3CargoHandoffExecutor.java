@@ -177,6 +177,17 @@ final class FrontierV3CargoHandoffExecutor {
         CustomData data = actual.get(DataComponents.CUSTOM_DATA);
         return data != null && expected.id().value().equals(data.copyTag().getString(ITEM_ID_KEY));
     }
+    /**
+     * Exact postcondition for a one-unit physical extraction from a named stack.
+     *
+     * <p>A surviving remainder must retain both the original Minecraft kind and its exact
+     * canonical identity. Matching only the copied item tag would allow an altered physical
+     * item to confirm a durable source-to-cargo transfer after a restart.</p>
+     */
+    static boolean exactOneUnitDecrement(ItemStack actual, ExactItemStack source) {
+        if (source.count() == 1) return actual.isEmpty();
+        return exactMatch(actual, new ExactItemStack(source.id(), source.economicOwnerId(), source.itemKind(), source.count() - 1, source.custody()));
+    }
     static Optional<SubjectId> itemId(ItemStack actual) {
         CustomData data = actual.get(DataComponents.CUSTOM_DATA);
         if (data == null) return Optional.empty();

@@ -108,8 +108,7 @@ final class FrontierV3RouteConstructionExecutor {
     static boolean extractOne(ChestBlockEntity chest, int slot, ExactItemStack source) {
         if (chest == null || slot < 0 || slot >= chest.getContainerSize() || !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), source)) return false;
         ItemStack remainder = chest.getItem(slot).copy(); remainder.shrink(1); chest.setItem(slot, remainder); chest.setChanged();
-        return chest.getItem(slot).getCount() == source.count() - 1
-                && (chest.getItem(slot).isEmpty() || FrontierV3CargoHandoffExecutor.itemId(chest.getItem(slot)).equals(Optional.of(source.id())));
+        return FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(chest.getItem(slot), source);
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
@@ -152,7 +151,7 @@ final class FrontierV3RouteConstructionExecutor {
     private static void inspectMaterialLoading(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                                MaterialTarget target, ChestBlockEntity chest) {
         ItemStack stack = chest.getItem(target.slot());
-        if (stack.getCount() == target.sourceRemainingCount() && (stack.isEmpty() || FrontierV3CargoHandoffExecutor.itemId(stack).equals(Optional.of(target.sourceMaterial().id())))) {
+        if (FrontierV3CargoHandoffExecutor.exactOneUnitDecrement(stack, target.sourceMaterial())) {
             confirmMaterialLoading(level, runtime, intent, target);
         }
         else unknown(runtime, intent.id(), "material-restart-postcondition-conflict");
