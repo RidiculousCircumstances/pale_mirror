@@ -33,6 +33,7 @@ class FrontierWorldStateUpdateTest {
         assertSame(state.physicalDeltas(), changed.physicalDeltas());
         assertSame(state.ambientLeases(), changed.ambientLeases());
         assertSame(state.routeConstructions(), changed.routeConstructions());
+        assertSame(state.routeMaintenances(), changed.routeMaintenances());
         assertSame(state.routeTopology(), changed.routeTopology());
         assertSame(state.strategicPlans(), changed.strategicPlans());
         assertSame(state.humanPopulation(), changed.humanPopulation());

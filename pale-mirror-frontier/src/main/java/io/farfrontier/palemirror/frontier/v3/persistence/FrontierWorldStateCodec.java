@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 98; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 99; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -43,6 +43,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeSceneLeases(output, state.sceneLeases());
                 AmbientLeaseStateCodec.write(output, state.ambientLeases());
                 RouteConstructionStateCodec.write(output, state.routeConstructions());
+                RouteMaintenanceStateCodec.write(output, state.routeMaintenances());
                 RouteTopologyStateCodec.write(output, state.routeTopology());
                 StrategicPlanStateCodec.write(output, state.strategicPlans());
                 HumanPopulationStateCodec.write(output, state.humanPopulation());
@@ -72,13 +73,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = PhysicalEffectObservationStateCodec.read(input);
             Map<SceneLeaseId, SceneLease> scenes = readSceneLeases(input); Map<SubjectId, AmbientActorLease> ambient = AmbientLeaseStateCodec.read(input);
             Map<SubjectId, RouteConstruction> constructions = RouteConstructionStateCodec.read(input, true, true, true, true);
+            Map<SubjectId, RouteMaintenance> maintenances = RouteMaintenanceStateCodec.read(input);
             RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
             StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, VERSION);
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, contracts, operations, history,
-                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, topology, plans, population, companies, sites);
+                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

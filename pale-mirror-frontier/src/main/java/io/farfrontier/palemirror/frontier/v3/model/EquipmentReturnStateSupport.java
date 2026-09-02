@@ -10,7 +10,7 @@ public final class EquipmentReturnStateSupport {
 
     public static InventoryCustody.ContainerSlot targetSlot(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("equipment return needs exact owner, resident and item");
-        if (state.routeConstructions().containsKey(intent.subjectIds().getFirst())) return EngineeringEquipmentStateSupport.targetSlot(state, intent);
+        if (state.routeConstructions().containsKey(intent.subjectIds().getFirst()) || state.routeMaintenances().containsKey(intent.subjectIds().getFirst())) return EngineeringEquipmentStateSupport.targetSlot(state, intent);
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(intent.subjectIds().getFirst());
         if (assault == null) throw new IllegalArgumentException("equipment return has no assault");
         var target = intent.targetSlot().orElseThrow(() -> new IllegalArgumentException("equipment return lacks typed target slot"));
@@ -24,7 +24,7 @@ public final class EquipmentReturnStateSupport {
         if (intent.kind() != PhysicalIntentKind.EQUIPMENT_RETURN) throw new IllegalArgumentException("not an equipment return intent");
         if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("equipment return needs exact owner, resident and item");
         SubjectId ownerId = intent.subjectIds().get(0), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        if (state.routeConstructions().containsKey(ownerId)) {
+        if (state.routeConstructions().containsKey(ownerId) || state.routeMaintenances().containsKey(ownerId)) {
             EngineeringEquipmentStateSupport.validateReturn(state, intent);
             return;
         }

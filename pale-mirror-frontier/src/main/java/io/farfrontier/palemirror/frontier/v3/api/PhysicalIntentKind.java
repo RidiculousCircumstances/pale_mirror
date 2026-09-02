@@ -27,7 +27,11 @@ public enum PhysicalIntentKind {
     /** One exact settlement-owned equipment stack moves into one named active defender's hand. */
     EQUIPMENT_ISSUE,
     /** One exact former defender's hand stack moves into its named free active-depot slot. */
-    EQUIPMENT_RETURN;
+    EQUIPMENT_RETURN,
+    /** One exact cargo unit restores one observed retained route surface or foundation cell. */
+    ROUTE_MAINTENANCE,
+    /** One exact maintenance-depot stack becomes cargo for one retained-route repair. */
+    ROUTE_MAINTENANCE_MATERIAL_LOADING;
 
     public int wireTag() {
         return switch (this) {
@@ -47,6 +51,8 @@ public enum PhysicalIntentKind {
             case HIVE_NUTRIENT_ARRIVAL -> 13;
             case EQUIPMENT_ISSUE -> 14;
             case EQUIPMENT_RETURN -> 15;
+            case ROUTE_MAINTENANCE -> 16;
+            case ROUTE_MAINTENANCE_MATERIAL_LOADING -> 17;
         };
     }
 }

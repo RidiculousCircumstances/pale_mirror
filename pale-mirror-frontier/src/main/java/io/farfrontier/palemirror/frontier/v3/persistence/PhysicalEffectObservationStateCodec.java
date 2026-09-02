@@ -81,6 +81,12 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof EquipmentReturnObservation returned) {
                 output.writeByte(16); string(output, returned.id().value()); string(output, returned.intentId().value()); string(output, returned.assaultId().value());
                 string(output, returned.residentId().value()); string(output, returned.itemId().value()); FrontierWorldStateCodec.writeCustody(output, returned.targetSlot());
+            } else if (observation instanceof RouteMaintenanceObservation repair) {
+                output.writeByte(17); string(output, repair.id().value()); string(output, repair.intentId().value()); string(output, repair.maintenanceId().value());
+                string(output, repair.itemId().value()); FrontierWorldStateCodec.writePosition(output, repair.position());
+            } else if (observation instanceof RouteMaintenanceMaterialLoadObservation loading) {
+                output.writeByte(18); string(output, loading.id().value()); string(output, loading.intentId().value()); string(output, loading.maintenanceId().value());
+                string(output, loading.cargoId().value()); string(output, loading.sourceItemId().value()); string(output, loading.cargoItemId().value()); output.writeByte(loading.sourceRemainingCount());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -108,6 +114,9 @@ final class PhysicalEffectObservationStateCodec {
                 case 14 -> new HiveNutrientArrivalObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 case 15 -> equipmentIssue(input, id, intentId);
                 case 16 -> equipmentReturn(input, id, intentId);
+                case 17 -> new RouteMaintenanceObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), FrontierWorldStateCodec.readPosition(input));
+                case 18 -> new RouteMaintenanceMaterialLoadObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)),
+                        new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

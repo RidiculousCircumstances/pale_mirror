@@ -16,9 +16,9 @@ public final class FrontierEngineeringWorkSceneSupport {
      * A scene becomes possible only after the same retained crew has tools and completed its
      * immutable COLD approach. No materializer is allowed to create a crew or choose a cell.
      */
-    public static Optional<EngineeringWorkSceneCandidate> candidate(FrontierWorldState state, RouteConstruction project) {
-        if (project.status() != RouteConstructionStatus.BUILDING || project.team().isEmpty() || project.assembly().isEmpty()) return Optional.empty();
-        EngineeringRecoveryTeam team = project.team().orElseThrow();
+    public static Optional<EngineeringWorkSceneCandidate> candidate(FrontierWorldState state, EngineeringWorkOrder project) {
+        if (!project.building() || project.engineeringTeam().isEmpty() || project.assembly().isEmpty()) return Optional.empty();
+        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.complete() || !EngineeringToolCustody.ready(state, team)
                 || project.confirmedCells() >= project.workCells().size()) return Optional.empty();
@@ -30,13 +30,13 @@ public final class FrontierEngineeringWorkSceneSupport {
     }
 
     public static Optional<EngineeringWorkSceneCandidate> nextCandidate(FrontierWorldState state) {
-        return state.routeConstructions().values().stream().sorted(Comparator.comparing(RouteConstruction::id))
+        return java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
+                .sorted(Comparator.comparing(EngineeringWorkOrder::id))
                 .map(project -> candidate(state, project)).flatMap(Optional::stream).findFirst();
     }
 
-    public static RouteConstruction require(FrontierWorldState state, EngineeringWorkSceneCause cause) {
-        RouteConstruction project = state.routeConstructions().get(cause.projectId());
-        if (project == null) throw new IllegalArgumentException("engineering scene has no active construction project");
+    public static EngineeringWorkOrder require(FrontierWorldState state, EngineeringWorkSceneCause cause) {
+        EngineeringWorkOrder project = EngineeringWorkOrderSupport.require(state, cause.projectId());
         if (project.confirmedCells() != cause.workCellIndex()) throw new IllegalArgumentException("engineering scene cursor differs from current construction cell");
         return project;
     }
@@ -46,14 +46,13 @@ public final class FrontierEngineeringWorkSceneSupport {
         // work-site lease drains.  Owner resolution is intentionally broader than admission:
         // the old lease must still close or recover under the same project/settlement after
         // that advance, rather than being misread as a logistics scene or becoming ownerless.
-        RouteConstruction project = state.routeConstructions().get(cause.projectId());
-        if (project == null) throw new IllegalArgumentException("engineering scene has no active construction project");
+        EngineeringWorkOrder project = EngineeringWorkOrderSupport.require(state, cause.projectId());
         return project.settlementId();
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         EngineeringWorkSceneCause cause = FrontierSceneBehaviors.engineeringWorksite(lease);
-        RouteConstruction project = require(state, cause);
+        EngineeringWorkOrder project = require(state, cause);
         EngineeringWorkSceneCandidate candidate = candidate(state, project)
                 .orElseThrow(() -> new IllegalArgumentException("engineering scene has no exact COLD-ready crew"));
         if (!lease.handoffPosition().equals(candidate.workCell())
@@ -70,9 +69,13 @@ public final class FrontierEngineeringWorkSceneSupport {
 
     /** A retained crew may open only its current-cell work intent while its exact lease is HOT. */
     public static boolean permitsCurrentWorkIntent(FrontierWorldState state, PhysicalIntent intent) {
-        RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get)
-                .filter(java.util.Objects::nonNull).findFirst().orElse(null);
-        if (project == null || project.team().isEmpty() || project.cargoId().isEmpty()) return false;
+        EngineeringWorkOrder project = intent.subjectIds().stream().map(id -> {
+                    RouteConstruction construction = state.routeConstructions().get(id);
+                    RouteMaintenance maintenance = state.routeMaintenances().get(id);
+                    if (construction != null && maintenance != null) throw new IllegalArgumentException("engineering work owner is ambiguous");
+                    return construction != null ? construction : maintenance;
+                }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        if (project == null || project.engineeringTeam().isEmpty() || project.cargoId().isEmpty()) return false;
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .filter(lease -> lease.status() == SceneLeaseStatus.HOT).anyMatch(lease -> {
                     EngineeringWorkSceneCause cause = FrontierSceneBehaviors.engineeringWorksite(lease);

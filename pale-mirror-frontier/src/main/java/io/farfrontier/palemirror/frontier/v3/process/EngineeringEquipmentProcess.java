@@ -15,8 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
-import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
-import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
+import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkOrder;
 
 import java.util.Comparator;
 import java.util.List;
@@ -26,13 +25,13 @@ import java.util.Optional;
 public final class EngineeringEquipmentProcess {
     private EngineeringEquipmentProcess() { }
 
-    public static Optional<PhysicalIntent> issueOne(FrontierWorldState state, RouteConstruction project) {
-        if (project.team().isEmpty() || project.status() != RouteConstructionStatus.BUILDING || pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_ISSUE)) {
+    public static Optional<PhysicalIntent> issueOne(FrontierWorldState state, EngineeringWorkOrder project) {
+        if (project.engineeringTeam().isEmpty() || !project.building() || pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_ISSUE)) {
             return Optional.empty();
         }
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
-        EngineeringRecoveryTeam team = project.team().orElseThrow();
+        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         SubjectId resident = team.memberIds().stream().filter(member -> !EngineeringToolCustody.holdsTool(state, member)).findFirst().orElse(null);
         if (resident == null || state.actorLocations().get(resident) == null
                 || state.actorLocations().get(resident).condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return Optional.empty();
@@ -42,7 +41,7 @@ public final class EngineeringEquipmentProcess {
                 .filter(value -> !reservedForIssue(state, value.id()))
                 .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
         if (item == null) return Optional.empty();
-        String suffix = project.id().value().substring("construction:".length()) + "-" + resident.value().replace(':', '-')
+        String suffix = project.id().value().replace(':', '-') + "-" + resident.value().replace(':', '-')
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
@@ -51,13 +50,13 @@ public final class EngineeringEquipmentProcess {
                 PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED));
     }
 
-    public static Optional<PhysicalIntent> returnOne(FrontierWorldState state, RouteConstruction project) {
-        if (project.team().isEmpty() || project.status() != RouteConstructionStatus.READY || pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_RETURN)) {
+    public static Optional<PhysicalIntent> returnOne(FrontierWorldState state, EngineeringWorkOrder project) {
+        if (project.engineeringTeam().isEmpty() || !project.readyForToolReturn() || pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_RETURN)) {
             return Optional.empty();
         }
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
-        EngineeringRecoveryTeam team = project.team().orElseThrow();
+        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = team.memberIds().stream().flatMap(member -> state.inventory().actorItems(member).stream())
                 .filter(value -> value.economicOwnerId().equals(project.settlementId()) && EngineeringToolCustody.isTool(value.itemKind()))
                 .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
@@ -65,7 +64,7 @@ public final class EngineeringEquipmentProcess {
                 || state.actorLocations().get(actor.actorId()) == null
                 || state.actorLocations().get(actor.actorId()).condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return Optional.empty();
         int slot = state.inventory().firstFreeSlot(depot).orElse(-1); if (slot < 0) return Optional.empty();
-        String suffix = project.id().value().substring("construction:".length()) + "-" + actor.actorId().value().replace(':', '-')
+        String suffix = project.id().value().replace(':', '-') + "-" + actor.actorId().value().replace(':', '-')
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
@@ -79,8 +78,8 @@ public final class EngineeringEquipmentProcess {
                 && !intent.subjectIds().isEmpty() && intent.subjectIds().getFirst().equals(projectId));
     }
 
-    public static boolean returnedOrLost(FrontierWorldState state, RouteConstruction project) {
-        return project.team().stream().flatMap(team -> team.memberIds().stream()).noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
+    public static boolean returnedOrLost(FrontierWorldState state, EngineeringWorkOrder project) {
+        return project.engineeringTeam().stream().flatMap(team -> team.memberIds().stream()).noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
                 && !pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_RETURN);
     }
 
@@ -89,7 +88,7 @@ public final class EngineeringEquipmentProcess {
                 && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(itemId));
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.model.Settlement settlement(FrontierWorldState state, RouteConstruction project) {
+    private static io.farfrontier.palemirror.frontier.v3.model.Settlement settlement(FrontierWorldState state, EngineeringWorkOrder project) {
         return io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport.settlement(state.bootstrap(), project.settlementId());
     }
 }

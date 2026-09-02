@@ -41,7 +41,7 @@ public final class RouteConstructionStateSupport {
                 }
             }));
         }
-        RouteConstructionTeamStateSupport.validate(population, constructions, jobs, sites, operations, contracts, plans);
+        RouteConstructionTeamStateSupport.validate(population, constructions, Map.of(), jobs, sites, operations, contracts, plans);
     }
 
     static FrontierWorldState begin(FrontierWorldState state, RouteConstruction project) {

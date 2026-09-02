@@ -58,14 +58,14 @@ final class RouteConstructionStateCodec {
         return Map.copyOf(projects);
     }
 
-    private static void writeTeam(DataOutputStream output, EngineeringRecoveryTeam team) throws IOException {
+    static void writeTeam(DataOutputStream output, EngineeringRecoveryTeam team) throws IOException {
         FrontierWorldStateCodec.writeString(output, team.id().value()); FrontierWorldStateCodec.writeString(output, team.ownerId().value());
         FrontierWorldStateCodec.writeString(output, team.settlementId().value()); FrontierWorldStateCodec.writeString(output, team.leaderId().value());
         output.writeByte(team.memberIds().size());
         for (SubjectId member : team.memberIds()) FrontierWorldStateCodec.writeString(output, member.value());
     }
 
-    private static EngineeringRecoveryTeam readTeam(DataInputStream input) throws IOException {
+    static EngineeringRecoveryTeam readTeam(DataInputStream input) throws IOException {
         SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId owner = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId leader = new SubjectId(FrontierWorldStateCodec.readString(input));
         int count = input.readUnsignedByte();
@@ -75,7 +75,7 @@ final class RouteConstructionStateCodec {
         return new EngineeringRecoveryTeam(id, owner, settlement, leader, List.copyOf(members));
     }
 
-    private static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
+    static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
         output.writeByte(assembly.members().size());
         for (Map.Entry<SubjectId, EngineeringWorkAssembly.Member> entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value());
@@ -86,7 +86,7 @@ final class RouteConstructionStateCodec {
         }
     }
 
-    private static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
+    static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte();
         if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) throw new IllegalArgumentException("route construction assembly size is invalid");
         Map<SubjectId, EngineeringWorkAssembly.Member> members = new LinkedHashMap<>();

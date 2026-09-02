@@ -219,7 +219,7 @@ public final class RouteConstructionProcess {
                         .thenComparing(Comparator.comparing((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed())
                         .thenComparing(ResidentProfile::id))
                 .limit(INITIAL_ROUTE_REPAIR_CREW_SIZE).map(ResidentProfile::id).toList();
-        return members.isEmpty() ? null : EngineeringRecoveryTeam.forProject(projectId, settlementId, members);
+        return members.isEmpty() ? null : EngineeringRecoveryTeam.forWorkOrder(projectId, settlementId, members);
     }
 
     private static Optional<ExactItemStack> maintenanceMaterial(FrontierWorldState state) {

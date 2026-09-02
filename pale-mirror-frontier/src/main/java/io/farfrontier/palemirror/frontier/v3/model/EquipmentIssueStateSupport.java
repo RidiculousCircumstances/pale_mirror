@@ -12,7 +12,7 @@ public final class EquipmentIssueStateSupport {
         if (intent.kind() != PhysicalIntentKind.EQUIPMENT_ISSUE) throw new IllegalArgumentException("not an equipment issue intent");
         if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("equipment issue needs exact owner, resident and item");
         SubjectId ownerId = intent.subjectIds().get(0), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        if (state.routeConstructions().containsKey(ownerId)) {
+        if (state.routeConstructions().containsKey(ownerId) || state.routeMaintenances().containsKey(ownerId)) {
             EngineeringEquipmentStateSupport.validateIssue(state, intent);
             return;
         }

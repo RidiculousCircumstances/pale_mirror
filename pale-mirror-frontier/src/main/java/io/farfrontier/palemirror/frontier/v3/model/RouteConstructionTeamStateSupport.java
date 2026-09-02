@@ -11,6 +11,7 @@ final class RouteConstructionTeamStateSupport {
     private RouteConstructionTeamStateSupport() { }
 
     static void validate(HumanPopulation population, Map<SubjectId, RouteConstruction> constructions,
+                         Map<SubjectId, RouteMaintenance> maintenances,
                          Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
                          Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
                          StrategicPlanState plans) {
@@ -40,6 +41,14 @@ final class RouteConstructionTeamStateSupport {
                 ResidentProfile resident = population.resident(member);
                 if (resident == null || !resident.settlementId().equals(project.settlementId()) || !assigned.add(member)) {
                     throw new IllegalArgumentException("route construction team must retain distinct local exact residents");
+                }
+            }
+        }
+        for (RouteMaintenance maintenance : maintenances.values()) {
+            for (SubjectId member : maintenance.team().memberIds()) {
+                ResidentProfile resident = population.resident(member);
+                if (resident == null || !resident.settlementId().equals(maintenance.settlementId()) || !assigned.add(member)) {
+                    throw new IllegalArgumentException("route maintenance team must retain distinct local exact residents");
                 }
             }
         }

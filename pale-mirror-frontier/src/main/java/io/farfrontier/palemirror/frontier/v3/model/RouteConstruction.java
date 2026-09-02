@@ -9,7 +9,7 @@ import java.util.Optional;
 /** Exact, resumable work order for one replacement route; active topology remains unchanged. */
 public record RouteConstruction(SubjectId id, SubjectId settlementId, List<BlockPosition> waypoints, List<BlockPosition> workCells,
                                 int confirmedCells, RouteConstructionStatus status, Optional<SubjectId> cargoId,
-                                Optional<EngineeringRecoveryTeam> team, Optional<EngineeringWorkAssembly> assembly) {
+                                Optional<EngineeringRecoveryTeam> team, Optional<EngineeringWorkAssembly> assembly) implements EngineeringWorkOrder {
     public RouteConstruction {
         Objects.requireNonNull(id, "route construction id"); Objects.requireNonNull(settlementId, "route construction settlement");
         waypoints = List.copyOf(Objects.requireNonNull(waypoints, "route construction waypoints"));
@@ -61,6 +61,10 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
     public SubjectId plannedCargoItemId() {
         return new SubjectId("item:route-build-" + id.value().substring("construction:".length()) + "-" + confirmedCells);
     }
+
+    @Override public boolean building() { return status == RouteConstructionStatus.BUILDING; }
+    @Override public boolean readyForToolReturn() { return status == RouteConstructionStatus.READY; }
+    @Override public Optional<EngineeringRecoveryTeam> engineeringTeam() { return team; }
 
     RouteConstruction withConfirmedCells(int nextConfirmedCells, RouteConstructionStatus nextStatus) {
         // A completed physical cell invalidates the prior work-site slots.  The same retained

@@ -8,19 +8,19 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 public final class EngineeringEquipmentStateSupport {
     private EngineeringEquipmentStateSupport() { }
 
-    public static RouteConstruction project(FrontierWorldState state, SubjectId ownerId) {
-        RouteConstruction project = state.routeConstructions().get(ownerId);
-        if (project == null || project.team().isEmpty()) throw new IllegalArgumentException("equipment owner is not an active engineering project");
+    public static EngineeringWorkOrder project(FrontierWorldState state, SubjectId ownerId) {
+        EngineeringWorkOrder project = EngineeringWorkOrderSupport.require(state, ownerId);
+        if (project.engineeringTeam().isEmpty()) throw new IllegalArgumentException("equipment owner has no exact engineering team");
         return project;
     }
 
     public static void validateIssue(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("engineering equipment issue needs exact owner, resident and item");
         SubjectId projectId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        RouteConstruction project = project(state, projectId);
-        EngineeringRecoveryTeam team = project.team().orElseThrow();
+        EngineeringWorkOrder project = project(state, projectId);
+        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
-        if (project.status() != RouteConstructionStatus.BUILDING || !intent.causeSubjectId().equals(project.settlementId())
+        if (!project.building() || !intent.causeSubjectId().equals(project.settlementId())
                 || !team.memberIds().contains(residentId) || !living(state, residentId) || item == null
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot source)
                 || !source.containerId().equals(FrontierWorldState.depotId(project.settlementId()))
@@ -32,7 +32,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static InventoryCustody.ContainerSlot targetSlot(FrontierWorldState state, PhysicalIntent intent) {
-        RouteConstruction project = project(state, intent.subjectIds().getFirst());
+        EngineeringWorkOrder project = project(state, intent.subjectIds().getFirst());
         var target = intent.targetSlot().orElseThrow(() -> new IllegalArgumentException("engineering equipment return lacks typed target slot"));
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         if (!target.containerId().equals(depot)) throw new IllegalArgumentException("engineering equipment return target is not the home depot");
@@ -42,11 +42,11 @@ public final class EngineeringEquipmentStateSupport {
     public static void validateReturn(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("engineering equipment return needs exact owner, resident and item");
         SubjectId projectId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
-        RouteConstruction project = project(state, projectId);
-        EngineeringRecoveryTeam team = project.team().orElseThrow();
+        EngineeringWorkOrder project = project(state, projectId);
+        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
         InventoryCustody.ContainerSlot target = targetSlot(state, intent);
-        if (project.status() != RouteConstructionStatus.READY || !intent.causeSubjectId().equals(project.settlementId())
+        if (!project.readyForToolReturn() || !intent.causeSubjectId().equals(project.settlementId())
                 || !team.memberIds().contains(residentId) || !living(state, residentId) || item == null
                 || !(item.custody() instanceof InventoryCustody.Actor actor) || !actor.actorId().equals(residentId)
                 || !item.economicOwnerId().equals(project.settlementId()) || !EngineeringToolCustody.isTool(item.itemKind())

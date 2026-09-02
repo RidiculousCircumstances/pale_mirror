@@ -22,7 +22,7 @@ public final class EngineeringWorksite {
 
     private EngineeringWorksite() { }
 
-    public static EngineeringWorkAssembly compile(FrontierWorldState state, RouteConstruction project) {
+    public static EngineeringWorkAssembly compile(FrontierWorldState state, EngineeringWorkOrder project) {
         Objects.requireNonNull(state, "engineering work-site state");
         EngineeringRecoveryTeam team = requireTeam(project);
         List<BlockPosition> slots = slots(state.bootstrap(), state.routeTopology(), project);
@@ -154,7 +154,7 @@ public final class EngineeringWorksite {
         return actorIndex;
     }
 
-    static void validate(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
+    static void validate(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
         if (project.assembly().isEmpty()) return;
         EngineeringRecoveryTeam team = requireTeam(project);
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
@@ -168,9 +168,8 @@ public final class EngineeringWorksite {
         }
     }
 
-    public static BlockPosition workCell(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
-        List<BlockPosition> cells = project.workCells().isEmpty()
-                ? FrontierRouteNetwork.constructionCells(bootstrap, topology, project.settlementId(), project.waypoints()) : project.workCells();
+    public static BlockPosition workCell(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
+        List<BlockPosition> cells = project.workCells();
         if (project.confirmedCells() >= cells.size()) throw new IllegalArgumentException("ready construction has no remaining work cell");
         return cells.get(project.confirmedCells());
     }
@@ -184,21 +183,21 @@ public final class EngineeringWorksite {
      * already observed loss can survive validation and explain that failure.  A failed project
      * cannot advance its cursor, therefore this is still one exact bounded footprint.</p>
      */
-    public static List<BlockPosition> intactStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
+    public static List<BlockPosition> intactStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
         Objects.requireNonNull(bootstrap, "engineering staging bootstrap"); Objects.requireNonNull(topology, "engineering staging topology");
         Objects.requireNonNull(project, "engineering staging project");
-        if (project.team().isEmpty() || project.confirmedCells() >= project.workCells().size()) return List.of();
-        return List.copyOf(slots(bootstrap, topology, project).subList(0, project.team().orElseThrow().memberIds().size()));
+        if (project.engineeringTeam().isEmpty() || project.confirmedCells() >= project.workCells().size()) return List.of();
+        return List.copyOf(slots(bootstrap, topology, project).subList(0, project.engineeringTeam().orElseThrow().memberIds().size()));
     }
 
     /** Current desired staging exists only for a supplied, assembled active work front. */
-    public static List<BlockPosition> activeStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
-        if (project.status() != RouteConstructionStatus.BUILDING || project.cargoId().isEmpty()
+    public static List<BlockPosition> activeStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
+        if (!project.building() || project.cargoId().isEmpty()
                 || project.assembly().isEmpty() || !project.assembly().orElseThrow().complete()) return List.of();
         return intactStagingCells(bootstrap, topology, project);
     }
 
-    private static List<BlockPosition> slots(FrontierBootstrap bootstrap, RouteTopology topology, RouteConstruction project) {
+    private static List<BlockPosition> slots(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
         // Canonical actor positions are column anchors; the NeoForge materializer resolves
         // their actual standing cell through FrontierV3StandingPosition. Keep the engineering
         // corridor on the same anchor plane as the route floor rather than embedding adapter Y.
@@ -206,12 +205,12 @@ public final class EngineeringWorksite {
         return SLOT_OFFSETS.stream().map(offset -> anchorPlane.offset(offset.x(), 0, offset.z())).toList();
     }
 
-    private static EngineeringRecoveryTeam requireTeam(RouteConstruction project) {
+    private static EngineeringRecoveryTeam requireTeam(EngineeringWorkOrder project) {
         Objects.requireNonNull(project, "engineering work-site project");
-        if (project.status() != RouteConstructionStatus.BUILDING || project.team().isEmpty()) {
+        if (!project.building() || project.engineeringTeam().isEmpty()) {
             throw new IllegalArgumentException("engineering work-site needs one active exact construction crew");
         }
-        return project.team().orElseThrow();
+        return project.engineeringTeam().orElseThrow();
     }
 
     private static final class AttemptBudget {

@@ -39,6 +39,7 @@ public final class FrontierWorldStateUpdate {
         PHYSICAL_DELTAS,
         AMBIENT_LEASES,
         ROUTE_CONSTRUCTIONS,
+        ROUTE_MAINTENANCES,
         ROUTE_TOPOLOGY,
         STRATEGIC_PLANS,
         HUMAN_POPULATION,
@@ -63,6 +64,7 @@ public final class FrontierWorldStateUpdate {
     private Map<BlockPosition, PhysicalDelta> physicalDeltas;
     private Map<SubjectId, AmbientActorLease> ambientLeases;
     private Map<SubjectId, RouteConstruction> routeConstructions;
+    private Map<SubjectId, RouteMaintenance> routeMaintenances;
     private RouteTopology routeTopology;
     private StrategicPlanState strategicPlans;
     private HumanPopulation humanPopulation;
@@ -123,6 +125,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate routeConstructions(Map<SubjectId, RouteConstruction> next) {
         mark(Component.ROUTE_CONSTRUCTIONS); routeConstructions = require(next, "route constructions"); return this;
     }
+    public FrontierWorldStateUpdate routeMaintenances(Map<SubjectId, RouteMaintenance> next) {
+        mark(Component.ROUTE_MAINTENANCES); routeMaintenances = require(next, "route maintenances"); return this;
+    }
     public FrontierWorldStateUpdate routeTopology(RouteTopology next) {
         mark(Component.ROUTE_TOPOLOGY); routeTopology = require(next, "route topology"); return this;
     }
@@ -155,6 +160,7 @@ public final class FrontierWorldStateUpdate {
     Map<BlockPosition, PhysicalDelta> physicalDeltas(FrontierWorldState state) { return changed(Component.PHYSICAL_DELTAS, physicalDeltas, state.physicalDeltas()); }
     Map<SubjectId, AmbientActorLease> ambientLeases(FrontierWorldState state) { return changed(Component.AMBIENT_LEASES, ambientLeases, state.ambientLeases()); }
     Map<SubjectId, RouteConstruction> routeConstructions(FrontierWorldState state) { return changed(Component.ROUTE_CONSTRUCTIONS, routeConstructions, state.routeConstructions()); }
+    Map<SubjectId, RouteMaintenance> routeMaintenances(FrontierWorldState state) { return changed(Component.ROUTE_MAINTENANCES, routeMaintenances, state.routeMaintenances()); }
     RouteTopology routeTopology(FrontierWorldState state) { return changed(Component.ROUTE_TOPOLOGY, routeTopology, state.routeTopology()); }
     StrategicPlanState strategicPlans(FrontierWorldState state) { return changed(Component.STRATEGIC_PLANS, strategicPlans, state.strategicPlans()); }
     HumanPopulation humanPopulation(FrontierWorldState state) { return changed(Component.HUMAN_POPULATION, humanPopulation, state.humanPopulation()); }

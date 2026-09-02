@@ -79,6 +79,15 @@ if (frontierV3PilotCatalog.getProperty("${frontierV3PilotProfile}.runner") != 'd
 }
 def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
 def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
+def frontierV3GrayboxDisabledModsCatalog = new File(rootProject.projectDir.parentFile, 'config/graybox-disabled-mods.txt')
+if (!frontierV3GrayboxDisabledModsCatalog.isFile()) {
+    throw new GradleException("Frontier v3 pack-pilot requires the shared graybox mod catalog at ${frontierV3GrayboxDisabledModsCatalog}")
+}
+def frontierV3GrayboxDisabledMods = frontierV3GrayboxDisabledModsCatalog.readLines()
+        .collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith('#') }
+if (frontierV3GrayboxDisabledMods.isEmpty()) {
+    throw new GradleException("Frontier v3 pack-pilot graybox mod catalog is empty: ${frontierV3GrayboxDisabledModsCatalog}")
+}
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
@@ -796,6 +805,11 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
         // NeoForge ModDev contributes the current Pale Mirror source set to the
         // run. Leaving this pack artifact beside it silently wins class lookup.
         exclude 'mods/pale_mirror-hosted.jar'
+        // The visible pack-backed pilot must match the live source-graybox
+        // server's gameplay exclusions. This shared catalog is the sole owner;
+        // do not let an enabled client-side infection/mob mod create a second
+        // visual/runtime authority or reject the ordinary server connection.
+        frontierV3GrayboxDisabledMods.each { exclude "mods/${it}" }
     }
     into(frontierV3PilotPackClientDirectory)
     doFirst {
@@ -806,6 +820,12 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
     doLast {
         if (new File(frontierV3PilotPackClientDirectory.get().asFile, 'mods/pale_mirror-hosted.jar').isFile()) {
             throw new GradleException('Frontier v3 pilot profile must not contain the hosted Pale Mirror jar')
+        }
+        def leakedDisabledMod = frontierV3GrayboxDisabledMods.find {
+            new File(frontierV3PilotPackClientDirectory.get().asFile, "mods/${it}").isFile()
+        }
+        if (leakedDisabledMod != null) {
+            throw new GradleException("Frontier v3 pack-pilot retained graybox-disabled mod ${leakedDisabledMod}")
         }
     }
 }

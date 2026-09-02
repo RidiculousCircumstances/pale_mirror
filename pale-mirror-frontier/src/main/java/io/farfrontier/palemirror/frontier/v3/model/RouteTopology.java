@@ -98,6 +98,30 @@ public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementSuppl
         return next.equals(supplyAvailability) ? this : new RouteTopology(replacementSupplyRoutes, next);
     }
 
+    /**
+     * Rebuilds only the finite retained edge-availability view from exact current route-loss
+     * evidence.  A repair may therefore reopen an edge only after every loss that affects that
+     * edge has a separate observed receipt; it cannot treat one repaired block as permission to
+     * hide a second physical hole.
+     */
+    public RouteTopology reconcileSupplyAvailability(FrontierBootstrap bootstrap, Map<BlockPosition, PhysicalDelta> deltas) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(deltas, "physical deltas");
+        Map<SubjectId, Map<TraversalEdgeId, TraversalAvailability>> rebuilt = new LinkedHashMap<>();
+        for (Settlement settlement : bootstrap.settlements()) {
+            TraversalTopology topology = supplyTraversalTopology(bootstrap, settlement.id());
+            Map<TraversalEdgeId, TraversalAvailability> edges = new LinkedHashMap<>();
+            deltas.values().stream()
+                    .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
+                    .filter(delta -> delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent())
+                    .filter(delta -> delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
+                            || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent())
+                    .forEach(delta -> FrontierRouteNetwork.affectedTraversalEdges(topology, delta.position())
+                            .forEach(edge -> edges.put(edge, TraversalAvailability.BLOCKED)));
+            if (!edges.isEmpty()) rebuilt.put(settlement.id(), Map.copyOf(edges));
+        }
+        return rebuilt.equals(supplyAvailability) ? this : new RouteTopology(replacementSupplyRoutes, rebuilt);
+    }
+
     public boolean supplyPassable(FrontierBootstrap bootstrap, SubjectId settlementId) {
         return supplyTraversalTopology(bootstrap, settlementId).edges().stream()
                 .allMatch(edge -> edge.traversableBy(TraversalCapability.PEDESTRIAN));
