@@ -44,8 +44,8 @@ class FrontierBootstrapperTest {
     void bootstrapIsSeedDeterministicAndLocaleIndependent() {
         WorldId world = new WorldId("frontier:bootstrap");
         FrontierBootstrap first = FrontierBootstrapper.create(world, 7L);
-        assertEquals("1eafc566435e3cd72a5f69bbc88d92ff5c6bf458dea98ff344d535c790145115", first.canonicalSha256());
-        assertEquals("56d6398d1143604d7617a6858621b4752894e98c86b93a7780ff6e4b77e43392", FrontierBootstrapper.create(world, 8L).canonicalSha256());
+        assertEquals("a943888ba67862e12412af158e01960cea9743fcb1d90d411c12066121527c18", first.canonicalSha256());
+        assertEquals("0430fcb4936fe1da6be1dd29b6823595c25a3625b8ac239ac5a818298760853c", FrontierBootstrapper.create(world, 8L).canonicalSha256());
         assertEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 7L).canonicalSha256());
         assertNotEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 8L).canonicalSha256());
 
@@ -64,9 +64,10 @@ class FrontierBootstrapperTest {
         Settlement settlement = bootstrap.settlements().getFirst();
         int count = settlement.residents().size() + 1;
 
-        List<BlockPosition> batch = FrontierSettlementActorSlots.slots(bootstrap.bounds(), bootstrap.terrain(), settlement.anchor(), settlement.structures(), count);
+        int housingBeds = bootstrap.ruleset().facilityCapacity().intactHousingBeds();
+        List<BlockPosition> batch = FrontierSettlementActorSlots.residentSlots(bootstrap.bounds(), bootstrap.terrain(), settlement, housingBeds, count);
         for (int ordinal = 0; ordinal < count; ordinal++) {
-            assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.slot(bootstrap.bounds(), bootstrap.terrain(), settlement, ordinal));
+            assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.residentSlot(bootstrap.bounds(), bootstrap.terrain(), settlement, housingBeds, ordinal));
         }
     }
 }

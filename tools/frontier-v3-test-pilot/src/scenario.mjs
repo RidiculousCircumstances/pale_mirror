@@ -110,7 +110,9 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (['walk', 'look', 'break', 'place', 'open_container', 'wait_until_block'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (['walk', 'break', 'place', 'open_container'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
+      if (action.type === 'wait_until_block' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'place' && (!validItemKind(action.item) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('place needs a known item, block position and timeoutMs 0..120000');
       }
@@ -126,7 +128,7 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
         throw new Error('wait_until_container_item needs a container, exact item/count and timeoutMs 0..300000');
       }
-      if (action.type === 'assert_visible_block' && (!validPosition(action.position) || !Number.isInteger(action.timeoutMs)
+      if (action.type === 'assert_visible_block' && (!validResolvablePosition(action.position) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('assert_visible_block needs position and timeoutMs 0..120000');
       }
@@ -285,6 +287,20 @@ function validatePosition(value) {
 
 function validPosition(value) {
   return value && Number.isInteger(value.x) && Number.isInteger(value.y) && Number.isInteger(value.z);
+}
+
+/**
+ * A materialization scenario may follow the current first crop of one named
+ * site through the existing read-only diagnostic. The narrow form keeps
+ * movement/mutation actions literal and prevents stale generated coordinates
+ * from becoming a hidden part of the test contract.
+ */
+function validResolvablePosition(value) {
+  if (validPosition(value)) return true;
+  const reference = value?.diagnostic;
+  return value && typeof value === 'object' && Object.keys(value).length === 1
+    && reference && typeof reference === 'object' && Object.keys(reference).length === 3
+    && reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop';
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }

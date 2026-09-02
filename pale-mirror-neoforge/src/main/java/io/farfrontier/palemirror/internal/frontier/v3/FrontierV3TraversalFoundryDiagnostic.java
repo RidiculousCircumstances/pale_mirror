@@ -37,7 +37,7 @@ final class FrontierV3TraversalFoundryDiagnostic {
                     "{\"schema\":1,\"kind\":\"traversal_foundry\",\"id\":\"" + quote(requestedPhase)
                             + "\",\"status\":\"unavailable\",\"reason\":\"unsupported_phase\"}");
         }
-        if (phase == FoundryAuditPhase.COMPILED && requested.facilityScope().isPresent()) {
+        if (phase == FoundryAuditPhase.COMPILED && requested.scopeId().isPresent()) {
             return FrontierV3DiagnosticJson.bounded(VIEW, requestedPhase, checkpoint,
                     "{\"schema\":1,\"kind\":\"traversal_foundry\",\"id\":\"" + quote(requestedPhase)
                             + "\",\"status\":\"unavailable\",\"reason\":\"scope_requires_runtime\"}");
@@ -46,7 +46,7 @@ final class FrontierV3TraversalFoundryDiagnostic {
         try {
             report = phase == FoundryAuditPhase.COMPILED
                     ? FrontierV3TraversalFoundryAudit.auditCompiled(state)
-                    : FrontierV3TraversalFoundryAudit.audit(state, level, phase, requested.facilityScope());
+                    : FrontierV3TraversalFoundryAudit.audit(state, level, phase, requested.scopeId());
         } catch (IllegalArgumentException invalidScope) {
             return FrontierV3DiagnosticJson.bounded(VIEW, requestedPhase, checkpoint,
                     "{\"schema\":1,\"kind\":\"traversal_foundry\",\"id\":\"" + quote(requestedPhase)
@@ -95,8 +95,8 @@ final class FrontierV3TraversalFoundryDiagnostic {
                 + ",\"z\":" + finding.position().z() + "},\"message\":\"" + quote(finding.message()) + "\"}";
     }
 
-    /** `settled@structure:1-infirmary` is one read-only naturally visited facility scope. */
-    private record Requested(FoundryAuditPhase phase, Optional<SubjectId> facilityScope, String scopeText) {
+    /** A runtime scope is either a semantic facility or one immutable topology; it never loads or projects cells. */
+    private record Requested(FoundryAuditPhase phase, Optional<SubjectId> scopeId, String scopeText) {
         static Requested parse(String requested) {
             int separator = requested.indexOf('@');
             String phaseText = (separator < 0 ? requested : requested.substring(0, separator)).trim();

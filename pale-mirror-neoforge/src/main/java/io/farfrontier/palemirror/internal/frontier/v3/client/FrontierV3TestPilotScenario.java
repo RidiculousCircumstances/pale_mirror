@@ -67,7 +67,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
                     (type.equals("assert_fixture") && !validFixture(action)) ||
-                    (type.equals("assert_visible_block") && (!position(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("assert_visible_block") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("assert_visible_entity") && !validVisibleEntity(action)) ||
                     (type.equals("look_nearest_entity") && !validLookNearestEntity(action)) ||
@@ -78,7 +78,9 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
                     (type.equals("place") && (!position(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
-                    ((type.equals("look") || type.equals("walk") || type.equals("break") || type.equals("wait_until_block")) && !action.has("position") && !action.has("at"))) {
+                    (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
+                    ((type.equals("walk") || type.equals("break")) && !position(action)) ||
+                    (type.equals("wait_until_block") && !resolvablePosition(action, "position"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
         }
@@ -241,6 +243,22 @@ final class FrontierV3TestPilotScenario {
     private static boolean position(JsonObject action) {
         JsonObject position = action.has("position") ? action.getAsJsonObject("position") : action.getAsJsonObject("at");
         return position != null && whole(position, "x") && whole(position, "y") && whole(position, "z");
+    }
+
+    /**
+     * Dynamic coordinates are intentionally limited to the explicit first-crop
+     * anchor published by one named site diagnostic. They are usable only by
+     * read-only visual/wait actions, never by pilot mutation actions.
+     */
+    private static boolean resolvablePosition(JsonObject action, String field) {
+        JsonObject value = action.getAsJsonObject(field);
+        if (value == null) return false;
+        if (whole(value, "x") && whole(value, "y") && whole(value, "z")) return true;
+        JsonObject reference = value.getAsJsonObject("diagnostic");
+        return reference != null && reference.entrySet().size() == 3
+                && reference.has("view") && reference.get("view").isJsonPrimitive() && reference.get("view").getAsString().equals("site")
+                && reference.has("id") && reference.get("id").isJsonPrimitive() && requiredId(reference, "id", "site:")
+                && reference.has("field") && reference.get("field").isJsonPrimitive() && reference.get("field").getAsString().equals("firstCrop");
     }
 
     private static boolean offset(JsonObject action) {

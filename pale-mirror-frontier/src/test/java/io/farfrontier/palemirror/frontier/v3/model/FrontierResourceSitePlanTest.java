@@ -23,14 +23,17 @@ class FrontierResourceSitePlanTest {
         assertThrows(UnsupportedOperationException.class, () -> first.clear(), "cached field geometry must remain immutable");
         Set<BlockPosition> structureCells = FrontierGrayboxPlan.compile(FrontierWorldState.initial(bootstrap)).cells().keySet();
         Set<BlockPosition> cropCells = new HashSet<>();
+        Set<BlockPosition> managedCells = new HashSet<>();
 
         assertEquals(first, second); assertEquals(12, first.size());
         for (ResourceSite site : first.values()) {
             assertEquals(ResourceSiteKind.WHEAT_FIELD, site.kind()); assertEquals(64, site.cropSlots().size());
             assertEquals(site.cropSlots().stream().map(slot -> slot.offset(0, -1, 0)).toList(), site.soilSlots());
-            assertTrue(site.cropSlots().stream().allMatch(bootstrap.bounds()::contains));
-            assertTrue(site.cropSlots().stream().noneMatch(structureCells::contains));
+            assertTrue(site.managedSlots().stream().allMatch(bootstrap.bounds()::contains));
+            assertTrue(site.managedSlots().stream().noneMatch(structureCells::contains),
+                    () -> "field must not claim an immutable structure, route or public-access cell: " + site.id());
             assertTrue(cropCells.addAll(site.cropSlots()), "crop sites must not overlap each other");
+            assertTrue(managedCells.addAll(site.managedSlots()), "no managed field cell may overlap another field: " + site.id());
         }
     }
 }

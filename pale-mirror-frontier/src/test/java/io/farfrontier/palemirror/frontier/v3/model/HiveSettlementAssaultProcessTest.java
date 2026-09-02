@@ -180,10 +180,29 @@ class HiveSettlementAssaultProcessTest {
         }
         assertEquals(SettlementAssaultStatus.WAITING_FOR_BATTLE, state.strategicPlans().settlementAssaults().get(started.id()).status());
         SubjectId defender = started.defenderIds().getFirst();
-        state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(33, 0, 0))));
+        state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(43, 0, 0))));
         List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
         assertEquals(List.of(new SettlementAssaultTransition(started.id(), SettlementAssaultStatus.CONFLICT)),
                 conflict.stream().map(ProposedEvent::payload).toList());
+    }
+
+    @Test void battlefieldEnvelopeComesFromTheResidentApronRatherThanTheFormerThirtyTwoBlockCircle() {
+        Fixture fixture = fixture(true);
+        Settlement settlement = FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), fixture.sighting().settlementId());
+        SubjectId perimeterResident = fixture.state().humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(settlement.id()))
+                .filter(value -> {
+                    BlockPosition position = fixture.state().actorLocations().get(value.id()).supportingSurface().support();
+                    long x = (long) position.x() - settlement.anchor().x(), z = (long) position.z() - settlement.anchor().z();
+                    return x * x + z * z > 32L * 32L;
+                }).map(ResidentProfile::id).findFirst().orElseThrow();
+
+        assertTrue(FrontierSettlementAssaultBattlefield.attackerFloors(fixture.state(), fixture.sighting(), List.of(perimeterResident), 1).isPresent(),
+                "one exact resident on the immutable apron remains a valid defender, not an off-map body");
+        FrontierWorldState outside = fixture.state().withActorBody(perimeterResident,
+                BodyPosition.above(new SurfaceAnchor(settlement.anchor().offset(43, 0, 0))));
+        assertTrue(FrontierSettlementAssaultBattlefield.attackerFloors(outside, fixture.sighting(), List.of(perimeterResident), 1).isEmpty(),
+                "the battlefield remains bounded by the declared resident plan instead of admitting arbitrary actor coordinates");
     }
 
     @Test void typedHotSceneRetainsAnExactCargoFreeAssaultAcrossSnapshotAndRelease() {

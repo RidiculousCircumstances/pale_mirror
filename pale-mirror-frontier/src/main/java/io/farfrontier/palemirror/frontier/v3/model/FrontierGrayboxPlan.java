@@ -280,6 +280,14 @@ public final class FrontierGrayboxPlan {
         if (added != null) return intactOrganCell(added, position);
         for (Settlement settlement : bootstrap.settlements()) {
             if (!settlement.id().equals(owner)) continue;
+            SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+            if (ingress.foundationCells().contains(position)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+            }
+            if (ingress.ownedSurfaces().stream().map(SurfaceAnchor::support).anyMatch(position::equals)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+            }
             if (SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement).contains(position)) {
                 return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
@@ -388,6 +396,12 @@ public final class FrontierGrayboxPlan {
             if (!cells.containsKey(position)) add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
         });
         for (Settlement settlement : bootstrap.settlements()) {
+            SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+            for (BlockPosition foundation : ingress.foundationCells()) {
+                if (cells.containsKey(foundation)) continue;
+                add(cells, foundation, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+            }
             for (BlockPosition foundation : SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement)) {
                 if (cells.containsKey(foundation)) continue;
                 add(cells, foundation, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
@@ -403,6 +417,13 @@ public final class FrontierGrayboxPlan {
             add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         });
         for (Settlement settlement : bootstrap.settlements()) {
+            SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                    bootstrap.ruleset().facilityCapacity().intactHousingBeds());
+            for (SurfaceAnchor surface : ingress.ownedSurfaces()) {
+                BlockPosition position = surface.support();
+                if (cells.containsKey(position)) continue;
+                add(cells, position, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+            }
             for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(settlement)) {
                 // The Hall route node is deliberately already route-network owned. Every other
                 // compiled sidewalk cell belongs to the settlement's public circulation plan;

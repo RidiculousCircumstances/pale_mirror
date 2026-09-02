@@ -52,14 +52,16 @@ class RouteSceneReturnRepairTest {
         submit(engine, world, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
         submit(engine, world, new SceneLeaseReleased(lease.id(), memberPositions(state(engine), operation)));
 
-        for (long tick = engine.checkpoint().instant().ticks() + 1L; tick <= 6_000L; tick++) {
+        long start = engine.checkpoint().instant().ticks();
+        for (long tick = start + 1L; tick <= start + 6_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         }
 
         FrontierWorldState after = state(engine);
         assertTrue(after.operations().get(operation.id()).stage() == OperationStage.FAILED);
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
-                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED));
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED),
+                () -> "route loss did not reach a confirmed patrol: " + after.strategicPlans().routePatrols());
         assertTrue(after.routeMaintenances().values().stream().anyMatch(maintenance -> maintenance.settlementId().equals(operation.settlementId())
                         && maintenance.repairCell().equals(obstruction) && maintenance.status() == RouteMaintenanceStatus.BUILDING),
                 () -> "confirmed patrol did not start exact route maintenance; maintenance=" + after.routeMaintenances());

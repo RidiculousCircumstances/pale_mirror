@@ -161,10 +161,7 @@ public final class FrontierV3TestPilotClient {
                 case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> inspect(minecraft, action);
-                case "look" -> {
-                    look(minecraft, position(action, action.has("at") ? "at" : "position"));
-                    advance(type);
-                }
+                case "look" -> lookAtPosition(minecraft, action);
                 case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
                 case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
@@ -279,7 +276,8 @@ public final class FrontierV3TestPilotClient {
     }
 
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
-        BlockPos target = position(action, "position");
+        BlockPos target = resolvedPosition(minecraft, action, "position");
+        if (target == null) return;
         String expected = action.has("block") ? action.get("block").getAsString() : "minecraft:air";
         String actual = BuiltInRegistries.BLOCK.getKey(minecraft.level.getBlockState(target).getBlock()).toString();
         if (actual.equals(expected)) { advance("wait_until_block"); return; }
@@ -349,7 +347,8 @@ public final class FrontierV3TestPilotClient {
 
     /** Proves the player camera itself is aimed at one loaded, non-air exact block. */
     private static void assertVisibleBlock(Minecraft minecraft, JsonObject action) {
-        BlockPos expected = position(action, "position");
+        BlockPos expected = resolvedPosition(minecraft, action, "position");
+        if (expected == null) return;
         Vec3 delta = Vec3.atCenterOf(expected).subtract(minecraft.player.getEyePosition());
         double distance = delta.length();
         boolean aimed = distance > 0.0D && distance <= 128.0D
@@ -686,6 +685,52 @@ public final class FrontierV3TestPilotClient {
         Vec3 delta = Vec3.atCenterOf(target).subtract(eye);
         minecraft.player.setYRot((float) (Mth.atan2(-delta.x, delta.z) * Mth.RAD_TO_DEG));
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
+    }
+
+    /**
+     * Looks at either a literal test coordinate or the one explicitly declared
+     * read-only field anchor. The latter prevents a materialization test from
+     * quietly retaining a stale generated coordinate when the immutable field
+     * compiler legitimately chooses another free side of the farm.
+     */
+    private static void lookAtPosition(Minecraft minecraft, JsonObject action) {
+        BlockPos target = resolvedPosition(minecraft, action, action.has("at") ? "at" : "position");
+        if (target == null) return;
+        look(minecraft, target);
+        advance("look");
+    }
+
+    /**
+     * Resolves the deliberately narrow dynamic-coordinate form used by field
+     * materialization scenarios. This is read-only client diagnostic traffic:
+     * it never grants a scenario an arbitrary server position or mutation
+     * authority. Other pilot actions continue to require literal coordinates.
+     */
+    private static BlockPos resolvedPosition(Minecraft minecraft, JsonObject action, String field) {
+        JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
+        if (value.has("x") && value.has("y") && value.has("z")) {
+            return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());
+        }
+        JsonObject reference = value.getAsJsonObject("diagnostic");
+        if (reference == null) throw new IllegalArgumentException(field + " requires a literal coordinate or field diagnostic anchor");
+        String siteId = reference.get("id").getAsString();
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("site", siteId));
+        // firstCrop is compiled into the immutable resource-site plan.  A preceding
+        // wait may have proved it during the prior action, so a non-waiting
+        // read-only action such as look must consume that exact recorded anchor
+        // rather than demand a new diagnostic response (and invent a timeout).
+        if (observed != null) {
+            JsonObject crop = observed.value().getAsJsonObject("firstCrop");
+            if (crop == null || !crop.has("x") || !crop.has("y") || !crop.has("z")) {
+                throw new IllegalStateException("site diagnostic lacks firstCrop for " + siteId);
+            }
+            return new BlockPos(crop.get("x").getAsInt(), crop.get("y").getAsInt(), crop.get("z").getAsInt());
+        }
+        if ((minecraft.level.getGameTime() - actionStartedTick) % 20L == 0L) {
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
+        }
+        timeout(minecraft, action, "timed out reading current field anchor " + siteId);
+        return null;
     }
 
     /**

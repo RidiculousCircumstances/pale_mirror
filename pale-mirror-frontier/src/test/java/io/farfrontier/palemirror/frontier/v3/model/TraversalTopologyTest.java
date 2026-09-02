@@ -197,4 +197,71 @@ class TraversalTopologyTest {
         assertEquals(damaged, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged)),
                 "the distinct facility datum, footing loss and consequence survive recovery");
     }
+
+    @Test void elevatedSettlementOwnsBoundedResidentApronAndGradeCheckedNaturalIngress() {
+        FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress-flat"), 91L);
+        Settlement original = flat.settlements().getFirst();
+        TerrainSurfacePlan terrain = flat.terrain();
+        for (SettlementStructure structure : original.structures()) {
+            for (SurfaceAnchor surface : SettlementStructureFootprint.supportSurfaces(structure)) {
+                terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+            }
+        }
+        for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(original)) {
+            terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+        }
+        FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress"), 91L,
+                FrontierRulesets.production(), terrain);
+        Settlement settlement = surveyed.settlements().getFirst();
+        int beds = surveyed.ruleset().facilityCapacity().intactHousingBeds();
+        SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(surveyed.bounds(), terrain, settlement, beds);
+        FrontierWorldState state = FrontierWorldState.initial(surveyed);
+        FrontierGrayboxPlan graybox = FrontierGrayboxPlan.compile(state);
+
+        assertEquals(beds, ingress.homeSlots().size());
+        assertTrue(ingress.homeSlots().stream().allMatch(position -> position.y() == settlement.anchor().y()),
+                "every exact resident home occupies the raised settlement apron, not an unplanned natural-height ring");
+        assertTrue(ingress.topology().edges().stream().anyMatch(edge -> edge.grade() == 1),
+                "the external ingress retains actual one-block grade edges to its surveyed natural endpoint");
+        BlockPosition homeFooting = ingress.homeSlots().getFirst().offset(0, -4, 0);
+        assertEquals(new GrayboxCell(homeFooting, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
+                graybox.cells().get(homeFooting), "the raised resident apron owns its complete lower support fill");
+        assertEquals(new GrayboxCell(ingress.homeSlots().getFirst(), settlement.id(), GrayboxMaterial.ROUTE,
+                        GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), graybox.cells().get(ingress.homeSlots().getFirst()),
+                "home surfaces are materialized public support, not abstract actor coordinates");
+        assertTrue(FrontierTraversalPlan.compile(state).topologies().containsKey(ingress.topology().id()),
+                "the ingress is retained as a named pedestrian topology instead of a navigator-only ramp");
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "the resident apron is derived again from the same immutable terrain/bootstrap contract after recovery");
+    }
+
+    @Test void residentIngressFailsClosedWhenNoSurveyedNaturalSupportIsReachableAtAValidGrade() {
+        FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress-blocked-flat"), 91L);
+        Settlement original = flat.settlements().getFirst();
+        TerrainSurfacePlan terrain = flat.terrain();
+        for (SettlementStructure structure : original.structures()) {
+            for (SurfaceAnchor surface : SettlementStructureFootprint.supportSurfaces(structure)) {
+                terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+            }
+        }
+        for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(original)) {
+            terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+        }
+        FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress-blocked"), 91L,
+                FrontierRulesets.production(), terrain);
+        Settlement settlement = surveyed.settlements().getFirst();
+        FacilityFacing facing = SettlementAccessPort.forHall(settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow()).facing();
+        // The plan's declared 30-cell apron is deliberately bounded; no farther surveyed
+        // column may cause it to manufacture a longer or alternate ingress.
+        BlockPosition gate = settlement.anchor().offset(facing.x() * 30, 0, facing.z() * 30);
+        for (int step = 1; step <= 32; step++) {
+            terrain = terrain.withSurveyedSupport(gate.x() + facing.x() * step, gate.z() + facing.z() * step, 100);
+        }
+
+        TerrainSurfacePlan unreachableTerrain = terrain;
+        assertThrows(IllegalArgumentException.class, () -> SettlementResidentIngressPlan.compile(surveyed.bounds(), unreachableTerrain,
+                settlement, surveyed.ruleset().facilityCapacity().intactHousingBeds()),
+                "the compiler must reject an unreachable site instead of cutting an unbounded ramp or inventing another entrance");
+    }
 }

@@ -12,7 +12,7 @@ class FrontierTraversalPlanTest {
         FrontierTraversalPlan plan = FrontierTraversalPlan.compile(state);
 
         assertEquals(36, plan.facilities().size());
-        assertEquals(60, plan.topologies().size(), "supply, circulation and one ingress topology for each Hall/infirmary/depot");
+        assertEquals(72, plan.topologies().size(), "supply, circulation, facility ingress and one resident ingress topology per settlement");
         for (FrontierTraversalPlan.FacilityBinding binding : plan.facilities().values()) {
             TraversalTopology publicTopology = plan.publicTopologyFor(binding.port().facilityId());
             assertTrue(publicTopology.nodes().containsValue(binding.port().exteriorApproach().getFirst()),

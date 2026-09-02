@@ -13,7 +13,6 @@ import java.util.Set;
 
 /** Pure compiler for the exact, local floor columns of a settlement assault. */
 public final class FrontierSettlementAssaultBattlefield {
-    private static final int MAX_HANDOFF_RADIUS = 32;
     private FrontierSettlementAssaultBattlefield() { }
 
     public static Optional<List<BlockPosition>> attackerFloors(FrontierWorldState state, HiveSettlementKnowledge.Sighting sighting,
@@ -23,14 +22,19 @@ public final class FrontierSettlementAssaultBattlefield {
             return Optional.empty();
         }
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
+        long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
         Set<BlockPosition> occupied = new LinkedHashSet<>();
         for (SubjectId defender : defenderIds) {
             ActorLocation location = state.actorLocations().get(defender);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) return Optional.empty();
+                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
+                    location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) {
+                return Optional.empty();
+            }
         }
         List<BlockPosition> choices = FrontierSettlementActorSlots.slots(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement.anchor(), structureCells,
-                attackerCount + occupied.size() + 16).stream().filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, position))
+                attackerCount + occupied.size() + 16).stream().filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(),
+                        settlementEnvelopeSquared, structureCells, position))
                 .filter(position -> !occupied.contains(position)).limit(attackerCount).toList();
         return choices.size() == attackerCount ? Optional.of(choices) : Optional.empty();
     }
@@ -42,13 +46,15 @@ public final class FrontierSettlementAssaultBattlefield {
         }
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
+        long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
         for (SubjectId member : members) {
             ActorLocation location = state.actorLocations().get(member);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
+                    || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
+                    location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
                 return Optional.empty();
             }
         }
@@ -57,15 +63,28 @@ public final class FrontierSettlementAssaultBattlefield {
     }
 
     static boolean localClearFloor(FrontierWorldState state, Settlement settlement, BlockPosition position) {
-        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()), position);
+        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), residentEnvelopeSquared(state, settlement),
+                FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()), position);
     }
 
-    private static boolean localClearFloor(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, BlockPosition position) {
-        return nearby(anchor, position) && FrontierSettlementActorSlots.clearFloor(bounds, structureCells, position);
+    private static boolean localClearFloor(WorldBounds bounds, BlockPosition anchor, long settlementEnvelopeSquared,
+                                           Set<BlockPosition> structureCells, BlockPosition position) {
+        return nearby(anchor, position, settlementEnvelopeSquared) && FrontierSettlementActorSlots.clearFloor(bounds, structureCells, position);
     }
 
-    private static boolean nearby(BlockPosition anchor, BlockPosition position) {
+    private static long residentEnvelopeSquared(FrontierWorldState state, Settlement settlement) {
+        return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
+                        state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).homeSlots().stream()
+                .mapToLong(position -> distanceSquared(settlement.anchor(), position)).max()
+                .orElseThrow(() -> new IllegalArgumentException("settlement battlefield requires one planned resident home"));
+    }
+
+    private static boolean nearby(BlockPosition anchor, BlockPosition position, long settlementEnvelopeSquared) {
+        return distanceSquared(anchor, position) <= settlementEnvelopeSquared;
+    }
+
+    private static long distanceSquared(BlockPosition anchor, BlockPosition position) {
         long x = (long) anchor.x() - position.x(), y = (long) anchor.y() - position.y(), z = (long) anchor.z() - position.z();
-        return x * x + y * y + z * z <= (long) MAX_HANDOFF_RADIUS * MAX_HANDOFF_RADIUS;
+        return x * x + y * y + z * z;
     }
 }

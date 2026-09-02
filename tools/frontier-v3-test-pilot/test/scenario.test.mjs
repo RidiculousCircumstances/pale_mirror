@@ -126,6 +126,18 @@ test('semantic visible checks are bounded evidence actions, not world mutations'
   assert.throws(() => validateScenario({ ...visible, setup: [visible.actions[0]] }), /unsupported setup action/);
 });
 
+test('field materialization may follow one declared read-only crop anchor but mutation remains literal', () => {
+  const crop = { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'firstCrop' } };
+  const anchored = { ...scenario, setup: [], actions: [
+    { type: 'wait_until_block', position: crop, block: 'minecraft:wheat', timeoutMs: 30_000 },
+    { type: 'look', at: crop },
+    { type: 'assert_visible_block', position: crop, timeoutMs: 10_000 }
+  ], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(anchored));
+  assert.throws(() => validateScenario({ ...anchored, actions: [{ ...anchored.actions[0], position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'cropSlots' } } }] }), /position/);
+  assert.throws(() => validateScenario({ ...anchored, actions: [{ type: 'break', position: crop }] }), /position/);
+});
+
 test('native pilot may right-click one visible v3 board and await only its local card receipt', () => {
   const interaction = { ...scenario, setup: [], actions: [
     { type: 'interact_board', text: 'WHEAT FIELD', title: 'Northwatch', position: { x: 4, y: 67, z: 5 }, radius: 3, maxDistance: 64, maxAngleDeg: 50, timeoutMs: 30_000 }

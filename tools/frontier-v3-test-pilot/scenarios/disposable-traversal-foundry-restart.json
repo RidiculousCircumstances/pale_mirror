@@ -6,7 +6,7 @@
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 60, "ports": 36, "errors": 0, "blockers": 0 } }
+      { "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 72, "ports": 36, "errors": 0, "blockers": 0 } }
     ] }
   ],
   "actions": [
@@ -21,7 +21,7 @@
     { "type": "inspect", "view": "traversal_foundry", "id": "reloaded@structure:1-infirmary" }
   ],
   "assertions": [
-    { "after": 1, "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 60, "ports": 36, "errors": 0, "blockers": 0 } },
+    { "after": 1, "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 72, "ports": 36, "errors": 0, "blockers": 0 } },
     { "after": 4, "view": "traversal_foundry", "id": "settled@structure:1-infirmary", "expect": { "status": "ok", "phase": "SETTLED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 } },
     { "after": 9, "view": "traversal_foundry", "id": "reloaded@structure:1-infirmary", "expect": { "status": "ok", "phase": "RELOADED", "scope": "structure:1-infirmary", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "blockedThroats": 0 } }
   ],

@@ -26,8 +26,8 @@ class FrontierV3TraversalFoundryAuditTest {
         var report = FrontierV3TraversalFoundryAudit.auditCompiled(state);
 
         assertTrue(report.passed(), report::summary);
-        assertEquals(60D, metric(report, "frontier.traversal.topologies"),
-                "each of twelve settlements contributes route, circulation, Hall, depot and infirmary topology");
+        assertEquals(72D, metric(report, "frontier.traversal.topologies"),
+                "each of twelve settlements contributes route, circulation, Hall, depot, infirmary and resident-ingress topology");
         assertEquals(36D, metric(report, "frontier.port.count"),
                 "the depot service port is a first-class semantic port alongside Hall and infirmary");
         assertTrue(metric(report, "frontier.traversal.edges") > 0D);

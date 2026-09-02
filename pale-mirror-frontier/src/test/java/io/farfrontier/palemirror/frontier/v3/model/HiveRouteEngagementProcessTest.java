@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,10 +61,11 @@ class HiveRouteEngagementProcessTest {
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = StrategicObjectiveProcess.plan(state,
                 StrategicObjectiveProcess.review(hive, 1, 2_600L));
 
-        StrategicTask task = ((StrategicTaskPlanned) events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
-                .filter(StrategicTaskPlanned.class::isInstance).findFirst().orElseThrow()).task();
-        assertTrue(task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM || task.kind() == StrategicTaskKind.SPREAD_INFECTION_CELL);
-        assertTrue(task.operationTarget().isEmpty());
+        List<StrategicTask> tasks = events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(StrategicTaskPlanned.class::isInstance).map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task).toList();
+        assertFalse(tasks.stream().anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION),
+                "an unobserved human operation may not become a hive target");
+        assertTrue(tasks.stream().allMatch(task -> task.operationTarget().isEmpty()));
         assertTrue(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScheduleEffect.Created.class::isInstance));
     }
 

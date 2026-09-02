@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 101 and persistence-envelope v10 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 102 and persistence-envelope v11 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -167,12 +167,20 @@
   order. The native `disposable-traversal-foundry-restart` scenario was refreshed from
   its stale 48-topology/24-port contract to the existing three-port-per-settlement
   60/36 plan, then passed `COMPILED → SETTLED → RELOADED` with zero
-  pending/mismatch/blockers after graceful restart. Committed as `0774dce1`; focused
+  pending/mismatch/blockers after graceful restart. Committed as `9b9a8ff1`; focused
   pure/Node checks and the full critical gate pass (275/275 GameTests, guardrails/check,
   build and packaged-JAR verification). This is deliberately not full terrain closure:
-  resident perimeter slots still
-  need a bounded planned apron/ingress to elevated sites, then bridge/rail-grade,
-  foundation repair/replan and cross-family HOT/COLD evidence remain.
+  resident perimeter slots now use a bounded planned apron/ingress to elevated sites:
+  exact homes are capacity-derived public surfaces at the finished settlement datum,
+  joined through the semantic Hall port to one retained grade-checked natural endpoint.
+  If the immutable survey cannot reach an endpoint in 32 cells, bootstrap fails closed
+  instead of extending geometry or inventing an entrance. The focused non-flat,
+  unreachable-ingress and snapshot-recovery checks pass; native
+  `disposable-resident-ingress-restart` run `23dfba38-244b-412d-8fec-2d7642b8621e`
+  passed `COMPILED → SETTLED → RELOADED` with 265 checked surfaces, 530 open edges and
+  zero pending/mismatch/unverified edges after graceful restart. Its clean technical
+  frame is `build/frontier-v3-scenarios/disposable_resident_ingress_restart-f43294c2-402e-4683-a2fe-7314a87c009c-northwatch-resident-apron.png`.
+  Bridge/rail-grade, foundation repair/replan and cross-family HOT/COLD evidence remain.
 - V3-AUD-019's raised-route provider now treats one player support break as one bounded
   durable physical-loss set: its directly supported `ROUTE_SURFACE` is observed and
   conflicted with the `ROUTE_FOUNDATION` before Vanilla removes either block. The same
@@ -189,12 +197,31 @@
   receipt creates inventory, completes the task and schedules regrowth. Its bounded site work
   set skips unloaded fields, so one deferred field cannot starve a later naturally loaded one;
   it runs as an `EFFECT` after active container provenance. The obsolete direct-output payload
-  and codec are removed, and the current snapshot schema 101/persistence envelope 10 require a fresh world.
+  and codec are removed, and the current snapshot schema 102/persistence envelope 11 require a fresh world.
   Focused normal/negative/head-of-line checks, economy 15/15, scene 38/38 and native
   `disposable_redwillow_harvest` run `9b424ba2-7a80-4a44-82e6-4da1aac5dd24` pass. The run proves
   exact wheat at `CONFIRMED` before graceful restart and the same field `GROWING` epoch 2 with an
   active physical depot afterwards; autonomous production legitimately transforms that wheat to
   exact bread, rather than the test mistaking a living economy for lost state.
+- The current terrain/materialization slice makes resident ingress and farm placement one
+  immutable bootstrap plan. Resource fields choose only a finite farm-relative side whose exact
+  64 crop, 64 soil and four water cells are disjoint from static structures, organs, route/public
+  surfaces, resident ingress/foundations and earlier fields; no fixed offset remains. Recovery now
+  recognises exactly either the original preparation intent or the same site's durable
+  neutral-baseline projection claim, rejecting every other claim. The initially failed native run
+  exposed a separate pilot bug—`look` demanded a new diagnostic and read a nonexistent timeout—so
+  read-only field presentation now consumes the preceding immutable anchor. Node schema checks
+  pass 32/32, focused Java parser checks pass, and one fullscreen native graceful restart run
+  `b043766f-2b2c-4fde-9a7d-ca03df0fcb0c` proves `site:4-wheat-field` remains `GROWING` at
+  `(377,64,-346)` after restart; the clean frame is
+  `build/frontier-v3-scenarios/disposable_redwillow_field_restart-b043766f-2b2c-4fde-9a7d-ca03df0fcb0c-after-restart-field.png`.
+  The full suite then exposed a test-harness, not product, defect: both 8x8
+  field GameTests declared Minecraft's 1x1 `bastion/mobs/empty` template, so
+  the runner could allocate another test across their physical footprint. Both
+  now declare the existing 38x48x38 air template, keeping field and chest in
+  their own allocated cell. The recovery GameTest proves the durable
+  projection claim after a ledger round-trip; Node 32/32, economy 17/17 and
+  the full 276/276 GameTest suite pass before the final packaging gate.
 - V3-AUD-022 now has one registered canonical route-maintenance chain: an observed retained PM
   surface/foundation loss admits one exact local engineering team, issues/returns its exact tool,
   advances one shared COLD/HOT worksite, separately observes one active maintenance-chest unit

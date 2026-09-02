@@ -39,7 +39,7 @@ public final class FrontierBootstrapper {
         java.util.Objects.requireNonNull(ruleset, "ruleset");
         java.util.Objects.requireNonNull(terrain, "terrain surface plan");
         List<Settlement> settlements = new ArrayList<>(12);
-        for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index, terrain));
+        for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index, ruleset, terrain));
         SubjectId hiveId = new SubjectId("hive:frontier");
         List<HiveNest> nests = List.of(
                 new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 64, 420)),
@@ -67,7 +67,7 @@ public final class FrontierBootstrapper {
         return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms), ruleset, terrain);
     }
 
-    private static Settlement settlement(long seed, int index, TerrainSurfacePlan terrain) {
+    private static Settlement settlement(long seed, int index, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
         SubjectId settlementId = new SubjectId("settlement:" + (index + 1));
         BlockPosition horizontalAnchor = new BlockPosition(ANCHORS[index][0], 0, ANCHORS[index][1]);
         List<SettlementStructure> structures = new ArrayList<>();
@@ -82,7 +82,10 @@ public final class FrontierBootstrapper {
         structures.replaceAll(structure -> new SettlementStructure(structure.id(), structure.settlementId(), structure.kind(),
                 structure.anchor().offset(0, deckY, 0), structure.facing()));
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
-        List<BlockPosition> placements = FrontierSettlementActorSlots.slots(BOUNDS, terrain, anchor, structures, residents);
+        // Compile exact future bed surfaces from the same immutable deck geometry before
+        // attaching the initial residents; no temporary invalid Settlement exists.
+        List<BlockPosition> placements = SettlementResidentIngressPlan.compile(BOUNDS, terrain, settlementId, anchor, structures,
+                ruleset.facilityCapacity().intactHousingBeds()).homeSlots().subList(0, residents);
         List<Resident> people = new ArrayList<>(residents);
         for (int ordinal = 0; ordinal < residents; ordinal++) {
             people.add(new Resident(new SubjectId("resident:" + (index + 1) + "-" + (ordinal + 1)), settlementId,

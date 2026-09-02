@@ -136,6 +136,18 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyTheReadOnlyFirstCropAnchorForFieldPresentationEvidence() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"wait_until_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"block":"minecraft:wheat","timeoutMs":10000},
+                {"type":"look","at":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}},
+                {"type":"assert_visible_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"timeoutMs":10000}]}""");
+        assertEquals(3, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}"""));
+    }
+
+    @Test
     void permitsOnlyBoundedLocalNamedEntityCameraTargets() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"look_nearest_entity","entityType":"minecraft:zombie",

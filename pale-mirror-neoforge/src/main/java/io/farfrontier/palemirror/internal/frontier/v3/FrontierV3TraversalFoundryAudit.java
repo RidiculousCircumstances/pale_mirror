@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalTopology;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalTopologyId;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -70,9 +71,9 @@ final class FrontierV3TraversalFoundryAudit {
      * being judged by unrelated, newly resident chunks elsewhere in the autonomous world.
      */
     static FoundryAuditReport audit(FrontierWorldState state, ServerLevel level, FoundryAuditPhase phase,
-                                    Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> facilityScope) {
+                                    Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> scopeId) {
         Objects.requireNonNull(state, "frontier Foundry state"); Objects.requireNonNull(phase, "frontier Foundry phase");
-        facilityScope = Objects.requireNonNull(facilityScope, "frontier Foundry facility scope");
+        scopeId = Objects.requireNonNull(scopeId, "frontier Foundry scope");
         if ((phase == FoundryAuditPhase.SETTLED || phase == FoundryAuditPhase.RELOADED) && level == null) {
             throw new IllegalArgumentException("runtime Foundry phase needs its already-loaded level");
         }
@@ -124,7 +125,7 @@ final class FrontierV3TraversalFoundryAudit {
         metrics.add(new FoundryMetric("frontier.port.count", plan.facilities().size(), "ports"));
         metrics.add(new FoundryMetric("frontier.port.disconnected", disconnectedPorts, "ports"));
         if (level != null && phase != FoundryAuditPhase.COMPILED && phase != FoundryAuditPhase.PLAN) {
-            inspectRuntime(plan, graybox, level, phase, facilityScope, findings, metrics);
+            inspectRuntime(plan, graybox, level, phase, scopeId, findings, metrics);
         }
         findings.sort(Comparator.comparing(FoundryFinding::severity).reversed().thenComparing(FoundryFinding::ruleId)
                 .thenComparing(FoundryFinding::targetId).thenComparing(value -> value.position().x())
@@ -135,9 +136,9 @@ final class FrontierV3TraversalFoundryAudit {
 
     private static void inspectRuntime(FrontierTraversalPlan plan, FrontierGrayboxPlan graybox, ServerLevel level,
                                        FoundryAuditPhase phase,
-                                       Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> facilityScope,
+                                       Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> scopeId,
                                        List<FoundryFinding> findings, List<FoundryMetric> metrics) {
-        RuntimeScope scope = runtimeScope(plan, facilityScope);
+        RuntimeScope scope = runtimeScope(plan, scopeId);
         Set<SurfaceAnchor> surfaces = scope.surfaces();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         int checked = 0, unloaded = 0, pending = 0, mismatch = 0;
@@ -245,14 +246,19 @@ final class FrontierV3TraversalFoundryAudit {
     }
 
     private static RuntimeScope runtimeScope(FrontierTraversalPlan plan,
-                                             Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> facilityScope) {
-        if (facilityScope.isEmpty()) {
+                                             Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> scopeId) {
+        if (scopeId.isEmpty()) {
             Set<SurfaceAnchor> surfaces = new LinkedHashSet<>();
             plan.topologies().values().forEach(topology -> surfaces.addAll(topology.nodes().values()));
             return new RuntimeScope(surfaces, List.copyOf(plan.facilities().values()), List.copyOf(plan.topologies().values()));
         }
-        FrontierTraversalPlan.FacilityBinding binding = plan.facilities().get(facilityScope.orElseThrow());
-        if (binding == null) throw new IllegalArgumentException("frontier Foundry has no facility scope: " + facilityScope.orElseThrow());
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId requested = scopeId.orElseThrow();
+        FrontierTraversalPlan.FacilityBinding binding = plan.facilities().get(requested);
+        if (binding == null) {
+            TraversalTopology topology = plan.topologies().get(new TraversalTopologyId(requested.value()));
+            if (topology == null) throw new IllegalArgumentException("frontier Foundry has no facility or topology scope: " + requested);
+            return new RuntimeScope(new LinkedHashSet<>(topology.nodes().values()), List.of(), List.of(topology));
+        }
         Set<SurfaceAnchor> surfaces = new LinkedHashSet<>(plan.publicTopologyFor(binding.port().facilityId()).nodes().values());
         surfaces.addAll(binding.port().ingressSurfaces());
         List<TraversalTopology> topologies = plan.topologies().values().stream()

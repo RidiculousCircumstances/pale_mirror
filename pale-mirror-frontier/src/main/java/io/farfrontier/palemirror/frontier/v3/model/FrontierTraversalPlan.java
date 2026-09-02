@@ -35,6 +35,9 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
             put(topologies, supply.id(), supply);
             TraversalTopology circulation = SettlementLocalCirculation.topology(settlement);
             put(topologies, circulation.id(), circulation);
+            SettlementResidentIngressPlan.Plan residentIngress = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(),
+                    settlement, state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
+            put(topologies, residentIngress.topology().id(), residentIngress.topology());
             for (SettlementStructure structure : settlement.structures()) {
                 FacilityTraversalPort port = switch (structure.kind()) {
                     case HALL -> SettlementAccessPort.forHall(structure).topologyPort();

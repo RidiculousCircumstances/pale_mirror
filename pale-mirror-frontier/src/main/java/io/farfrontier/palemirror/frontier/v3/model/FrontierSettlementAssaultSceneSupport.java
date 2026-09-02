@@ -7,7 +7,6 @@ import java.util.Set;
 
 /** Typed owner and admission rules for cargo-free settlement-assault scenes. */
 public final class FrontierSettlementAssaultSceneSupport {
-    private static final int MAX_HANDOFF_RADIUS = 32;
     private FrontierSettlementAssaultSceneSupport() { }
 
     public static SettlementAssault require(FrontierWorldState state, SettlementAssaultSceneCause cause) {
@@ -51,7 +50,9 @@ public final class FrontierSettlementAssaultSceneSupport {
             BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(floor)
                     || !floor.equals(candidate.memberPositions().get(member.actorId()))
-                    || !actual.add(member.actorId()) || !floors.add(floor) || !near(assault.settlementAnchor(), floor)) {
+                    || !actual.add(member.actorId()) || !floors.add(floor)
+                    || !FrontierSettlementAssaultBattlefield.localClearFloor(state,
+                    FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId()), floor)) {
                 throw new IllegalArgumentException("assault scene needs exact living actors at distinct local hand-off floors");
             }
         }
@@ -66,10 +67,5 @@ public final class FrontierSettlementAssaultSceneSupport {
         Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, assault.settlementId());
         return settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
                 .anyMatch(value -> conditions.get(value.id()) != StructureCondition.DESTROYED);
-    }
-
-    private static boolean near(BlockPosition anchor, BlockPosition floor) {
-        long x = (long) anchor.x() - floor.x(), y = (long) anchor.y() - floor.y(), z = (long) anchor.z() - floor.z();
-        return x * x + y * y + z * z <= (long) MAX_HANDOFF_RADIUS * MAX_HANDOFF_RADIUS;
     }
 }

@@ -83,8 +83,9 @@ class HumanPopulationProcessTest {
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         BlockPosition birthPosition = started.job().position();
         GrayboxCell birthFoot = FrontierGrayboxPlan.compile(active).cells().get(birthPosition);
-        assertTrue(birthFoot == null || birthFoot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
-                "a new resident may use a route surface but must not be born inside structure geometry");
+        assertTrue(birthFoot == null || birthFoot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE
+                        || birthFoot.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE,
+                "a new resident may use a public support surface but must not be born inside structure geometry");
         assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 1, 0)));
         assertEquals(null, FrontierGrayboxPlan.compile(active).cells().get(birthPosition.offset(0, 2, 0)));
         assertTrue(active.actorLocations().values().stream().noneMatch(actor -> FrontierTestPositions.supportOf(actor).equals(birthPosition)),

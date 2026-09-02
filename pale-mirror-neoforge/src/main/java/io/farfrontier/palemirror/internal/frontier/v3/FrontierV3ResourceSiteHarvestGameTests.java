@@ -30,7 +30,10 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
 
     private FrontierV3ResourceSiteHarvestGameTests() { }
 
-    @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    // The fixture writes an 8x8 field plus an adjacent chest.  Use the 38x48x38
+    // vanilla air template, not the 1x1 `mobs/empty` template, so GameTest's
+    // layout allocator reserves the complete physical footprint.
+    @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void exactMatureFieldBecomesOneTaggedDepotStackAndRecovers(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN)); prepare(level, site);
         helper.runAfterDelay(10, () -> {
@@ -74,10 +77,42 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
         });
     }
 
-    private static ResourceSite field(BlockPos origin) {
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    public static void coldProjectionClaimSurvivesRestartAsTheSameOwnedField(GameTestHelper helper) {
+        // Every GameTest has its own template cell. Keep the complete 8x8 footprint
+        // inside that cell: a remote local offset can overlap another test's template
+        // in the complete suite and is not evidence about the production executor.
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(helper.absolutePos(FIXTURE_ORIGIN), "site:resource-harvest-cold-projection");
+        prepare(level, site);
+        helper.runAfterDelay(10, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            PhysicalIntentId projection = new PhysicalIntentId("intent:site-projection-resource-harvest-cold-projection");
+            PhysicalIntentId preparation = new PhysicalIntentId("intent:site-prepare-resource-harvest-game-test");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
+                    "the recovery fixture must retain its isolated complete neutral baseline before the projection write");
+            ledger.reserve(site.id(), projection);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
+                    "a COLD-complete field must first retain the complete neutral-baseline projection");
+            ledger.activate(site.id());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 3),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the durable projection claim owns its observed field stage");
+            CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess());
+            ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, preparation, 3),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.CURRENT,
+                    "a restarted field accepts its own persisted COLD projection claim instead of manufacturing a conflict");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3)
+                            && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
+                    "recovery preserves the observed field and active exact ownership");
+            helper.succeed();
+        });
+    }
+
+    private static ResourceSite field(BlockPos origin) { return field(origin, "site:resource-harvest-game-test"); }
+    private static ResourceSite field(BlockPos origin, String id) {
         List<BlockPosition> crops = new ArrayList<>(64);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(origin.getX() + x, origin.getY(), origin.getZ() + z));
-        return new ResourceSite(new SubjectId("site:resource-harvest-game-test"), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, crops);
+        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, crops);
     }
     private static void prepare(ServerLevel level, ResourceSite site) {
         site.soilSlots().forEach(soil -> { BlockPos position = new BlockPos(soil.x(), soil.y(), soil.z()); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -89,4 +124,5 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
         site.cropSlots().stream().filter(crop -> crop.x() == minX).forEach(crop -> level.setBlock(new BlockPos(crop.x() - 1, crop.y(), crop.z()), Blocks.GLOWSTONE.defaultBlockState(), 3));
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(new BlockPos(crop.x() + 1, crop.y(), crop.z()), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
+
 }

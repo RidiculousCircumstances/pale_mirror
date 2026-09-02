@@ -25,6 +25,23 @@ public final class FrontierSettlementActorSlots {
         return slot(bounds, terrain, settlement.anchor(), settlement.structures(), ordinal);
     }
 
+    /**
+     * One exact resident home surface from the settlement-owned, capacity-bounded apron.
+     * Population processes must supply the retained ruleset capacity; a terrain ring is not a
+     * substitute for a planned settlement home when the site deck is elevated.
+     */
+    public static BlockPosition residentSlot(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int housingBeds, int ordinal) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(settlement, "settlement");
+        if (ordinal < 0 || ordinal >= housingBeds) throw new IllegalArgumentException("resident placement ordinal is outside housing capacity");
+        return SettlementResidentIngressPlan.compile(bounds, terrain, settlement, housingBeds).homeSlots().get(ordinal);
+    }
+
+    static List<BlockPosition> residentSlots(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int housingBeds, int count) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(settlement, "settlement");
+        if (count < 0 || count > housingBeds) throw new IllegalArgumentException("resident placement count is outside housing capacity");
+        return SettlementResidentIngressPlan.compile(bounds, terrain, settlement, housingBeds).homeSlots().subList(0, count);
+    }
+
     public static BlockPosition slot(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, List<SettlementStructure> structures, int ordinal) {
         Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
         if (ordinal < 0) throw new IllegalArgumentException("resident placement ordinal must not be negative");

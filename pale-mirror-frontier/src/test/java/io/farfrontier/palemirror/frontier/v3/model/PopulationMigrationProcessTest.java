@@ -256,6 +256,7 @@ class PopulationMigrationProcessTest {
 
     private static boolean clearOfStructuralGeometry(java.util.Map<BlockPosition, GrayboxCell> cells, BlockPosition position) {
         return java.util.stream.Stream.of(position, position.offset(0, 1, 0), position.offset(0, 2, 0))
-                .map(cells::get).filter(java.util.Objects::nonNull).noneMatch(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE);
+                .map(cells::get).filter(java.util.Objects::nonNull).noneMatch(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE
+                        && cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
     }
 }

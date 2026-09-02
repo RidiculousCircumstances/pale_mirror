@@ -78,12 +78,14 @@ it never opens a door, clears a path, chooses an alternate entrance or changes
 canonical availability. Non-flat, blocked-entrance and bridge/rail-grade
 fixtures are mandatory exit evidence for the T0 foundation gate.
 
-The read-only v3 diagnostic may narrow a runtime proof to one semantic facility:
-`/pale_mirror v3 inspect traversal_foundry settled@structure:1-infirmary`.
-The scope is that port's declared ingress and public topology, never a
-nearest-route lookup. It neither loads nor projects cells; it merely makes a
-naturally visited facility's terminal proof practical while keeping foreign
-world changes visible as errors.
+The read-only v3 diagnostic may narrow a runtime proof to one semantic facility
+or one retained topology: `/pale_mirror v3 inspect traversal_foundry
+settled@structure:1-infirmary` or `settled@topology:resident-ingress-1`.
+A facility scope is that port's declared ingress and public topology; a topology
+scope is precisely its retained nodes and edges. Neither is a nearest-route
+lookup. They neither load nor project cells; they merely make a naturally
+visited terminal proof practical while keeping foreign world changes visible as
+errors.
 
 For every scoped runtime pass the diagnostic also reports the derived count of
 `OPEN`, `BLOCKED` and `UNVERIFIED` semantic ports, plus the corresponding

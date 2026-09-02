@@ -157,7 +157,7 @@ final class FrontierV3ResourceSiteExecutor {
         // A neutral footprint alone proves only that it is currently safe to
         // inspect.  Recreating it needs the separate durable proof that this
         // exact intent had already confirmed ownership before the crash.
-        if (claim == null || !claim.intentId().equals(intentId) || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) {
+        if (claim == null || !ownsRestartClaim(claim.intentId(), site, intentId) || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) {
             return RestartReconciliation.CONFLICT;
         }
         if (matches(level, site, desiredStage)) {
@@ -289,6 +289,16 @@ final class FrontierV3ResourceSiteExecutor {
     private static BlockState crop(int stage) { return Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, stage); }
     private static PhysicalIntentId projectionClaim(ResourceSite site) {
         return new PhysicalIntentId("intent:site-projection-" + site.id().value().substring("site:".length()));
+    }
+    /**
+     * A field can first gain physical ownership through its original confirmed
+     * preparation intent or, after a COLD-complete unvisited lifecycle, through
+     * the durable neutral-baseline projection claim. Both are exact ownership
+     * proofs. Treating the latter as foreign on restart manufactured a conflict
+     * for a field whose complete physical postcondition had survived intact.
+     */
+    static boolean ownsRestartClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId preparationIntentId) {
+        return claimIntentId.equals(preparationIntentId) || claimIntentId.equals(projectionClaim(site));
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
