@@ -48,8 +48,8 @@ public final class FrontierGrayboxPlan {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
-        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         addRoutes(cells, state.bootstrap(), state.routeTopology());
         addActiveWorksiteStaging(cells, state);
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
@@ -122,8 +122,8 @@ public final class FrontierGrayboxPlan {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
-        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
         return cells.values().stream()
                 .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
@@ -144,8 +144,8 @@ public final class FrontierGrayboxPlan {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
-        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
         Map<SubjectId, Set<BlockPosition>> byOwner = new LinkedHashMap<>();
         cells.values().forEach(cell -> byOwner.computeIfAbsent(cell.ownerId(), ignored -> new LinkedHashSet<>()).add(cell.position()));
@@ -275,9 +275,9 @@ public final class FrontierGrayboxPlan {
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
             if (structure.id().equals(owner)) return intactStructureCell(bootstrap.terrain(), structure, position);
         }
-        for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(organ, position);
+        for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(bootstrap.terrain(), organ, position);
         HiveOrgan added = colony.addedOrgans().get(owner);
-        if (added != null) return intactOrganCell(added, position);
+        if (added != null) return intactOrganCell(bootstrap.terrain(), added, position);
         for (Settlement settlement : bootstrap.settlements()) {
             if (!settlement.id().equals(owner)) continue;
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
@@ -319,9 +319,14 @@ public final class FrontierGrayboxPlan {
         return 25 + 3 * 16 + (organ.containerId().isPresent() ? 1 : 0);
     }
 
-    private static GrayboxCell intactOrganCell(HiveOrgan organ, BlockPosition position) {
+    /** Exact organ-owned tissue plus terrain-provider hiveroot for damage accounting. */
+    public static int intactOrganCellCount(TerrainSurfacePlan terrain, HiveOrgan organ) {
+        return Math.addExact(intactOrganCellCount(organ), HiveOrganSupportPlan.foundationCells(terrain, organ).size());
+    }
+
+    private static GrayboxCell intactOrganCell(TerrainSurfacePlan terrain, HiveOrgan organ, BlockPosition position) {
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        addOrgan(cells, organ);
+        addOrgan(cells, terrain, organ);
         return cells.get(position);
     }
 
@@ -378,10 +383,29 @@ public final class FrontierGrayboxPlan {
         return false;
     }
 
+    private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, HiveOrgan organ) {
+        GrayboxMaterial material = organMaterial(organ);
+        for (BlockPosition root : HiveOrganSupportPlan.foundationCells(terrain, organ)) {
+            // Hiveroot is organ-owned support, not a second organ body.  Its FOUNDATION
+            // semantic makes the generic executor require a real lower block while its
+            // exact organ owner keeps physical loss/accounting causal.
+            add(cells, root, organ.id(), material, GrayboxSemanticPart.FOUNDATION);
+        }
+        addOrgan(cells, organ, material);
+    }
+
     private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, HiveOrgan organ) {
+        addOrgan(cells, organ, organMaterial(organ));
+    }
+
+    private static GrayboxMaterial organMaterial(HiveOrgan organ) {
         GrayboxMaterial material = switch (organ.kind()) {
             case HEART -> GrayboxMaterial.HIVE_HEART; case BROOD -> GrayboxMaterial.HIVE_BROOD; case STORE -> GrayboxMaterial.HIVE_STORE;
         };
+        return material;
+    }
+
+    private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, HiveOrgan organ, GrayboxMaterial material) {
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) for (int y = 0; y <= 3; y++) {
             if (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2) add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
         }

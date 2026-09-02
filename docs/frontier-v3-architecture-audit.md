@@ -138,7 +138,14 @@ scenario retains the same actor IDs, topology edge and cursor without
 force-loading; Foundry passes the relevant `COMPILED`, `SETTLED` and `RELOADED`
 rules.
 
-Current implementation boundary: this correction must not be misreported as
+Current implementation boundary: the terrain provider now compiles the same support discipline
+for both seed-hive sites: every nest datum derives from its declared organ base-support columns,
+and lower organ tissue receives exact owner-specific hiveroot fill.  Bootstrap, projection,
+physical-loss validation and organ-operational thresholds share that immutable plan; no hive
+anchor queries a loaded height map or remains at a hidden fixed Y.  This is pure/non-flat
+recovery evidence, not yet a settled/reloaded Foundry proof.
+
+This correction must not be misreported as
 complete merely because the medical scene has typed port data. The flat provider
 does not claim physical excavation or a non-flat entrance: its infirmary
 support remains at the uniform datum. `TraversalPath` is a small immutable value

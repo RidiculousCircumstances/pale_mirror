@@ -181,6 +181,14 @@
   zero pending/mismatch/unverified edges after graceful restart. Its clean technical
   frame is `build/frontier-v3-scenarios/disposable_resident_ingress_restart-f43294c2-402e-4683-a2fe-7314a87c009c-northwatch-resident-apron.png`.
   Bridge/rail-grade, foundation repair/replan and cross-family HOT/COLD evidence remain.
+- The terrain provider now also owns seed-hive support rather than leaving the distributed hive
+  on a hidden fixed world height. `HiveOrganSupportPlan` chooses one datum from every declared
+  organ base-support column at each nest and compiles any lower columns into exact owner-specific
+  `HIVE_TISSUE` hiveroot. Bootstrap, graybox projection, physical-loss validation and organ
+  operational thresholds consume that same plan. The focused non-flat/recovery regression proves
+  one west nest rises to the surveyed datum, its other nest does not shift, an ordinary root loss
+  is exact semantic damage, and snapshot recovery preserves the surveyed bootstrap. Focused
+  Frontier topology tests pass; NeoForge materialization/reloaded Foundry evidence remains next.
 - V3-AUD-019's raised-route provider now treats one player support break as one bounded
   durable physical-loss set: its directly supported `ROUTE_SURFACE` is observed and
   conflicted with the `ROUTE_FOUNDATION` before Vanilla removes either block. The same

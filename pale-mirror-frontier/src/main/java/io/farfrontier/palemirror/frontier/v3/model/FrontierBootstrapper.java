@@ -41,18 +41,27 @@ public final class FrontierBootstrapper {
         List<Settlement> settlements = new ArrayList<>(12);
         for (int index = 0; index < NAMES.length; index++) settlements.add(settlement(seed, index, ruleset, terrain));
         SubjectId hiveId = new SubjectId("hive:frontier");
-        List<HiveNest> nests = List.of(
-                new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 64, 420)),
-                new HiveNest(new SubjectId("nest:seed-east"), hiveId, new BlockPosition(420, 64, 420)));
-        List<HiveOrgan> organs = new ArrayList<>();
-        for (HiveNest nest : nests) {
+        List<HiveNest> provisionalNests = List.of(
+                new HiveNest(new SubjectId("nest:seed-west"), hiveId, new BlockPosition(-420, 0, 420)),
+                new HiveNest(new SubjectId("nest:seed-east"), hiveId, new BlockPosition(420, 0, 420)));
+        List<HiveOrgan> provisionalOrgans = new ArrayList<>();
+        for (HiveNest nest : provisionalNests) {
             String suffix = nest.id().value().substring("nest:seed-".length());
-            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-heart"), hiveId, nest.id(), HiveOrganKind.HEART,
+            provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-heart"), hiveId, nest.id(), HiveOrganKind.HEART,
                     nest.anchor(), java.util.Optional.empty()));
-            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-brood"), hiveId, nest.id(), HiveOrganKind.BROOD,
+            provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-brood"), hiveId, nest.id(), HiveOrganKind.BROOD,
                     nest.anchor().offset(8, 0, 0), java.util.Optional.empty()));
-            organs.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-store"), hiveId, nest.id(), HiveOrganKind.STORE,
+            provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-store"), hiveId, nest.id(), HiveOrganKind.STORE,
                     nest.anchor().offset(-8, 0, 0), java.util.Optional.of(new SubjectId("container:hive-" + suffix + "-store"))));
+        }
+        List<HiveNest> nests = new ArrayList<>(provisionalNests.size());
+        List<HiveOrgan> organs = new ArrayList<>(provisionalOrgans.size());
+        for (HiveNest provisional : provisionalNests) {
+            List<HiveOrgan> nestOrgans = provisionalOrgans.stream().filter(organ -> organ.nestId().equals(provisional.id())).toList();
+            int deckY = HiveOrganSupportPlan.nestDeckY(terrain, nestOrgans);
+            nests.add(new HiveNest(provisional.id(), hiveId, provisional.anchor().offset(0, deckY, 0)));
+            nestOrgans.forEach(organ -> organs.add(new HiveOrgan(organ.id(), organ.hiveId(), organ.nestId(), organ.kind(),
+                    organ.anchor().offset(0, deckY, 0), organ.containerId())));
         }
         List<Bioform> bioforms = new ArrayList<>();
         for (int nestIndex = 0; nestIndex < nests.size(); nestIndex++) {

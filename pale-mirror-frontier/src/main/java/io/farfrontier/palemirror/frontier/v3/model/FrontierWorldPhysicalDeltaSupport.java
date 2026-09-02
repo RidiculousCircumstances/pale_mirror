@@ -132,6 +132,6 @@ public final class FrontierWorldPhysicalDeltaSupport {
         if (organ == null) throw new IllegalArgumentException("unknown hive organ: " + organId.value());
         long lost = deltas.values().stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
                 && delta.ownerId().orElseThrow().equals(organId)).count();
-        return lost < (FrontierGrayboxPlan.intactOrganCellCount(organ) + 2L) / 3L;
+        return lost < (FrontierGrayboxPlan.intactOrganCellCount(bootstrap.terrain(), organ) + 2L) / 3L;
     }
 }

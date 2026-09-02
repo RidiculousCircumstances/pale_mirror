@@ -71,11 +71,14 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void worksiteRetirementIndexSurvivesLedgerReloadWithoutScanningStructuralClaims(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        for (int offset = 0; offset < 512; offset++) {
+        // The index invariant needs unrelated structural provenance, not an out-of-template
+        // 512-cell world write.  Keep this complete semantic fixture inside its allocated
+        // air template so another GameTest cannot inherit its SavedData claims.
+        for (int offset = 0; offset < 16; offset++) {
             BlockPos position = helper.absolutePos(new BlockPos(offset, 8, 4));
             ledger.applied(position, "structure:static-" + offset, GrayboxMaterial.HALL.name(), GrayboxSemanticPart.FOUNDATION.name());
         }
@@ -85,11 +88,14 @@ public final class FrontierV3GrayboxCursorGameTests {
         ledger.applied(second, "construction:index-b", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         FrontierV3GrayboxLedger restored = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
         helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
+                        .filter(value -> value.claim().owner().startsWith("construction:index-"))
                         .map(value -> value.position().asLong()).toList(), List.of(first.asLong(), second.asLong()),
-                "only exact retained temporary claims are returned in stable order after restart; unrelated structural provenance is not retirement work");
+                "only this test's exact retained temporary claims are returned in stable order after restart; concurrent worksite provenance is not this owner's work");
         restored.retire(first, "construction:index-a", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
-        helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).size(), 1,
-                "retiring one owned temporary floor immediately removes it from the bounded index");
+        helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
+                        .filter(value -> value.claim().owner().startsWith("construction:index-"))
+                        .count(), 1L,
+                "retiring one owned temporary floor immediately removes it from this owner's bounded index");
         helper.succeed();
     }
 
@@ -137,6 +143,30 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.assertTrue(level.getBlockState(footing).is(Blocks.PINK_CONCRETE) && level.getBlockState(sill).is(Blocks.GRAY_CARPET)
                         && ledger.claim(footing) != null && ledger.claim(sill) != null,
                 "the elevated facility and approach retain distinguishable physical provenance at their distinct datums");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void surveyedHiverootSupportsItsRaisedOrganWithOwnedProvenance(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos root = helper.absolutePos(new BlockPos(30, 8, 4)); BlockPos organBase = root.above();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        GrayboxCell rootTissue = new GrayboxCell(new BlockPosition(root.getX(), root.getY(), root.getZ()),
+                new SubjectId("organ:surveyed-hive-heart"), GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.FOUNDATION);
+        GrayboxCell organTissue = new GrayboxCell(new BlockPosition(organBase.getX(), organBase.getY(), organBase.getZ()),
+                new SubjectId("organ:surveyed-hive-heart"), GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.HIVE_TISSUE);
+
+        level.setBlock(root.below(), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, rootTissue), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "an elevated organ's hiveroot must not float or adopt a player/world support");
+        level.setBlock(root.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, rootTissue), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the immutable provider-owned root materializes through the normal graybox executor");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, organTissue), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the raised organ tissue may materialize only over its own claimed hiveroot");
+        helper.assertTrue(level.getBlockState(root).is(Blocks.RED_CONCRETE) && level.getBlockState(organBase).is(Blocks.RED_CONCRETE)
+                        && ledger.claim(root) != null && ledger.claim(root).owner().equals("organ:surveyed-hive-heart")
+                        && ledger.claim(root).semanticPart().equals(GrayboxSemanticPart.FOUNDATION.name()),
+                "root and organ retain one exact organ provenance, never a generic terrain/foundation owner");
         helper.succeed();
     }
 

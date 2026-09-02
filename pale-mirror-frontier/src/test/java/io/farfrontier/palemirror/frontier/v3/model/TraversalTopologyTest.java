@@ -198,6 +198,39 @@ class TraversalTopologyTest {
                 "the distinct facility datum, footing loss and consequence survive recovery");
     }
 
+    @Test void surveyedHiveDatumCompilesOwnedHiverootWithoutAFlatFallback() {
+        FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-hive-flat"), 91L);
+        HiveNest west = flat.hive().seedNests().getFirst();
+        List<HiveOrgan> westOrgans = flat.hive().organs().stream().filter(organ -> organ.nestId().equals(west.id())).toList();
+        TerrainSurfacePlan terrain = flat.terrain();
+        for (HiveOrgan organ : westOrgans) for (BlockPosition support : HiveOrganSupportPlan.baseSupportCells(organ)) {
+            terrain = terrain.withSurveyedSupport(support.x(), support.z(), 67);
+        }
+        HiveOrgan heart = westOrgans.stream().filter(organ -> organ.kind() == HiveOrganKind.HEART).findFirst().orElseThrow();
+        BlockPosition lowHeartRoot = heart.anchor().offset(-2, 0, -2);
+        terrain = terrain.withSurveyedSupport(lowHeartRoot.x(), lowHeartRoot.z(), 63);
+
+        FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-hive-surveyed"), 91L,
+                FrontierRulesets.production(), terrain);
+        HiveNest raisedWest = surveyed.hive().seedNests().stream().filter(nest -> nest.id().equals(west.id())).findFirst().orElseThrow();
+        HiveOrgan raisedHeart = surveyed.hive().organs().stream().filter(organ -> organ.id().equals(heart.id())).findFirst().orElseThrow();
+        FrontierWorldState initial = FrontierWorldState.initial(surveyed);
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(initial);
+        BlockPosition firstRoot = new BlockPosition(lowHeartRoot.x(), 64, lowHeartRoot.z());
+
+        assertEquals(68, raisedWest.anchor().y(), "a seed nest derives its datum from all declared organ supports");
+        assertEquals(64, surveyed.hive().seedNests().get(1).anchor().y(), "one nest survey never shifts the other hive territory");
+        assertEquals(new GrayboxCell(firstRoot, raisedHeart.id(), GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.FOUNDATION),
+                plan.cells().get(firstRoot), "lower terrain receives organ-owned hiveroot instead of a floating graybox organ");
+        FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(firstRoot, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(raisedHeart.id()), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
+        assertTrue(damaged.physicalDeltas().containsKey(firstRoot), "a broken hiveroot is an exact organ-owned physical consequence, not unowned terrain");
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged));
+        assertEquals(surveyed.canonicalSha256(), restored.bootstrap().canonicalSha256(),
+                "the exact elevated hive datum and terrain provider survive snapshot recovery");
+        assertTrue(restored.physicalDeltas().containsKey(firstRoot));
+    }
+
     @Test void elevatedSettlementOwnsBoundedResidentApronAndGradeCheckedNaturalIngress() {
         FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-resident-ingress-flat"), 91L);
         Settlement original = flat.settlements().getFirst();
