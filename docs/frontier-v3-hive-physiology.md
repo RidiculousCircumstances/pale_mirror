@@ -87,10 +87,13 @@ a free global healing organ. Destroying one Ganglion degrades its branch but
 does not kill the distributed Hivemind or erase facts already transmitted to
 another surviving owner.
 
-The current Java `HEART/BROOD/STORE` enum is an interim implementation. Its
-replacement must use new explicit wire tags and a versioned migration or an
-explicit fresh-development-world schema cut. An old `HEART` wire value must
-never be silently reinterpreted as `GANGLION`.
+The Java organ vocabulary now uses the complete accepted set with explicit
+non-reused tags (`GANGLION=10` through `SENSOR=18`). The seed profile creates
+only its currently implemented `GANGLION`/`BROOD`/`STORE` organs; `RELAY` is
+the first growth output, and the remaining organ types must not be fabricated
+until their own owning process exists. This cut is schema 103 and persistence
+envelope 12, fresh-world-only. The retired `HEART` byte `0` is intentionally
+unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
 

@@ -27,7 +27,7 @@ class RouteEngagementTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:engagement"), hive, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
                 Optional.of(new InfectionCell(0, 0)), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:1"), objective.id(), hive, StrategicTaskKind.SPREAD_INFECTION_CELL,
-                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.ACTIVE);
+                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), StrategicTaskStatus.ACTIVE);
         RouteEngagement engagement = engagement(List.of(new SubjectId("bioform:west-0")));
         StrategicPlanState plans = new StrategicPlanState(Map.of(objective.id(), objective), Map.of(task.id(), task), Map.of(), Map.of(engagement.id(), engagement));
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
@@ -44,7 +44,7 @@ class RouteEngagementTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:engagement"), hive, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
                 Optional.of(new InfectionCell(0, 0)), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:1"), objective.id(), hive, StrategicTaskKind.SPREAD_INFECTION_CELL,
-                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.ACTIVE);
+                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), StrategicTaskStatus.ACTIVE);
         RouteEngagement engagement = engagement(List.of(new SubjectId("bioform:west-0")));
         StrategicPlanState state = new StrategicPlanState(Map.of(objective.id(), objective), Map.of(task.id(), task), Map.of(), Map.of())
                 .startEngagement(engagement)
@@ -70,7 +70,7 @@ class RouteEngagementTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:engagement"), hive, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
                 Optional.of(new InfectionCell(0, 0)), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:1"), objective.id(), hive, StrategicTaskKind.SPREAD_INFECTION_CELL,
-                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.ACTIVE);
+                Optional.of(new InfectionCell(0, 0)), List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), StrategicTaskStatus.ACTIVE);
         SubjectId attacker = initial.bootstrap().hive().bioforms().getFirst().id();
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startEngagement(new RouteEngagement(new SubjectId("engagement:missing-operation"), task.id(), new SubjectId("operation:missing"), hive,

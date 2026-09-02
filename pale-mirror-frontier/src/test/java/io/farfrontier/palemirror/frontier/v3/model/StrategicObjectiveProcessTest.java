@@ -34,7 +34,7 @@ class StrategicObjectiveProcessTest {
         StrategicTaskPlanned task = assertInstanceOf(StrategicTaskPlanned.class, planned.get(1).payload());
         assertEquals(StrategicObjectiveKind.HIVE_EXPAND_INFECTION, selected.objective().kind());
         assertEquals(StrategicTaskKind.SPREAD_INFECTION_CELL, task.task().kind());
-        assertEquals(List.of(StrategicTaskRequirement.OPERATIONAL_HEART), task.task().requirements());
+        assertEquals(List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), task.task().requirements());
         state = StrategicObjectiveProcess.reduceObjective(state, hive, selected);
         state = StrategicObjectiveProcess.reduceTask(state, hive, task);
         for (ProposedEvent event : planned.stream().filter(event -> event.payload() instanceof HiveTerritoryObserved).toList()) {
@@ -296,6 +296,6 @@ class StrategicObjectiveProcessTest {
 
     private static StrategicTask hiveTask(String id, StrategicObjective objective, StrategicTaskStatus status) {
         return new StrategicTask(new SubjectId(id), objective.id(), objective.ownerId(), StrategicTaskKind.SPREAD_INFECTION_CELL,
-                objective.infectionTarget(), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), status);
+                objective.infectionTarget(), List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), status);
     }
 }

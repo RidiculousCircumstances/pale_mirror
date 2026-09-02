@@ -43,7 +43,7 @@ class FrontierGrayboxPlanTest {
         assertTrue(first.cells().size() > 10_000);
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("structure:1-depot")
                 && cell.material() == GrayboxMaterial.DEPOT));
-        assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("organ:west-heart")
+        assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("organ:west-ganglion")
                 && cell.semanticPart() == GrayboxSemanticPart.HIVE_TISSUE));
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.material() == GrayboxMaterial.ROUTE));
         assertEquals(state.infection(), first.infection());
@@ -67,7 +67,7 @@ class FrontierGrayboxPlanTest {
     void physicalLossIsAnExactDynamicMaskOverTheRetainedStructuralBaseline() {
         FrontierWorldState state = initial();
         GrayboxCell lost = FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .filter(cell -> cell.ownerId().value().equals("organ:west-heart")).findFirst().orElseThrow();
+                .filter(cell -> cell.ownerId().value().equals("organ:west-ganglion")).findFirst().orElseThrow();
         BlockPosition broken = lost.position();
         FrontierWorldState afterLoss = state.recordPhysicalDelta(new PhysicalDelta(broken, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 java.util.Optional.of(lost.ownerId()), java.util.Optional.of(lost.semanticPart()), "player:test"));

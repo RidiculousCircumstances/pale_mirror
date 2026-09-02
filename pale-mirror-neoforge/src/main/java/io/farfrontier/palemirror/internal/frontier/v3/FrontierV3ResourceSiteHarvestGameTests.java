@@ -26,7 +26,11 @@ import java.util.List;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ResourceSiteHarvestGameTests {
-    private static final BlockPos FIXTURE_ORIGIN = new BlockPos(2, 8, 2);
+    // Keep the 8x8 fixture in the upper half of its declared 38x48x38 air cell.
+    // The complete GameTest catalogue includes legacy tests that use low local Y
+    // coordinates; sharing their horizontal allocator cell must not make a field
+    // baseline depend on their temporary geometry.
+    private static final BlockPos FIXTURE_ORIGIN = new BlockPos(2, 30, 2);
 
     private FrontierV3ResourceSiteHarvestGameTests() { }
 
@@ -41,7 +45,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             ledger.reserve(site.id(), intent); helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "the harvest fixture must first materialize an exact active stage-zero field");
             ledger.activate(site.id());
-            BlockPos chestPosition = helper.absolutePos(new BlockPos(12, 8, 2));
+            BlockPos chestPosition = helper.absolutePos(FIXTURE_ORIGIN.offset(10, 0, 0));
             level.setBlock(chestPosition, Blocks.AIR.defaultBlockState(), 3); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
             SubjectId depot = new SubjectId("container:resource-harvest-game-test"); ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, depot);
             helper.assertTrue(chest != null, "the isolated harvest fixture must claim its fresh exact depot chest");

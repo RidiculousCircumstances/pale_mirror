@@ -20,6 +20,11 @@ class FrontierWireTagsTest {
         assertEquals(13, PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL.wireTag());
         assertEquals(3, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART.wireTag());
         assertEquals(13, PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED.wireTag());
+        assertEquals(10, HiveOrganKind.GANGLION.wireTag());
+        assertEquals(11, HiveOrganKind.RELAY.wireTag());
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierWireTags.require(HiveOrganKind.class, 0),
+                "the retired HEART byte must never become GANGLION");
         assertEquals(RouteEngagementStatus.UNKNOWN_AFTER_RESTART,
                 FrontierWireTags.require(RouteEngagementStatus.class, 5));
         assertEquals(PhysicalIntentKind.CARGO_LOADING,

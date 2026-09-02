@@ -113,7 +113,7 @@ public final class FrontierReadabilityPlan {
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
         boolean operational = state.isHiveOrganOperational(organ.id());
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), stage == null && operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
-                organ.kind() == HiveOrganKind.HEART ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
+                organ.kind() == HiveOrganKind.GANGLION ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
                 "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED", stage)));
     }
 
@@ -194,9 +194,15 @@ public final class FrontierReadabilityPlan {
 
     private static String organName(HiveOrganKind kind) {
         return switch (kind) {
-            case HEART -> "HEART";
+            case GANGLION -> "GANGLION";
+            case RELAY -> "RELAY";
             case BROOD -> "BROOD";
             case STORE -> "STORE";
+            case DIGESTER -> "DIGESTER";
+            case HIBERNACULUM -> "HIBERNACULUM";
+            case MORPHER -> "MORPHER";
+            case SPORULATOR -> "SPORULATOR";
+            case SENSOR -> "SENSOR";
         };
     }
 

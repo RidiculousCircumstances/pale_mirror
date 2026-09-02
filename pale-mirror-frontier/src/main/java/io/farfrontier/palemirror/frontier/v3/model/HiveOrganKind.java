@@ -2,9 +2,15 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Functional identity of one stable organ in the distributed hive. */
 public enum HiveOrganKind {
-    HEART,
+    GANGLION,
+    RELAY,
+    STORE,
+    DIGESTER,
     BROOD,
-    STORE
+    HIBERNACULUM,
+    MORPHER,
+    SPORULATOR,
+    SENSOR
 ;
 
     public int wireTag() { return FrontierWireTags.tag(this); }

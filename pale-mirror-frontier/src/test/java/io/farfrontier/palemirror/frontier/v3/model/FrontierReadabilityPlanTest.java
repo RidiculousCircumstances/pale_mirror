@@ -77,11 +77,11 @@ class FrontierReadabilityPlanTest {
     @Test
     void makesCanonicalInfectionContactVisibleOnTheAffectedHiveOrgan() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-infection"), 91L));
-        HiveOrgan heart = state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.HEART).findFirst().orElseThrow();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(heart.id());
+        HiveOrgan ganglion = state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.GANGLION).findFirst().orElseThrow();
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(ganglion.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("INFECTED\nSATURATED"));
-        assertTrue(!board.text().contains(heart.id().value()));
+        assertTrue(!board.text().contains(ganglion.id().value()));
         assertEquals(FrontierObjectBoard.Scope.LANDMARK, board.scope());
     }
 

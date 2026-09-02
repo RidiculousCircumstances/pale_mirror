@@ -121,14 +121,14 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
 
     /** World-scale distances and COLD movement strides used by the canonical process layer. */
     public record Spatial(int decontaminationResponseRadius, int settlementInfectionRadius, int hivePerceptionRadius,
-                          int hiveTerritoryHeartRadius, int hiveTerritoryScoutRadius, int hiveSettlementSightRadius,
+                          int hiveTerritoryGanglionRadius, int hiveTerritoryScoutRadius, int hiveSettlementSightRadius,
                           int hiveScoutPatrolRadius, int hiveScoutPatrolStep, int hiveRouteEngagementColdStepBlocks,
                           int hiveSettlementAssaultTerritoryRadius, int hiveSettlementAssaultColdStepBlocks) {
         public Spatial {
             requirePositive(decontaminationResponseRadius, "decontamination response radius");
             requirePositive(settlementInfectionRadius, "settlement infection radius");
             requirePositive(hivePerceptionRadius, "hive perception radius");
-            requirePositive(hiveTerritoryHeartRadius, "hive territory heart radius");
+            requirePositive(hiveTerritoryGanglionRadius, "hive territory ganglion radius");
             requirePositive(hiveTerritoryScoutRadius, "hive territory scout radius");
             requirePositive(hiveSettlementSightRadius, "hive settlement sight radius");
             requirePositive(hiveScoutPatrolRadius, "hive scout patrol radius");
@@ -138,7 +138,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(hiveSettlementAssaultColdStepBlocks, "hive settlement assault COLD step");
         }
         private String canonicalText() {
-            return decontaminationResponseRadius + "," + settlementInfectionRadius + "," + hivePerceptionRadius + "," + hiveTerritoryHeartRadius
+            return decontaminationResponseRadius + "," + settlementInfectionRadius + "," + hivePerceptionRadius + "," + hiveTerritoryGanglionRadius
                     + "," + hiveTerritoryScoutRadius + "," + hiveSettlementSightRadius + "," + hiveScoutPatrolRadius + "," + hiveScoutPatrolStep
                     + "," + hiveRouteEngagementColdStepBlocks + "," + hiveSettlementAssaultTerritoryRadius + "," + hiveSettlementAssaultColdStepBlocks;
         }

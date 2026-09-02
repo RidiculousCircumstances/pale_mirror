@@ -68,7 +68,7 @@ public final class HiveTerritoryKnowledge {
     private static BlockPosition sensorPosition(FrontierBootstrap bootstrap, HiveColony colony, Map<SubjectId, ActorLocation> actors, SubjectId observer) {
         HiveOrgan organ = organs(bootstrap, colony).stream().filter(value -> value.id().equals(observer)).findFirst().orElse(null);
         if (organ != null) {
-            if (organ.kind() != HiveOrganKind.HEART) throw new IllegalArgumentException("hive territory observer is not a heart");
+            if (organ.kind() != HiveOrganKind.GANGLION) throw new IllegalArgumentException("hive territory observer is not a ganglion");
             return organ.anchor();
         }
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, observer);
@@ -79,7 +79,7 @@ public final class HiveTerritoryKnowledge {
 
     private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
         return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer))
-                ? bootstrap.ruleset().spatial().hiveTerritoryHeartRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
+                ? bootstrap.ruleset().spatial().hiveTerritoryGanglionRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
     }
 
     private static java.util.List<HiveOrgan> organs(FrontierBootstrap bootstrap, HiveColony colony) {

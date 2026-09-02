@@ -101,7 +101,7 @@ public final class StrategicPlanState {
                 throw new IllegalArgumentException("settlement containment task has an invalid decomposition");
             }
             if (objective.kind() == StrategicObjectiveKind.HIVE_EXPAND_INFECTION
-                    && (task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.requirements().equals(List.of(StrategicTaskRequirement.OPERATIONAL_HEART)))) {
+                    && (task.kind() != StrategicTaskKind.SPREAD_INFECTION_CELL || !task.requirements().equals(List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION)))) {
                 throw new IllegalArgumentException("hive expansion task has an invalid decomposition");
             }
             if (objective.kind() == StrategicObjectiveKind.HIVE_GROW_ORGANISM

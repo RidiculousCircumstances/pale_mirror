@@ -557,9 +557,11 @@ not depend on a player or Narrator.
 - Distinct infection substrate and destructible hiveroot graph with independent
   vascular/synaptic capacity, finite extraction, valves, severance and
   resource-backed regrowth.
-- Replace provisional `HEART` with distributed Hivemind plus local `GANGLION`;
-  add `RELAY`, `DIGESTER`, `HIBERNACULUM`, `MORPHER`, `SPORULATOR` and `SENSOR`
-  through explicit stable wire tags and versioned recovery.
+- Complete the distributed Hivemind and local `GANGLION` implementation: the
+  explicit stable organ vocabulary and fresh-world schema cut are in place;
+  add the remaining functional ownership for `RELAY`, `DIGESTER`,
+  `HIBERNACULUM`, `MORPHER`, `SPORULATOR` and `SENSOR` without fabricating
+  inactive bootstrap organs.
 - Brood and exact bioform lifecycle split into chassis, visible mutation,
   assignment, cocoon/physical custody, controller, wounds, structural/reserve
   biomass, consumption, carcass and recycling.

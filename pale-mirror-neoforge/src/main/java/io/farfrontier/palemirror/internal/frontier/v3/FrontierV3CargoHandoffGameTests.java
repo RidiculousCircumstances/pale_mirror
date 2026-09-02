@@ -395,7 +395,7 @@ public final class FrontierV3CargoHandoffGameTests {
         BlockPos unknown = helper.absolutePos(new BlockPos(41, 8, 0));
         level.setBlock(known.below(), Blocks.STONE.defaultBlockState(), 3);
         FrontierV3GrayboxLedger provenance = FrontierV3GrayboxLedger.get(level);
-        GrayboxCell organ = grayboxCell(known, "organ:explosion-test", GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.HIVE_TISSUE);
+        GrayboxCell organ = grayboxCell(known, "organ:explosion-test", GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, provenance, organ), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the observation begins with an exact owned organ cell");
         level.setBlock(unknown, Blocks.STONE.defaultBlockState(), 3);

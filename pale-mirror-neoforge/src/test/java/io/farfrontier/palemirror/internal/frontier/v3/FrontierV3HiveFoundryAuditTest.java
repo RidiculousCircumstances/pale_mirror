@@ -29,13 +29,13 @@ class FrontierV3HiveFoundryAuditTest {
                 terrain = terrain.withSurveyedSupport(organ.anchor().x() + x, organ.anchor().z() + z, 67);
             }
         }
-        HiveOrgan flatHeart = flat.hive().organs().stream().filter(value -> value.nestId().equals(west.id()) && value.kind() == HiveOrganKind.HEART).findFirst().orElseThrow();
-        terrain = terrain.withSurveyedSupport(flatHeart.anchor().x() - 2, flatHeart.anchor().z() - 2, 63);
+        HiveOrgan flatGanglion = flat.hive().organs().stream().filter(value -> value.nestId().equals(west.id()) && value.kind() == HiveOrganKind.GANGLION).findFirst().orElseThrow();
+        terrain = terrain.withSurveyedSupport(flatGanglion.anchor().x() - 2, flatGanglion.anchor().z() - 2, 63);
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-foundry-raised"), 91L,
                 FrontierRulesets.production(), terrain));
-        HiveOrgan heart = state.bootstrap().hive().organs().stream().filter(value -> value.id().equals(flatHeart.id())).findFirst().orElseThrow();
+        HiveOrgan ganglion = state.bootstrap().hive().organs().stream().filter(value -> value.id().equals(flatGanglion.id())).findFirst().orElseThrow();
 
-        var report = FrontierV3HiveFoundryAudit.auditCompiled(state, heart.id());
+        var report = FrontierV3HiveFoundryAudit.auditCompiled(state, ganglion.id());
 
         assertTrue(report.passed(), report::summary);
         assertTrue(metric(report, "frontier.hive.hiveroot.cells") > 0D,
@@ -45,10 +45,10 @@ class FrontierV3HiveFoundryAuditTest {
 
     @Test
     void runtimeClassificationRejectsMatchingLookingUnclaimedOrConflictedHiveroot() {
-        GrayboxCell root = new GrayboxCell(new BlockPosition(8, 65, 8), new SubjectId("organ:test-heart"),
-                GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.FOUNDATION);
-        FrontierV3GrayboxLedger.Claim claim = new FrontierV3GrayboxLedger.Claim("organ:test-heart", "HIVE_HEART", "FOUNDATION", false);
-        FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("organ:test-heart", "HIVE_HEART", "FOUNDATION", true);
+        GrayboxCell root = new GrayboxCell(new BlockPosition(8, 65, 8), new SubjectId("organ:test-ganglion"),
+                GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
+        FrontierV3GrayboxLedger.Claim claim = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", "HIVE_GANGLION", "FOUNDATION", false);
+        FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", "HIVE_GANGLION", "FOUNDATION", true);
 
         assertEquals(FrontierV3HiveFoundryAudit.RuntimeCellStatus.PENDING,
                 FrontierV3HiveFoundryAudit.classify(root, null, FrontierV3HiveFoundryAudit.ObservedCell.AIR));

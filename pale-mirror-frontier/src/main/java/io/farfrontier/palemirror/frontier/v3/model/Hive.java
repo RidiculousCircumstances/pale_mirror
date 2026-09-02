@@ -3,10 +3,19 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Objects;
 
 /** One shared polity/economy graph rooted at exactly two seed nests. */
 public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organs, List<Bioform> bioforms) {
+    /**
+     * A seed nest starts with only the organs that have a current canonical function.  The
+     * remaining accepted physiology is a legal extension vocabulary, not fictional bootstrap
+     * infrastructure: it appears only when its owning process is introduced.
+     */
+    private static final Set<HiveOrganKind> REQUIRED_SEED_ORGANS = Set.of(
+            HiveOrganKind.GANGLION, HiveOrganKind.BROOD, HiveOrganKind.STORE);
+
     public Hive {
         Objects.requireNonNull(id, "hive id");
         seedNests = List.copyOf(seedNests);
@@ -14,8 +23,8 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
         bioforms = List.copyOf(bioforms);
         List<HiveNest> declaredNests = seedNests;
         if (seedNests.size() != 2) throw new IllegalArgumentException("bootstrap hive requires exactly two seed nests");
-        if (organs.size() != seedNests.size() * HiveOrganKind.values().length) {
-            throw new IllegalArgumentException("bootstrap hive requires every organ kind at every seed nest");
+        if (organs.size() != seedNests.size() * REQUIRED_SEED_ORGANS.size()) {
+            throw new IllegalArgumentException("bootstrap hive requires exactly its implemented seed organs at every nest");
         }
         if (declaredNests.stream().anyMatch(nest -> !id.equals(nest.hiveId()))
                 || organs.stream().anyMatch(organ -> !id.equals(organ.hiveId()) || declaredNests.stream().noneMatch(nest -> nest.id().equals(organ.nestId())))
@@ -28,9 +37,9 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
             throw new IllegalArgumentException("hive organ identities and storage surfaces must be unique");
         }
         for (HiveNest nest : declaredNests) {
-            for (HiveOrganKind kind : HiveOrganKind.values()) {
+            for (HiveOrganKind kind : REQUIRED_SEED_ORGANS) {
                 if (organs.stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == kind).count() != 1) {
-                    throw new IllegalArgumentException("each seed nest must own one of every organ kind");
+                    throw new IllegalArgumentException("each seed nest must own one of every required seed organ");
                 }
             }
         }

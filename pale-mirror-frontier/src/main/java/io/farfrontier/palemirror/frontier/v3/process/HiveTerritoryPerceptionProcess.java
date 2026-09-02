@@ -56,7 +56,7 @@ public final class HiveTerritoryPerceptionProcess {
     private static List<SubjectId> sensors(FrontierWorldState state) {
         List<SubjectId> sensors = new ArrayList<>();
         java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
-                .filter(organ -> organ.kind() == HiveOrganKind.HEART && state.isHiveOrganOperational(organ.id()))
+                .filter(organ -> organ.kind() == HiveOrganKind.GANGLION && state.isHiveOrganOperational(organ.id()))
                 .map(HiveOrgan::id).forEach(sensors::add);
         java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(bioform -> bioform.role() == BioformRole.SCOUT)
@@ -74,7 +74,7 @@ public final class HiveTerritoryPerceptionProcess {
                                                 Map<SubjectId, StructureCondition> structures, SubjectId observer) {
         HiveOrgan organ = organs(bootstrap, colony).stream().filter(value -> value.id().equals(observer)).findFirst().orElse(null);
         if (organ != null) {
-            if (organ.kind() != HiveOrganKind.HEART) throw new IllegalArgumentException("hive territory observer is not a heart");
+            if (organ.kind() != HiveOrganKind.GANGLION) throw new IllegalArgumentException("hive territory observer is not a ganglion");
             return organ.anchor();
         }
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, observer);
@@ -87,7 +87,7 @@ public final class HiveTerritoryPerceptionProcess {
 
     private static int sensorRadius(FrontierBootstrap bootstrap, HiveColony colony, SubjectId observer) {
         return organs(bootstrap, colony).stream().anyMatch(value -> value.id().equals(observer))
-                ? bootstrap.ruleset().spatial().hiveTerritoryHeartRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
+                ? bootstrap.ruleset().spatial().hiveTerritoryGanglionRadius() : bootstrap.ruleset().spatial().hiveTerritoryScoutRadius();
     }
 
     private static List<HiveOrgan> organs(FrontierBootstrap bootstrap, HiveColony colony) {
@@ -101,7 +101,7 @@ public final class HiveTerritoryPerceptionProcess {
     private static boolean canCurrentlyObserve(FrontierWorldState state, HiveTerritoryKnowledge.Belief belief) {
         SubjectId observer = belief.observerId();
         HiveOrgan organ = organs(state.bootstrap(), state.hiveColony()).stream().filter(value -> value.id().equals(observer)).findFirst().orElse(null);
-        if (organ != null) return organ.kind() == HiveOrganKind.HEART && state.isHiveOrganOperational(organ.id()) && organ.anchor().equals(belief.sensorPosition());
+        if (organ != null) return organ.kind() == HiveOrganKind.GANGLION && state.isHiveOrganOperational(organ.id()) && organ.anchor().equals(belief.sensorPosition());
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), observer);
         if (scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) return false;
         BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();

@@ -400,7 +400,11 @@ public final class FrontierGrayboxPlan {
 
     private static GrayboxMaterial organMaterial(HiveOrgan organ) {
         GrayboxMaterial material = switch (organ.kind()) {
-            case HEART -> GrayboxMaterial.HIVE_HEART; case BROOD -> GrayboxMaterial.HIVE_BROOD; case STORE -> GrayboxMaterial.HIVE_STORE;
+            case GANGLION -> GrayboxMaterial.HIVE_GANGLION; case RELAY -> GrayboxMaterial.HIVE_RELAY;
+            case BROOD -> GrayboxMaterial.HIVE_BROOD; case STORE -> GrayboxMaterial.HIVE_STORE;
+            case DIGESTER -> GrayboxMaterial.HIVE_DIGESTER; case HIBERNACULUM -> GrayboxMaterial.HIVE_HIBERNACULUM;
+            case MORPHER -> GrayboxMaterial.HIVE_MORPHER; case SPORULATOR -> GrayboxMaterial.HIVE_SPORULATOR;
+            case SENSOR -> GrayboxMaterial.HIVE_SENSOR;
         };
         return material;
     }

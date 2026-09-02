@@ -212,7 +212,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 new SubjectId("nest:seed-east"), biomass,
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
                 new HiveOrgan(new SubjectId("organ:east-grown-heart-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
-                        HiveOrganKind.HEART, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
+                        HiveOrganKind.RELAY, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
                 new Bioform(new SubjectId("bioform:east-grown-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
                         BioformRole.GUARD, new BlockPosition(436, 64, 432)));
         HiveGrowthStarted started = new HiveGrowthStarted(job);

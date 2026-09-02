@@ -12,10 +12,10 @@ class FrontierV3ObjectBoardCardTest {
     @Test
     void preservesObjectKindAndAllStateLinesWithinOneBoundedCard() {
         PlayerContextCard card = FrontierV3ObjectBoardCard.fromBoard(board(FrontierObjectBoard.Tone.WARNING,
-                "HIVE\nHEART\nACTIVE\nINFECTED\nSATURATED"));
+                "HIVE\nGANGLION\nACTIVE\nINFECTED\nSATURATED"));
 
         assertEquals("HIVE", card.title());
-        assertEquals(java.util.List.of("HEART", "ACTIVE · INFECTED · SATURATED"), card.lines());
+        assertEquals(java.util.List.of("GANGLION", "ACTIVE · INFECTED · SATURATED"), card.lines());
         assertEquals(0xFF5A5A, card.accentRgb());
     }
 
@@ -30,6 +30,6 @@ class FrontierV3ObjectBoardCardTest {
     }
 
     private static FrontierObjectBoard board(FrontierObjectBoard.Tone tone, String text) {
-        return new FrontierObjectBoard(new SubjectId("organ:test-heart"), new BlockPosition(1, 64, 1), tone, text);
+        return new FrontierObjectBoard(new SubjectId("organ:test-ganglion"), new BlockPosition(1, 64, 1), tone, text);
     }
 }

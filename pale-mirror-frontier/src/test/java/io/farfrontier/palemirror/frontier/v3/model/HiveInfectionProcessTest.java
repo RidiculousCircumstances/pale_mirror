@@ -42,18 +42,18 @@ class HiveInfectionProcessTest {
     }
 
     @Test
-    void destroyedHeartsBlockTheOwnedTaskInsteadOfContinuingOwnerlessMetabolism() {
+    void destroyedGangliaBlockTheOwnedTaskInsteadOfContinuingOwnerlessMetabolism() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-destroyed"), 106L));
         InfectionCell target = HiveInfectionProcess.expansionTarget(state, 0L).orElseThrow();
-        for (HiveOrgan heart : state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.HEART).toList()) {
-            int threshold = (FrontierGrayboxPlan.intactOrganCellCount(heart) + 2) / 3;
-            List<GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells().values().stream().filter(cell -> cell.ownerId().equals(heart.id()))
+        for (HiveOrgan ganglion : state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.GANGLION).toList()) {
+            int threshold = (FrontierGrayboxPlan.intactOrganCellCount(ganglion) + 2) / 3;
+            List<GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells().values().stream().filter(cell -> cell.ownerId().equals(ganglion.id()))
                     .sorted(java.util.Comparator.comparingInt((GrayboxCell cell) -> cell.position().x())
                             .thenComparingInt(cell -> cell.position().y()).thenComparingInt(cell -> cell.position().z())).toList();
             for (int index = 0; index < threshold; index++) {
                 GrayboxCell cell = cells.get(index);
                 state = state.recordPhysicalDelta(new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                        Optional.of(heart.id()), Optional.of(cell.semanticPart()), "test:heart-loss"));
+                        Optional.of(ganglion.id()), Optional.of(cell.semanticPart()), "test:ganglion-loss"));
             }
         }
         state = withTask(state, target);
@@ -174,7 +174,7 @@ class HiveInfectionProcessTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-infection"), hive, StrategicObjectiveKind.HIVE_EXPAND_INFECTION,
                 Optional.of(target), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-infection"), objective.id(), hive, StrategicTaskKind.SPREAD_INFECTION_CELL,
-                Optional.of(target), List.of(StrategicTaskRequirement.OPERATIONAL_HEART), List.of(), StrategicTaskStatus.PENDING);
+                Optional.of(target), List.of(StrategicTaskRequirement.OPERATIONAL_GANGLION), List.of(), StrategicTaskStatus.PENDING);
         return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
     }
 

@@ -44,7 +44,7 @@ public final class FrontierV3ObjectBoardGameTests {
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void movedBoardBecomesConflictInsteadOfBeingSilentlyRestored(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(16, 8, 0));
-        FrontierObjectBoard board = board(position, "organ:board-heart", FrontierObjectBoard.Tone.HIVE, "HIVE\nHEART\nACTIVE");
+        FrontierObjectBoard board = board(position, "organ:board-ganglion", FrontierObjectBoard.Tone.HIVE, "HIVE\nGANGLION\nACTIVE");
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
         helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
                 "the fixture begins from one v3-owned board");
@@ -60,10 +60,10 @@ public final class FrontierV3ObjectBoardGameTests {
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedBoardUpdatesItsReadableTextWithoutReplacingItsBody(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(24, 8, 0));
-        FrontierObjectBoard prior = board(position, "organ:board-updated-heart", FrontierObjectBoard.Tone.WARNING,
-                "HIVE\nHEART\nACTIVE\nINFECTION · SATURATED");
-        FrontierObjectBoard current = board(position, "organ:board-updated-heart", FrontierObjectBoard.Tone.WARNING,
-                "HIVE\nHEART\nACTIVE\nINFECTED\nSATURATED");
+        FrontierObjectBoard prior = board(position, "organ:board-updated-ganglion", FrontierObjectBoard.Tone.WARNING,
+                "HIVE\nGANGLION\nACTIVE\nINFECTION · SATURATED");
+        FrontierObjectBoard current = board(position, "organ:board-updated-ganglion", FrontierObjectBoard.Tone.WARNING,
+                "HIVE\nGANGLION\nACTIVE\nINFECTED\nSATURATED");
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
         helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, prior), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
                 "the initial canonical board is materialized once");

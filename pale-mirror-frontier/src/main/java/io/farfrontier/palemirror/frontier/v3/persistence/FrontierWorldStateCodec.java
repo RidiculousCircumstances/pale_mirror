@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 102; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 103; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -254,7 +254,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
             int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input); boolean hasContainer = input.readBoolean();
             java.util.Optional<SubjectId> container = hasContainer ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-            if (kind >= HiveOrganKind.values().length || organs.put(id, new HiveOrgan(id, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, container)) != null) {
+            if (organs.put(id, new HiveOrgan(id, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, container)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate added hive organ");
             }
         }
@@ -262,7 +262,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
             int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
-            if (role >= BioformRole.values().length || bioforms.put(id, new Bioform(id, hive, nest, FrontierWireTags.require(BioformRole.class, role), position)) != null) {
+            if (bioforms.put(id, new Bioform(id, hive, nest, FrontierWireTags.require(BioformRole.class, role), position)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate spawned bioform");
             }
         }
@@ -272,7 +272,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
             SubjectId bioformId = new SubjectId(readString(input)); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
-            if (kind >= HiveOrganKind.values().length || role >= BioformRole.values().length || jobs.put(id, new HiveGrowthJob(id, hive, nest, item, consumption,
+            if (jobs.put(id, new HiveGrowthJob(id, hive, nest, item, consumption,
                     new HiveOrgan(organId, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
                     new Bioform(bioformId, hive, nest, FrontierWireTags.require(BioformRole.class, role), position))) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }

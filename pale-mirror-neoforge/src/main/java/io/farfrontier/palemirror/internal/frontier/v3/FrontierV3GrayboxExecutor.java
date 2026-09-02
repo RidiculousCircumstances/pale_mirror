@@ -232,9 +232,15 @@ final class FrontierV3GrayboxExecutor {
             case WORKSHOP -> Blocks.BLUE_CONCRETE.defaultBlockState();
             case DEPOT -> Blocks.YELLOW_CONCRETE.defaultBlockState();
             case INFIRMARY -> Blocks.PINK_CONCRETE.defaultBlockState();
-            case HIVE_HEART -> Blocks.RED_CONCRETE.defaultBlockState();
+            case HIVE_GANGLION -> Blocks.RED_CONCRETE.defaultBlockState();
+            case HIVE_RELAY -> Blocks.PINK_CONCRETE.defaultBlockState();
             case HIVE_BROOD -> Blocks.PURPLE_CONCRETE.defaultBlockState();
             case HIVE_STORE -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
+            case HIVE_DIGESTER -> Blocks.BROWN_CONCRETE.defaultBlockState();
+            case HIVE_HIBERNACULUM -> Blocks.CYAN_CONCRETE.defaultBlockState();
+            case HIVE_MORPHER -> Blocks.LIME_CONCRETE.defaultBlockState();
+            case HIVE_SPORULATOR -> Blocks.ORANGE_CONCRETE.defaultBlockState();
+            case HIVE_SENSOR -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
             // Routes are semantic paved corridors, not waist-high walls.  A thin gray surface
             // stays plainly visible in graybox; exact Transit bodies use the compiler's adjacent
             // clear lane, so forced HOT motion never treats the route block as pass-through air.

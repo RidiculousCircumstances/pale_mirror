@@ -47,7 +47,7 @@ public final class FrontierBootstrapper {
         List<HiveOrgan> provisionalOrgans = new ArrayList<>();
         for (HiveNest nest : provisionalNests) {
             String suffix = nest.id().value().substring("nest:seed-".length());
-            provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-heart"), hiveId, nest.id(), HiveOrganKind.HEART,
+            provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-ganglion"), hiveId, nest.id(), HiveOrganKind.GANGLION,
                     nest.anchor(), java.util.Optional.empty()));
             provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-brood"), hiveId, nest.id(), HiveOrganKind.BROOD,
                     nest.anchor().offset(8, 0, 0), java.util.Optional.empty()));

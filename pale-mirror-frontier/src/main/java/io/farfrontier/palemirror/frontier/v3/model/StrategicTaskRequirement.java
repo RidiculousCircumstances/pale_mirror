@@ -4,7 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public enum StrategicTaskRequirement {
     ACTIVE_INFIRMARY,
     EXACT_DECONTAMINATION_REAGENT,
-    OPERATIONAL_HEART,
+    OPERATIONAL_GANGLION,
     AVAILABLE_HIVE_GUARD,
     EXACT_HIVE_BIOMASS,
     ACTIVE_WORKSHOP,

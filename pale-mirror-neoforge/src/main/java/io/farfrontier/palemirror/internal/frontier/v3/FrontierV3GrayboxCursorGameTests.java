@@ -151,9 +151,9 @@ public final class FrontierV3GrayboxCursorGameTests {
         ServerLevel level = helper.getLevel(); BlockPos root = helper.absolutePos(new BlockPos(30, 8, 4)); BlockPos organBase = root.above();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         GrayboxCell rootTissue = new GrayboxCell(new BlockPosition(root.getX(), root.getY(), root.getZ()),
-                new SubjectId("organ:surveyed-hive-heart"), GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.FOUNDATION);
+                new SubjectId("organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
         GrayboxCell organTissue = new GrayboxCell(new BlockPosition(organBase.getX(), organBase.getY(), organBase.getZ()),
-                new SubjectId("organ:surveyed-hive-heart"), GrayboxMaterial.HIVE_HEART, GrayboxSemanticPart.HIVE_TISSUE);
+                new SubjectId("organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
 
         level.setBlock(root.below(), Blocks.AIR.defaultBlockState(), 3);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, rootTissue), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
@@ -169,7 +169,7 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, reloaded, organTissue), FrontierV3GrayboxExecutor.ProjectionResult.CURRENT,
                 "a reloaded ledger retains the same organ tissue provenance above its root");
         helper.assertTrue(level.getBlockState(root).is(Blocks.RED_CONCRETE) && level.getBlockState(organBase).is(Blocks.RED_CONCRETE)
-                        && ledger.claim(root) != null && ledger.claim(root).owner().equals("organ:surveyed-hive-heart")
+                        && ledger.claim(root) != null && ledger.claim(root).owner().equals("organ:surveyed-hive-ganglion")
                         && ledger.claim(root).semanticPart().equals(GrayboxSemanticPart.FOUNDATION.name()),
                 "root and organ retain one exact organ provenance, never a generic terrain/foundation owner");
         helper.succeed();

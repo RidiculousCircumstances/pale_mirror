@@ -45,7 +45,7 @@ public final class HiveInfectionProcess {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
         if (task.status() == StrategicTaskStatus.BLOCKED || task.status() == StrategicTaskStatus.COMPLETED) return List.of();
-        if (!hasOperationalHeart(state)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        if (!hasOperationalGanglion(state)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         InfectionCell target = task.infectionTarget().orElseThrow();
         if (!state.bootstrap().bounds().contains(target.originAtY(64))) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         FixedRatio prior = state.infection().getOrDefault(target, new FixedRatio(FixedScalar.ZERO));
@@ -63,7 +63,7 @@ public final class HiveInfectionProcess {
     }
 
     public static Optional<InfectionCell> expansionTarget(FrontierWorldState state, long now) {
-        if (!hasOperationalHeart(state)) return Optional.empty();
+        if (!hasOperationalGanglion(state)) return Optional.empty();
         Map<InfectionCell, FixedRatio> perceived = state.strategicPlans().hiveTerritoryKnowledge().freshInfection(state.bootstrap().ruleset(), now);
         if (perceived.isEmpty()) return roots(state).stream().map(organ -> InfectionCell.at(organ.anchor())).findFirst();
         FrontierInfectionFrontier frontier = FrontierWorldStateSupport.infectionFrontier(perceived, state.bootstrap().bounds());
@@ -72,7 +72,7 @@ public final class HiveInfectionProcess {
                 .or(() -> frontier.best(perceived));
     }
 
-    public static boolean hasOperationalHeart(FrontierWorldState state) { return !roots(state).isEmpty(); }
+    public static boolean hasOperationalGanglion(FrontierWorldState state) { return !roots(state).isEmpty(); }
 
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
         return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
@@ -82,7 +82,7 @@ public final class HiveInfectionProcess {
 
     private static List<HiveOrgan> roots(FrontierWorldState state) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
-                .filter(organ -> organ.kind() == HiveOrganKind.HEART && state.isHiveOrganOperational(organ.id()))
+                .filter(organ -> organ.kind() == HiveOrganKind.GANGLION && state.isHiveOrganOperational(organ.id()))
                 .sorted(Comparator.comparing(HiveOrgan::id)).toList();
     }
 }
