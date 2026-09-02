@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteConstructionProcessIntegrationTest {
     @Test
-    void scheduledPatrolConfirmsObservedRouteLossBeforeConstructionStarts() {
+    void scheduledPatrolConfirmsObservedRouteLossBeforeInPlaceMaintenanceStarts() {
         WorldId worldId = new WorldId("frontier:route-reroute-scheduled");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 100L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -34,10 +34,10 @@ class RouteConstructionProcessIntegrationTest {
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new PhysicalDeltaObserved(delta))));
         for (long tick = 1L; tick <= 2_600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteConstruction candidate = after.routeConstructions().values().stream()
-                .filter(value -> value.settlementId().equals(settlement)).findFirst().orElseThrow();
+        RouteMaintenance candidate = after.routeMaintenances().values().stream()
+                .filter(value -> value.settlementId().equals(settlement) && value.repairCell().equals(loss)).findFirst().orElseThrow();
         assertEquals(settlement, candidate.settlementId());
-        EngineeringRecoveryTeam team = candidate.team().orElseThrow();
+        EngineeringRecoveryTeam team = candidate.team();
         assertEquals(candidate.id(), team.ownerId());
         assertEquals(settlement, team.settlementId());
         assertTrue(team.memberIds().size() >= EngineeringRecoveryTeam.MIN_MEMBERS
@@ -48,9 +48,10 @@ class RouteConstructionProcessIntegrationTest {
             assertEquals(candidate.id(), assignments.assignment(member).ownerId().orElseThrow());
         });
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after));
-        assertEquals(team, restored.routeConstructions().get(candidate.id()).team().orElseThrow());
+        assertEquals(team, restored.routeMaintenances().get(candidate.id()).team());
         assertEquals(assignments, HumanAssignmentProjection.compile(restored));
-        assertTrue(FrontierRouteNetwork.isPassable(after.bootstrap(), candidate.waypoints(), after.physicalDeltas()));
+        assertTrue(after.routeConstructions().isEmpty(), "one retained baseline loss may not become a concurrent bypass project");
+        assertTrue(!after.routeTopology().supplyPassable(after.bootstrap(), settlement), "unrepaired loss must retain its blocked edge");
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement)
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().equals(Optional.of(loss))));
     }

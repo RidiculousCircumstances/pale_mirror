@@ -39,8 +39,11 @@ import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssemblyDeferred;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkOrder;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionAssemblyAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.Settlement;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAccessPort;
@@ -760,15 +763,15 @@ final class FrontierV3AmbientActorExecutor {
     private static boolean observeEngineeringAssemblyArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                               FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
         EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
-        RouteConstruction project = engineeringProject(state, actorId);
+        EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || member == null || member.arrived()
                 || !observedBody(body).equals(lease.goalBody())) return false;
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-engineering-assembly", actorId.value(),
-                new RouteConstructionAssemblyAdvanced(project.id(), assembly.advance(actorId)));
-        FrontierV3DiagnosticTrace.record(level.getServer(), "route-construction:" + project.id().value(),
-                "route_construction_assembly_advanced", actorId, result);
+                assemblyAdvanced(project, assembly.advance(actorId)));
+        FrontierV3DiagnosticTrace.record(level.getServer(), "engineering:" + project.id().value(),
+                "engineering_assembly_advanced", actorId, result);
         return true;
     }
     private static boolean observeScoutPatrolArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
@@ -842,17 +845,23 @@ final class FrontierV3AmbientActorExecutor {
         SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
         return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
-    private static RouteConstruction engineeringProject(FrontierWorldState state, SubjectId actorId) {
-        return state.routeConstructions().values().stream()
+    private static EngineeringWorkOrder engineeringProject(FrontierWorldState state, SubjectId actorId) {
+        return java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
                 .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
-                .findFirst().orElse(null);
+                .reduce((left, right) -> { throw new IllegalStateException("engineering assembly owner is ambiguous"); }).orElse(null);
     }
     private static EngineeringWorkAssembly.Member engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
-        RouteConstruction project = engineeringProject(state, actorId);
+        EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return null;
         EngineeringWorkAssembly.Member member = project.assembly().orElseThrow().members().get(actorId);
         BlockPosition expected = member.arrived() ? member.currentPosition() : member.corridor().get(member.cursor() + 1);
         return lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(expected))) ? member : null;
+    }
+    private static FrontierPayload assemblyAdvanced(EngineeringWorkOrder project, EngineeringWorkAssembly assembly) {
+        return switch (project) {
+            case RouteConstruction construction -> new RouteConstructionAssemblyAdvanced(construction.id(), assembly);
+            case RouteMaintenance maintenance -> new RouteMaintenanceAssemblyAdvanced(maintenance.id(), assembly);
+        };
     }
     private static BlockPos minecraftBody(BodyPosition body) { return new BlockPos(body.x(), body.y(), body.z()); }
     private static BodyPosition observedBody(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }

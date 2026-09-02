@@ -60,7 +60,7 @@ class RoutePatrolProcessTest {
     }
 
     @Test
-    void exactGuardPatrolCreatesDurableEvidenceBeforeOpeningRouteConstruction() {
+    void exactGuardPatrolCreatesDurableEvidenceBeforeOpeningInPlaceMaintenance() {
         WorldId world = new WorldId("frontier:route-patrol");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 712L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -80,10 +80,10 @@ class RoutePatrolProcessTest {
         assertEquals(RoutePatrolStatus.OBSTRUCTION_CONFIRMED, patrol.status());
         assertEquals(Optional.of(obstruction), patrol.obstruction());
         assertEquals(StrategicTaskStatus.COMPLETED, after.strategicPlans().tasks().get(patrol.taskId()).status());
-        assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement)));
+        assertTrue(after.routeConstructions().isEmpty(), "a PM baseline loss must not open a hidden bypass project");
         StrategicTask construction = after.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlement)
                 && task.kind() == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS).findFirst().orElseThrow();
-        assertEquals(StrategicTaskStatus.ACTIVE, construction.status());
+        assertEquals(StrategicTaskStatus.BLOCKED, construction.status());
         assertEquals(java.util.List.of(patrol.taskId()), construction.dependencies());
         assertEquals(patrol.route().get(patrol.routeIndex()), FrontierTestPositions.supportOf(after.actorLocations().get(patrol.guardId())));
         assertEquals(2, patrol.memberIds().size());

@@ -305,34 +305,32 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !strategicPlans.settlementAssaults().containsKey(intent.causeSubjectId())
                     && !bootstrap.hive().id().equals(intent.causeSubjectId())
                     && !FrontierRouteNetwork.OWNER.equals(intent.causeSubjectId()) && !routeConstructions.containsKey(intent.causeSubjectId())
-                    && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
+                    && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
                 RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
                 boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
-                boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING
-                        && routeConstruction != null && routeConstruction.cargoId().isEmpty()
+                boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING && routeConstruction != null && routeConstruction.cargoId().isEmpty()
                         && (subject.equals(routeConstruction.plannedCargoId())
                         || subject.equals(routeConstruction.plannedCargoItemId()));
-                if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject)
-                        && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
+                boolean reservedRouteMaintenanceCargo = RouteMaintenanceStateSupport.reservesSubject(routeMaintenances, intent, subject);
+                if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject) && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
                         && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)
                         && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
                         && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, subject)
-                        && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject)
+                        && !FrontierRouteNetwork.OWNER.equals(subject) && !routeConstructions.containsKey(subject) && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, subject)
                         && !strategicPlans.routeEngagements().containsKey(subject) && !strategicPlans.settlementAssaults().containsKey(subject)
                         && contracts.values().stream().noneMatch(contract -> contract.cargoId().equals(subject))
-                        && !reservedRouteConstructionCargo && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
+                        && !reservedRouteConstructionCargo && !reservedRouteMaintenanceCargo && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, subject)) {
                     throw new IllegalArgumentException("physical intent references an unknown canonical subject");
                 }
             }
         }
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, operations,
-                contracts, sceneLeases, routeConstructions, routeTopology);
+        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, operations, contracts, sceneLeases, routeConstructions, routeMaintenances, routeTopology);
         ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -802,6 +800,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if ((current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                     || current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING)
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
+            if (RouteMaintenanceStateSupport.ownsIntent(current) && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteMaintenanceStateSupport.conflict(this, current, next);
             if (HiveNutrientTransferStateSupport.isEndpointIntent(current) && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return HiveNutrientTransferStateSupport.unknownEndpoint(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
@@ -840,6 +839,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
+        if (RouteMaintenanceStateSupport.ownsIntent(current)) return RouteMaintenanceStateSupport.confirm(this, current, evidence, next);
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
             if (!(evidence instanceof SceneStrikeObservation strike)) throw new IllegalArgumentException("scene strike requires exact hit evidence");
             SceneStrikeStateSupport.validateObservation(this, current, strike);

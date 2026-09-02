@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.RouteConstructionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -48,7 +49,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, EngineeringWorkSceneCandidate candidate) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        String suffix = candidate.projectId().value().substring("construction:".length());
+        String suffix = candidate.projectId().value().replace(':', '-');
         SceneLeaseId id = new SceneLeaseId("lease:engineering-" + suffix + "-cell-" + candidate.workCellIndex() + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
@@ -97,17 +98,27 @@ final class FrontierV3EngineeringWorkSceneExecutor {
             if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
-        if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
+        if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
+                || intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE)
+                && intent.subjectIds().contains(FrontierSceneBehaviors.engineeringWorksite(lease).projectId())
                 && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                 || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING))) return;
         EngineeringWorkSceneCause cause = FrontierSceneBehaviors.engineeringWorksite(lease);
-        RouteConstruction project = state.routeConstructions().get(cause.projectId());
+        EngineeringWorkOrder project;
+        try { project = EngineeringWorkOrderSupport.require(state, cause.projectId()); }
+        catch (IllegalArgumentException absent) { return; }
         if (project == null || project.cargoId().isEmpty() || project.confirmedCells() != cause.workCellIndex()) return;
         SubjectId cargo = project.cargoId().orElseThrow();
         var batch = state.inventory().cargo().get(cargo);
         if (batch == null || batch.itemIds().size() != 1) { conflict(level, runtime, lease, "work-cargo-unavailable"); return; }
-        submit(runtime, "engineering-work-intent", lease.id().value(), new PhysicalIntentPrepared(
-                RouteConstructionProcess.workIntent(project, cargo, batch.itemIds().getFirst())));
+        submit(runtime, "engineering-work-intent", lease.id().value(), new PhysicalIntentPrepared(workIntent(project, cargo, batch.itemIds().getFirst())));
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent workIntent(EngineeringWorkOrder project, SubjectId cargo, SubjectId item) {
+        return switch (project) {
+            case RouteConstruction construction -> RouteConstructionProcess.workIntent(construction, cargo, item);
+            case RouteMaintenance maintenance -> RouteMaintenanceProcess.workIntent(maintenance, cargo, item);
+        };
     }
 
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {

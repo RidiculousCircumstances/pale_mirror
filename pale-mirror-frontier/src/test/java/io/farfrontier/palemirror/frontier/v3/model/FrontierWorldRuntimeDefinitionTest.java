@@ -431,7 +431,14 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void longLivedPulsesKeepTheirBoundedWorkCostInsteadOfGrowingIntoTheSchedulerBudget() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:long-pulse"), 91L));
-        for (long tick = 100L; tick <= 60_000L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+        for (long tick = 100L; tick <= 60_000L; tick += 100L) {
+            engine.advanceTo(new SimInstant(tick), new WorkBudget(8, 64));
+            if (tick % 1_200L == 0L) {
+                // Model the runtime's durable checkpoint before it releases its covered WAL.
+                // This test measures bounded scheduled work, not intentionally exhausted WAL.
+                engine.compact(engine.checkpoint().revision());
+            }
+        }
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse("no failure detail"));
         assertTrue(engine.projection(ProjectionQuery.summary()).revision().value() >= 600L);

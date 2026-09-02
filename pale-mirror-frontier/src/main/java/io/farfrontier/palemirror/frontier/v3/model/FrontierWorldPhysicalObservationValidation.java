@@ -16,7 +16,8 @@ final class FrontierWorldPhysicalObservationValidation {
     static void validate(FrontierBootstrap bootstrap, ExactInventory inventory, Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection,
                          Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                          Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts, Map<SceneLeaseId, SceneLease> sceneLeases,
-                         Map<SubjectId, RouteConstruction> constructions, RouteTopology topology) {
+                         Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
+                         RouteTopology topology) {
         for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : observations.entrySet()) {
             PhysicalEffectObservation observation = entry.getValue();
             if (!entry.getKey().equals(observation.id())) throw new IllegalArgumentException("physical observation map key must match observation identity");
@@ -41,6 +42,10 @@ final class FrontierWorldPhysicalObservationValidation {
                 RouteConstructionStateSupport.validateReceipt(bootstrap, topology, constructions, intent, construction);
             } else if (observation instanceof RouteConstructionMaterialLoadObservation loading) {
                 RouteConstructionStateSupport.validateMaterialLoadingReceiptForRecovery(inventory, constructions, intents, observations, intent, loading);
+            } else if (observation instanceof RouteMaintenanceObservation maintenance) {
+                RouteMaintenanceStateSupport.validateReceipt(bootstrap, topology, maintenances, intent, maintenance);
+            } else if (observation instanceof RouteMaintenanceMaterialLoadObservation loading) {
+                RouteMaintenanceStateSupport.validateMaterialLoadingReceiptForRecovery(inventory, maintenances, intents, observations, intent, loading);
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
                 ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(bootstrap, intent, harvest);
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {

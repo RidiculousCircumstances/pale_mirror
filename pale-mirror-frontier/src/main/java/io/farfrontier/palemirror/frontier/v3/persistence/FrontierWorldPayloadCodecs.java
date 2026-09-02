@@ -48,7 +48,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             StrategicPlanPayloadCodecs.scoutPatrolLeaseRecovered()))); }
     static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
             RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
-            RouteConstructionPayloadCodecs.assemblyAdvanced(), RoutePatrolPayloadCodecs.started(),
+            RouteConstructionPayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.started(), RouteMaintenancePayloadCodecs.materialLoaded(),
+            RouteMaintenancePayloadCodecs.assemblyStarted(), RouteMaintenancePayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.closed(), RoutePatrolPayloadCodecs.started(),
             RoutePatrolPayloadCodecs.advanced(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed())); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
             StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }

@@ -38,6 +38,12 @@ final class FrontierV3DiagnosticTrace {
         return "route-construction:" + projectId.value();
     }
 
+    /** One retained in-place repair, shared by pickup and its same-cell physical receipt. */
+    static String routeMaintenanceCorrelation(SubjectId maintenanceId) {
+        Objects.requireNonNull(maintenanceId, "route maintenance operation");
+        return "route-maintenance:" + maintenanceId.value();
+    }
+
     /** One exact cargo crossing between the two roots of the distributed hive organism. */
     static String hiveNutrientCorrelation(SubjectId transferId) {
         Objects.requireNonNull(transferId, "hive nutrient transfer");

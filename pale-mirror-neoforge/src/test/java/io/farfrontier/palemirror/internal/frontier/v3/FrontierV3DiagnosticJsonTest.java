@@ -258,6 +258,8 @@ class FrontierV3DiagnosticJsonTest {
     void derivesOneStableTraceCorrelationForTheCompleteRouteRepairWorkOrder() {
         assertTrue(FrontierV3DiagnosticTrace.routeConstructionCorrelation(new SubjectId("construction:route-reroute-settlement-1--380-64--304"))
                 .equals("route-construction:construction:route-reroute-settlement-1--380-64--304"));
+        assertTrue(FrontierV3DiagnosticTrace.routeMaintenanceCorrelation(new SubjectId("maintenance:route--380-64--304"))
+                .equals("route-maintenance:maintenance:route--380-64--304"));
     }
 
     @Test

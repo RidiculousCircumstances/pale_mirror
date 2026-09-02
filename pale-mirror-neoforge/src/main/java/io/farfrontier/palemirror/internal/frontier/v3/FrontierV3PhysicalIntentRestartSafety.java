@@ -67,9 +67,9 @@ final class FrontierV3PhysicalIntentRestartSafety {
     static boolean hasLoadedPostconditionInspector(PhysicalIntent intent,
                                                     java.util.function.Predicate<PhysicalIntentId> hasManagedPostcondition) {
         return switch (intent.kind()) {
-            case CARGO_HANDOFF, STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION, DECONTAMINATION,
+            case CARGO_HANDOFF, STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION, ROUTE_MAINTENANCE, DECONTAMINATION,
                     EXACT_ITEM_CONSUMPTION, RESOURCE_SITE_PREPARATION, RESOURCE_SITE_HARVEST,
-                    PRODUCTION_TRANSFORMATION, CARGO_LOADING, ROUTE_CONSTRUCTION_MATERIAL_LOADING,
+                    PRODUCTION_TRANSFORMATION, CARGO_LOADING, ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE_MATERIAL_LOADING,
                     HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> true;
             case EXPLOSION -> hasManagedPostcondition.test(intent.id());
             default -> false;

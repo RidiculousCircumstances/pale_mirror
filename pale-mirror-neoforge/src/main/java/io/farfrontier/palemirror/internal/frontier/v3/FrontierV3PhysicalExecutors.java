@@ -33,8 +33,9 @@ final class FrontierV3PhysicalExecutors {
             executor("cargo-handoff", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "cargo-handoff-effect", FrontierV3CargoHandoffExecutor::tick),
             executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-handoff"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
             executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
+            executor("route-maintenance", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-construction"), "route-maintenance-effect", FrontierV3RouteMaintenanceExecutor::tick),
 
-            executor("scenes", FrontierV3PhysicalExecutorRegistry.Stage.SCENE, Set.of("route-construction", "object-boards"), "scene-leases", FrontierV3SceneExecutor::tick)
+            executor("scenes", FrontierV3PhysicalExecutorRegistry.Stage.SCENE, Set.of("route-maintenance", "object-boards"), "scene-leases", FrontierV3SceneExecutor::tick)
     ));
 
     private FrontierV3PhysicalExecutors() { }

@@ -99,6 +99,9 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         PhysicalIntent intent = prepared.intent();
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
+        if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
+            return RouteMaintenanceProcess.reducePrepared(state, subject, intent);
+        }
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
             if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup must be prepared by the route network");
             RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
@@ -165,6 +168,10 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
             if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup transition lacks route-network ownership");
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
+        if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
+            if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance transition lacks route-network ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {

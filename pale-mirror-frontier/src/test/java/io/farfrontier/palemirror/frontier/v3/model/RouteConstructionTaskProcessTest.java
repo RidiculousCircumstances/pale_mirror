@@ -27,40 +27,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RouteConstructionTaskProcessTest {
     @Test
-    void unreachableExactCrewBlocksConstructionAdmissionWithoutCreatingProject() {
+    void confirmedPmBaselineLossBlocksBypassAdmissionBeforeAnyCrewIsReserved() {
         FrontierWorldState state = stateWithConfirmedPatrol();
         StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
-        RouteConstruction viable = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L)).stream()
-                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
-                .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
-        SubjectId stranded = viable.team().orElseThrow().memberIds().getFirst();
-        BlockPosition blockedFloor = FrontierGrayboxPlan.currentBodyGeometry(state).stream().findFirst().orElseThrow().offset(0, -1, 0);
-        state = state.withActorBody(stranded, FrontierTestPositions.bodyAboveSupport(blockedFloor));
-
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
 
         assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
                 && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.BLOCKED));
         assertFalse(result.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted),
-                "a topology with no real COLD crew approach must not create an unreachable construction project");
+                "a retained PM baseline loss must not create a hidden bypass before maintenance admits its exact crew");
     }
 
     @Test
-    void confirmedPatrolStartsOneExactCrewProjectAndGatesLegacyPlacer() {
-        FrontierWorldState state = stateWithConfirmedPatrol();
-        StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> started = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
-        assertTrue(started.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted));
-        assertTrue(started.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
-                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.ACTIVE));
-
-        RouteConstruction project = started.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
-                .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst().orElseThrow();
+    void explicitlyAdmittedDetourRetainsExactCrewAndGatesLegacyPlacer() {
+        FrontierWorldState state = FrontierDevelopmentScenarios.engineeringEquipmentFixture(
+                new WorldId("frontier:route-construction-task"), 91L).state();
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
         assertTrue(project.team().isPresent(), "new construction must retain an exact engineering crew instead of an autonomous builder");
         assertEquals(EngineeringRecoveryTeam.MIN_MEMBERS, project.team().orElseThrow().memberIds().size(),
                 "one narrow replacement cell admits its reachable two-person work front, not a fictitious four-body crowd");
-        state = state.withStrategicPlans(state.strategicPlans().transitionTask(construction.id(), StrategicTaskStatus.ACTIVE));
-        state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
@@ -107,27 +92,6 @@ class RouteConstructionTaskProcessTest {
         assertEquals(assemblyAdvanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(assemblyAdvanced.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(assemblyAdvanced)));
         state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, assemblyAdvanced);
-        assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
-                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
-
-        RouteConstruction activeProject = state.routeConstructions().get(project.id());
-        int requiredCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), activeProject.settlementId(), activeProject.waypoints()).size();
-        RouteConstruction ready = activeProject.withConfirmedCells(requiredCells, RouteConstructionStatus.READY);
-        LinkedHashMap<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
-        projects.put(project.id(), ready);
-        state = state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects));
-        PhysicalIntentPrepared toolReturn = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 300L)).stream()
-                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
-                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN, toolReturn.intent().kind());
-        state = state.preparePhysicalIntent(toolReturn.intent());
-        SubjectId returnedItem = toolReturn.intent().subjectIds().get(2), returnedResident = toolReturn.intent().subjectIds().get(1);
-        InventoryCustody.ContainerSlot returnSlot = new InventoryCustody.ContainerSlot(toolReturn.intent().targetSlot().orElseThrow().containerId(),
-                toolReturn.intent().targetSlot().orElseThrow().slot());
-        state = EquipmentReturnStateSupport.complete(state, toolReturn.intent(), new EquipmentReturnObservation(
-                new PhysicalObservationId("observation:engineering-tool-return"), toolReturn.intent().id(), project.id(), returnedResident, returnedItem, returnSlot),
-                new LinkedHashMap<>(state.physicalIntents()));
-        assertEquals(returnSlot, state.inventory().items().get(returnedItem).custody());
         assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
     }

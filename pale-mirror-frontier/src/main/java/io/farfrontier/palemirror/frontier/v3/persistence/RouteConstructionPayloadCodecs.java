@@ -103,7 +103,7 @@ final class RouteConstructionPayloadCodecs {
         return new EngineeringRecoveryTeam(id, owner, settlement, leader, members);
     }
 
-    private static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
+    static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
         output.writeByte(assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
@@ -113,7 +113,7 @@ final class RouteConstructionPayloadCodecs {
         }
     }
 
-    private static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
+    static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte();
         if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) {
             throw new IllegalArgumentException("route construction assembly payload has invalid size");

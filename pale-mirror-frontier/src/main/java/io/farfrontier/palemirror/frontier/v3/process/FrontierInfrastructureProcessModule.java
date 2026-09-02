@@ -13,6 +13,11 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RouteConstructionAssemblyStarted started -> RouteConstructionStateSupport.reduceAssemblyStarted(state, event.subject(), started);
             case RouteConstructionAssemblyAdvanced advanced -> RouteConstructionStateSupport.reduceAssemblyAdvanced(state, event.subject(), advanced);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
+            case RouteMaintenanceStarted started -> RouteMaintenanceStateSupport.reduceStarted(state, event.subject(), started);
+            case RouteMaintenanceMaterialLoaded loaded -> RouteMaintenanceStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
+            case RouteMaintenanceAssemblyStarted started -> RouteMaintenanceStateSupport.reduceAssemblyStarted(state, event.subject(), started);
+            case RouteMaintenanceAssemblyAdvanced advanced -> RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, event.subject(), advanced);
+            case RouteMaintenanceClosed closed -> RouteMaintenanceStateSupport.reduceClosed(state, event.subject(), closed);
             case RoutePatrolStarted started -> RoutePatrolProcess.reduceStarted(state, event.subject(), started);
             case RoutePatrolAdvanced advanced -> RoutePatrolProcess.reduceAdvanced(state, event.subject(), advanced);
             case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);

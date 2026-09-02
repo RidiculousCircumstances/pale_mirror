@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -132,40 +133,39 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
-     * Read-only engineering issue boundary. A confirmed patrol owns one route-bypass project
-     * and its exact local crew, while four real depot pickaxes remain untouched. A native visit
-     * must materialize the depot and issue one existing tagged pickaxe; this fixture neither
-     * starts work nor moves an actor or item.
+     * Read-only engineering issue boundary. It explicitly retains one already-admitted detour
+     * project and its exact local crew, while four real depot pickaxes remain untouched. A
+     * fixture is allowed to establish that canonical precondition, but it must not invent a
+     * production cause: a PM-owned baseline loss is now exclusively in-place maintenance.
+     * A native visit must materialize the depot and issue one existing tagged pickaxe; this
+     * fixture neither starts work nor moves an actor or item.
      */
     static RouteConstructionFixture engineeringEquipmentFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
-        BlockPosition obstruction = route.get(1);
-        state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:engineering"));
-        Resident guard = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.GUARD).findFirst()
-                .orElseThrow(() -> new IllegalStateException("engineering fixture needs one guard"));
-        StrategicObjective patrolObjective = new StrategicObjective(new SubjectId("objective:fixture-engineering-patrol"), settlement.id(),
-                StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask patrolTask = new StrategicTask(new SubjectId("task:fixture-engineering-patrol"), patrolObjective.id(), settlement.id(),
-                StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.PENDING);
-        StrategicPlanState plans = StrategicPlanState.empty().addObjective(patrolObjective).addTask(patrolTask).transitionTask(patrolTask.id(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol patrol = new RoutePatrol(patrolTask.id(), settlement.id(), guard.id(), route, 1, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(obstruction));
-        plans = plans.startPatrol(patrol).transitionTask(patrolTask.id(), StrategicTaskStatus.COMPLETED);
-        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:fixture-engineering-construction"), settlement.id(),
-                StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:fixture-engineering-construction"), objective.id(), settlement.id(),
-                StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS, Optional.empty(), List.of(StrategicTaskRequirement.CONFIRMED_ROUTE_OBSTRUCTION,
-                StrategicTaskRequirement.EXACT_ROUTE_CONSTRUCTION_MATERIAL), List.of(patrolTask.id()), StrategicTaskStatus.PENDING);
-        state = state.withStrategicPlans(plans.addObjective(objective).addTask(task));
-        List<ProposedEvent> start = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(task, 100L));
-        RouteConstruction project = start.stream().map(ProposedEvent::payload).filter(RouteConstructionStarted.class::isInstance)
-                .map(RouteConstructionStarted.class::cast).map(RouteConstructionStarted::project).findFirst()
-                .orElseThrow(() -> new IllegalStateException("engineering fixture did not retain a route project"));
-        state = state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        RouteConstruction project = fixtureDetourProject(state, settlement);
         state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteConstructionStarted(project));
         return new RouteConstructionFixture(state, new SimInstant(200L), List.of(RouteConstructionProcess.scan(1, 200L)), project.id());
+    }
+
+    private static RouteConstruction fixtureDetourProject(FrontierWorldState state, Settlement settlement) {
+        List<BlockPosition> baseline = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        BlockPosition origin = baseline.getFirst(), destination = baseline.getLast();
+        BlockPosition egress = origin.offset(-36, 0, 0), lane = egress.offset(0, 0, 60);
+        List<BlockPosition> detour = List.of(origin, egress, lane, new BlockPosition(-300, lane.y(), lane.z()),
+                new BlockPosition(-300, destination.y(), destination.z()), destination);
+        // This identity is the fixture's stable subject referenced by checked-in scenario and
+        // GameTest evidence. It no longer encodes a physical-loss cause.
+        SubjectId projectId = new SubjectId("construction:route-reroute-" + settlement.id().value().replace(':', '-') + "--366-64--304");
+        List<SubjectId> crew = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resident.capability(HumanCapability.ENGINEERING) > 0)
+                .sorted(Comparator.comparing(ResidentProfile::id)).limit(EngineeringRecoveryTeam.MIN_MEMBERS).map(ResidentProfile::id).toList();
+        if (crew.isEmpty()) throw new IllegalStateException("engineering fixture needs one exact engineer");
+        List<BlockPosition> workCells = FrontierRouteNetwork.constructionCells(state.bootstrap(), state.routeTopology(), settlement.id(), detour);
+        if (workCells.isEmpty()) throw new IllegalStateException("engineering fixture needs a non-empty immutable detour work plan");
+        return new RouteConstruction(projectId, settlement.id(), detour, workCells, 0, RouteConstructionStatus.BUILDING,
+                Optional.empty(), Optional.of(EngineeringRecoveryTeam.forWorkOrder(projectId, settlement.id(), crew)), Optional.empty());
     }
 
     /**

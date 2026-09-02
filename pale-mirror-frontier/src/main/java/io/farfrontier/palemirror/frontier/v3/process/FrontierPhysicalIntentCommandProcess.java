@@ -31,6 +31,8 @@ public final class FrontierPhysicalIntentCommandProcess {
                         FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
                 case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition));
                 case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(state, intent, transition));
+                case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition));
+                case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(state, intent, transition));
                 case DECONTAMINATION -> new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
                 case RESOURCE_SITE_PREPARATION -> new CommandPlan.Accepted(
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
@@ -131,6 +133,17 @@ public final class FrontierPhysicalIntentCommandProcess {
                 if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
                     return rejected("route construction physical work requires its current HOT engineering scene");
                 }
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+            }
+            if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE) {
+                RouteMaintenanceStateSupport.validateWorkIntent(state, intent);
+                if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+                    return rejected("route maintenance physical work requires its current HOT engineering scene");
+                }
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+            }
+            if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
+                RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
             }
             if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return rejected("physical executor cannot prepare this intent kind");

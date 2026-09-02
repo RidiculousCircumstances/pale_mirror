@@ -25,10 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Guards the live HOT-to-COLD route-loss path rather than only a cold-start patrol. */
+/** Guards the live HOT-to-COLD route-loss handoff into the exact in-place maintenance owner. */
 class RouteSceneReturnRepairTest {
     @Test
-    void releasedFailedHotShipmentStillTriggersPatrolAndRouteConstruction() {
+    void releasedFailedHotShipmentStillTriggersPatrolAndInPlaceRouteMaintenance() {
         WorldId world = new WorldId("frontier:route-scene-return-repair");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         FrontierWorldState initial = state(engine);
@@ -60,9 +60,10 @@ class RouteSceneReturnRepairTest {
         assertTrue(after.operations().get(operation.id()).stage() == OperationStage.FAILED);
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED));
-        assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(operation.settlementId())),
-                () -> "confirmed patrol did not start a route project; objectives=" + after.strategicPlans().objectives()
-                        + ", tasks=" + after.strategicPlans().tasks() + ", patrols=" + after.strategicPlans().routePatrols());
+        assertTrue(after.routeMaintenances().values().stream().anyMatch(maintenance -> maintenance.settlementId().equals(operation.settlementId())
+                        && maintenance.repairCell().equals(obstruction) && maintenance.status() == RouteMaintenanceStatus.BUILDING),
+                () -> "confirmed patrol did not start exact route maintenance; maintenance=" + after.routeMaintenances());
+        assertTrue(after.routeConstructions().isEmpty(), "a retained baseline loss may not become a hidden bypass project");
     }
 
     /**
@@ -71,7 +72,7 @@ class RouteSceneReturnRepairTest {
      * fixture from masking a repair planner that cannot recover an already-moving convoy.
      */
     @Test
-    void laterHotRouteLossStillStartsTheExactBypassProject() {
+    void laterHotRouteLossStillStartsTheExactInPlaceMaintenance() {
         WorldId world = new WorldId("frontier:route-scene-return-repair-later-edge");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
@@ -112,10 +113,11 @@ class RouteSceneReturnRepairTest {
         assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED), () -> "later obstruction did not reach the patrol: " + after.strategicPlans());
-        assertTrue(after.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(operation.settlementId())),
-                () -> "later obstruction did not start a route project; objectives=" + after.strategicPlans().objectives()
-                        + ", tasks=" + after.strategicPlans().tasks() + ", patrols=" + after.strategicPlans().routePatrols()
+        assertTrue(after.routeMaintenances().values().stream().anyMatch(maintenance -> maintenance.settlementId().equals(operation.settlementId())
+                        && maintenance.repairCell().equals(obstruction) && maintenance.status() == RouteMaintenanceStatus.BUILDING),
+                () -> "later obstruction did not start exact route maintenance; maintenance=" + after.routeMaintenances()
                         + ", deltas=" + after.physicalDeltas());
+        assertTrue(after.routeConstructions().isEmpty(), "a retained baseline loss may not become a hidden bypass project");
     }
 
     private static SceneLease lease(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint, RouteOperation operation) {

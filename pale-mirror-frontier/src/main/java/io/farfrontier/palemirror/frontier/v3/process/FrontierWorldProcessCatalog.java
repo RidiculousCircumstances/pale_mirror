@@ -81,6 +81,9 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
             "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
+            "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
+            "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
+            "frontier.route_maintenance_closed",
             "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
             "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed");
     private static final Set<String> STRATEGY = types(
@@ -128,6 +131,8 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
             Map.entry("frontier.route_construction.start", (state, action, autonomous) -> RouteConstructionProcess.planStart(state, action)),
             Map.entry("frontier.route_construction.assembly_progress", (state, action, autonomous) -> RouteConstructionProcess.planAssemblyProgress(state, action)),
+            Map.entry("frontier.route_maintenance.scan", (state, action, autonomous) -> RouteMaintenanceProcess.plan(state, action)),
+            Map.entry("frontier.route_maintenance.assembly_progress", (state, action, autonomous) -> RouteMaintenanceProcess.planAssemblyProgress(state, action)),
             Map.entry("frontier.route_patrol.start", (state, action, autonomous) -> RoutePatrolProcess.planStart(state, action)),
             Map.entry("frontier.route_patrol.progress", (state, action, autonomous) -> RoutePatrolProcess.planProgress(state, action)),
             Map.entry("frontier.hive_route_engagement.start", (state, action, autonomous) -> HiveRouteEngagementProcess.planStart(state, action)),
@@ -190,7 +195,8 @@ public final class FrontierWorldProcessCatalog {
     public static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         FrontierRuleset.Cadence cadence = bootstrap.ruleset().cadence();
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, cadence.structuralRepairInitialScanTick()),
-                RouteConstructionProcess.scan(1, cadence.routeConstructionInitialScanTick()), DecontaminationProcess.scan(1, cadence.decontaminationInitialScanTick())));
+                RouteConstructionProcess.scan(1, cadence.routeConstructionInitialScanTick()), RouteMaintenanceProcess.scan(1, cadence.routeConstructionInitialScanTick()),
+                DecontaminationProcess.scan(1, cadence.decontaminationInitialScanTick())));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
@@ -272,7 +278,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.hive.nutrient.transfer.progress", "frontier.hive.scout.patrol"); }
     private static Set<String> infrastructureSchedules() { return types(
             "frontier.structural_repair.scan", "frontier.route_construction.scan", "frontier.route_construction.start",
-            "frontier.route_construction.assembly_progress",
+            "frontier.route_construction.assembly_progress", "frontier.route_maintenance.scan", "frontier.route_maintenance.assembly_progress",
             "frontier.route_patrol.start", "frontier.route_patrol.progress", "frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
@@ -376,6 +382,8 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.route_construction_started", "frontier.route_construction_material_loaded", "frontier.route_topology_cutover",
                     "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
+                    "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
+                    "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
                     "frontier.route_patrol_started", "frontier.route_patrol_advanced", "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

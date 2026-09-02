@@ -48,6 +48,7 @@ public final class RouteConstructionProcess {
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = constructionTaskById(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
+        if (RouteMaintenanceProcess.blocksBypassConstruction(state, settlement.id())) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         boolean confirmed = task.dependencies().stream().map(state.strategicPlans().routePatrols()::get).anyMatch(patrol -> patrol != null
                 && patrol.settlementId().equals(settlement.id()) && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED
                 && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
