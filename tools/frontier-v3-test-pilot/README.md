@@ -15,8 +15,8 @@ world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
 `hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-nutrient-transfer`,
-`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `hot-scout-patrol-recovery`, `health-quarantine`
-or `resident-transit`. These fail-closed development fixtures are available
+`scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `hot-scout-patrol-recovery`, `health-quarantine`,
+`resident-transit` or `route-maintenance-cold-source-fairness`. These fail-closed development fixtures are available
 only to the named disposable pilot runner. `hot-scene-strike` selects a
 deterministic canonical HOT engagement. `hive-growth` stops the real
 twelve-settlement schedule at a durable exact-biomass receipt, so an ordinary
@@ -28,7 +28,7 @@ facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 exact stack must leave one loaded chest, cross the retained COLD corridor, then
 enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded
 reserved-bed corridor and no HOT body; an ordinary visit must materialize and
-advance that same journey. `settlement-assault` stops at a real Scout-rooted COLD battle: a visit must admit only its exact cargo-free attackers and defenders. `defender-equipment` retains an approaching real assault and one exact depot sword, but no issue intent, active chest or resident body; an ordinary visit must make the normal surface, ambient-actor and equipment executors complete the hand-off. `defender-equipment-return` begins only with that same exact resident-held sword after a resolved assault; a visit must make the normal executors return it to one named free active-depot slot. The normal `world` profile remains the default. No profile gives the pilot a canonical mutation API or force-loads chunks.
+advance that same journey. `settlement-assault` stops at a real Scout-rooted COLD battle: a visit must admit only its exact cargo-free attackers and defenders. `defender-equipment` retains an approaching real assault and one exact depot sword, but no issue intent, active chest or resident body; an ordinary visit must make the normal surface, ambient-actor and equipment executors complete the hand-off. `defender-equipment-return` begins only with that same exact resident-held sword after a resolved assault; a visit must make the normal executors return it to one named free active-depot slot. `route-maintenance-cold-source-fairness` retains two independent PM-owned route losses: the first source is intentionally COLD, while the second already has its exact cargo and team. An ordinary visit may repair only the loaded second target; it must leave the first pending without force-loading or inventing provenance. The normal `world` profile remains the default. No profile gives the pilot a canonical mutation API or force-loads chunks.
 
 Run the checked-in isolated terminal-harvest regression on the visible `:0`
 display:

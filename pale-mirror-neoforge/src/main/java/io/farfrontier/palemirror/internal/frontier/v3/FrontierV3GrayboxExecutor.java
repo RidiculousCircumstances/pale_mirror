@@ -69,7 +69,11 @@ final class FrontierV3GrayboxExecutor {
             // repair simply removes this mask; the repair executor owns its physical write and
             // provenance transition, while this ordinary projector may subsequently see it as
             // CURRENT.  We never use the cached baseline to recreate a lost cell.
-            if (state.physicalDeltas().containsKey(cell.position())) continue;
+            PhysicalDelta delta = state.physicalDeltas().get(cell.position());
+            if (delta != null) {
+                if (matchesKnownLoss(delta, cell)) retainKnownLoss(level, ledger, cell);
+                continue;
+            }
             project(level, ledger, cell);
         }
     }
@@ -162,6 +166,25 @@ final class FrontierV3GrayboxExecutor {
         }
         ledger.applied(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
         return ProjectionResult.APPLIED;
+    }
+
+    /**
+     * A COLD canonical consequence can predate the first natural chunk visit.  The baseline is
+     * masked by the exact delta, but the physical ledger still needs a durable tombstone so a
+     * later owned repair can distinguish that scar from fresh air.  This method never mutates
+     * the block: foreign/non-air geometry remains untouched and will make repair visibly fail.
+     */
+    static void retainKnownLoss(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
+        BlockPos position = toMinecraft(cell);
+        if (!level.hasChunkAt(position) || !level.getBlockState(position).isAir()) return;
+        ledger.damaged(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+    }
+
+    /** A masked cell receives a tombstone only for its own exact canonical semantic loss. */
+    static boolean matchesKnownLoss(PhysicalDelta delta, GrayboxCell cell) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.ownerId().equals(Optional.of(cell.ownerId()))
+                && delta.semanticPart().equals(Optional.of(cell.semanticPart()));
     }
 
     static BlockState material(GrayboxMaterial material) {

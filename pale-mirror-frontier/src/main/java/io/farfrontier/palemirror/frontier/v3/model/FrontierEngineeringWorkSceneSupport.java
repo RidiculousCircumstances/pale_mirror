@@ -2,8 +2,10 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -82,5 +84,18 @@ public final class FrontierEngineeringWorkSceneSupport {
                     return cause.projectId().equals(project.id()) && cause.workCellIndex() == project.confirmedCells()
                             && lease.handoffPosition().equals(EngineeringWorksite.workCell(state.bootstrap(), state.routeTopology(), project));
                 });
+    }
+
+    /**
+     * A work order owns its engineering-scene lifecycle. When a physical result makes that
+     * order terminal, the exact HOT bodies must enter the normal release protocol in the same
+     * canonical transition; otherwise they retain stale authority over a non-building cell.
+     */
+    public static Map<SceneLeaseId, SceneLease> drainProjectWorksites(FrontierWorldState state, SubjectId projectId) {
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
+                && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(projectId)
+                && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
+        return leases;
     }
 }

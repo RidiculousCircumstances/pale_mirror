@@ -78,12 +78,19 @@ final class FrontierV3RouteMaintenanceExecutor {
     private static FrontierV3PhysicalIntentScheduling.Readiness workReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition origin = wholeBlock(intent);
         if (origin == null || target(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
-        if (!FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) {
+        BlockPos position = new BlockPos(origin.x(), origin.y(), origin.z());
+        if (!FrontierV3PhysicalDemand.exists(level, position)) {
             return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         }
-        return FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)
-                ? FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE
-                : FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+            return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        }
+        FrontierV3GrayboxLedger.Claim claim = FrontierV3GrayboxLedger.get(level).claim(position);
+        // A COLD loss can predate the first ordinary visit. Its provenance tombstone is written
+        // by the independent projector on that visit; empty air before that write is a bounded
+        // projection delay, not a failed repair.
+        if (claim == null && level.getBlockState(position).isAir()) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {

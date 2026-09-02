@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,6 +24,55 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Pure admission regressions for the distinct in-place route-maintenance owner. */
 class RouteMaintenanceProcessTest {
+    @Test
+    void independentRouteLossesRetainDistinctTeamsAndAdvanceInDeterministicRotation() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-parallel"), 41L);
+        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        SubjectId firstSettlement = bootstrap.settlements().get(0).id();
+        SubjectId secondSettlement = bootstrap.settlements().get(1).id();
+        List<BlockPosition> firstRoute = initial.routeTopology().supplyWaypoints(bootstrap, firstSettlement);
+        List<BlockPosition> secondRoute = initial.routeTopology().supplyWaypoints(bootstrap, secondSettlement);
+        BlockPosition firstLoss = firstRoute.stream().filter(position -> !secondRoute.contains(position)).findFirst().orElseThrow();
+        BlockPosition secondLoss = secondRoute.stream().filter(position -> !firstRoute.contains(position)).findFirst().orElseThrow();
+        FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(firstLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:first"))
+                .recordPhysicalDelta(new PhysicalDelta(secondLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                        Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:second"));
+
+        RouteMaintenanceStarted first = started(RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)));
+        FrontierWorldState oneRetained = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER, first);
+        RouteMaintenanceStarted second = started(RouteMaintenanceProcess.plan(oneRetained, RouteMaintenanceProcess.scan(2, 200L)));
+        assertFalse(first.maintenance().id().equals(second.maintenance().id()), "one retained COLD repair must not suppress a distinct observed loss");
+        assertTrue(Set.copyOf(first.maintenance().team().memberIds()).stream().noneMatch(second.maintenance().team().memberIds()::contains),
+                "parallel repairs retain disjoint exact people rather than cloning a crew");
+
+        FrontierWorldState retained = RouteMaintenanceStateSupport.reduceStarted(oneRetained, FrontierRouteNetwork.OWNER, second);
+        List<SubjectId> ordered = retained.routeMaintenances().keySet().stream().sorted().toList();
+        RouteMaintenanceAssemblyStarted firstTurn = RouteMaintenanceProcess.plan(retained, RouteMaintenanceProcess.scan(3, 300L)).stream()
+                .map(ProposedEvent::payload).filter(RouteMaintenanceAssemblyStarted.class::isInstance).map(RouteMaintenanceAssemblyStarted.class::cast)
+                .findFirst().orElseThrow();
+        RouteMaintenanceAssemblyStarted secondTurn = RouteMaintenanceProcess.plan(retained, RouteMaintenanceProcess.scan(4, 400L)).stream()
+                .map(ProposedEvent::payload).filter(RouteMaintenanceAssemblyStarted.class::isInstance).map(RouteMaintenanceAssemblyStarted.class::cast)
+                .findFirst().orElseThrow();
+        assertEquals(ordered.get(0), firstTurn.maintenanceId());
+        assertEquals(ordered.get(1), secondTurn.maintenanceId(), "a blocked earlier owner cannot monopolize every strategic scan");
+
+        SubjectId sourceId = new SubjectId("item:parallel-maintenance-source");
+        SubjectId maintenanceContainer = FrontierRouteNetwork.MAINTENANCE_CONTAINER;
+        int sourceSlot = retained.inventory().firstFreeSlot(maintenanceContainer).orElseThrow();
+        ExactInventory suppliedInventory = retained.inventory().withSurfaceStatus(maintenanceContainer, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(maintenanceContainer, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(sourceId, FrontierRouteNetwork.OWNER,
+                        "minecraft:gray_concrete", 2, new InventoryCustody.ContainerSlot(maintenanceContainer, sourceSlot)));
+        FrontierWorldState supplied = retained.withInventory(suppliedInventory);
+        RouteMaintenance firstMaintenance = supplied.routeMaintenances().get(ordered.get(0));
+        RouteMaintenance secondMaintenance = supplied.routeMaintenances().get(ordered.get(1));
+        PhysicalIntent firstPickup = RouteMaintenanceProcess.materialLoadingIntent(supplied, firstMaintenance, suppliedInventory.items().get(sourceId));
+        FrontierWorldState reserved = RouteMaintenanceProcess.reducePrepared(supplied, FrontierRouteNetwork.OWNER, firstPickup);
+        PhysicalIntent duplicateSourcePickup = RouteMaintenanceProcess.materialLoadingIntent(reserved, secondMaintenance, reserved.inventory().items().get(sourceId));
+        assertThrows(IllegalArgumentException.class, () -> RouteMaintenanceProcess.reducePrepared(reserved, FrontierRouteNetwork.OWNER, duplicateSourcePickup),
+                "a shared physical chest may serialize exact source stacks, but a second repair may not reserve the same stack optimistically");
+    }
+
     @Test
     void knownRouteLossAdmitsOneExactLocalMaintenanceOwnerWithoutCreatingABypass() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-admission"), 41L);
@@ -360,6 +410,49 @@ class RouteMaintenanceProcessTest {
     }
 
     @Test
+    void physicalMaintenanceConflictDrainsItsExactHotWorksiteInsteadOfRetainingStaleBodies() {
+        WorldId world = new WorldId("frontier:route-maintenance-conflict-drain");
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(world, 41L);
+        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        SubjectId settlement = bootstrap.settlements().getFirst().id();
+        BlockPosition loss = initial.routeTopology().supplyWaypoints(bootstrap, settlement).get(2);
+        FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
+        RouteMaintenance maintenance = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
+                .map(ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance).map(RouteMaintenanceStarted.class::cast)
+                .findFirst().orElseThrow().maintenance();
+        SubjectId engineer = maintenance.team().memberIds().getFirst();
+        ExactItemStack tool = damaged.inventory().items().values().stream().filter(item -> EngineeringToolCustody.isTool(item.itemKind()))
+                .filter(item -> item.economicOwnerId().equals(settlement)).findFirst().orElseThrow();
+        FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
+                new RouteMaintenanceStarted(maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
+        EngineeringWorkAssembly assembly = EngineeringWorksite.compile(assembled, maintenance);
+        assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(assembled, FrontierRouteNetwork.OWNER,
+                new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly));
+        while (!assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow().complete()) {
+            EngineeringWorkAssembly current = assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow();
+            assembled = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(assembled, FrontierRouteNetwork.OWNER,
+                    new RouteMaintenanceAssemblyAdvanced(maintenance.id(), current.advance(current.nextSafeAdvance().orElseThrow())));
+        }
+        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(assembled).orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-conflict-drain");
+        SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
+                candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
+                candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = assembled.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        PhysicalIntent intent = RouteMaintenanceProcess.workIntent(maintenance, maintenance.plannedCargoId(), maintenance.plannedCargoItemId());
+        FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(hot, intent, new java.util.LinkedHashMap<>(hot.physicalIntents()));
+
+        assertEquals(RouteMaintenanceStatus.CONFLICT, conflicted.routeMaintenances().get(maintenance.id()).status());
+        assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(leaseId).status(),
+                "a terminal physical conflict must atomically revoke HOT authority before the bodies are released");
+        assertDoesNotThrow(() -> conflicted.releaseSceneLease(leaseId, lease.members().stream().map(member ->
+                new SceneMemberPosition(member.actorId(), conflicted.actorLocations().get(member.actorId()).body(),
+                        conflicted.actorLocations().get(member.actorId()).condition().health())).toList()));
+    }
+
+    @Test
     void terminalMaintenanceMayRetainItsHistoricalAssemblyWithoutBecomingAnActiveWorksite() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-terminal-assembly"), 41L);
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
@@ -382,5 +475,10 @@ class RouteMaintenanceProcessTest {
 
         assertDoesNotThrow(() -> assembled.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(Map.of(conflicted.id(), conflicted))),
                 "a retained terminal assembly is history, not permission to validate or materialize a new active worksite");
+    }
+
+    private static RouteMaintenanceStarted started(List<ProposedEvent> events) {
+        return events.stream().map(ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance)
+                .map(RouteMaintenanceStarted.class::cast).findFirst().orElseThrow();
     }
 }

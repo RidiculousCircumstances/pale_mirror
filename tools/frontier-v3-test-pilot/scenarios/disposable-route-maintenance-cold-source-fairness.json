@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "disposable_route_maintenance_cold_source_fairness",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "route-maintenance-cold-source-fairness", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "route_maintenance", "id": "settlement:1", "expect": { "status": "ok", "cargoPresent": false, "pendingMaintenanceIntents": 1 } },
+      { "view": "route_maintenance", "id": "settlement:2", "expect": { "status": "ok", "cargoPresent": true, "assemblyPurpose": "WORKSITE", "assemblyComplete": true, "pendingMaintenanceIntents": 0 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -140, "y": 65, "z": -304 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "route_maintenance", "id": "settlement:1", "expect": { "status": "ok", "cargoPresent": false, "pendingMaintenanceIntents": 1 }, "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -140, "y": 64, "z": -304 }, "block": "minecraft:gray_carpet", "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "route-maintenance:maintenance:route--140-64--304", "expect": { "status": "ok", "eventKind": "route_maintenance_cell_repaired", "subject": "maintenance:route--140-64--304" }, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -140, "y": 64, "z": -304 } },
+    { "type": "assert_visible_block", "position": { "x": -140, "y": 64, "z": -304 }, "timeoutMs": 30000 }
+  ],
+  "frames": [
+    { "after": 5, "name": "loaded-second-repair-while-first-source-cold" }
+  ]
+}

@@ -285,14 +285,17 @@ public final class FrontierSceneBehaviors {
                 throw new IllegalArgumentException("engineering scene must bind its current exact crew");
             }
             boolean currentCell = project.confirmedCells() == cause.workCellIndex();
+            boolean activeCurrentCell = currentCell && project.building();
             boolean confirmedCellDraining = project.confirmedCells() == cause.workCellIndex() + 1
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED);
-            if ((currentCell && !project.building()) || (!currentCell && !confirmedCellDraining)) {
+            boolean interruptedCurrentCellDraining = currentCell && !project.building()
+                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED);
+            if (!activeCurrentCell && !confirmedCellDraining && !interruptedCurrentCellDraining) {
                 throw new IllegalArgumentException("engineering scene cursor differs from its owner lifecycle: project="
                         + project.id().value() + " causeCell=" + cause.workCellIndex() + " confirmedCells=" + project.confirmedCells()
                         + " building=" + project.building() + " leaseStatus=" + lease.status());
             }
-            if (currentCell && (project.assembly().isEmpty() || project.assembly().orElseThrow().purpose() != EngineeringJourneyPurpose.WORKSITE
+            if (activeCurrentCell && (project.assembly().isEmpty() || project.assembly().orElseThrow().purpose() != EngineeringJourneyPurpose.WORKSITE
                     || !project.assembly().orElseThrow().complete())) {
                 throw new IllegalArgumentException("engineering scene must wait for its complete COLD approach");
             }

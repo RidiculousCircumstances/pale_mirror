@@ -56,19 +56,29 @@ public final class RouteMaintenanceProcess {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
-        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks()
+        int scanOrdinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
+        int nextOrdinal = scanOrdinal + 1;
+        ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(nextOrdinal, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().routeConstructionScanInterval())));
-        Optional<RouteMaintenance> active = state.routeMaintenances().values().stream().filter(RouteMaintenance::building)
-                .sorted(Comparator.comparing(RouteMaintenance::id)).findFirst();
-        Optional<RouteMaintenance> ready = state.routeMaintenances().values().stream().filter(value -> value.status() == RouteMaintenanceStatus.READY)
-                .sorted(Comparator.comparing(RouteMaintenance::id)).findFirst();
-        if (ready.isPresent()) {
-            return planReady(state, ready.orElseThrow(), action, java.util.Optional.of(next));
-        }
-        if (active.isEmpty()) return candidate(state).map(value -> List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceStarted(value)), next)).orElse(List.of(next));
-        return planBuilding(state, active.orElseThrow(), action, java.util.Optional.of(next));
+        java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
+        nextMaintainedOwner(state, scanOrdinal).ifPresent(maintenance -> events.addAll(maintenance.status() == RouteMaintenanceStatus.READY
+                ? planReady(state, maintenance, action, Optional.empty()) : planBuilding(state, maintenance, action, Optional.empty())));
+        candidate(state).ifPresent(value -> events.add(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceStarted(value))));
+        events.add(next);
+        return List.copyOf(events);
+    }
+
+    /**
+     * One scan advances one retained owner in deterministic rotation.  This is deliberately not
+     * a global first-ID queue: a COLD depot or an under-supplied crew must not suppress another
+     * exact repair cell whose people and physical endpoint are independently available.
+     */
+    private static Optional<RouteMaintenance> nextMaintainedOwner(FrontierWorldState state, int scanOrdinal) {
+        List<RouteMaintenance> values = state.routeMaintenances().values().stream()
+                .filter(value -> value.building() || value.status() == RouteMaintenanceStatus.READY)
+                .sorted(Comparator.comparing(RouteMaintenance::id)).toList();
+        if (values.isEmpty()) return Optional.empty();
+        return Optional.of(values.get(Math.floorMod(scanOrdinal - 1, values.size())));
     }
 
     private static List<ProposedEvent> planBuilding(FrontierWorldState state, RouteMaintenance maintenance,
@@ -162,6 +172,7 @@ public final class RouteMaintenanceProcess {
     }
 
     private static Optional<RouteMaintenance> candidate(FrontierWorldState state) {
+        if (state.routeMaintenances().size() >= RouteMaintenanceStateSupport.MAX_MAINTENANCE) return Optional.empty();
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.physicalDeltas().values().stream().filter(loss -> loss.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
                 .filter(loss -> loss.ownerId().equals(Optional.of(FrontierRouteNetwork.OWNER)))
@@ -237,6 +248,9 @@ public final class RouteMaintenanceProcess {
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER))
                 .filter(item -> state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER) != null
                         && state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).status() == ContainerSurfaceStatus.ACTIVE)
+                .filter(item -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
+                        && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
+                        && intent.subjectIds().size() == 5 && intent.subjectIds().get(4).equals(item.id())))
                 .sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
     }
 

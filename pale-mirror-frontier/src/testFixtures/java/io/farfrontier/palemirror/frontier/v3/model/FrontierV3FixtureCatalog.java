@@ -63,6 +63,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
+            Map.entry("routeMaintenanceColdSourceFairness", FrontierV3FixtureCatalog::routeMaintenanceColdSourceFairnessConfiguration),
             Map.entry("steppedRoute", FrontierV3FixtureCatalog::steppedRouteConfiguration));
     private static final Catalog CATALOG = loadCatalog();
     public static final String DEFAULT_PROFILE = CATALOG.defaultProfile();
@@ -206,6 +207,15 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkerDeathConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    /**
+     * Read-only two-owner precondition for the native scheduler proof. The first exact repair
+     * waits on an unvisited maintenance source; the second retains independent cargo and crew.
+     */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routeMaintenanceColdSourceFairnessConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.RouteMaintenanceFairnessFixture fixture = FrontierDevelopmentScenarios.routeMaintenanceColdSourceFairnessFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

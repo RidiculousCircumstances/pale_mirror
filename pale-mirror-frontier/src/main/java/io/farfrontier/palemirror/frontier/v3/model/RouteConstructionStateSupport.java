@@ -185,11 +185,7 @@ public final class RouteConstructionStateSupport {
         int required = project.workCells().size();
         RouteConstruction completed = project.withConfirmedCells(confirmed, confirmed == required ? RouteConstructionStatus.READY : RouteConstructionStatus.BUILDING);
         projects.put(project.id(), material.count() == 1 ? completed.withoutCargo() : completed);
-        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.replaceAll((leaseId, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
-                && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
-                && FrontierSceneBehaviors.engineeringWorksite(lease).workCellIndex() == project.confirmedCells()
-                && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, project.id());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.put(observation.id(), observation);
@@ -204,7 +200,8 @@ public final class RouteConstructionStateSupport {
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeConstructions(projects));
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeConstructions(projects)
+                .sceneLeases(FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, project.id())));
     }
 
     static FrontierWorldState cutover(FrontierWorldState state, SubjectId projectId) {

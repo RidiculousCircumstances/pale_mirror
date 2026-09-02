@@ -22,7 +22,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(23, profiles.size());
+        assertEquals(24, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -107,6 +107,23 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 20), tool.custody());
         assertTrue(state.physicalIntents().isEmpty(), "the fixture must not pre-issue or materialize an engineering tool");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.route_construction.scan")));
+    }
+
+    @Test
+    void routeMaintenanceFairnessFixtureRetainsOneColdSourceAndOneIndependentLoadedWorksite() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
+                new WorldId("frontier:route-maintenance-fairness-fixture"), 41L).initialState();
+        RouteMaintenance cold = state.routeMaintenances().get(new SubjectId("maintenance:route--380-64--304"));
+        RouteMaintenance loaded = state.routeMaintenances().get(new SubjectId("maintenance:route--140-64--304"));
+
+        assertTrue(cold != null && cold.cargoId().isEmpty());
+        assertTrue(loaded != null && loaded.cargoId().isPresent() && loaded.assembly().orElseThrow().complete());
+        assertTrue(state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(cold.id())
+                && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING));
+        assertTrue(state.physicalIntents().values().stream().noneMatch(intent -> intent.subjectIds().contains(loaded.id())
+                        && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE),
+                "the fixture may retain COLD-ready cargo and crew, but a repair intent belongs exclusively to the later HOT worksite");
+        assertEquals(ContainerSurfaceStatus.ACTIVE, state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).status());
     }
 
     @Test

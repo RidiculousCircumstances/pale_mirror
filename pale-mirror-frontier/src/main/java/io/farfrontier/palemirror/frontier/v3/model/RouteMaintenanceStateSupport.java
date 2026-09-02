@@ -245,6 +245,12 @@ public final class RouteMaintenanceStateSupport {
                 || !wholeBlock(intent).equals(FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()))) {
             throw new IllegalArgumentException("route maintenance pickup lacks an active exact maintenance stack");
         }
+        boolean sourceAlreadyReserved = state.physicalIntents().values().stream().anyMatch(existing -> existing.kind()
+                == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
+                && (existing.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                || existing.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
+                && !existing.id().equals(intent.id()) && existing.subjectIds().size() == 5 && existing.subjectIds().get(4).equals(source));
+        if (sourceAlreadyReserved) throw new IllegalArgumentException("route maintenance source stack is already reserved by another active pickup");
     }
 
     public static void validateMaterialLoadingReceipt(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
@@ -317,10 +323,7 @@ public final class RouteMaintenanceStateSupport {
         }
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.ready().withoutCargo());
         Map<BlockPosition, PhysicalDelta> deltas = new LinkedHashMap<>(state.physicalDeltas()); deltas.remove(maintenance.repairCell());
-        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
-                && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
-                && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, maintenance.id());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation.id())));
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().consumeCargoUnit(maintenance.cargoId().orElseThrow(), observation.itemId()))
@@ -334,7 +337,8 @@ public final class RouteMaintenanceStateSupport {
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.conflict());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances));
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances)
+                .sceneLeases(FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, maintenance.id())));
     }
 
     static FrontierWorldState confirm(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,

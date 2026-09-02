@@ -79,6 +79,28 @@ final class FrontierV3GrayboxLedger extends SavedData {
         claims.put(position.asLong(), new Claim(prior.owner(), prior.material(), prior.semanticPart(), true)); setDirty();
     }
     /**
+     * Records a canonical PM-owned loss that predates this chunk's first physical visit.
+     *
+     * <p>This is a provenance tombstone, not a desired-state write: it never creates or
+     * removes a Minecraft block.  It lets a later exact repair prove that the currently empty
+     * cell is the retained loss rather than fresh world air.  A nonmatching prior claim remains
+     * a fail-closed ownership error.</p>
+     */
+    void damaged(BlockPos position, String owner, String material, String semanticPart) {
+        ensureCapacityFor(position);
+        Claim tombstone = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), true);
+        Claim prior = claims.putIfAbsent(position.asLong(), tombstone);
+        if (prior != null && (!prior.owner().equals(tombstone.owner()) || !prior.material().equals(tombstone.material())
+                || !prior.semanticPart().equals(tombstone.semanticPart()))) {
+            throw new IllegalStateException("v3 graybox damage tombstone collides with another semantic cell");
+        }
+        if (prior == null) {
+            index(tombstone, position.asLong()); setDirty();
+        } else if (!prior.conflicted()) {
+            claims.put(position.asLong(), tombstone); setDirty();
+        }
+    }
+    /**
      * Returns a bounded stable snapshot of claims of one semantic kind.  It is deliberately a
      * ledger query, not materialization authority: callers must still require a naturally
      * loaded exact expected block before retiring a temporary cell.

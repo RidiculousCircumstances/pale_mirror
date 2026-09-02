@@ -27,6 +27,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -208,6 +209,38 @@ public final class FrontierV3CargoHandoffGameTests {
                 "maintenance never overwrites foreign post-loss geometry");
         helper.assertTrue(level.getBlockState(target).is(Blocks.DIAMOND_BLOCK) && ledger.claim(target).conflicted(),
                 "a rejected foreign block retains visible conflict evidence for later player resolution");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-route-maintenance", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void coldCanonicalRouteLossRetainsARepairableProvenanceTombstoneOnFirstVisit(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(24, 8, 0));
+        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+
+        FrontierV3GrayboxExecutor.retainKnownLoss(level, ledger, cell);
+        helper.assertTrue(level.getBlockState(target).isAir(),
+                "recording a COLD canonical loss must not write or erase a world block on first visit");
+        helper.assertTrue(ledger.claim(target) != null && ledger.claim(target).conflicted(),
+                "the unloaded loss must retain an exact durable provenance tombstone rather than becoming unowned fresh air");
+        FrontierV3GrayboxLedger restored = FrontierV3GrayboxLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertTrue(restored.claim(target) != null && restored.claim(target).conflicted(),
+                "a restart retains the exact COLD-loss tombstone rather than forgetting repair authority");
+        ledger = restored;
+        helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
+                "the later exact maintenance receipt may restore only the retained canonical scar");
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && !ledger.claim(target).conflicted(),
+                "repair alone clears the tombstone and restores the matching claimed route cell");
+
+        BlockPos foreign = target.east(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        FrontierV3GrayboxExecutor.retainKnownLoss(level, ledger, grayboxCell(foreign, "route:frontier-network",
+                GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE));
+        helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK) && ledger.claim(foreign) == null,
+                "a COLD-loss visit never adopts, erases, or tombstones foreign non-air geometry");
+        helper.assertFalse(FrontierV3GrayboxExecutor.matchesKnownLoss(
+                        new io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta(new BlockPosition(0, 0, 0),
+                                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test"), cell),
+                "an unowned scar is never reclassified as a repairable semantic tombstone");
         helper.succeed();
     }
 
