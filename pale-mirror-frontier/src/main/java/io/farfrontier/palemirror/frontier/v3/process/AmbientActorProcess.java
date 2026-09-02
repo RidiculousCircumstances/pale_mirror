@@ -143,8 +143,8 @@ public final class AmbientActorProcess {
     }
 
     public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId) {
-        RouteConstruction engineering = state.routeConstructions().values().stream()
-                .filter(project -> project.status() == RouteConstructionStatus.BUILDING)
+        EngineeringWorkOrder engineering = java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
+                .filter(project -> project.building() || project.readyForToolReturn())
                 .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
                 .findFirst().orElse(null);
         if (engineering != null) {

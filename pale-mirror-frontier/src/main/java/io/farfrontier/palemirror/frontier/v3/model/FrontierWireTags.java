@@ -41,6 +41,8 @@ public final class FrontierWireTags {
             entry(EconomicOwnerKind.class,
                     tag(0, EconomicOwnerKind.SETTLEMENT_TREASURY), tag(1, EconomicOwnerKind.HIVE_COLLECTIVE), tag(2, EconomicOwnerKind.PUBLIC_INFRASTRUCTURE),
                     tag(3, EconomicOwnerKind.COMPANY), tag(4, EconomicOwnerKind.RESIDENT)),
+            entry(EngineeringJourneyPurpose.class,
+                    tag(0, EngineeringJourneyPurpose.MUSTER_DEPOT), tag(1, EngineeringJourneyPurpose.WORKSITE), tag(2, EngineeringJourneyPurpose.RETURN_DEPOT)),
             entry(EmploymentContractStatus.class,
                     tag(0, EmploymentContractStatus.ACTIVE), tag(1, EmploymentContractStatus.SUSPENDED), tag(2, EmploymentContractStatus.TERMINATED)),
             entry(EmploymentTerminationReason.class,

@@ -14,7 +14,7 @@ final class ContainerSurfaceManifest {
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().ifPresent(depot -> {
                     SubjectId container = depotId(settlement.id());
-                    surfaces.put(container, unmaterialized(container, depot.anchor()));
+                    surfaces.put(container, unmaterialized(container, SettlementDepotServicePort.forDepot(depot).containerPosition().offset(0, -1, 0)));
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 surfaces.put(container, unmaterialized(container, organ.anchor()))));

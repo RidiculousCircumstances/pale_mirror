@@ -29,9 +29,9 @@ public final class ProductionTransformationStateSupport {
                 || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())) || input.count() != job.outputCount()) {
             throw new IllegalArgumentException("production transformation has no matching exact depot wheat input");
         }
-        StrategicTask task = activeTask(state, job);
-        if (task.status() != StrategicTaskStatus.ACTIVE) throw new IllegalArgumentException("production transformation task is not active");
+        activeTask(state, job);
         java.util.Optional<EmploymentContract> contract = intent.status() == PhysicalIntentStatus.RUNNING
+                || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                 ? CompanyWorkPaymentStateSupport.settlementContractFor(state, job) : CompanyWorkPaymentStateSupport.contractFor(state, job);
         contract.ifPresent(value -> {
             FinancialReservation expected = CompanyWorkPaymentStateSupport.reservation(job, value);
@@ -82,8 +82,10 @@ public final class ProductionTransformationStateSupport {
                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         if (job == null) throw new IllegalArgumentException("production failure has no active job");
-        StrategicPlanState plans = state.strategicPlans().transitionTask(activeTask(state, job).id(), StrategicTaskStatus.BLOCKED);
-        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).strategicPlans(plans));
+        // UNKNOWN is a durable, inspectable physical boundary rather than a terminal task
+        // outcome.  Retaining this exact active job and its reservation lets a later loaded
+        // postcondition close it, and prevents a second job from taking its facility.
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents));
     }
 
     public static Target target(FrontierWorldState state, PhysicalIntent intent) {
@@ -98,8 +100,12 @@ public final class ProductionTransformationStateSupport {
     }
 
     private static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
+        return taskFor(state, job, StrategicTaskStatus.ACTIVE);
+    }
+
+    private static StrategicTask taskFor(FrontierWorldState state, ProductionJob job, StrategicTaskStatus status) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(job.settlementId())
-                && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.ACTIVE)
+                && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == status)
                 .reduce((left, right) -> { throw new IllegalArgumentException("production task binding is ambiguous"); })
                 .orElseThrow(() -> new IllegalArgumentException("production has no active strategic task"));
     }

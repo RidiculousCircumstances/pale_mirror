@@ -189,6 +189,29 @@ class FrontierGrayboxPlanTest {
         state.inventory().surfaces().values().forEach(surface -> {
             GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElseThrow();
             assertEquals(support, plan.cells().get(support.position()), "socket must be part of the immutable graybox plan: " + surface.containerId());
+            assertEquals(null, plan.cells().get(surface.position()),
+                    "the exact chest body cell must remain clear of the structural plan: " + surface.containerId());
+        });
+    }
+
+    @Test
+    void everyDepotHasAVisibleWalkableServicePortRatherThanAnInteriorRemoteChestSocket() {
+        FrontierWorldState state = initial(); FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+
+        state.bootstrap().settlements().forEach(settlement -> {
+            SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+            SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+            assertEquals(port.containerPosition(), state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).position(),
+                    "the exact depot chest must use its semantic service socket");
+            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), depot.id(), GrayboxMaterial.DEPOT,
+                    GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), plan.cells().get(surface.support()),
+                    "the depot service floor must retain depot provenance"));
+            port.throatAirCells().forEach(cell -> assertEquals(null, plan.cells().get(cell),
+                    "the depot service doorway must retain two-body headroom"));
+            port.stations().forEach(station -> {
+                assertEquals(null, plan.cells().get(station.support().offset(0, 1, 0)), "service station feet cell must stay clear");
+                assertEquals(null, plan.cells().get(station.support().offset(0, 2, 0)), "service station head cell must stay clear");
+            });
         });
     }
 

@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierEngineeringWorkSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
@@ -24,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceMaterialLoadObservation;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceObservation;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStateSupport;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -52,11 +54,16 @@ final class FrontierV3RouteMaintenanceExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
+        // Admission only proves that this work intent was prepared while the exact crew owned a
+        // HOT worksite.  A graceful restart can retain that unstarted intent while the scene is
+        // UNKNOWN_AFTER_RESTART.  Do not let a newly loaded target spend the cargo before the
+        // same lease/body set has reclaimed HOT authority.
+        if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) return;
         BlockPosition raw = wholeBlock(intent); if (raw == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(raw.x(), raw.y(), raw.z()))) return;
         Target target = target(state, intent); if (target == null) return;
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-        if (!FrontierV3RouteConstructionExecutor.applyOne(level, FrontierV3GrayboxLedger.get(level), target.position(), target.cell())) {
+        if (!repairOne(level, FrontierV3GrayboxLedger.get(level), target.position(), target.cell())) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
         }
         confirm(level, runtime, intent, target);
@@ -83,7 +90,7 @@ final class FrontierV3RouteMaintenanceExecutor {
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition raw = wholeBlock(intent); if (raw == null) return null;
-        RouteMaintenance maintenance = state.routeMaintenances().get(intent.causeSubjectId());
+        RouteMaintenance maintenance = RouteMaintenanceStateSupport.workOperation(state, intent);
         if (maintenance == null || !maintenance.building() || !maintenance.repairCell().equals(raw) || maintenance.cargoId().isEmpty()) return null;
         SubjectId cargoId = maintenance.cargoId().orElseThrow();
         SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(FrontierRouteNetwork.OWNER) && !id.equals(maintenance.id()) && !id.equals(cargoId))
@@ -94,6 +101,21 @@ final class FrontierV3RouteMaintenanceExecutor {
                 FrontierRouteNetwork.OWNER, raw) == null) return null;
         return new Target(new BlockPos(raw.x(), raw.y(), raw.z()), new GrayboxCell(raw, FrontierRouteNetwork.OWNER, maintenance.expectedMaterial(),
                 maintenance.semanticPart()), maintenance, material);
+    }
+
+    /**
+     * Restores only a known PM-owned loss.  Unlike route construction, maintenance must retain
+     * the original provenance claim while the cell is damaged; accepting a fresh/unclaimed cell
+     * here would turn a repair receipt into permission to adopt arbitrary world geometry.
+     */
+    static boolean repairOne(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos position, GrayboxCell cell) {
+        FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
+        if (claim == null || !claim.conflicted() || !claim.owner().equals(cell.ownerId().value())
+                || !claim.material().equals(cell.material().name()) || !claim.semanticPart().equals(cell.semanticPart().name())
+                || !level.getBlockState(position).isAir()) return false;
+        if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
+        ledger.repaired(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        return true;
     }
 
     private static void loadMaterial(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -127,7 +149,8 @@ final class FrontierV3RouteMaintenanceExecutor {
         RouteMaintenanceMaterialLoadObservation observation = new RouteMaintenanceMaterialLoadObservation(observationId(intent), intent.id(),
                 target.maintenance().id(), target.cargoId(), target.sourceMaterial().id(), target.cargoMaterialId(), target.sourceRemainingCount());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "material-confirmed");
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("route maintenance material confirmation was rejected");
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("route maintenance material confirmation was rejected: "
+                + ((CommandResult.Rejected) result).rejection().code() + " " + ((CommandResult.Rejected) result).rejection().detail());
         FrontierV3DiagnosticTrace.record(level.getServer(), correlation(target.maintenance()), "route_maintenance_material_loaded", target.maintenance().id(), result);
     }
 

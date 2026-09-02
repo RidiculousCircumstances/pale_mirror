@@ -47,4 +47,19 @@ public final class FrontierV3ProductionTransformationGameTests {
                 "an altered player/world stack remains conflict evidence and is never transformed");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-production", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void runningProductionRecoveryPrecedesGenericContainerDriftAudit(GameTestHelper helper) {
+        var diagnostics = FrontierV3PhysicalExecutors.registry().diagnostics();
+        int production = diagnostics.stream().map(FrontierV3PhysicalExecutorRegistry.Diagnostic::id)
+                .toList().indexOf("production-transformation");
+        int containers = diagnostics.stream().map(FrontierV3PhysicalExecutorRegistry.Diagnostic::id)
+                .toList().indexOf("container-surfaces");
+        helper.assertTrue(production >= 0 && containers >= 0 && production < containers,
+                "a persisted production effect must reconcile before its physical slot is audited as player/world drift");
+        helper.assertTrue(diagnostics.stream().filter(value -> value.id().equals("container-surfaces")).findFirst()
+                        .orElseThrow().dependencies().contains("production-transformation"),
+                "the recovery order must be a declared graph edge, not incidental source order");
+        helper.succeed();
+    }
 }

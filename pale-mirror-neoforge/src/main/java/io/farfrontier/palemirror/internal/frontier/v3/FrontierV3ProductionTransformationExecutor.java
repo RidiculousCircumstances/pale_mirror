@@ -32,7 +32,8 @@ final class FrontierV3ProductionTransformationExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
                 .filter(intent -> intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION)
-                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
+                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
+                        || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                 .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
     }
 
@@ -45,6 +46,7 @@ final class FrontierV3ProductionTransformationExecutor {
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
                 new FrontierV3CargoHandoffExecutor.StoreTarget(position, target.slot().containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
+        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(runtime, intent, target, chest); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectOrApply(runtime, intent, target, chest); return; }
         if (!matchesInput(chest, target)) { unknown(runtime, intent.id(), "input-precondition-conflict"); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
@@ -57,6 +59,16 @@ final class FrontierV3ProductionTransformationExecutor {
         if (matchesOutput(chest, target)) { confirm(runtime, intent, target); return; }
         if (matchesInput(chest, target) && replace(chest, target)) { confirm(runtime, intent, target); return; }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
+    }
+
+    /**
+     * A restart-quarantined effect is evidence-only.  It may settle only when the exact planned
+     * output is already in its named slot; an unchanged input remains visible UNKNOWN rather
+     * than being silently replayed after the server boundary.
+     */
+    private static void inspectRecovered(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
+                                         ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
+        if (matchesOutput(chest, target)) confirm(runtime, intent, target);
     }
 
     static boolean matchesInput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {

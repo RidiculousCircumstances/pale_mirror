@@ -29,7 +29,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -44,10 +44,44 @@ final class FrontierV3EquipmentIssueExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
+        // A naturally unloaded earlier depot or resident is a deferral.  It
+        // must not prevent a later loaded exact hand-off from making progress.
+        // The canonical ledger has an explicit 4,096-intent retention bound;
+        // this family scan is therefore deterministic and bounded.
+        FrontierV3PhysicalIntentScheduling.firstActionable(pendingIntents(state), intent -> readiness(level, state, intent))
+                .ifPresent(intent -> execute(level, runtime, state, intent));
+    }
+
+    static List<PhysicalIntent> pendingIntents(FrontierWorldState state) {
+        return state.physicalIntents().values().stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE)
-                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
-                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
+                        || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                .toList();
+    }
+
+    static FrontierV3PhysicalIntentScheduling.Readiness readiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        return readinessDetail(level, state, intent).selection();
+    }
+
+    /** Read-only explanation of the exact same physical admission predicate used by {@link #readiness}. */
+    static Readiness readinessDetail(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        Target target = target(state, intent);
+        if (target == null) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.INVALID, "CANONICAL_TARGET_INVALID");
+        if (!level.hasChunkAt(target.chestPosition())) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "DEPOT_CHUNK_UNLOADED");
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        if (chest == null) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "OWNED_DEPOT_CHEST_UNAVAILABLE");
+        Villager resident = resident(level, state, target.residentId());
+        if (resident == null) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "EXACT_HOT_RESIDENT_UNAVAILABLE");
+        FrontierV3EngineeringDepotServicePort.Readiness engineering = FrontierV3EngineeringDepotServicePort.readiness(
+                state, intent, resident, io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyPurpose.MUSTER_DEPOT);
+        if (engineering == FrontierV3EngineeringDepotServicePort.Readiness.CANONICAL_STATIONS_UNAVAILABLE) {
+            return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "CANONICAL_MUSTER_STATION_UNAVAILABLE");
+        }
+        if (!engineering.runnable()) {
+            return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "RESIDENT_NOT_AT_MUSTER_PORT");
+        }
+        return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE, "READY");
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -57,7 +91,9 @@ final class FrontierV3EquipmentIssueExecutor {
         if (!level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         Villager resident = resident(level, state, target.residentId());
-        if (chest == null || resident == null) return;
+        if (chest == null || resident == null || !FrontierV3EngineeringDepotServicePort.readiness(
+                state, intent, resident, io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyPurpose.MUSTER_DEPOT).runnable()) return;
+        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(level, runtime, intent, target, chest, resident); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target, chest, resident); return; }
         if (!sourceMatches(chest, target) || !resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) {
             unknown(runtime, intent.id(), "precondition-conflict"); return;
@@ -105,6 +141,14 @@ final class FrontierV3EquipmentIssueExecutor {
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
+    /** Same exact whole-state recovery rule as the paired engineering return executor. */
+    private static void inspectRecovered(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
+                                         ChestBlockEntity chest, Villager resident) {
+        boolean source = sourceMatches(chest, target), hand = FrontierV3CargoHandoffExecutor.exactMatch(resident.getItemBySlot(EquipmentSlot.MAINHAND), target.item());
+        if (!source && hand) { confirm(level, runtime, intent, target); return; }
+        if (source && resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty() && handOff(chest, resident, target)) confirm(level, runtime, intent, target);
+    }
+
     private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         EquipmentIssueObservation observation = new EquipmentIssueObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.ownerId(), target.residentId(), target.item().id(), target.sourceSlot());
@@ -141,4 +185,12 @@ final class FrontierV3EquipmentIssueExecutor {
 
     record Target(SubjectId ownerId, SubjectId residentId, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot,
                   BlockPos chestPosition) { }
+
+    /** Bounded physical readiness for one exact equipment issue; diagnostics never invent a second predicate. */
+    record Readiness(FrontierV3PhysicalIntentScheduling.Readiness selection, String detail) {
+        Readiness {
+            java.util.Objects.requireNonNull(selection, "equipment issue readiness selection");
+            if (detail == null || detail.isBlank()) throw new IllegalArgumentException("equipment issue readiness detail is required");
+        }
+    }
 }

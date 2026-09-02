@@ -37,11 +37,13 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
 });
 
-test('native pilot recognizes the one read-only route-construction diagnostic view', () => {
+test('native pilot recognizes the distinct read-only route construction and maintenance views', () => {
   const routeConstruction = { ...scenario, actions: [{ type: 'wait_until_diagnostic', view: 'route_construction', id: 'settlement:1',
     expect: { status: 'ok', phase: 'BUILDING' }, timeoutMs: 30_000 }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(routeConstruction));
   assert.throws(() => validateScenario({ ...routeConstruction, actions: [{ ...routeConstruction.actions[0], id: '' }] }), /wait_until_diagnostic/);
+  const routeMaintenance = { ...routeConstruction, actions: [{ ...routeConstruction.actions[0], view: 'route_maintenance' }] };
+  assert.doesNotThrow(() => validateScenario(routeMaintenance));
 });
 
 test('native pilot recognizes the bounded declared-route diagnostic view', () => {

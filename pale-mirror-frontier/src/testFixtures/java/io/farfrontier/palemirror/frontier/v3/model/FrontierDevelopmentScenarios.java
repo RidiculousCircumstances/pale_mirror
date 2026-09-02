@@ -202,7 +202,7 @@ final class FrontierDevelopmentScenarios {
             locations.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(arrived.currentPosition())), locations.get(member).condition()));
         });
         RouteConstruction ready = new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
-                project.status(), java.util.Optional.of(cargo.id()), project.team(), java.util.Optional.of(new EngineeringWorkAssembly(completed)));
+                project.status(), java.util.Optional.of(cargo.id()), project.team(), java.util.Optional.of(new EngineeringWorkAssembly(EngineeringJourneyPurpose.WORKSITE, completed)));
         java.util.Map<SubjectId, RouteConstruction> projects = new java.util.LinkedHashMap<>(state.routeConstructions()); projects.put(ready.id(), ready);
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).actorLocations(locations).routeConstructions(projects));
         return new RouteConstructionFixture(state, base.instant(), List.of(), ready.id());

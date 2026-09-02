@@ -1,15 +1,17 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
  * Small immutable public pedestrian network compiled from semantic facility ports.
  *
- * <p>The current graybox has one infirmary port per settlement. Its sidewalk is deliberately
+ * <p>The current graybox has infirmary and depot service ports per settlement. Its sidewalks are deliberately
  * compiled here, rather than being inferred by a navigator from a hall centre or terrain query.
  * Later facilities add their own port-to-network connector to this same plan.</p>
  */
@@ -28,16 +30,53 @@ public final class SettlementLocalCirculation {
     }
 
     public static TraversalTopology topology(Settlement settlement) {
-        List<SurfaceAnchor> surfaces = infirmarySidewalk(settlement);
-        return TraversalTopology.bidirectionalCorridor(new TraversalTopologyId("topology:circulation-" + settlement.id().value().substring("settlement:".length())),
-                revision(surfaces), settlement.id(), TraversalKind.PEDESTRIAN,
-                Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM), surfaces);
+        List<List<SurfaceAnchor>> branches = circulationBranches(settlement);
+        long revision = revision(branches.stream().flatMap(List::stream).toList());
+        Map<TraversalNodeId, SurfaceAnchor> nodes = new LinkedHashMap<>();
+        Map<String, TraversalTopology.Edge> edges = new LinkedHashMap<>();
+        for (List<SurfaceAnchor> branch : branches) for (int index = 0; index < branch.size(); index++) {
+            SurfaceAnchor surface = branch.get(index); TraversalNodeId node = node(surface);
+            nodes.putIfAbsent(node, surface);
+            if (index == 0) continue;
+            TraversalNodeId prior = node(branch.get(index - 1));
+            addBidirectional(edges, prior, node, branch.get(index - 1), surface, revision);
+        }
+        return new TraversalTopology(new TraversalTopologyId("topology:circulation-" + settlement.id().value().substring("settlement:".length())),
+                revision, settlement.id(), nodes, List.copyOf(edges.values()));
     }
 
     public static Set<BlockPosition> surfaceCells(Settlement settlement) {
         LinkedHashSet<BlockPosition> cells = new LinkedHashSet<>();
-        infirmarySidewalk(settlement).forEach(surface -> cells.add(surface.support()));
+        circulationBranches(settlement).forEach(branch -> branch.forEach(surface -> cells.add(surface.support())));
         return java.util.Collections.unmodifiableSet(cells);
+    }
+
+    private static List<List<SurfaceAnchor>> circulationBranches(Settlement settlement) {
+        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no depot"));
+        SurfaceAnchor publicRoute = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no Hall"))).routeSurface();
+        SurfaceAnchor depotExterior = SettlementDepotServicePort.forDepot(depot).exteriorApproach();
+        return List.of(infirmarySidewalk(settlement), manhattanWithFinalGrade(publicRoute, depotExterior));
+    }
+
+    private static TraversalNodeId node(SurfaceAnchor surface) {
+        return new TraversalNodeId("node:" + surface.x() + ":" + surface.y() + ":" + surface.z());
+    }
+
+    private static void addBidirectional(Map<String, TraversalTopology.Edge> edges, TraversalNodeId from, TraversalNodeId to,
+                                         SurfaceAnchor fromSurface, SurfaceAnchor toSurface, long revision) {
+        Set<TraversalCapability> capabilities = Set.of(TraversalCapability.PEDESTRIAN, TraversalCapability.GROUND_BIOFORM);
+        addEdge(edges, from, to, fromSurface, toSurface, revision, capabilities);
+        addEdge(edges, to, from, toSurface, fromSurface, revision, capabilities);
+    }
+
+    private static void addEdge(Map<String, TraversalTopology.Edge> edges, TraversalNodeId from, TraversalNodeId to,
+                                SurfaceAnchor fromSurface, SurfaceAnchor toSurface, long revision,
+                                Set<TraversalCapability> capabilities) {
+        String key = from.value() + ">" + to.value();
+        edges.putIfAbsent(key, new TraversalTopology.Edge(new TraversalEdgeId("edge:" + key), from, to, TraversalKind.PEDESTRIAN,
+                capabilities, Math.abs(fromSurface.y() - toSurface.y()), 2, revision, TraversalAvailability.OPEN));
     }
 
     private static List<SurfaceAnchor> manhattanWithFinalGrade(SurfaceAnchor start, SurfaceAnchor target) {

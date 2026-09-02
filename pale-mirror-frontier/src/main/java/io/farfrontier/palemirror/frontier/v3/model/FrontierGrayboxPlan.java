@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -110,10 +111,11 @@ public final class FrontierGrayboxPlan {
     }
 
     /**
-     * Exact current semantic body occupancy for pure COLD route planners.  Visible route cells
-     * are deliberate floor support, not body geometry: an actor standing on one needs the two
-     * cells above it clear.  This avoids compiling the whole render plan merely to answer that
-     * collision question while retaining the same structure, organ and physical-loss rules.
+     * Exact current semantic body occupancy for pure COLD route planners.  Visible route and
+     * public-access cells are deliberate floor support, not body geometry: an actor standing on
+     * either needs the two cells above it clear.  This avoids compiling the whole render plan
+     * merely to answer that collision question while retaining the same structure, organ and
+     * physical-loss rules.
      */
     static Set<BlockPosition> currentBodyGeometry(FrontierWorldState state) {
         Objects.requireNonNull(state, "body geometry state");
@@ -123,7 +125,10 @@ public final class FrontierGrayboxPlan {
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
-        return Set.copyOf(cells.keySet());
+        return cells.values().stream()
+                .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
+                .map(GrayboxCell::position)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -190,13 +195,21 @@ public final class FrontierGrayboxPlan {
                 if (state.infection().containsKey(cell)) candidates.add(cell);
             }
         }
-        if (structure.kind() == StructureKind.HALL) {
-            for (SurfaceAnchor access : SettlementAccessPort.forHall(structure).ownedSurfaces()) {
-                InfectionCell cell = InfectionCell.at(access.support());
-                if (state.infection().containsKey(cell)) candidates.add(cell);
-            }
-        }
+        publicAccessSurfaces(structure).forEach(access -> {
+            InfectionCell cell = InfectionCell.at(access.support());
+            if (state.infection().containsKey(cell)) candidates.add(cell);
+        });
         return candidates;
+    }
+
+    /** Every exterior semantic access floor is part of the same exact structure exposure model. */
+    private static List<SurfaceAnchor> publicAccessSurfaces(SettlementStructure structure) {
+        return switch (structure.kind()) {
+            case HALL -> SettlementAccessPort.forHall(structure).ownedSurfaces();
+            case DEPOT -> SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces();
+            case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).ownedAccessSurfaces();
+            default -> List.of();
+        };
     }
 
     /** Deterministic inactive cells that an exact-material replacement project must build. */
@@ -266,10 +279,10 @@ public final class FrontierGrayboxPlan {
         HiveOrgan added = colony.addedOrgans().get(owner);
         if (added != null) return intactOrganCell(added, position);
         if (FrontierRouteNetwork.OWNER.equals(owner)) {
-            if (FrontierRouteNetwork.surfaceCells(bootstrap, topology).contains(position)) {
+            if (FrontierRouteNetwork.isSurfaceCell(bootstrap, topology, position)) {
                 return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
             }
-            if (FrontierRouteNetwork.foundationCells(bootstrap, topology).contains(position)) {
+            if (FrontierRouteNetwork.isFoundationCell(bootstrap, topology, position)) {
                 return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
             }
         }
@@ -315,21 +328,27 @@ public final class FrontierGrayboxPlan {
             case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
         };
         SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
+        SettlementDepotServicePort depotService = structure.kind() == StructureKind.DEPOT ? SettlementDepotServicePort.forDepot(structure) : null;
         SettlementInfirmaryTreatmentPort treatment = structure.kind() == StructureKind.INFIRMARY ? SettlementInfirmaryTreatmentPort.forInfirmary(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             if (visitor.visit(structure.anchor().offset(x, 0, z), GrayboxSemanticPart.FOUNDATION)) return true;
             for (int y = 1; y < height; y++) if (x == -width / 2 || x == (width - 1) / 2 || z == -depth / 2 || z == (depth - 1) / 2) {
                 BlockPosition wall = structure.anchor().offset(x, y, z);
                 if ((access == null || !access.throatAirCells().contains(wall))
+                        && (depotService == null || !depotService.throatAirCells().contains(wall))
                         && (treatment == null || !treatment.throatAirCells().contains(wall))
                         && visitor.visit(wall, GrayboxSemanticPart.WALL)) return true;
             }
             BlockPosition roof = structure.anchor().offset(x, height, z);
             if ((access == null || !access.throatAirCells().contains(roof))
+                    && (depotService == null || !depotService.throatAirCells().contains(roof))
                     && (treatment == null || !treatment.throatAirCells().contains(roof))
                     && visitor.visit(roof, GrayboxSemanticPart.ROOF)) return true;
         }
         if (access != null) for (SurfaceAnchor surface : access.ownedSurfaces()) {
+            if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
+        }
+        if (depotService != null) for (SurfaceAnchor surface : depotService.ownedAccessSurfaces()) {
             if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         if (treatment != null) for (SurfaceAnchor surface : treatment.ownedAccessSurfaces()) {

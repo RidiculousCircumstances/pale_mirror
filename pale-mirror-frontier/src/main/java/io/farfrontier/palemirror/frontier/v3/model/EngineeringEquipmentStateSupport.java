@@ -20,7 +20,8 @@ public final class EngineeringEquipmentStateSupport {
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
-        if (!project.building() || !intent.causeSubjectId().equals(project.settlementId())
+        if (!project.building() || !EngineeringDepotService.atStations(state, project, EngineeringJourneyPurpose.MUSTER_DEPOT)
+                || !intent.causeSubjectId().equals(project.settlementId())
                 || !team.memberIds().contains(residentId) || !living(state, residentId) || item == null
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot source)
                 || !source.containerId().equals(FrontierWorldState.depotId(project.settlementId()))
@@ -46,7 +47,8 @@ public final class EngineeringEquipmentStateSupport {
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
         InventoryCustody.ContainerSlot target = targetSlot(state, intent);
-        if (!project.readyForToolReturn() || !intent.causeSubjectId().equals(project.settlementId())
+        if (!project.readyForToolReturn() || !EngineeringDepotService.atStations(state, project, EngineeringJourneyPurpose.RETURN_DEPOT)
+                || !intent.causeSubjectId().equals(project.settlementId())
                 || !team.memberIds().contains(residentId) || !living(state, residentId) || item == null
                 || !(item.custody() instanceof InventoryCustody.Actor actor) || !actor.actorId().equals(residentId)
                 || !item.economicOwnerId().equals(project.settlementId()) || !EngineeringToolCustody.isTool(item.itemKind())

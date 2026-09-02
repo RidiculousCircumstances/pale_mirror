@@ -76,6 +76,7 @@ final class RouteConstructionStateCodec {
     }
 
     static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
+        output.writeByte(assembly.purpose().wireTag());
         output.writeByte(assembly.members().size());
         for (Map.Entry<SubjectId, EngineeringWorkAssembly.Member> entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value());
@@ -87,6 +88,7 @@ final class RouteConstructionStateCodec {
     }
 
     static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
+        EngineeringJourneyPurpose purpose = FrontierWireTags.require(EngineeringJourneyPurpose.class, input.readUnsignedByte());
         int count = input.readUnsignedByte();
         if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) throw new IllegalArgumentException("route construction assembly size is invalid");
         Map<SubjectId, EngineeringWorkAssembly.Member> members = new LinkedHashMap<>();
@@ -99,6 +101,6 @@ final class RouteConstructionStateCodec {
                 throw new IllegalArgumentException("route construction assembly has duplicate member");
             }
         }
-        return new EngineeringWorkAssembly(members);
+        return new EngineeringWorkAssembly(purpose, members);
     }
 }

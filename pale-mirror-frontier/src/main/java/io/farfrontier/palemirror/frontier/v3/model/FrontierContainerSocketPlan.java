@@ -34,7 +34,7 @@ public final class FrontierContainerSocketPlan {
             if (!surface.containerId().equals(depot)) continue;
             return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
                     .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED)
-                    .filter(structure -> structure.anchor().equals(position))
+                    .filter(structure -> SettlementDepotServicePort.forDepot(structure).socketSurface().support().equals(position))
                     .map(structure -> new GrayboxCell(position, structure.id(), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION)).findFirst();
         }
         for (HiveOrgan organ : state.bootstrap().hive().organs()) {

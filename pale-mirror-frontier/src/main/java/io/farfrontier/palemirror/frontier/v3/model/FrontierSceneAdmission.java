@@ -93,6 +93,12 @@ public final class FrontierSceneAdmission {
                 .forEach(operation -> reserved.addAll(operation.participantIds()));
         state.coldEngagementSceneCandidates().forEach(candidate -> reserved.addAll(candidate.actorIds()));
         state.coldSettlementAssaultSceneCandidates().forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+        // A completed engineering assembly is the next exclusive physical owner, even before
+        // its scene lease is prepared.  Without this reservation an ordinary ambient visit can
+        // re-open one of the exact crew between COLD completion and scene admission (notably
+        // after restart), leaving the worksite indefinitely unavailable to itself.
+        FrontierEngineeringWorkSceneSupport.nextCandidate(state)
+                .ifPresent(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         return Set.copyOf(reserved);
     }
 

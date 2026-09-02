@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import net.minecraft.core.BlockPos;
@@ -45,6 +46,21 @@ public final class FrontierV3EquipmentIssueGameTests {
         helper.assertTrue(FrontierV3EquipmentIssueExecutor.commandId("running", new Revision(9_876L)).value()
                         .equals("executor:equipment-issue-running-r9876"),
                 "an executor command stays valid even when the semantic intent ID is long");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-equipment-issue", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void engineeringHandOffRequiresTheNamedServiceStationRatherThanChestDistance(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Villager resident = EntityType.VILLAGER.create(level);
+        if (resident == null) throw new IllegalStateException("test Villager could not be created");
+        BlockPosition assignedStation = new BlockPosition(41, 8, 0);
+        resident.setPos(41.5D, 9.0D, 0.5D);
+        helper.assertTrue(FrontierV3EngineeringDepotServicePort.bodyAtAssignedStation(resident, assignedStation),
+                "an exact HOT body at its compiled station may use the depot service");
+        resident.setPos(43.5D, 9.0D, 0.5D);
+        helper.assertTrue(!FrontierV3EngineeringDepotServicePort.bodyAtAssignedStation(resident, assignedStation),
+                "a body beside an incidental chest-radius location may not substitute for its assigned station");
         helper.succeed();
     }
 }

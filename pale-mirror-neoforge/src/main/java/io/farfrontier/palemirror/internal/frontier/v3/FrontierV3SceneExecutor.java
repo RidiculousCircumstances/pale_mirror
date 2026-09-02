@@ -918,10 +918,18 @@ final class FrontierV3SceneExecutor {
     /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                  SceneLease lease, String cause) {
-        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name(), observedMembers(level, lease));
+        // Cargo is not a generic scene property.  Engineering, medical and assault scenes are
+        // deliberately cargo-free, so conflict reporting must consult the typed registry before
+        // asking the logistics-only carrier executor to decode a cause.  The diagnostic remains
+        // complete without inventing a synthetic logistics binding for other scene families.
+        String carrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)
+                ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name()
+                : "NOT_APPLICABLE";
+        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), carrier, observedMembers(level, lease));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_conflict:" + cause + ":" + readiness.bodies() + ":" + readiness.carrier(), lease,
                 submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }
+
     /** A loaded demand point has disproved exact reclaimability; record conflict rather than loop forever or replace a body. */
     private static void recoveryUnresolved(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, java.util.Set<SubjectId> missingActors,
                                            boolean missingCarrier) {

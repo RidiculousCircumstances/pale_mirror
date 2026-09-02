@@ -249,7 +249,10 @@ public final class RouteConstructionStateSupport {
     public static FrontierWorldState reduceAssemblyStarted(FrontierWorldState state, SubjectId subject, RouteConstructionAssemblyStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction assembly must be owned by the route network");
         RouteConstruction project = state.routeConstructions().get(started.projectId());
-        if (project == null || project.assembly().isPresent()) throw new IllegalArgumentException("route construction assembly has no unassembled project");
+        if (project == null || (project.assembly().isPresent() && !(project.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
+                && project.assembly().orElseThrow().complete() && started.assembly().purpose() == EngineeringJourneyPurpose.WORKSITE))) {
+            throw new IllegalArgumentException("route construction assembly has no unassembled project");
+        }
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), project.withAssembly(started.assembly()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAssembly(started.assembly()));

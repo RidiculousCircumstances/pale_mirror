@@ -22,7 +22,6 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSitePreparationStarted started -> ResourceSiteProcess.reducePreparationStarted(state, event.subject(), started);
             case ResourceSitePrepared prepared -> ResourceSiteProcess.reducePrepared(state, event.subject(), prepared);
             case ResourceSiteHarvestStarted started -> ResourceSiteHarvestProcess.reduceStarted(state, event.subject(), started);
-            case ResourceSiteHarvested harvested -> ResourceSiteHarvestProcess.reduceHarvested(state, event.subject(), harvested);
             case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             default -> throw new IllegalArgumentException("resource-site process does not own event: " + event.payload().type());
         };

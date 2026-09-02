@@ -39,6 +39,22 @@ public final class RouteMaintenanceProcess {
                 new SimInstant(dueAt), 0, maintenanceId, "frontier.route_maintenance.assembly_progress", 1);
     }
 
+    /**
+     * Durable continuation of an admitted maintenance owner.  This is deliberately separate
+     * from the slow strategic scan: an observed local journey arrival, tool hand-off or work
+     * completion must make the same retained owner actionable on the normal human cadence.
+     */
+    public static ScheduledAction progress(RouteMaintenance maintenance, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:route-maintenance-progress-" + maintenance.id().value().replace(':', '-')
+                + "-at-" + dueAt), new SimInstant(dueAt), 0, maintenance.id(), "frontier.route_maintenance.progress", 1);
+    }
+
+    /** Durable reactive continuation after a physical repair has made the exact crew returnable. */
+    public static ScheduledAction returnProgress(RouteMaintenance maintenance, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:route-maintenance-return-" + maintenance.id().value().replace(':', '-')
+                + "-at-" + dueAt), new SimInstant(dueAt), 0, maintenance.id(), "frontier.route_maintenance.return_progress", 1);
+    }
+
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value()) + 1;
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal, action.dueAt().ticks()
@@ -48,43 +64,45 @@ public final class RouteMaintenanceProcess {
         Optional<RouteMaintenance> ready = state.routeMaintenances().values().stream().filter(value -> value.status() == RouteMaintenanceStatus.READY)
                 .sorted(Comparator.comparing(RouteMaintenance::id)).findFirst();
         if (ready.isPresent()) {
-            RouteMaintenance completed = ready.orElseThrow();
-            if (!EngineeringEquipmentProcess.returnedOrLost(state, completed)) {
-                return EngineeringEquipmentProcess.returnOne(state, completed).map(intent -> List.of(new ProposedEvent(completed.settlementId(),
-                        new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
-            }
-            boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
-                    .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(completed.id())
-                            && lease.status() != SceneLeaseStatus.CLOSED);
-            return retainedScene ? List.of(next) : List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceClosed(completed.id())), next);
+            return planReady(state, ready.orElseThrow(), action, java.util.Optional.of(next));
         }
         if (active.isEmpty()) return candidate(state).map(value -> List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteMaintenanceStarted(value)), next)).orElse(List.of(next));
-        RouteMaintenance maintenance = active.orElseThrow();
+        return planBuilding(state, active.orElseThrow(), action, java.util.Optional.of(next));
+    }
+
+    private static List<ProposedEvent> planBuilding(FrontierWorldState state, RouteMaintenance maintenance,
+                                                     ScheduledAction action, Optional<ProposedEvent> retry) {
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE
                 || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
                 && intent.subjectIds().contains(maintenance.id())
-                && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
+                && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return retryOnly(retry);
         if (!EngineeringToolCustody.ready(state, maintenance.team())) {
-            return EngineeringEquipmentProcess.issueOne(state, maintenance).map(intent -> List.of(new ProposedEvent(maintenance.settlementId(),
-                    new PhysicalIntentPrepared(intent)), next)).orElse(List.of(next));
+            if (!EngineeringDepotService.atStations(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
+                return admitDepotJourney(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT, action, retry);
+            }
+            return EngineeringEquipmentProcess.issueOne(state, maintenance).map(intent -> withRetry(List.of(new ProposedEvent(maintenance.settlementId(),
+                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
         }
-        if (maintenance.assembly().isEmpty()) return admitAssembly(state, maintenance, action, next);
-        if (!maintenance.assembly().orElseThrow().complete()) return List.of(next);
-        if (maintenance.cargoId().isEmpty()) return material(state, maintenance).map(item -> List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new PhysicalIntentPrepared(materialLoadingIntent(state, maintenance, item)) ), next)).orElse(List.of(next));
-        return List.of(next);
+        if (maintenance.assembly().isEmpty() || maintenance.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT) {
+            return admitAssembly(state, maintenance, action, retry);
+        }
+        if (!maintenance.assembly().orElseThrow().complete()) return retryOnly(retry);
+        if (maintenance.cargoId().isEmpty()) return material(state, maintenance).map(item -> withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new PhysicalIntentPrepared(materialLoadingIntent(state, maintenance, item)) )), retry)).orElseGet(() -> retryOnly(retry));
+        return retryOnly(retry);
     }
 
     public static List<ProposedEvent> planAssemblyProgress(FrontierWorldState state, ScheduledAction action) {
         RouteMaintenance maintenance = state.routeMaintenances().get(action.subject());
         if (maintenance == null || !assemblyProgress(maintenance.id(), action.dueAt().ticks()).id().equals(action.id())
-                || !maintenance.building() || maintenance.assembly().isEmpty()) return List.of();
+                || maintenance.assembly().isEmpty()
+                || (!maintenance.building() && maintenance.status() != RouteMaintenanceStatus.READY)) return List.of();
         EngineeringWorkAssembly assembly = maintenance.assembly().orElseThrow();
         if (assembly.complete()) return List.of();
         ProposedEvent next = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().migrationStepInterval())));
-        boolean retainedHotOrRecovery = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
+        boolean retainedHotOrRecovery = assembly.purpose() == EngineeringJourneyPurpose.WORKSITE && state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
@@ -92,19 +110,55 @@ public final class RouteMaintenanceProcess {
             AmbientActorLease lease = state.ambientLeases().get(member);
             return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
         }).findFirst().orElse(null);
-        return advancing == null ? List.of(next) : List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
-                new RouteMaintenanceAssemblyAdvanced(maintenance.id(), assembly.advance(advancing))), next);
+        if (advancing == null) return List.of(next);
+        EngineeringWorkAssembly advanced = assembly.advance(advancing);
+        ProposedEvent progressed = advanced.complete() ? new ProposedEvent(maintenance.id(),
+                new ScheduleEffect.Created(progress(maintenance, Math.addExact(action.dueAt().ticks(), 1)))) : null;
+        return progressed == null ? List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteMaintenanceAssemblyAdvanced(maintenance.id(), advanced)), next) : List.of(
+                new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyAdvanced(maintenance.id(), advanced)), progressed, next);
     }
 
-    private static List<ProposedEvent> admitAssembly(FrontierWorldState state, RouteMaintenance maintenance, ScheduledAction action, ProposedEvent next) {
+    /** Runs a retained owner after a local state transition without re-running strategic admission. */
+    public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
+        RouteMaintenance maintenance = state.routeMaintenances().get(action.subject());
+        if (maintenance == null || !progress(maintenance, action.dueAt().ticks()).id().equals(action.id())) return List.of();
+        return maintenance.status() == RouteMaintenanceStatus.READY
+                ? planReady(state, maintenance, action, Optional.empty())
+                : maintenance.building() ? planBuilding(state, maintenance, action, Optional.empty()) : List.of();
+    }
+
+    /** Drives one already-ready operation immediately after its observed repair instead of awaiting the global scan. */
+    public static List<ProposedEvent> planReturnProgress(FrontierWorldState state, ScheduledAction action) {
+        RouteMaintenance maintenance = state.routeMaintenances().get(action.subject());
+        if (maintenance == null || maintenance.status() != RouteMaintenanceStatus.READY
+                || !returnProgress(maintenance, action.dueAt().ticks()).id().equals(action.id())) return List.of();
+        return planReady(state, maintenance, action, Optional.empty());
+    }
+
+    private static List<ProposedEvent> admitAssembly(FrontierWorldState state, RouteMaintenance maintenance, ScheduledAction action, Optional<ProposedEvent> retry) {
         if (maintenance.team().memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return List.of(next);
+                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
         EngineeringWorkAssembly assembly;
         try { assembly = EngineeringWorksite.compile(state, maintenance); }
-        catch (IllegalArgumentException unavailable) { return List.of(next); }
-        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly)),
+        catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
+        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyStarted(maintenance.id(), assembly)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
-                        + state.bootstrap().ruleset().cadence().migrationStepInterval()))), next);
+                        + state.bootstrap().ruleset().cadence().migrationStepInterval())))), retry);
+    }
+
+    private static List<ProposedEvent> admitDepotJourney(FrontierWorldState state, RouteMaintenance maintenance,
+                                                           EngineeringJourneyPurpose purpose, ScheduledAction action, Optional<ProposedEvent> retry) {
+        EngineeringWorkAssembly current = maintenance.assembly().orElse(null);
+        if (current != null) return retryOnly(retry);
+        if (maintenance.team().memberIds().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return retryOnly(retry);
+        EngineeringWorkAssembly journey;
+        try { journey = EngineeringDepotService.compile(state, maintenance, purpose); }
+        catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
+        return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceAssemblyStarted(maintenance.id(), journey)),
+                new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
+                        + state.bootstrap().ruleset().cadence().migrationStepInterval())))), retry);
     }
 
     private static Optional<RouteMaintenance> candidate(FrontierWorldState state) {
@@ -186,21 +240,28 @@ public final class RouteMaintenanceProcess {
                 .sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
     }
 
-    public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         RouteMaintenanceStateSupport.validateWorkIntent(state, intent);
-        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, transition));
+        if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, transition));
+        RouteMaintenance maintenance = maintenanceFor(state, intent);
+        return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, transition), new ProposedEvent(maintenance.id(),
+                new ScheduleEffect.Created(returnProgress(maintenance, Math.addExact(now, 1L)))));
     }
 
-    public static List<ProposedEvent> planMaterialLoadingTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    public static List<ProposedEvent> planMaterialLoadingTransition(FrontierWorldState state, PhysicalIntent intent,
+                                                                      PhysicalIntentTransition transition, long now) {
         RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, transition));
         if (!(transition.observation().orElseThrow() instanceof RouteMaintenanceMaterialLoadObservation observation)) {
             throw new IllegalArgumentException("route maintenance loading requires its exact observation");
         }
         RouteMaintenanceStateSupport.validateMaterialLoadingReceipt(state, intent, observation);
+        RouteMaintenance maintenance = state.routeMaintenances().get(observation.maintenanceId());
+        if (maintenance == null) throw new IllegalArgumentException("route maintenance loading has no retained operation");
         return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, transition), new ProposedEvent(FrontierRouteNetwork.OWNER,
                 new RouteMaintenanceMaterialLoaded(observation.maintenanceId(), new CargoBatch(observation.cargoId(), FrontierRouteNetwork.OWNER,
-                        List.of(observation.cargoItemId())))));
+                        List.of(observation.cargoItemId())))), new ProposedEvent(maintenance.id(), new ScheduleEffect.Created(
+                progress(maintenance, Math.addExact(now, 1L)))));
     }
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
@@ -209,5 +270,42 @@ public final class RouteMaintenanceProcess {
         else if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
         else throw new IllegalArgumentException("route maintenance process received foreign intent");
         return state.preparePhysicalIntent(intent);
+    }
+
+    private static List<ProposedEvent> planReady(FrontierWorldState state, RouteMaintenance completed,
+                                                   ScheduledAction action, Optional<ProposedEvent> retry) {
+        if (!EngineeringEquipmentProcess.returnedOrLost(state, completed)) {
+            if (!EngineeringDepotService.atStations(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT)) {
+                return admitDepotJourney(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT, action, retry);
+            }
+            return EngineeringEquipmentProcess.returnOne(state, completed).map(intent -> withRetry(List.of(new ProposedEvent(completed.settlementId(),
+                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+        }
+        boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
+                .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(completed.id())
+                        && lease.status() != SceneLeaseStatus.CLOSED);
+        if (retainedScene) return retryOnly(retry);
+        ProposedEvent closed = new ProposedEvent(FrontierRouteNetwork.OWNER, new RouteMaintenanceClosed(completed.id()));
+        return action.kind().equals("frontier.route_maintenance.return_progress") ? List.of(closed) : withRetry(List.of(closed), retry);
+    }
+
+    private static List<ProposedEvent> retryOnly(Optional<ProposedEvent> retry) {
+        return retry.map(List::of).orElseGet(List::of);
+    }
+
+    private static List<ProposedEvent> withRetry(List<ProposedEvent> events, Optional<ProposedEvent> retry) {
+        if (retry.isEmpty()) return events;
+        java.util.ArrayList<ProposedEvent> result = new java.util.ArrayList<>(events);
+        result.add(retry.orElseThrow());
+        return List.copyOf(result);
+    }
+
+    private static RouteMaintenance maintenanceFor(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.subjectIds().size() < 2) throw new IllegalArgumentException("route maintenance intent lacks its exact project subject");
+        RouteMaintenance maintenance = state.routeMaintenances().get(intent.subjectIds().get(1));
+        if (maintenance == null || !intent.subjectIds().contains(maintenance.id())) {
+            throw new IllegalArgumentException("route maintenance intent has no retained project");
+        }
+        return maintenance;
     }
 }

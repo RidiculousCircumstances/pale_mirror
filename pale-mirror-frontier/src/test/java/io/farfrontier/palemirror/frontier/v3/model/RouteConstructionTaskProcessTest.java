@@ -10,7 +10,11 @@ import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -22,6 +26,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -51,7 +56,21 @@ class RouteConstructionTaskProcessTest {
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:route-construction"), FrontierRouteNetwork.OWNER,
                         "minecraft:gray_concrete", 1, new InventoryCustody.ContainerSlot(FrontierRouteNetwork.MAINTENANCE_CONTAINER, 0))));
-        PhysicalIntentPrepared toolIssue = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> musterPlan = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L));
+        assertTrue(musterPlan.stream().noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared),
+                "a remote crew must first retain a depot journey rather than issue a tool across the world");
+        RouteConstructionAssemblyStarted musterStarted = musterPlan.stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
+                .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(EngineeringJourneyPurpose.MUSTER_DEPOT, musterStarted.assembly().purpose());
+        state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, musterStarted);
+        while (!state.routeConstructions().get(project.id()).assembly().orElseThrow().complete()) {
+            EngineeringWorkAssembly journey = state.routeConstructions().get(project.id()).assembly().orElseThrow();
+            SubjectId advancing = journey.nextSafeAdvance().orElseThrow();
+            state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER,
+                    new RouteConstructionAssemblyAdvanced(project.id(), journey.advance(advancing)));
+        }
+        PhysicalIntentPrepared toolIssue = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(2, 201L)).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE, toolIssue.intent().kind());
@@ -94,6 +113,42 @@ class RouteConstructionTaskProcessTest {
         state = RouteConstructionStateSupport.reduceAssemblyAdvanced(state, FrontierRouteNetwork.OWNER, assemblyAdvanced);
         assertEquals(state, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test
+    void completedDepotMusterSchedulesImmediateToolIssueWithoutAwaitingTheGlobalConstructionScan() {
+        FrontierWorldState state = FrontierDevelopmentScenarios.engineeringEquipmentFixture(
+                new WorldId("frontier:route-construction-reactive-muster"), 91L).state();
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
+        SubjectId depot = FrontierWorldState.depotId(project.settlementId());
+        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        RouteConstructionAssemblyStarted started = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 200L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
+                .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(EngineeringJourneyPurpose.MUSTER_DEPOT, started.assembly().purpose());
+        FrontierWorldState travelling = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, started);
+        while (true) {
+            EngineeringWorkAssembly assembly = travelling.routeConstructions().get(project.id()).assembly().orElseThrow();
+            SubjectId advancing = assembly.nextSafeAdvance().orElseThrow();
+            EngineeringWorkAssembly advanced = assembly.advance(advancing);
+            if (advanced.complete()) break;
+            travelling = RouteConstructionStateSupport.reduceAssemblyAdvanced(travelling, FrontierRouteNetwork.OWNER,
+                    new RouteConstructionAssemblyAdvanced(project.id(), advanced));
+        }
+        var completion = RouteConstructionProcess.planAssemblyProgress(travelling,
+                RouteConstructionProcess.assemblyProgress(project.id(), 300L));
+        RouteConstructionAssemblyAdvanced advanced = completion.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteConstructionAssemblyAdvanced.class::isInstance).map(RouteConstructionAssemblyAdvanced.class::cast).findFirst().orElseThrow();
+        assertTrue(completion.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast)
+                .anyMatch(effect -> effect.action().equals(RouteConstructionProcess.progress(project, 301L))));
+        FrontierWorldState mustered = RouteConstructionStateSupport.reduceAssemblyAdvanced(travelling, FrontierRouteNetwork.OWNER, advanced);
+        var continuation = RouteConstructionProcess.planProgress(mustered, RouteConstructionProcess.progress(project, 301L));
+        assertTrue(continuation.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast)
+                .anyMatch(intent -> intent.intent().kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE),
+                "the exact crew/tool hand-off must continue at the final local depot arrival");
     }
 
     @Test
@@ -182,6 +237,45 @@ class RouteConstructionTaskProcessTest {
                 new AmbientLeaseReleased(member, FrontierTestPositions.bodyAboveSupport(after.currentPosition()), FixedScalar.whole(8)));
         assertEquals(AmbientLeaseStatus.CLOSED, released.ambientLeases().get(member).status());
         assertEquals(after.currentPosition(), FrontierTestPositions.supportOf(released.actorLocations().get(member)));
+    }
+
+    @Test
+    void physicalEngineeringArrivalIsRegisteredToInfrastructureAndRejectsAStaleOrUnleasedCursor() {
+        WorldId world = new WorldId("frontier:route-construction-hot-command");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierV3FixtureCatalog.engineeringEquipmentConfiguration(world, 41L);
+        FrontierWorldState state = issueAllFixtureTools(base.initialState());
+        RouteConstruction project = state.routeConstructions().values().stream().findFirst().orElseThrow();
+        SubjectId member = project.team().orElseThrow().memberIds().getFirst();
+        RouteConstructionAssemblyStarted started = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(1, 400L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteConstructionAssemblyStarted.class::isInstance)
+                .map(RouteConstructionAssemblyStarted.class::cast).findFirst().orElseThrow();
+        state = RouteConstructionStateSupport.reduceAssemblyStarted(state, FrontierRouteNetwork.OWNER, started);
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, member, new SimInstant(400L));
+        state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, lease), member, AmbientLeaseStatus.HOT);
+        EngineeringWorkAssembly next = state.routeConstructions().get(project.id()).assembly().orElseThrow().advance(member);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
+                world, state, new SimInstant(400L), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var engine = FrontierEngines.create(configuration);
+        CommandId arrival = new CommandId("executor:engineering-arrival");
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, arrival, world, engine.checkpoint().revision(),
+                engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(arrival),
+                new RouteConstructionAssemblyAdvanced(project.id(), next))));
+
+        CommandId stale = new CommandId("executor:engineering-arrival-stale");
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, stale, world, engine.checkpoint().revision(),
+                engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(stale),
+                new RouteConstructionAssemblyAdvanced(project.id(), next))),
+                "a physical executor cannot replay an already observed engineering cursor");
+    }
+
+    @Test
+    void infrastructureDeclaresEveryPhysicalEngineeringArrivalPayload() {
+        var infrastructure = FrontierWorldProcessCatalog.descriptors().stream()
+                .filter(descriptor -> descriptor.id().equals("infrastructure")).findFirst().orElseThrow();
+        assertEquals(java.util.Set.of("frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced"),
+                infrastructure.commandPayloadTypes(),
+                "the only physical engineering arrivals must remain explicitly owned by the infrastructure command boundary");
     }
 
     private static FrontierWorldState stateWithConfirmedPatrol() {

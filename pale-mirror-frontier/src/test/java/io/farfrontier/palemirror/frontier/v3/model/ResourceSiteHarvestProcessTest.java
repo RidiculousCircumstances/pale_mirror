@@ -5,6 +5,9 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -42,26 +45,38 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
-    void exactMatureFieldCreatesOneNamedWheatStackWithoutAPlayerLoadedDepot() {
+    void exactMatureFieldReservesOneNamedWheatStackUntilItsPhysicalReceipt() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
                 ResourceSiteHarvestProcess.start(task, 22_100L));
 
-        assertEquals(5, planned.size()); assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE), planned.getFirst().payload());
+        assertEquals(3, planned.size()); assertEquals(new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE), planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
         assertEquals(task.id(), started.job().taskId()); assertFalse(tasked.inventory().items().containsKey(started.job().outputItemId()));
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.getFirst().payload());
         FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(active, site, started);
         ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
-        ResourceSiteHarvested harvested = (ResourceSiteHarvested) planned.get(2).payload();
-        assertEquals(output, harvested.output());
-        assertEquals(harvested, FrontierWorldRuntimeDefinition.payloadCodecs().decode(harvested.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(harvested)));
-        FrontierWorldState complete = ResourceSiteHarvestProcess.reduceHarvested(harvesting, site, harvested);
-        complete = StrategicObjectiveProcess.reduceTaskTransition(complete, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.get(3).payload());
+        PhysicalIntentPrepared prepared = (PhysicalIntentPrepared) planned.get(2).payload();
+        assertEquals(started.job().intentId(), prepared.intent().id());
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, prepared.intent());
+        assertEquals(ResourceSitePhase.HARVESTING, harvesting.resourceSites().site(site).phase());
+        assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
+        assertFalse(harvesting.inventory().items().containsKey(output.id()), "canonical inventory must wait for Minecraft receipt");
+        assertEquals(StrategicTaskStatus.ACTIVE, harvesting.strategicPlans().tasks().get(task.id()).status());
+
+        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
+        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> completion = ResourceSiteHarvestProcess.planTransition(harvesting, prepared.intent(), confirmed, 22_200L);
+        assertEquals(3, completion.size());
+        FrontierWorldState complete = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        complete = StrategicObjectiveProcess.reduceTaskTransition(complete, new SubjectId("settlement:1"), (StrategicTaskTransition) completion.get(1).payload());
         assertEquals(ResourceSitePhase.GROWING, complete.resourceSites().site(site).phase());
         assertEquals(output, complete.inventory().items().get(output.id()));
+        assertEquals(PhysicalIntentStatus.CONFIRMED, complete.physicalIntents().get(prepared.intent().id()).status());
+        assertEquals(receipt, complete.physicalObservations().get(receipt.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, complete.strategicPlans().tasks().get(task.id()).status());
         assertTrue(new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(complete)).inventory().items().containsKey(output.id()));
     }
@@ -78,7 +93,7 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
-    void canonicalHarvestCannotRedirectTheNamedOutputToAnotherDepotSlot() {
+    void physicalHarvestReceiptCannotRedirectTheNamedOutputToAnotherDepotSlot() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
@@ -86,16 +101,20 @@ class ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
         FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.getFirst().payload());
         FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(active, site, started);
+        PhysicalIntentPrepared prepared = (PhysicalIntentPrepared) planned.get(2).payload();
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, prepared.intent());
+        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         InventoryCustody.ContainerSlot otherSlot = new InventoryCustody.ContainerSlot(started.job().outputSlot().containerId(),
                 started.job().outputSlot().slot() + 1);
         ExactItemStack redirected = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, otherSlot);
 
+        ResourceSiteHarvestObservation redirectedReceipt = receipt(prepared.intent(), started.job(), redirected);
         FrontierWorldState state = harvesting;
-        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceHarvested(state, site, new ResourceSiteHarvested(started.job(), redirected)));
+        assertThrows(IllegalArgumentException.class, () -> state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(redirectedReceipt)));
     }
 
     @Test
-    void duplicateCanonicalHarvestOutputIsRejectedWithoutChangingTheField() {
+    void duplicatePhysicalHarvestReceiptIsRejectedWithoutChangingTheField() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
@@ -104,9 +123,13 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState harvesting = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) planned.getFirst().payload());
         harvesting = ResourceSiteHarvestProcess.reduceStarted(harvesting, site, started);
-        ResourceSiteHarvested harvested = (ResourceSiteHarvested) planned.get(2).payload();
-        FrontierWorldState withDuplicate = harvesting.withInventory(harvesting.inventory().store(harvested.output()));
-        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceHarvested(withDuplicate, site, harvested));
+        PhysicalIntentPrepared prepared = (PhysicalIntentPrepared) planned.get(2).payload();
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, prepared.intent());
+        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
+        FrontierWorldState withDuplicate = harvesting.withInventory(harvesting.inventory().store(output));
+        ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
+        assertThrows(IllegalArgumentException.class, () -> withDuplicate.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
     }
 
     private static FrontierWorldState ready(FrontierWorldState state) {
@@ -146,6 +169,11 @@ class ResourceSiteHarvestProcessTest {
 
     private static StrategicTask onlyHarvestTask(FrontierWorldState state) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+    }
+
+    private static ResourceSiteHarvestObservation receipt(PhysicalIntent intent, ResourceSiteHarvestJob job, ExactItemStack output) {
+        return new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
+                intent.id(), job.siteId(), job.workerId(), output, 64);
     }
 
     private static FrontierWorldState initial() {

@@ -20,7 +20,7 @@ public final class FrontierEngineeringWorkSceneSupport {
         if (!project.building() || project.engineeringTeam().isEmpty() || project.assembly().isEmpty()) return Optional.empty();
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
-        if (!assembly.complete() || !EngineeringToolCustody.ready(state, team)
+        if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE || !assembly.complete() || !EngineeringToolCustody.ready(state, team)
                 || project.confirmedCells() >= project.workCells().size()) return Optional.empty();
         Map<SubjectId, BlockPosition> positions = assembly.positions();
         if (!positions.keySet().equals(Set.copyOf(team.memberIds())) || positions.entrySet().stream()

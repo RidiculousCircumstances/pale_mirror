@@ -11,6 +11,7 @@ class FrontierV3GameTestSliceTest {
     void sceneSliceIncludesOnlyTheFastHotColdBatches() {
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-handoff"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-restart-reclaim"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-route-maintenance"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-resource-harvest"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "core-integration"));
     }
@@ -32,4 +33,5 @@ class FrontierV3GameTestSliceTest {
         assertTrue(FrontierV3GameTestSlice.includes("", "core-integration"));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("all", "pm-frontier-v3-scene-handoff"));
     }
+
 }

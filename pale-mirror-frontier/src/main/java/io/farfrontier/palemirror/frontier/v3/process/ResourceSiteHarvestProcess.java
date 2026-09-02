@@ -19,7 +19,15 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import java.util.List;
 import java.util.OptionalInt;
 
-/** Plans one exact 64-cell COLD harvest; loaded-world projection follows canonical completion. */
+/**
+ * Plans one exact 64-cell harvest through the physical-intent boundary.
+ *
+ * <p>A mature field reserves its farmer, depot slot and output identity in canonical state, but
+ * it produces neither crop nor inventory until the naturally loaded executor observes the whole
+ * field reset and the exact tagged stack in that reserved chest slot.  This deliberately makes a
+ * COLD harvest wait for ordinary Minecraft materialization instead of treating a container as a
+ * desired-state projection.</p>
+ */
 public final class ResourceSiteHarvestProcess {
     private ResourceSiteHarvestProcess() { }
 
@@ -46,33 +54,15 @@ public final class ResourceSiteHarvestProcess {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
         ResourceSiteHarvestJob job = job(lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
-        ExactItemStack output = new ExactItemStack(job.outputItemId(), settlement.id(), "minecraft:wheat", 64, job.outputSlot());
-        ResourceSiteLifecycle harvested = lifecycle.harvesting(job).harvested();
+        PhysicalIntent intent = intent(site, job);
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
-                new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvested(job, output)), transition(task, StrategicTaskStatus.COMPLETED),
-                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(harvested,
-                        Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+                new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
         ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
         return state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
-    }
-
-    public static FrontierWorldState reduceHarvested(FrontierWorldState state, SubjectId subject, ResourceSiteHarvested harvested) {
-        ResourceSiteHarvestJob job = harvested.job();
-        if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest completion has a foreign event owner");
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-        validateJob(state, lifecycle, job);
-        ExactItemStack output = harvested.output();
-        if (!output.id().equals(job.outputItemId()) || !output.custody().equals(job.outputSlot()) || output.count() != 64
-                || !output.itemKind().equals("minecraft:wheat") || state.inventory().items().containsKey(output.id())) {
-            throw new IllegalArgumentException("resource-site harvest completion has an invalid exact output");
-        }
-        ResourceSite site = site(state, lifecycle.siteId());
-        if (!output.economicOwnerId().equals(site.settlementId())) throw new IllegalArgumentException("resource-site harvest completion has a foreign output owner");
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.harvested())).withInventory(state.inventory().store(output));
     }
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
@@ -153,6 +143,14 @@ public final class ResourceSiteHarvestProcess {
         String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + lifecycle.growthEpoch();
         return new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-" + suffix), task.id(), lifecycle.siteId(), farmer.id(),
                 new SubjectId("item:site-harvest-" + suffix + "-wheat"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix));
+    }
+
+    private static PhysicalIntent intent(ResourceSite site, ResourceSiteHarvestJob job) {
+        BlockPosition origin = site.cropSlots().getFirst();
+        return new PhysicalIntent(job.intentId(), PhysicalIntentKind.RESOURCE_SITE_HARVEST, PhysicalIntentStatus.PREPARED, job.siteId(),
+                List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()),
+                new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
+                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED);
     }
 
     private static StrategicTask task(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {

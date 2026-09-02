@@ -119,7 +119,10 @@ public final class RouteMaintenanceStateSupport {
     public static FrontierWorldState reduceAssemblyStarted(FrontierWorldState state, SubjectId subject, RouteMaintenanceAssemblyStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance assembly must be owned by the route network");
         RouteMaintenance maintenance = state.routeMaintenances().get(started.maintenanceId());
-        if (maintenance == null || maintenance.assembly().isPresent()) throw new IllegalArgumentException("route maintenance has no unassembled operation");
+        if (maintenance == null || (maintenance.assembly().isPresent() && !(maintenance.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
+                && maintenance.assembly().orElseThrow().complete() && started.assembly().purpose() == EngineeringJourneyPurpose.WORKSITE))) {
+            throw new IllegalArgumentException("route maintenance has no unassembled operation");
+        }
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), maintenance.withAssembly(started.assembly()));
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAssembly(started.assembly()));
         return state.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(next));
@@ -184,8 +187,7 @@ public final class RouteMaintenanceStateSupport {
                 || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
-        RouteMaintenance maintenance = intent.subjectIds().stream().map(state.routeMaintenances()::get).filter(java.util.Objects::nonNull)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
+        RouteMaintenance maintenance = workOperation(state, intent);
         SubjectId cargoId = maintenance.cargoId().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent has no cargo"));
         SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(FrontierRouteNetwork.OWNER) && !id.equals(maintenance.id()) && !id.equals(cargoId))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an exact material"));
@@ -201,6 +203,24 @@ public final class RouteMaintenanceStateSupport {
                 || !wholeBlock(intent).equals(maintenance.repairCell())) {
             throw new IllegalArgumentException("route maintenance work intent lacks exact loss/cargo preconditions");
         }
+    }
+
+    /**
+     * Resolves the retained maintenance operation from the intent's exact subject binding.
+     *
+     * <p>The route network is the durable cause/semantic owner of an in-place repair, while the
+     * operation is one of the bound subjects.  Physical adapters must use this relation rather
+     * than treating {@code causeSubjectId} as an operation ID; otherwise a valid prepared intent
+     * is silently unexecutable.</p>
+     */
+    public static RouteMaintenance workOperation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
+                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER)
+                || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) {
+            throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
+        }
+        return intent.subjectIds().stream().map(state.routeMaintenances()::get).filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
     }
 
     public static void validateMaterialLoadingIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {

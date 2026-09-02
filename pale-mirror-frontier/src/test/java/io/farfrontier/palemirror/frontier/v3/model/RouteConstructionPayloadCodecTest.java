@@ -44,5 +44,24 @@ class RouteConstructionPayloadCodecTest {
         RouteConstructionMaterialLoaded loaded = new RouteConstructionMaterialLoaded(project, new CargoBatch(cargo, FrontierRouteNetwork.OWNER, List.of(cargoItem)));
         assertEquals(started, codecs.decode(started.type(), codecs.encode(started))); assertEquals(cutover, codecs.decode(cutover.type(), codecs.encode(cutover)));
         assertEquals(loaded, codecs.decode(loaded.type(), codecs.encode(loaded)));
+
+        SubjectId maintenance = new SubjectId("maintenance:codec"), maintenanceCargo = new SubjectId("cargo:route-maintenance-codec"),
+                maintenanceItem = new SubjectId("item:route-maintenance-codec");
+        PhysicalIntent maintenanceIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-codec"), PhysicalIntentKind.ROUTE_MAINTENANCE,
+                PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem),
+                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED);
+        RouteMaintenanceObservation repair = new RouteMaintenanceObservation(new PhysicalObservationId("observation:route-maintenance-codec"), maintenanceIntent.id(),
+                maintenance, maintenanceItem, new BlockPosition(12, 64, 18));
+        PhysicalIntentTransition repairTransition = new PhysicalIntentTransition(maintenanceIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(repair));
+        assertEquals(repairTransition, codecs.decode(repairTransition.type(), codecs.encode(repairTransition)));
+        PhysicalIntent maintenanceLoadIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-load-codec"),
+                PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, maintenance,
+                List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem, item),
+                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
+                PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED);
+        RouteMaintenanceMaterialLoadObservation maintenanceLoad = new RouteMaintenanceMaterialLoadObservation(
+                new PhysicalObservationId("observation:route-maintenance-load-codec"), maintenanceLoadIntent.id(), maintenance, maintenanceCargo, item, maintenanceItem, 63);
+        PhysicalIntentTransition maintenanceLoadTransition = new PhysicalIntentTransition(maintenanceLoadIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(maintenanceLoad));
+        assertEquals(maintenanceLoadTransition, codecs.decode(maintenanceLoadTransition.type(), codecs.encode(maintenanceLoadTransition)));
     }
 }

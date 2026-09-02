@@ -104,6 +104,7 @@ final class RouteConstructionPayloadCodecs {
     }
 
     static void writeAssembly(DataOutputStream output, EngineeringWorkAssembly assembly) throws IOException {
+        output.writeByte(assembly.purpose().wireTag());
         output.writeByte(assembly.members().size());
         for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
@@ -114,6 +115,7 @@ final class RouteConstructionPayloadCodecs {
     }
 
     static EngineeringWorkAssembly readAssembly(DataInputStream input) throws IOException {
+        EngineeringJourneyPurpose purpose = FrontierWireTags.require(EngineeringJourneyPurpose.class, input.readUnsignedByte());
         int count = input.readUnsignedByte();
         if (count < EngineeringRecoveryTeam.MIN_MEMBERS || count > EngineeringRecoveryTeam.MAX_MEMBERS) {
             throw new IllegalArgumentException("route construction assembly payload has invalid size");
@@ -128,6 +130,6 @@ final class RouteConstructionPayloadCodecs {
                 throw new IllegalArgumentException("route construction assembly payload has duplicate member");
             }
         }
-        return new EngineeringWorkAssembly(members);
+        return new EngineeringWorkAssembly(purpose, members);
     }
 }

@@ -104,6 +104,27 @@ public final class FrontierV3AmbientActorGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void freshAmbientBodyRehydratesExactEngineeringToolFromActorCustody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(20, 8, 0)); prepareFloor(level, origin);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-engineering-tool-hydration"), 91L), new EphemeralStore(), 10_000);
+        SubjectId resident = new SubjectId("resident:1-1"), tool = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        FrontierWorldState initial = state(runtime);
+        var exactTool = initial.inventory().items().get(tool);
+        FrontierWorldState equipped = initial.withInventory(initial.inventory().moveObservedItem(tool, exactTool.custody(),
+                new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Actor(resident)));
+
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, equipped, resident, bodyAt(origin)),
+                FrontierV3AmbientActorExecutor.Result.APPLIED,
+                "a fresh actor body must materialize only its one canonical identity");
+        Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(equipped, resident));
+        helper.assertTrue(body != null && FrontierV3CargoHandoffExecutor.exactMatch(
+                        body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND), exactTool),
+                "canonical engineering-tool custody must survive fresh COLD/restart materialization as the same tagged physical stack");
+        body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void unindexedManagedJoinDefersAdmissionUntilItsExactUuidIsPublished(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =

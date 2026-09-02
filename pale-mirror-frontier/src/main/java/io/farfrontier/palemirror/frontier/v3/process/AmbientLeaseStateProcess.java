@@ -53,9 +53,9 @@ public final class AmbientLeaseStateProcess {
         if (assembling != null && !release.body().supportingSurface().support().equals(assembling.activeAssembly().orElseThrow().members().get(release.actorId()).currentSurface().support())) {
             throw new IllegalArgumentException("HOT operation assembly may return to COLD only at its exact cursor");
         }
-        RouteConstruction engineering = state.routeConstructions().values().stream()
+        EngineeringWorkOrder engineering = java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
                 .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
-                .findFirst().orElse(null);
+                .reduce((left, right) -> { throw new IllegalArgumentException("ambient actor belongs to more than one engineering journey"); }).orElse(null);
         if (engineering != null) {
             EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(release.actorId());
             if (current.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !release.body().supportingSurface().support().equals(member.currentPosition())) {

@@ -19,10 +19,13 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStatus;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStarted;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -116,6 +119,26 @@ class FrontierV3DiagnosticJsonTest {
         String json = FrontierV3DiagnosticJson.render("item", itemId.value(), checkpoint, state.withInventory(inventory), Optional.empty());
 
         assertTrue(json.contains("\"custody\":{\"kind\":\"ACTOR\",\"actor\":\"" + actorId.value() + "\"}"));
+    }
+
+    @Test
+    void exposesBoundedReadOnlyPhysicalContainerSocketFacts(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-container-socket"), 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId container = state.inventory().containers().keySet().stream().sorted().findFirst().orElseThrow();
+        var readiness = new FrontierV3ContainerSurfaceExecutor.Readiness("LOADED", "CONFLICT", "READY",
+                "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "");
+
+        String json = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));
+
+        assertTrue(json.contains("\"physicalSocket\":{\"chunk\":\"LOADED\",\"freshSocket\":\"CONFLICT\""));
+        assertTrue(json.contains("\"targetBlock\":\"minecraft:chest\"") && json.contains("\"chest\":\"FOREIGN_OR_UNTAGGED\""));
+        assertTrue(runtime.decodedState().orElseThrow().equals(state), "container socket diagnostics must not mutate canonical inventory or load work");
+        runtime.shutdown();
     }
 
     @Test
@@ -263,6 +286,33 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void exposesOneRetainedInPlaceRouteMaintenanceWithoutInventingABypass(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-route-maintenance-test"), 95L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id();
+        BlockPosition position = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement).get(1);
+        FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
+        RouteMaintenanceStarted started = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance)
+                .map(RouteMaintenanceStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState admitted = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER, started);
+
+        String value = FrontierV3DiagnosticJson.render("route_maintenance", settlement.value(), checkpoint, admitted, Optional.empty());
+
+        assertTrue(value.contains("\"status\":\"ok\"") && value.contains("\"maintenance\":\"" + started.maintenance().id().value() + "\""));
+        assertTrue(value.contains("\"repairCell\":{\"x\":" + position.x()) && value.contains("\"semanticPart\":\"ROUTE_SURFACE\""));
+        assertTrue(value.contains("\"cargoPresent\":false") && value.contains("\"teamPresent\":true"));
+        assertTrue(value.contains("\"toolReturnRequired\":false") && value.contains("\"toolReturnReadiness\":\"NOT_READY_FOR_RETURN\""),
+                "the read-only maintenance view must expose the planner's terminal-return precondition without preparing an intent");
+        assertTrue(admitted.routeConstructions().isEmpty(), "the read-only maintenance view may not create a bypass project");
+        runtime.shutdown();
+    }
+
+    @Test
     void exposesOneExactPhysicalDeltaWithoutLeakingThePlayerIdentity(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-delta-test"), 95L),
@@ -343,7 +393,8 @@ class FrontierV3DiagnosticJsonTest {
                     new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(completed.currentPosition())),
                     sourceState.actorLocations().get(member).condition()));
         });
-        assembly = new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly(completedMembers);
+        assembly = new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly(
+                io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyPurpose.WORKSITE, completedMembers);
         var projects = new java.util.LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), new RouteConstruction(project.id(), project.settlementId(), project.waypoints(), project.workCells(), project.confirmedCells(),
                 project.status(), project.cargoId(), project.team(), Optional.of(assembly)));

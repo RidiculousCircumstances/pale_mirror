@@ -19,6 +19,9 @@ const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 const runId = randomUUID();
 const port = Number(process.env.FRONTIER_V3_PILOT_PORT ?? 25575);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('FRONTIER_V3_PILOT_PORT must be 1024..65535');
+// The disposable runner owns this listener exclusively.  Do not let Gradle/Minecraft discover
+// a stale pilot JVM only after it has created a fresh world directory and emitted a crash log.
+if (await portOpen(port)) throw new Error(`disposable v3 pilot port ${port} is already occupied; stop the exact previous pilot server first`);
 const world = `v3-${scenario.id.replace(/[^a-z0-9_-]/g, '-').slice(0, 36)}-${runId.slice(0, 8)}`;
 const output = resolve(project, outputPath);
 const ephemeralScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-scenario.json`);
@@ -68,7 +71,7 @@ try {
   if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;
 } finally {
-  if (server != null && !abruptStopAttempted) await stopServerSafely(server, serverLog, server.logOffset, port);
+  if (server != null && !abruptStopAttempted) await stopServerForCleanup(server, serverLog, server.logOffset, port);
   await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
   // A failed recovery run is diagnostic evidence.  In particular, never erase
   // the session.lock/world that prevented the next server from starting.
@@ -166,14 +169,14 @@ async function writeScenario(path, value) {
 }
 
 async function stopServerSafely(server, logPath, offset, serverPort) {
-  // Gradle's JavaExec console does not reliably forward `stop` from a pipe.
-  // Its SIGINT does begin the Minecraft shutdown, but Gradle can return before
-  // its forked server has flushed every level. In that case the exact JVM PID
-  // from this run's ready marker is the only remaining valid stop target.
-  // Therefore SIGINT is only a stop request; deletion waits for Minecraft's
-  // own durable acknowledgement and never infers success from process exit.
-  if (server.child.exitCode === null && server.child.signalCode === null) server.child.kill('SIGINT');
-  else requestGracefulStop(server.serverPid);
+  // Gradle's JavaExec wrapper is not the world owner. Sending a signal to it
+  // can fan out more than one shutdown signal to its child, which leaves
+  // Minecraft re-entering chunk-unload/save work while the runner mistakes the
+  // wrapper's lifecycle for the server's lifecycle. The exact JVM nonce is
+  // therefore the sole graceful-stop target, just as it is for abrupt recovery.
+  // A request is never evidence: only Minecraft's own durable marker below may
+  // authorize a restart or cleanup.
+  requestGracefulStop(server.serverPid);
   const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', DURABLE_STOP_TIMEOUT_MS);
   if (!stopped) throw new Error('disposable v3 server did not confirm a flushed world; preserving it for diagnosis');
   // The Gradle wrapper may linger after its dedicated Minecraft child has
@@ -190,6 +193,24 @@ async function stopServerSafely(server, logPath, offset, serverPort) {
   // let the next exact server lifecycle be governed solely by the durable
   // marker and closed game port above.
   releaseWrapper(server.child);
+}
+async function stopServerForCleanup(server, logPath, offset, serverPort) {
+  try {
+    await stopServerSafely(server, logPath, offset, serverPort);
+  } catch (failure) {
+    // Keep the failed world and its manifest for forensic recovery, but never leave the exact
+    // disposable JVM alive. A later scenario must not inherit its port or its loaded world.
+    // This fallback has no listener/name scan: it can affect only the nonce-announced JVM that
+    // this runner created. The original graceful-stop failure still reaches the caller.
+    if (await portOpen(serverPort)) {
+      killIfPresent(server.serverPid);
+      if (!await waitForPortClosed(serverPort, 45_000)) {
+        throw new Error(`disposable v3 cleanup could not stop its exact JVM after graceful failure: ${failure.message}`);
+      }
+    }
+    releaseWrapper(server.child);
+    throw failure;
+  }
 }
 async function stopServerAbruptly(server, serverPort) {
   if (!Number.isInteger(server.serverPid) || server.serverPid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
@@ -215,7 +236,7 @@ function killIfPresent(pid) {
 }
 function requestGracefulStop(pid) {
   if (!Number.isInteger(pid) || pid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
-  try { process.kill(pid, 'SIGINT'); }
+  try { process.kill(pid, 'SIGTERM'); }
   catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not gracefully stop exact disposable JVM ${pid}: ${failure}`); }
 }
 async function logOffsetAfter(path, marker, timeoutMs) {

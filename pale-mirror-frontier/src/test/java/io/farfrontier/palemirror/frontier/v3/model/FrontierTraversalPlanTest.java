@@ -11,8 +11,8 @@ class FrontierTraversalPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:traversal-plan"), 7_312L));
         FrontierTraversalPlan plan = FrontierTraversalPlan.compile(state);
 
-        assertEquals(24, plan.facilities().size());
-        assertEquals(48, plan.topologies().size(), "supply, circulation and one ingress topology for each Hall/infirmary");
+        assertEquals(36, plan.facilities().size());
+        assertEquals(60, plan.topologies().size(), "supply, circulation and one ingress topology for each Hall/infirmary/depot");
         for (FrontierTraversalPlan.FacilityBinding binding : plan.facilities().values()) {
             TraversalTopology publicTopology = plan.publicTopologyFor(binding.port().facilityId());
             assertTrue(publicTopology.nodes().containsValue(binding.port().exteriorApproach().getFirst()),

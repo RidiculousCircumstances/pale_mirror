@@ -147,8 +147,35 @@ public final class FrontierV3ServerLifecycle {
                 // The immutable canonical formatter remains the source of the not-found response.
             }
         }
+        java.util.Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness = java.util.Optional.empty();
+        if ("container".equals(view)) {
+            try {
+                containerReadiness = java.util.Optional.of(FrontierV3ContainerSurfaceExecutor.readiness(
+                        FrontierV3PhysicalWorld.require(server), state, new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
+        java.util.Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness = java.util.Optional.empty();
+        java.util.Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness = java.util.Optional.empty();
+        if ("intent".equals(view)) {
+            try {
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = state.physicalIntents().get(
+                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(id));
+                if (intent != null && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) {
+                    equipmentIssueReadiness = java.util.Optional.of(FrontierV3EquipmentIssueExecutor.readinessDetail(
+                            FrontierV3PhysicalWorld.require(server), state, intent));
+                } else if (intent != null && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) {
+                    equipmentReturnReadiness = java.util.Optional.of(FrontierV3EquipmentReturnExecutor.readinessDetail(
+                            FrontierV3PhysicalWorld.require(server), state, intent));
+                }
+            } catch (IllegalArgumentException ignored) {
+                // The immutable canonical formatter remains the source of the not-found response.
+            }
+        }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness);
+                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness,
+                containerReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */

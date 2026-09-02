@@ -16,8 +16,9 @@ import java.util.Set;
  * same people already owned by {@link EngineeringRecoveryTeam}; a future HOT lease may begin
  * only after every one of these immutable corridors reaches its terminal position.</p>
  */
-public record EngineeringWorkAssembly(Map<SubjectId, Member> members) {
+public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<SubjectId, Member> members) {
     public EngineeringWorkAssembly {
+        purpose = Objects.requireNonNull(purpose, "engineering journey purpose");
         Objects.requireNonNull(members, "engineering assembly members");
         Map<SubjectId, Member> copy = new LinkedHashMap<>();
         members.forEach((actor, member) -> {
@@ -71,7 +72,7 @@ public record EngineeringWorkAssembly(Map<SubjectId, Member> members) {
         if (current == null || current.arrived() || !safeAdvances().contains(actor)) throw new IllegalArgumentException("engineering assembly actor cannot safely advance");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
         next.put(actor, new Member(current.corridor(), current.cursor() + 1));
-        return new EngineeringWorkAssembly(next);
+        return new EngineeringWorkAssembly(purpose, next);
     }
 
     public record Member(List<BlockPosition> corridor, int cursor) {
@@ -83,8 +84,8 @@ public record EngineeringWorkAssembly(Map<SubjectId, Member> members) {
             for (int index = 1; index < corridor.size(); index++) {
                 BlockPosition prior = Objects.requireNonNull(corridor.get(index - 1), "engineering assembly corridor cell");
                 BlockPosition next = Objects.requireNonNull(corridor.get(index), "engineering assembly corridor cell");
-                if (prior.y() != next.y() || Math.abs(prior.x() - next.x()) + Math.abs(prior.z() - next.z()) != 1) {
-                    throw new IllegalArgumentException("engineering assembly corridor must remain horizontally adjacent");
+                if (Math.abs(prior.y() - next.y()) > 1 || Math.abs(prior.x() - next.x()) + Math.abs(prior.z() - next.z()) != 1) {
+                    throw new IllegalArgumentException("engineering assembly corridor must use adjacent supports with grade at most one");
                 }
             }
         }

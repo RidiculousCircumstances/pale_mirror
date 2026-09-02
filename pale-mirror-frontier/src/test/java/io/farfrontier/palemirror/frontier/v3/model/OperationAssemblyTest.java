@@ -141,7 +141,8 @@ class OperationAssemblyTest {
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-body-geometry"), 92L));
 
         java.util.Set<BlockPosition> projected = FrontierGrayboxPlan.compile(state).cells().values().stream()
-                .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE)
+                .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.ROUTE_SURFACE
+                        && cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
                 .map(GrayboxCell::position).collect(java.util.stream.Collectors.toUnmodifiableSet());
 
         assertEquals(projected, FrontierGrayboxPlan.currentBodyGeometry(state));

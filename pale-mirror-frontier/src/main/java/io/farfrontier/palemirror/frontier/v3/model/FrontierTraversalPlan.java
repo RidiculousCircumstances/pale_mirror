@@ -38,6 +38,7 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
             for (SettlementStructure structure : settlement.structures()) {
                 FacilityTraversalPort port = switch (structure.kind()) {
                     case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
+                    case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
                     case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
                     default -> null;
                 };

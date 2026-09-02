@@ -169,6 +169,68 @@ public final class FrontierRouteNetwork {
         return false;
     }
 
+    /**
+     * Highest declared carriageway support at one horizontal column.
+     *
+     * <p>This is a bounded topology query, not a path search or a Minecraft height lookup.
+     * Pedestrian compilers use it to stand <em>on</em> an owned route deck instead of compiling
+     * a terrain-level body through that deck after a work site or depot journey crosses a
+     * three-wide route.</p>
+     */
+    public static java.util.Optional<BlockPosition> surfaceAt(FrontierBootstrap bootstrap, RouteTopology topology, int x, int z) {
+        Objects.requireNonNull(bootstrap, "route bootstrap"); Objects.requireNonNull(topology, "route topology");
+        int highest = Integer.MIN_VALUE;
+        List<Settlement> settlements = bootstrap.settlements();
+        for (int index = 0; index < settlements.size(); index++) {
+            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
+            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
+            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ)));
+            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ)));
+            if (index % 4 != 3) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
+                    new BlockPosition(laneX, 64, laneZ), new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ)));
+            if (index < 8) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
+                    new BlockPosition(laneX, 64, laneZ), new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36)));
+        }
+        for (Settlement settlement : settlements) {
+            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < supply.size(); index++) {
+                highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, supply.get(index - 1), supply.get(index)));
+            }
+        }
+        return highest == Integer.MIN_VALUE ? java.util.Optional.empty() : java.util.Optional.of(new BlockPosition(x, highest, z));
+    }
+
+    /**
+     * True when {@code position} is one of the immutable surveyed support cells below an
+     * elevated route deck.  This is deliberately a bounded geometry predicate rather than a
+     * call to {@link #footprint(FrontierBootstrap, RouteTopology)}: state-transition validation
+     * asks about one retained loss on every canonical commit and must never compile the whole
+     * world route projection merely to validate that one cell.
+     */
+    public static boolean isFoundationCell(FrontierBootstrap bootstrap, RouteTopology topology, BlockPosition position) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(position, "route position");
+        int terrain = bootstrap.terrain().supportYAt(position.x(), position.z());
+        if (position.y() <= terrain) return false;
+        List<Settlement> settlements = bootstrap.settlements();
+        for (int index = 0; index < settlements.size(); index++) {
+            Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
+            int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
+            if (supportsFoundationAt(position, terrain, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ))
+                    || supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ))
+                    || index % 4 != 3 && supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, laneZ),
+                    new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ))
+                    || index < 8 && supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, laneZ),
+                    new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36))) return true;
+        }
+        for (Settlement settlement : settlements) {
+            List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
+            for (int index = 1; index < supply.size(); index++) {
+                if (supportsFoundationAt(position, terrain, supply.get(index - 1), supply.get(index))) return true;
+            }
+        }
+        return false;
+    }
+
     /** Cells that a replacement must physically create before the topology may become active. */
     public static List<BlockPosition> constructionCells(FrontierBootstrap bootstrap, RouteTopology active, SubjectId settlementId,
                                                  List<BlockPosition> replacement) {
@@ -295,6 +357,28 @@ public final class FrontierRouteNetwork {
                 || onSegment(position, from.offset(1, 0, 0), to.offset(1, 0, 0)))
                 || from.z() == to.z() && (onSegment(position, from.offset(0, 0, -1), to.offset(0, 0, -1))
                 || onSegment(position, from.offset(0, 0, 1), to.offset(0, 0, 1)));
+    }
+
+    private static boolean supportsFoundationAt(BlockPosition position, int terrain, BlockPosition from, BlockPosition to) {
+        int surfaceY = surfaceYAtCarriagewayColumn(position.x(), position.z(), from, to);
+        return surfaceY != Integer.MIN_VALUE && position.y() < surfaceY && position.y() > terrain;
+    }
+
+    /** Returns the deck elevation at one carriageway column, or a sentinel when it is outside. */
+    private static int surfaceYAtCarriagewayColumn(int x, int z, BlockPosition from, BlockPosition to) {
+        if (from.x() == to.x()) {
+            if (Math.abs(x - from.x()) > 1) return Integer.MIN_VALUE;
+            int horizontal = horizontalLength(from, to);
+            int step = (z - from.z()) * Integer.compare(to.z(), from.z());
+            return step < 0 || step > horizontal ? Integer.MIN_VALUE : heightAt(from, to, step, horizontal);
+        }
+        if (from.z() == to.z()) {
+            if (Math.abs(z - from.z()) > 1) return Integer.MIN_VALUE;
+            int horizontal = horizontalLength(from, to);
+            int step = (x - from.x()) * Integer.compare(to.x(), from.x());
+            return step < 0 || step > horizontal ? Integer.MIN_VALUE : heightAt(from, to, step, horizontal);
+        }
+        throw new IllegalArgumentException("route segment must be axis aligned");
     }
 
     /** A confirmed foundation loss is support evidence for the same elevated carriageway, not a second path. */

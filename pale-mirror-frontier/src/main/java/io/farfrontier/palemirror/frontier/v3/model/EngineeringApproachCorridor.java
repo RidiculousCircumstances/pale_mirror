@@ -13,10 +13,12 @@ import java.util.Set;
  * Bounded deterministic approach compiler for a construction crew.
  *
  * <p>Engineering does not need an unbounded general pathfinder: it approaches one declared
- * graybox work site on a finite, flat world. It therefore tries a small stable catalogue of
- * rectilinear public lanes, retains the first wholly clear corridor, and blocks admission if
- * none is available. The retained result is still the exact COLD path consumed one cell at a
- * time; this compiler never teleports a worker or asks Minecraft to invent topology.</p>
+ * graybox work site through a small stable catalogue of rectilinear public lanes.  Every
+ * horizontal cell is resolved against the immutable terrain provider plus an intact declared
+ * route deck at that column (with the exact start and work-site support retained as endpoints),
+ * and a candidate rejects a grade above one block.
+ * The retained result is still the exact COLD path consumed one cell at a time; this compiler
+ * never teleports a worker or asks Minecraft to invent terrain.</p>
  */
 final class EngineeringApproachCorridor {
     private static final int[] LOCAL_LANE_OFFSETS = {-16, 16, -32, 32, -64, 64, -96, 96};
@@ -34,7 +36,6 @@ final class EngineeringApproachCorridor {
         Objects.requireNonNull(state, "engineering approach state"); Objects.requireNonNull(actorId, "engineering approach actor");
         Objects.requireNonNull(destination, "engineering approach destination");
         BlockPosition start = Objects.requireNonNull(state.actorLocations().get(actorId), "engineering approach actor location").supportingSurface().support();
-        if (start.y() != destination.y()) throw new IllegalArgumentException("engineering approach changes its canonical anchor plane");
         Set<BlockPosition> bodyGeometry = FrontierGrayboxPlan.currentBodyGeometry(state);
         Set<BlockPosition> occupiedFloors = occupiedFloors(state, actorId);
         if (!traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, start)
@@ -42,7 +43,7 @@ final class EngineeringApproachCorridor {
             throw new IllegalArgumentException("engineering approach has no clear actor or work-site endpoint");
         }
         List<List<BlockPosition>> clear = new ArrayList<>();
-        for (List<BlockPosition> candidate : pathCandidates(state.bootstrap().bounds(), start, destination)) {
+        for (List<BlockPosition> candidate : pathCandidates(state, start, destination)) {
             if (candidate.size() <= OperationTravel.MAX_CELLS && candidate.stream()
                     .allMatch(cell -> traversable(state.bootstrap().bounds(), bodyGeometry, occupiedFloors, cell))) clear.add(candidate);
         }
@@ -58,17 +59,24 @@ final class EngineeringApproachCorridor {
         return occupied;
     }
 
-    private static List<List<BlockPosition>> pathCandidates(WorldBounds bounds, BlockPosition start, BlockPosition destination) {
+    private static List<List<BlockPosition>> pathCandidates(FrontierWorldState state, BlockPosition start, BlockPosition destination) {
+        WorldBounds bounds = state.bootstrap().bounds();
         List<List<BlockPosition>> candidates = new ArrayList<>();
-        add(candidates, route(start, new BlockPosition(start.x(), start.y(), destination.z()), destination));
-        add(candidates, route(start, new BlockPosition(destination.x(), start.y(), start.z()), destination));
+        add(candidates, route(state, start, terrainSurface(state, start.x(), destination.z()), destination));
+        add(candidates, route(state, start, terrainSurface(state, destination.x(), start.z()), destination));
         for (int lane : lanes(bounds.minX() + 2, bounds.maxXExclusive() - 3, start.x(), destination.x())) {
-            add(candidates, route(start, new BlockPosition(lane, start.y(), start.z()), new BlockPosition(lane, start.y(), destination.z()), destination));
+            add(candidates, route(state, start, terrainSurface(state, lane, start.z()), terrainSurface(state, lane, destination.z()), destination));
         }
         for (int lane : lanes(bounds.minZ() + 2, bounds.maxZExclusive() - 3, start.z(), destination.z())) {
-            add(candidates, route(start, new BlockPosition(start.x(), start.y(), lane), new BlockPosition(destination.x(), start.y(), lane), destination));
+            add(candidates, route(state, start, terrainSurface(state, start.x(), lane), terrainSurface(state, destination.x(), lane), destination));
         }
         return List.copyOf(candidates);
+    }
+
+    private static BlockPosition terrainSurface(FrontierWorldState state, int x, int z) {
+        BlockPosition terrain = new BlockPosition(x, state.bootstrap().terrain().supportYAt(x, z), z);
+        return FrontierRouteNetwork.surfaceAt(state.bootstrap(), state.routeTopology(), x, z)
+                .filter(surface -> !state.physicalDeltas().containsKey(surface)).orElse(terrain);
     }
 
     private static List<Integer> lanes(int minimum, int maximum, int start, int destination) {
@@ -84,21 +92,26 @@ final class EngineeringApproachCorridor {
     }
 
     private static void add(List<List<BlockPosition>> candidates, List<BlockPosition> route) {
-        if (!candidates.contains(route)) candidates.add(route);
+        if (!route.isEmpty() && !candidates.contains(route)) candidates.add(route);
     }
 
-    private static List<BlockPosition> route(BlockPosition... points) {
+    private static List<BlockPosition> route(FrontierWorldState state, BlockPosition... points) {
         List<BlockPosition> result = new ArrayList<>();
-        for (int index = 1; index < points.length; index++) addSegment(result, points[index - 1], points[index], index == 1);
+        for (int index = 1; index < points.length; index++) {
+            if (!addSegment(state, result, points[index - 1], points[index], index == 1)) return List.of();
+        }
         return List.copyOf(result);
     }
 
-    private static void addSegment(List<BlockPosition> cells, BlockPosition from, BlockPosition to, boolean includeStart) {
-        if (from.y() != to.y() || from.x() != to.x() && from.z() != to.z()) throw new IllegalArgumentException("engineering approach segment is not axis aligned");
+    private static boolean addSegment(FrontierWorldState state, List<BlockPosition> cells, BlockPosition from, BlockPosition to, boolean includeStart) {
+        if (from.x() != to.x() && from.z() != to.z()) throw new IllegalArgumentException("engineering approach segment is not axis aligned");
         int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
         for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
-            if (includeStart || x != from.x() || z != from.z()) cells.add(new BlockPosition(x, from.y(), z));
-            if (x == to.x() && z == to.z()) return;
+            BlockPosition cell = x == from.x() && z == from.z() ? from : x == to.x() && z == to.z() ? to : terrainSurface(state, x, z);
+            BlockPosition previous = cells.isEmpty() ? null : cells.getLast();
+            if (previous != null && Math.abs(previous.y() - cell.y()) > 1) return false;
+            if (includeStart || x != from.x() || z != from.z()) cells.add(cell);
+            if (x == to.x() && z == to.z()) return true;
         }
     }
 

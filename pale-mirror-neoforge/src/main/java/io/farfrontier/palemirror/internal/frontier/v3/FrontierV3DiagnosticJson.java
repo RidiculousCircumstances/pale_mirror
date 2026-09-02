@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
+import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
@@ -32,6 +33,7 @@ import io.farfrontier.palemirror.frontier.v3.model.MedicalEvacuationOperation;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause;
+import io.farfrontier.palemirror.frontier.v3.process.EngineeringEquipmentProcess;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -75,6 +77,29 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
                          Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness) {
+        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness, Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
+                         Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
+                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness,
+                         Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness) {
+        return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness,
+                containerReadiness, Optional.empty(), Optional.empty());
+    }
+
+    static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
+                         Optional<FrontierV3DiagnosticTrace.Entry> trace,
+                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
+                         Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
+                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness,
+                         Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness,
+                         Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
+                         Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness) {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(id, "id");
         Objects.requireNonNull(checkpoint, "checkpoint");
         Objects.requireNonNull(state, "state");
@@ -83,6 +108,9 @@ final class FrontierV3DiagnosticJson {
         Objects.requireNonNull(harvestReadiness, "harvestReadiness");
         Objects.requireNonNull(sceneReadiness, "sceneReadiness");
         Objects.requireNonNull(assemblyReadiness, "assemblyReadiness");
+        Objects.requireNonNull(containerReadiness, "containerReadiness");
+        Objects.requireNonNull(equipmentIssueReadiness, "equipmentIssueReadiness");
+        Objects.requireNonNull(equipmentReturnReadiness, "equipmentReturnReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "site" -> site(id, checkpoint, state);
@@ -91,14 +119,15 @@ final class FrontierV3DiagnosticJson {
             case "hive_transfer" -> hiveTransfer(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
-            case "container" -> container(id, checkpoint, state);
+            case "container" -> container(id, checkpoint, state, containerReadiness);
             case "market_order" -> marketOrder(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> routeConstruction(id, checkpoint, state);
+            case "route_maintenance" -> routeMaintenance(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
             case "medical" -> medical(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
-            case "intent" -> intent(id, checkpoint, state, harvestReadiness);
+            case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             case "transit" -> transit(id, checkpoint, state);
             case "route_topology" -> routeTopology(id, checkpoint, state);
@@ -273,7 +302,8 @@ final class FrontierV3DiagnosticJson {
     }
 
     /** One bounded exact-container projection for test-pilot and operator inspection. */
-    private static String container(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+    private static String container(String id, CheckpointImage checkpoint, FrontierWorldState state,
+                                    Optional<FrontierV3ContainerSurfaceExecutor.Readiness> readiness) {
         SubjectId subject = subject(id).orElse(null); ContainerRecord container = subject == null ? null : state.inventory().containers().get(subject);
         ContainerSurface surface = subject == null ? null : state.inventory().surfaces().get(subject);
         if (container == null || surface == null) return unavailable("container", id, checkpoint, "not_found");
@@ -283,9 +313,13 @@ final class FrontierV3DiagnosticJson {
         String occupied = occupiedItems.stream().map(item -> "{\"slot\":" + ((InventoryCustody.ContainerSlot) item.custody()).slot() + ",\"item\":\"" + quote(item.id().value())
                         + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + "}")
                 .reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]");
+        String physical = readiness.map(value -> ",\"physicalSocket\":{\"chunk\":\"" + quote(value.chunk())
+                + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
+                + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
+                + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch()) + "\"}").orElse("");
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"slotCount\":" + container.slotCount()
-                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + "}";
+                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + physical + "}";
     }
 
     private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {
@@ -385,17 +419,17 @@ final class FrontierV3DiagnosticJson {
         java.util.List<BlockPosition> cells = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.routeConstructionCells(state, project);
         String next = project.confirmedCells() == cells.size() ? "null" : position(cells.get(project.confirmedCells()));
         String team = project.team().map(value -> {
-            String members = value.memberIds().stream().sorted().map(actorId -> routeConstructionTeamMember(state, actorId))
+            String members = value.memberIds().stream().sorted().map(actorId -> engineeringTeamMember(state, actorId))
                     .reduce((left, right) -> left + "," + right).orElse("");
             boolean fullyEquipped = io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.ready(state, value);
             return ",\"teamPresent\":true,\"teamFullyEquipped\":" + fullyEquipped + ",\"teamMembers\":[" + members + "]";
         }).orElse(",\"teamPresent\":false,\"teamFullyEquipped\":false,\"teamMembers\":[]");
         String assembly = project.assembly().map(value -> {
             String members = value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
-                    .map(entry -> routeConstructionAssemblyMember(state, entry.getKey(), entry.getValue()))
+                    .map(entry -> engineeringAssemblyMember(state, entry.getKey(), entry.getValue()))
                     .reduce((left, right) -> left + "," + right).orElse("");
             int cursorTotal = value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member::cursor).sum();
-            return ",\"assemblyPresent\":true,\"assemblyComplete\":" + value.complete() + ",\"assemblyCursorTotal\":" + cursorTotal
+            return ",\"assemblyPresent\":true,\"assemblyPurpose\":\"" + value.purpose() + "\",\"assemblyComplete\":" + value.complete() + ",\"assemblyCursorTotal\":" + cursorTotal
                     + ",\"assemblyMembers\":[" + members + "]";
         }).orElse(",\"assemblyPresent\":false");
         long pendingProjectIntents = state.physicalIntents().values().stream()
@@ -413,17 +447,82 @@ final class FrontierV3DiagnosticJson {
                 + ",\"pendingProjectIntents\":" + pendingProjectIntents + ",\"pendingOtherIntents\":" + pendingOtherIntents + team + assembly + "}";
     }
 
+    /** One settlement's current in-place retained-route repair; it never selects another cell or route. */
+    private static String routeMaintenance(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId settlement = subject(id).orElse(null);
+        RouteMaintenance maintenance = settlement == null ? null : state.routeMaintenances().values().stream()
+                .filter(value -> value.settlementId().equals(settlement)).sorted(java.util.Comparator.comparing(RouteMaintenance::id))
+                .findFirst().orElse(null);
+        if (maintenance == null) return unavailable("route_maintenance", id, checkpoint, "not_found");
+        String members = maintenance.team().memberIds().stream().sorted().map(actorId -> engineeringTeamMember(state, actorId))
+                .reduce((left, right) -> left + "," + right).orElse("");
+        boolean fullyEquipped = io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.ready(state, maintenance.team());
+        String assembly = maintenance.assembly().map(value -> {
+            String assemblyMembers = value.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                    .map(entry -> engineeringAssemblyMember(state, entry.getKey(), entry.getValue()))
+                    .reduce((left, right) -> left + "," + right).orElse("");
+            int cursorTotal = value.members().values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member::cursor).sum();
+            return ",\"assemblyPresent\":true,\"assemblyPurpose\":\"" + value.purpose() + "\",\"assemblyComplete\":" + value.complete() + ",\"assemblyCursorTotal\":" + cursorTotal
+                    + ",\"assemblyMembers\":[" + assemblyMembers + "]";
+        }).orElse(",\"assemblyPresent\":false");
+        long pendingIntents = state.physicalIntents().values().stream().filter(intent -> intent.subjectIds().contains(maintenance.id()))
+                .filter(intent -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                        || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING).count();
+        var assemblyAdmission = maintenanceAssemblyAdmission(state, maintenance, fullyEquipped);
+        var toolReturn = EngineeringEquipmentProcess.returnReadiness(state, maintenance);
+        boolean toolReturnRequired = !EngineeringEquipmentProcess.returnedOrLost(state, maintenance);
+        String toolReturnActor = toolReturn.actorId().map(SubjectId::value).orElse("");
+        String toolReturnItem = toolReturn.itemId().map(SubjectId::value).orElse("");
+        String toolReturnSlot = toolReturn.targetSlot().map(slot -> Integer.toString(slot.slot())).orElse("");
+        return base("route_maintenance", id, checkpoint) + ",\"status\":\"ok\",\"maintenance\":\"" + quote(maintenance.id().value())
+                + "\",\"phase\":\"" + maintenance.status() + "\",\"repairCell\":" + position(maintenance.repairCell())
+                + ",\"semanticPart\":\"" + maintenance.semanticPart() + "\",\"cargo\":\"" + quote(maintenance.cargoId().map(SubjectId::value).orElse(""))
+                + "\",\"cargoPresent\":" + maintenance.cargoId().isPresent() + ",\"teamPresent\":true,\"teamFullyEquipped\":" + fullyEquipped
+                + ",\"assemblyAdmission\":\"" + quote(assemblyAdmission.reason()) + "\",\"assemblyAdmissionDetail\":\"" + quote(assemblyAdmission.detail()) + "\",\"teamMembers\":[" + members
+                + "],\"pendingMaintenanceIntents\":" + pendingIntents
+                + ",\"toolReturnRequired\":" + toolReturnRequired + ",\"toolReturnReadiness\":\"" + quote(toolReturn.reason())
+                + "\",\"toolReturnDepot\":\"" + quote(toolReturn.depotId().value()) + "\",\"toolReturnActor\":\"" + quote(toolReturnActor)
+                + "\",\"toolReturnItem\":\"" + quote(toolReturnItem) + "\",\"toolReturnSlot\":\"" + quote(toolReturnSlot) + "\"" + assembly + "}";
+    }
+
+    /**
+     * Read-only explanation for an intentionally asynchronous engineering admission.  This is
+     * never an alternate planner: it evaluates the same bounded pure compiler that the next
+     * canonical route-maintenance scan will use, so a tester can distinguish ordinary lease
+     * draining from an actual rejected approach.
+     */
+    private static EngineeringAdmissionDiagnostic maintenanceAssemblyAdmission(FrontierWorldState state, RouteMaintenance maintenance, boolean fullyEquipped) {
+        if (!maintenance.building()) return new EngineeringAdmissionDiagnostic("NOT_BUILDING", "");
+        if (maintenance.assembly().isPresent()) return new EngineeringAdmissionDiagnostic("ASSEMBLY_RETAINED", "");
+        if (!fullyEquipped) return new EngineeringAdmissionDiagnostic("WAITING_FOR_TOOL", "");
+        boolean predecessorLease = maintenance.team().memberIds().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED);
+        if (predecessorLease) return new EngineeringAdmissionDiagnostic("WAITING_FOR_AMBIENT_LEASE", "");
+        boolean retainedWorksite = state.sceneLeases().values().stream()
+                .filter(io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors::isEngineeringWorksite)
+                .anyMatch(lease -> io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
+                        && lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED);
+        if (retainedWorksite) return new EngineeringAdmissionDiagnostic("WAITING_FOR_WORKSITE", "");
+        var readiness = io.farfrontier.palemirror.frontier.v3.model.EngineeringWorksite.admission(state, maintenance);
+        return readiness.admissible() ? new EngineeringAdmissionDiagnostic("READY_TO_ASSEMBLE", "")
+                : new EngineeringAdmissionDiagnostic(readiness.reason(), readiness.detail());
+    }
+
+    private record EngineeringAdmissionDiagnostic(String reason, String detail) { }
+
     /** Bounded exact crew readiness shows why a project may not yet accept player-supplied material. */
-    private static String routeConstructionTeamMember(FrontierWorldState state, SubjectId actorId) {
+    private static String engineeringTeamMember(FrontierWorldState state, SubjectId actorId) {
         var lease = state.ambientLeases().get(actorId);
+        ActorLocation location = state.actorLocations().get(actorId);
         return "{\"actor\":\"" + quote(actorId.value()) + "\",\"toolReady\":"
                 + io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.holdsTool(state, actorId)
+                + ",\"position\":" + (location == null ? "null" : position(location.body()))
                 + ",\"ambientLease\":\"" + quote(lease == null ? "NONE" : lease.status().name())
                 + "\",\"ambientGoal\":\"" + quote(lease == null ? "NONE" : lease.goal().name()) + "\"}";
     }
 
     /** Read-only per-worker cursor and lease state for one bounded engineering approach. */
-    private static String routeConstructionAssemblyMember(FrontierWorldState state, SubjectId actorId,
+    private static String engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId,
                                                           io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member member) {
         var lease = state.ambientLeases().get(actorId);
         String next = member.arrived() ? "null" : position(member.corridor().get(member.cursor() + 1));
@@ -519,7 +618,9 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,
-                                 Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
+                                 Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
+                                 Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
+                                 Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness) {
         PhysicalIntent intent;
         try { intent = state.physicalIntents().get(new PhysicalIntentId(id)); }
         catch (IllegalArgumentException invalid) { intent = null; }
@@ -529,7 +630,21 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"intentStatus\":\"" + intent.status() + "\",\"causeSubject\":\"" + quote(intent.causeSubjectId().value())
                 + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]"
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST
-                    ? harvestReadiness.map(FrontierV3DiagnosticJson::harvestReadiness).orElse("") : "") + "}";
+                    ? harvestReadiness.map(FrontierV3DiagnosticJson::harvestReadiness).orElse("") : "")
+                + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE
+                    ? equipmentIssueReadiness.map(FrontierV3DiagnosticJson::equipmentIssueReadiness).orElse("") : "")
+                + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
+                    ? equipmentReturnReadiness.map(FrontierV3DiagnosticJson::equipmentReturnReadiness).orElse("") : "") + "}";
+    }
+
+    private static String equipmentIssueReadiness(FrontierV3EquipmentIssueExecutor.Readiness value) {
+        return ",\"physicalReadiness\":{\"selection\":\"" + quote(value.selection().name())
+                + "\",\"detail\":\"" + quote(value.detail()) + "\"}";
+    }
+
+    private static String equipmentReturnReadiness(FrontierV3EquipmentReturnExecutor.Readiness value) {
+        return ",\"physicalReadiness\":{\"selection\":\"" + quote(value.selection().name())
+                + "\",\"detail\":\"" + quote(value.detail()) + "\"}";
     }
 
     private static String harvestReadiness(FrontierV3ResourceSiteHarvestExecutor.Readiness value) {

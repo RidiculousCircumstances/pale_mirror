@@ -27,9 +27,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /** Turns one loaded mature field into its sole named 64-wheat stack without any implicit yield. */
 final class FrontierV3ResourceSiteHarvestExecutor {
@@ -49,10 +50,31 @@ final class FrontierV3ResourceSiteHarvestExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
+        // Never let an unloaded alphabetically first field starve a later naturally loaded one.
+        // The bounded site aggregate is the work set: scanning it is capped by the bootstrap's
+        // exact resource sites, unlike scanning the retained global physical-intent ledger.
+        firstRunnable(pendingIntents(state), intent -> {
+            Target target = target(state, intent);
+            // A retained canonical surface is projected on natural demand.  Until its physical
+            // location exists there is no chunk to inspect and no absence to infer.
+            return target != null && loaded(level, target.site()) && level.hasChunkAt(target.chestPosition());
+        }).ifPresent(intent -> execute(level, runtime, state, intent));
+    }
+
+    static List<PhysicalIntent> pendingIntents(FrontierWorldState state) {
+        return state.resourceSites().sites().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteLifecycle::siteId))
+                .flatMap(lifecycle -> lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                        .map(ResourceSiteHarvestJob.class::cast).stream())
+                .map(job -> state.physicalIntents().get(job.intentId())).filter(Objects::nonNull)
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
-                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+                .toList();
+    }
+
+    /** Bounded fair admission: an unloaded field is a deferral, never a global queue head. */
+    static Optional<PhysicalIntent> firstRunnable(List<PhysicalIntent> candidates, Predicate<PhysicalIntent> runnable) {
+        Objects.requireNonNull(candidates, "harvest candidates"); Objects.requireNonNull(runnable, "harvest runnable probe");
+        return candidates.stream().filter(runnable).findFirst();
     }
 
     /** Explains a pending harvest without loading chunks or mutating either world. */

@@ -127,6 +127,23 @@ public final class FrontierV3CargoHandoffGameTests {
 
     @GameTest(batch = "pm-frontier-v3-container-recovery", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void preparedOwnedEmptyChestRecoversItsOneCanonicalInitialWrite(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:prepared-empty-recovery"), 91L));
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos target = helper.absolutePos(new BlockPos(14, 8, 0));
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, target, container);
+
+        helper.assertTrue(chest != null && chest.isEmpty(), "the test needs the durable PREPARED-before-write owned chest state");
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.restorePreparedOwnedEmptyChest(chest, state, container),
+                "recovery may write only the known-empty owned pre-write chest from canonical truth");
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.matchesCanonicalSlots(chest, state, container),
+                "the recovered prepared socket must exactly converge before it becomes active");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-container-recovery", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void alteredPreparedSurfaceIsConflictEvidenceNotRepairWork(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:game-test-conflict"), 91L));
@@ -171,6 +188,26 @@ public final class FrontierV3CargoHandoffGameTests {
         level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "foreign post-loss geometry is never overwritten by repair");
         helper.assertTrue(chest.getItem(0).getCount() == 1 && level.getBlockState(target).is(Blocks.DIAMOND_BLOCK), "rejected repair leaves both the player/world block and supplied stack untouched");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-route-maintenance", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void routeMaintenanceRestoresOnlyItsRecordedOwnedLoss(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0));
+        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        ledger.applied(target, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
+
+        helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
+                "maintenance restores its exact empty conflicted route claim rather than treating it as fresh construction");
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && !ledger.claim(target).conflicted(),
+                "one restored route cell clears only its own durable conflict claim");
+
+        ledger.conflict(target); level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
+                "maintenance never overwrites foreign post-loss geometry");
+        helper.assertTrue(level.getBlockState(target).is(Blocks.DIAMOND_BLOCK) && ledger.claim(target).conflicted(),
+                "a rejected foreign block retains visible conflict evidence for later player resolution");
         helper.succeed();
     }
 

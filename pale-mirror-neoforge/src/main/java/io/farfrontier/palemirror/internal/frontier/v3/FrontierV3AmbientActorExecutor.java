@@ -31,6 +31,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolLeaseRecovered;
 import io.farfrontier.palemirror.frontier.v3.model.HotScoutOperationObserved;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
+import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess;
 import io.farfrontier.palemirror.frontier.v3.model.OperationAssembly;
@@ -129,10 +130,8 @@ final class FrontierV3AmbientActorExecutor {
             if (admitted >= MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
-            java.util.Set<SubjectId> reservedActors = reservedActors(runtime, state);
             var location = state.actorLocations().get(actorId);
-            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || reservedActors.contains(actorId)) {
+            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
                 forgetColdDemand(runtime, actorId);
                 forgetObserved(runtime, actorId);
                 continue;
@@ -142,6 +141,14 @@ final class FrontierV3AmbientActorExecutor {
                 Entity stale = level.getEntity(entityId(state, actorId));
                 if (stale != null && owned(stale, actorId, bioform(state, actorId))) stale.discard();
                 forgetObserved(runtime, actorId);
+            }
+            // Closed ambient bodies are stale even if a successor scene now reserves this
+            // actor.  Clean that exact canonical identity before yielding, otherwise a
+            // naturally restored body can obstruct the successor scene forever after restart.
+            if (reservedActors(runtime, state).contains(actorId)) {
+                forgetColdDemand(runtime, actorId);
+                forgetObserved(runtime, actorId);
+                continue;
             }
             boolean demanded = demand(level, location.supportingSurface().support());
             if (!demanded) {
@@ -230,7 +237,7 @@ final class FrontierV3AmbientActorExecutor {
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
-        hydrateExactHeldWeapon(body, state, actorId);
+        hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
@@ -241,9 +248,14 @@ final class FrontierV3AmbientActorExecutor {
      * COLD/restart materialization. Existing loaded bodies are never overwritten here: player
      * changes on those bodies remain observation input, not desired-state repair.
      */
-    private static void hydrateExactHeldWeapon(Mob body, FrontierWorldState state, SubjectId actorId) {
+    private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
-        state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()))
+        // The main hand is one exact physical projection.  A fresh COLD/restart body must
+        // re-materialize either supported current main-hand capability from canonical actor
+        // custody; otherwise an engineering pickaxe disappears between the issue and return
+        // operations even though the canonical item still has the same actor owner.
+        state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
+                        || EngineeringToolCustody.isTool(item.itemKind()))
                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
                 .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(item)));
     }

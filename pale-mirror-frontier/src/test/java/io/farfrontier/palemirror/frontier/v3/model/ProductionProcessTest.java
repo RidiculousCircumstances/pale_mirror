@@ -347,15 +347,53 @@ class ProductionProcessTest {
     }
 
     @Test
-    void foreignOrMissingPhysicalInputBlocksTheTaskWithoutDiscardingCanonicalClaim() {
+    void unknownPhysicalProductionRetainsTheExactActiveJobWithoutDiscardingCanonicalClaim() {
         PreparedProduction prepared = activePhysicalProduction();
 
         FrontierWorldState blocked = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
 
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, blocked.physicalIntents().get(prepared.intent().id()).status());
         assertTrue(blocked.inventory().items().containsKey(new SubjectId("item:bootstrap-1-wheat")));
-        assertEquals(StrategicTaskStatus.BLOCKED, blocked.strategicPlans().tasks().values().stream()
+        assertEquals(StrategicTaskStatus.ACTIVE, blocked.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+    }
+
+    @Test
+    void exactOutputObservedAfterRestartQuarantineCompletesTheSameRetainedProductionJob() {
+        PreparedProduction prepared = activePhysicalProduction();
+        FrontierWorldState unknown = prepared.state()
+                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty())
+                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        ExactItemStack input = unknown.inventory().items().get(prepared.job().consumedItemId());
+        ProductionTransformationObservation receipt = new ProductionTransformationObservation(
+                new PhysicalObservationId("observation:production-restart-output"), prepared.intent().id(), input.id(),
+                prepared.job().outputItemId(), input.count(), prepared.job().outputCount());
+
+        FrontierWorldState completed = unknown.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+
+        assertTrue(completed.productionJobs().isEmpty());
+        assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
+        assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+    }
+
+    @Test
+    void coldProductionBlocksItsDepotFromBecomingAPartialPhysicalSurface() {
+        ColdMarketJob cold = coldMarketJob();
+        SubjectId depot = FrontierWorldState.depotId(cold.settlementId());
+        assertTrue(ContainerSurfaceActivationStateSupport.blockedByColdProduction(cold.state(), depot));
+        assertFalse(ContainerSurfaceActivationStateSupport.blockedByColdProduction(cold.state(), new SubjectId("container:2-depot")));
+
+        WorldId world = new WorldId("frontier:cold-production-surface");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, cold.state(), SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+
+        assertInstanceOf(CommandResult.Accepted.class, submitSurface(engine, world, "surface-prepared", depot, ContainerSurfaceStatus.PREPARED));
+        CommandResult rejected = submitSurface(engine, world, "surface-active", depot, ContainerSurfaceStatus.ACTIVE);
+        assertInstanceOf(CommandResult.Rejected.class, rejected);
+        assertEquals(ContainerSurfaceStatus.PREPARED, new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState())
+                .inventory().surfaces().get(depot).status());
     }
 
     @Test
@@ -521,6 +559,13 @@ class ProductionProcessTest {
         var checkpoint = engine.checkpoint();
         return engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 CauseChain.root(command), new PhysicalIntentTransition(intent, status, observation)));
+    }
+
+    private static CommandResult submitSurface(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
+                                               String suffix, SubjectId container, ContainerSurfaceStatus status) {
+        var checkpoint = engine.checkpoint(); CommandId id = new CommandId("command:" + suffix);
+        return engine.submit(new FrontierCommand(1, id, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ContainerSurfaceTransition(container, status)));
     }
 
     private record PreparedProduction(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, MarketWorkOrder order, SubjectId settlementId, SubjectId taskId) { }

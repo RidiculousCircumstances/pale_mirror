@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 
 import java.util.List;
@@ -29,10 +30,12 @@ public final class FrontierPhysicalIntentCommandProcess {
             return switch (intent.kind()) {
                 case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
                         FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
-                case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition));
-                case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(state, intent, transition));
-                case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition));
-                case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(state, intent, transition));
+                case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(
+                        state, intent, transition, command.submittedAt().ticks()));
+                case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(
+                        state, intent, transition, command.submittedAt().ticks()));
                 case DECONTAMINATION -> new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
                 case RESOURCE_SITE_PREPARATION -> new CommandPlan.Accepted(
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
@@ -43,8 +46,8 @@ public final class FrontierPhysicalIntentCommandProcess {
                         state, intent, transition, command.submittedAt().ticks()));
                 case HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
                         state, intent, transition, command.submittedAt().ticks()));
-                case EQUIPMENT_ISSUE -> equipmentIssueTransition(state, intent, transition);
-                case EQUIPMENT_RETURN -> equipmentReturnTransition(state, intent, transition);
+                case EQUIPMENT_ISSUE -> equipmentIssueTransition(state, intent, transition, command.submittedAt().ticks());
+                case EQUIPMENT_RETURN -> equipmentReturnTransition(state, intent, transition, command.submittedAt().ticks());
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case SCENE_STRIKE -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
@@ -72,14 +75,37 @@ public final class FrontierPhysicalIntentCommandProcess {
             return rejected(invalid.getMessage());
         }
     }
-    private static CommandPlan equipmentIssueTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    private static CommandPlan equipmentIssueTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
+        return new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, false));
     }
 
-    private static CommandPlan equipmentReturnTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+    private static CommandPlan equipmentReturnTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
+        return new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, true));
+    }
+
+    /**
+     * A confirmed engineering hand-off changes the retained work order, so it owns its one
+     * immediate continuation.  Generic polling is deliberately not a second continuation owner:
+     * it can otherwise race an assembly completion and create the same schedule twice.
+     */
+    private static List<ProposedEvent> withEngineeringContinuation(FrontierWorldState state, PhysicalIntent intent,
+                                                                     PhysicalIntentTransition transition, long now,
+                                                                     boolean returning) {
+        ProposedEvent physical = new ProposedEvent(intent.causeSubjectId(), transition);
+        if (transition.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                || intent.subjectIds().isEmpty()) return List.of(physical);
+        SubjectId projectId = intent.subjectIds().getFirst();
+        RouteConstruction construction = state.routeConstructions().get(projectId);
+        if (construction != null) return List.of(physical, new ProposedEvent(projectId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                returning ? RouteConstructionProcess.returnProgress(construction, Math.addExact(now, 1L))
+                        : RouteConstructionProcess.progress(construction, Math.addExact(now, 1L)))));
+        RouteMaintenance maintenance = state.routeMaintenances().get(projectId);
+        if (maintenance != null) return List.of(physical, new ProposedEvent(projectId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                returning ? RouteMaintenanceProcess.returnProgress(maintenance, Math.addExact(now, 1L))
+                        : RouteMaintenanceProcess.progress(maintenance, Math.addExact(now, 1L)))));
+        return List.of(physical);
     }
 
     private static CommandPlan consumptionTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition,

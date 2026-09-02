@@ -17,12 +17,54 @@ import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteTopologyTest {
+    @Test
+    void directRouteSemanticLookupMatchesCompiledProjectionWithoutCompilingTheWorldPerLookup() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-direct-semantic"), 96L);
+        RouteTopology topology = RouteTopology.initial();
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        Set<GrayboxCell> expected = Set.copyOf(FrontierGrayboxPlan.compile(state).cells().values().stream()
+                .filter(cell -> cell.ownerId().equals(FrontierRouteNetwork.OWNER)).toList());
+
+        for (GrayboxCell cell : expected) {
+            GrayboxCell resolved = FrontierGrayboxPlan.intactSemanticCell(bootstrap, state.hiveColony(), topology,
+                    FrontierRouteNetwork.OWNER, cell.position());
+            assertEquals(cell, resolved, "direct route lookup must retain the compiler's exact semantic geometry");
+        }
+        BlockPosition outside = new BlockPosition(bootstrap.bounds().minX(), 120, bootstrap.bounds().minZ());
+        assertEquals(null, FrontierGrayboxPlan.intactSemanticCell(bootstrap, state.hiveColony(), topology,
+                FrontierRouteNetwork.OWNER, outside));
+    }
+
+    @Test
+    void engineeringCorridorUsesTheDeclaredRouteDeckInsteadOfWalkingThroughItAtTerrainHeight() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-engineering-deck"), 96L);
+        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        SubjectId engineer = new SubjectId("resident:1-1");
+        BlockPosition start = new BlockPosition(-381, 64, -305);
+        java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(initial.actorLocations());
+        locations.put(engineer, new ActorLocation(BodyPosition.above(new SurfaceAnchor(start)), locations.get(engineer).condition()));
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
+        BlockPosition deck = FrontierRouteNetwork.surfaceAt(bootstrap, state.routeTopology(), -380, -305).orElseThrow();
+        assertEquals(new BlockPosition(-380, 64, -305), deck);
+
+        List<List<BlockPosition>> candidates = EngineeringApproachCorridor.candidates(state, engineer, new BlockPosition(-345, 64, -325));
+        assertFalse(candidates.isEmpty());
+        for (List<BlockPosition> candidate : candidates) {
+            for (BlockPosition cell : candidate) {
+                FrontierRouteNetwork.surfaceAt(bootstrap, state.routeTopology(), cell.x(), cell.z()).ifPresent(surface ->
+                        assertTrue(cell.y() >= surface.y(), "a retained engineering body must never route through an owned deck"));
+            }
+        }
+    }
+
     @Test
     void acceptedReplacementIsBoundedCanonicalAndCannotBeAnArbitraryPlayerPath() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-topology"), 91L);

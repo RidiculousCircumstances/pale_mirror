@@ -133,15 +133,37 @@ class FrontierV3FixtureCatalogTest {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(world, 41L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(initial).orElseThrow();
+        assertTrue(FrontierSceneAdmission.available(initial, candidate.memberPositions().keySet()),
+                "the COLD-ready crew is free for its own scene hand-off");
+        assertTrue(candidate.memberPositions().keySet().stream().allMatch(actor -> FrontierSceneAdmission.reserved(initial, actor)),
+                "the next engineering worksite owns its COLD-ready crew before ambient demand can reclaim it");
         SceneLeaseId leaseId = new SceneLeaseId("lease:engineering-worksite-release");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), SceneLeaseStatus.PREPARED,
                 candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
                 SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        RouteConstruction project = initial.routeConstructions().get(candidate.projectId());
+        var workIntent = io.farfrontier.palemirror.frontier.v3.process.RouteConstructionProcess.workIntent(project,
+                project.cargoId().orElseThrow(), project.cargoId().map(initial.inventory().cargo()::get).orElseThrow().itemIds().getFirst());
+        assertTrue(!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(initial, workIntent),
+                "a retained construction item may not execute before its exact worksite is HOT");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-prepare", new EngineeringWorkSceneLeasePrepared(lease)));
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(prepared, workIntent),
+                "PREPARED is not physical-work authority");
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT)));
+        FrontierWorldState hot = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(hot, workIntent),
+                "the exact current HOT lease is the only work authorization");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                submit(engine, world, "engineering-worksite-restart", new SceneLeaseTransition(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)));
+        FrontierWorldState recovering = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(recovering, workIntent),
+                "a retained unstarted work intent must wait for the exact scene recovery after restart");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                submit(engine, world, "engineering-worksite-reclaimed", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT)));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "engineering-worksite-draining", new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING)));
         List<SceneMemberPosition> captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),

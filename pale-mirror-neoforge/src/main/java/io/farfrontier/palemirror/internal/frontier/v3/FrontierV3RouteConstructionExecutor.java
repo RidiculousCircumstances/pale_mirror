@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierEngineeringWorkSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
@@ -52,6 +53,10 @@ final class FrontierV3RouteConstructionExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
+        // A restart may retain an unstarted construction placement while its crew lease still
+        // needs physical recovery.  The executor must re-check present HOT ownership instead
+        // of treating the older prepare admission as permanent authorization.
+        if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) return;
         BlockPosition origin = wholeBlock(intent);
         if (origin == null || !FrontierV3PhysicalDemand.exists(level, new BlockPos(origin.x(), origin.y(), origin.z()))) return;
         Target target = target(state, intent);

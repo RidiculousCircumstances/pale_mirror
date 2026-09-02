@@ -225,3 +225,19 @@ Before every commit, confirm that generated/local files are not staged,
 architecture boundaries remain valid, failures are observable, and no
 unbounded state or silent fallback was introduced. Use concise Conventional
 Commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build:`).
+
+## Recurrence prevention
+
+- Treat every native-scenario, watchdog, persistence or deployment failure as a
+  candidate product defect until its exact cause is classified. Do not lengthen
+  a timeout, retry a world or suppress a log line as the fix.
+- Before rerunning a failed causal flow, add the smallest deterministic
+  regression or preflight that would have failed first: a pure/state test for
+  canonical rules, a codec/registry test for durable payloads, a bounded
+  performance guard for tick work, or a script-level dry-run/preflight for
+  deployment. Record the cause and remaining evidence in the architecture
+  audit/ledger.
+- A deployment may use only a verified clean detached source ref and must
+  prove Java/runtime/profile compatibility, exact target/reset paths, pinned
+  artifact checksum, fresh startup evidence and no new quarantine. A running
+  service or stale log line alone is never a successful deployment.

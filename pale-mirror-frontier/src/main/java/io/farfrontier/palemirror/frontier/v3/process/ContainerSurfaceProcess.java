@@ -17,6 +17,12 @@ public final class ContainerSurfaceProcess {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "container surface is unknown"));
         }
+        if (transition.status() == ContainerSurfaceStatus.ACTIVE
+                && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, transition.containerId())) {
+            return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                    io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY,
+                    "container activation waits for its exact cold production input"));
+        }
         return new CommandPlan.Accepted(List.of(new ProposedEvent(container.ownerId(), transition)));
     }
 

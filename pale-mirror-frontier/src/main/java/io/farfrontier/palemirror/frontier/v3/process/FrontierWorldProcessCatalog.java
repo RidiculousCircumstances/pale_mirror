@@ -65,7 +65,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
             "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started",
-            "frontier.resource_site_prepared", "frontier.resource_site_harvest_started", "frontier.resource_site_harvested",
+            "frontier.resource_site_prepared", "frontier.resource_site_harvest_started",
             "frontier.resource_site_conflict_observed");
     private static final Set<String> HIVE = types(
             "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed",
@@ -131,8 +131,12 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
             Map.entry("frontier.route_construction.start", (state, action, autonomous) -> RouteConstructionProcess.planStart(state, action)),
             Map.entry("frontier.route_construction.assembly_progress", (state, action, autonomous) -> RouteConstructionProcess.planAssemblyProgress(state, action)),
+            Map.entry("frontier.route_construction.progress", (state, action, autonomous) -> RouteConstructionProcess.planProgress(state, action)),
+            Map.entry("frontier.route_construction.return_progress", (state, action, autonomous) -> RouteConstructionProcess.planReturnProgress(state, action)),
             Map.entry("frontier.route_maintenance.scan", (state, action, autonomous) -> RouteMaintenanceProcess.plan(state, action)),
             Map.entry("frontier.route_maintenance.assembly_progress", (state, action, autonomous) -> RouteMaintenanceProcess.planAssemblyProgress(state, action)),
+            Map.entry("frontier.route_maintenance.progress", (state, action, autonomous) -> RouteMaintenanceProcess.planProgress(state, action)),
+            Map.entry("frontier.route_maintenance.return_progress", (state, action, autonomous) -> RouteMaintenanceProcess.planReturnProgress(state, action)),
             Map.entry("frontier.route_patrol.start", (state, action, autonomous) -> RoutePatrolProcess.planStart(state, action)),
             Map.entry("frontier.route_patrol.progress", (state, action, autonomous) -> RoutePatrolProcess.planProgress(state, action)),
             Map.entry("frontier.hive_route_engagement.start", (state, action, autonomous) -> HiveRouteEngagementProcess.planStart(state, action)),
@@ -170,7 +174,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("economy", Set.of(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
                 descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),
-                descriptor("infrastructure", Set.of(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
+                descriptor("infrastructure", infrastructureCommands(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY));
     }
 
@@ -255,6 +259,13 @@ public final class FrontierWorldProcessCatalog {
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered"); }
+    /**
+     * These are the two physical-observation payloads that advance an already declared
+     * engineering journey.  The infrastructure process verifies the exact HOT lease and
+     * retained one-cell corridor transition before reducing either one.
+     */
+    private static Set<String> infrastructureCommands() { return types(
+            "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced"); }
     private static Set<String> strategyCommands() { return Set.of(); }
 
     private static Set<String> logisticsSchedules() { return types(
@@ -278,7 +289,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.hive.nutrient.transfer.progress", "frontier.hive.scout.patrol"); }
     private static Set<String> infrastructureSchedules() { return types(
             "frontier.structural_repair.scan", "frontier.route_construction.scan", "frontier.route_construction.start",
-            "frontier.route_construction.assembly_progress", "frontier.route_maintenance.scan", "frontier.route_maintenance.assembly_progress",
+            "frontier.route_construction.assembly_progress", "frontier.route_construction.progress", "frontier.route_construction.return_progress",
+            "frontier.route_maintenance.scan", "frontier.route_maintenance.assembly_progress",
+            "frontier.route_maintenance.progress", "frontier.route_maintenance.return_progress",
             "frontier.route_patrol.start", "frontier.route_patrol.progress", "frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
@@ -298,6 +311,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.route_construction_material_loaded",
+                    "frontier.route_maintenance_material_loaded",
                     "frontier.resident_born", "frontier.resident_migrated",
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",
@@ -359,7 +373,7 @@ public final class FrontierWorldProcessCatalog {
             case "resource-sites" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
-                    "frontier.resource_site_harvest_started", "frontier.resource_site_harvested", "frontier.resource_site_conflict_observed",
+                    "frontier.resource_site_harvest_started", "frontier.resource_site_conflict_observed",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
@@ -383,7 +397,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.route_construction_started", "frontier.route_construction_material_loaded", "frontier.route_topology_cutover",
                     "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
                     "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
-                    "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
+                    "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced", "frontier.route_maintenance_closed",
                     "frontier.route_patrol_started", "frontier.route_patrol_advanced", "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed",
                     "frontier.physical_delta_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

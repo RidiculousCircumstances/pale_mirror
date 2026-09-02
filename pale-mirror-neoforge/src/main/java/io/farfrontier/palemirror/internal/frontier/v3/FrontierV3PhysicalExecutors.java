@@ -13,8 +13,7 @@ final class FrontierV3PhysicalExecutors {
 
             executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3GrayboxExecutor::tick),
             executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
-            executor("resource-site-harvest-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "resource-site-harvest-projection", FrontierV3ResourceSiteHarvestExecutor::tick),
-            executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-harvest-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
+            executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
             executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
             executor("object-boards", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("infection-overlay-projection"), "object-board-projection", FrontierV3ObjectBoardExecutor::tick),
 
@@ -24,11 +23,18 @@ final class FrontierV3PhysicalExecutors {
             executor("cargo-carrier-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("inventory-observation"), "cargo-carrier-custody-observation", FrontierV3CargoCarrierObservationExecutor::tick),
 
             executor("cargo-loading", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-carrier-observation"), "cargo-loading-effect", FrontierV3CargoLoadingExecutor::tick),
-            executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
-            executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
+            // A RUNNING production transformation may have changed one exact owned chest slot
+            // before a restart persisted its canonical receipt.  Reconcile that durable
+            // physical effect before the generic surface drift audit: otherwise the audit
+            // mistakes its own known recovery window for player/world tampering.
+            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
+            executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
+            // Harvest changes both one PM-owned field and its exact chest slot, so it is an
+            // effect after the container owner has established ACTIVE provenance, not projection.
+            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
+            executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-harvest"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
             executor("defender-equipment-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("hive-nutrient-endpoints"), "defender-equipment-issue-effect", FrontierV3EquipmentIssueExecutor::tick),
             executor("defender-equipment-return", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "defender-equipment-return-effect", FrontierV3EquipmentReturnExecutor::tick),
-            executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             executor("exact-item-consumption", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation", "hive-nutrient-endpoints"), "exact-item-consumption-effect", FrontierV3ExactItemConsumptionExecutor::tick),
             executor("cargo-handoff", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("exact-item-consumption"), "cargo-handoff-effect", FrontierV3CargoHandoffExecutor::tick),
             executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-handoff"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),

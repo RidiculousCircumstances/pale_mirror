@@ -24,8 +24,20 @@ public final class EngineeringWorksite {
 
     public static EngineeringWorkAssembly compile(FrontierWorldState state, EngineeringWorkOrder project) {
         Objects.requireNonNull(state, "engineering work-site state");
+        return compileJourney(state, project, EngineeringJourneyPurpose.WORKSITE, slots(state.bootstrap(), state.routeTopology(), project));
+    }
+
+    /** Shared bounded compiler for a semantic worksite or depot service journey. */
+    static EngineeringWorkAssembly compileJourney(FrontierWorldState state, EngineeringWorkOrder project,
+                                                  EngineeringJourneyPurpose purpose, List<BlockPosition> slots) {
+        Objects.requireNonNull(state, "engineering journey state"); Objects.requireNonNull(project, "engineering journey project");
+        Objects.requireNonNull(purpose, "engineering journey purpose");
+        slots = List.copyOf(Objects.requireNonNull(slots, "engineering journey slots"));
         EngineeringRecoveryTeam team = requireTeam(project);
-        List<BlockPosition> slots = slots(state.bootstrap(), state.routeTopology(), project);
+        if (slots.size() < team.memberIds().size() || slots.stream().anyMatch(Objects::isNull)
+                || slots.stream().distinct().count() != slots.size()) {
+            throw new IllegalArgumentException("engineering journey needs distinct declared slots for its exact crew");
+        }
         Map<SubjectId, List<List<BlockPosition>>> candidates = new LinkedHashMap<>();
         for (int index = 0; index < team.memberIds().size(); index++) {
             SubjectId member = team.memberIds().get(index);
@@ -40,11 +52,38 @@ public final class EngineeringWorksite {
                         + start + " to " + destination + ": " + unavailable.getMessage(), unavailable);
             }
         }
-        EngineeringWorkAssembly compiled = compileJoint(team.memberIds(), candidates);
+        EngineeringWorkAssembly compiled = compileJoint(purpose, team.memberIds(), candidates);
         if (compiled == null) {
             throw new IllegalArgumentException("engineering work-site has no collision-free bounded joint approach");
         }
         return compiled;
+    }
+
+    /**
+     * Read-only admission explanation for operator diagnostics.  It reuses the exact bounded
+     * compiler; it neither reserves a person nor creates a corridor, so it cannot become a
+     * second planning authority.
+     */
+    public static AdmissionReadiness admission(FrontierWorldState state, EngineeringWorkOrder project) {
+        try {
+            compile(state, project);
+            return new AdmissionReadiness(true, "READY", "");
+        } catch (IllegalArgumentException rejected) {
+            String message = rejected.getMessage();
+            String cause = rejected.getCause() == null ? "" : rejected.getCause().getMessage();
+            String detail = message + " " + cause;
+            if (detail.contains("endpoint")) return new AdmissionReadiness(false, "NO_CLEAR_ENDPOINT", detail);
+            if (detail.contains("collision-free")) return new AdmissionReadiness(false, "NO_COLLISION_FREE_CORRIDOR", detail);
+            if (detail.contains("no clear bounded public lane")) return new AdmissionReadiness(false, "NO_PUBLIC_LANE", detail);
+            if (detail.contains("anchor plane")) return new AdmissionReadiness(false, "INCOMPATIBLE_ANCHOR_PLANE", detail);
+            return new AdmissionReadiness(false, "REJECTED", detail);
+        }
+    }
+
+    public record AdmissionReadiness(boolean admissible, String reason, String detail) {
+        public AdmissionReadiness {
+            Objects.requireNonNull(reason, "engineering admission reason"); Objects.requireNonNull(detail, "engineering admission detail");
+        }
     }
 
     /**
@@ -54,11 +93,11 @@ public final class EngineeringWorksite {
      * would reject ordinary settlement geometry, while independent first-lane selection can
      * deadlock on a head-on exchange.
      */
-    private static EngineeringWorkAssembly compileJoint(List<SubjectId> members, Map<SubjectId, List<List<BlockPosition>>> candidates) {
+    private static EngineeringWorkAssembly compileJoint(EngineeringJourneyPurpose purpose, List<SubjectId> members, Map<SubjectId, List<List<BlockPosition>>> candidates) {
         AttemptBudget budget = new AttemptBudget();
         int largestCatalogue = candidates.values().stream().mapToInt(List::size).max().orElseThrow();
         for (int ceiling = 0; ceiling < largestCatalogue && !budget.exhausted(); ceiling++) {
-            EngineeringWorkAssembly compiled = compileJoint(members, candidates, 0, ceiling, false, new LinkedHashMap<>(), budget);
+            EngineeringWorkAssembly compiled = compileJoint(purpose, members, candidates, 0, ceiling, false, new LinkedHashMap<>(), budget);
             if (compiled != null) return compiled;
         }
         return null;
@@ -70,7 +109,7 @@ public final class EngineeringWorksite {
      * requires each person to take their second local lane. A ring is stable and finite; at
      * least one member must use its ceiling lane so earlier rings are never retried.
      */
-    private static EngineeringWorkAssembly compileJoint(List<SubjectId> members, Map<SubjectId, List<List<BlockPosition>>> candidates,
+    private static EngineeringWorkAssembly compileJoint(EngineeringJourneyPurpose purpose, List<SubjectId> members, Map<SubjectId, List<List<BlockPosition>> > candidates,
                                                           int memberIndex, int ceiling, boolean usesCeiling,
                                                           Map<SubjectId, EngineeringWorkAssembly.Member> selected, AttemptBudget budget) {
         if (budget.exhausted()) return null;
@@ -79,7 +118,7 @@ public final class EngineeringWorksite {
             budget.recordAttempt();
             EngineeringWorkAssembly assembly;
             try {
-                assembly = new EngineeringWorkAssembly(selected);
+                assembly = new EngineeringWorkAssembly(purpose, selected);
             } catch (IllegalArgumentException invalid) {
                 return null;
             }
@@ -90,7 +129,7 @@ public final class EngineeringWorksite {
         for (int option = 0; option <= Math.min(ceiling, options.size() - 1); option++) {
             List<BlockPosition> corridor = options.get(option);
             selected.put(member, new EngineeringWorkAssembly.Member(corridor, 0));
-            EngineeringWorkAssembly compiled = compileJoint(members, candidates, memberIndex + 1, ceiling, usesCeiling || option == ceiling,
+            EngineeringWorkAssembly compiled = compileJoint(purpose, members, candidates, memberIndex + 1, ceiling, usesCeiling || option == ceiling,
                     selected, budget);
             if (compiled != null) return compiled;
             if (budget.exhausted()) break;
@@ -155,11 +194,19 @@ public final class EngineeringWorksite {
     }
 
     static void validate(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
+        // A terminal READY/CONFLICT owner may deliberately retain its last assembly for
+        // explanation, release or recovery.  It no longer has an active work front, so its
+        // historic slots must not be validated as a fresh construction site.
         if (project.assembly().isEmpty()) return;
         EngineeringRecoveryTeam team = requireTeam(project);
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.members().keySet().equals(java.util.Set.copyOf(team.memberIds()))) {
             throw new IllegalArgumentException("engineering assembly changes its retained crew");
+        }
+        if (assembly.purpose() == EngineeringJourneyPurpose.WORKSITE && !project.building()) return;
+        if (assembly.purpose() != EngineeringJourneyPurpose.WORKSITE) {
+            EngineeringDepotService.validate(bootstrap, project, assembly);
+            return;
         }
         List<BlockPosition> slots = slots(bootstrap, topology, project);
         if (!assembly.members().values().stream().map(EngineeringWorkAssembly.Member::destination).collect(java.util.stream.Collectors.toSet())
@@ -193,7 +240,8 @@ public final class EngineeringWorksite {
     /** Current desired staging exists only for a supplied, assembled active work front. */
     public static List<BlockPosition> activeStagingCells(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
         if (!project.building() || project.cargoId().isEmpty()
-                || project.assembly().isEmpty() || !project.assembly().orElseThrow().complete()) return List.of();
+                || project.assembly().isEmpty() || project.assembly().orElseThrow().purpose() != EngineeringJourneyPurpose.WORKSITE
+                || !project.assembly().orElseThrow().complete()) return List.of();
         return intactStagingCells(bootstrap, topology, project);
     }
 
@@ -207,7 +255,7 @@ public final class EngineeringWorksite {
 
     private static EngineeringRecoveryTeam requireTeam(EngineeringWorkOrder project) {
         Objects.requireNonNull(project, "engineering work-site project");
-        if (!project.building() || project.engineeringTeam().isEmpty()) {
+        if (project.engineeringTeam().isEmpty()) {
             throw new IllegalArgumentException("engineering work-site needs one active exact construction crew");
         }
         return project.engineeringTeam().orElseThrow();

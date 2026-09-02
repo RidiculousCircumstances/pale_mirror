@@ -13,7 +13,10 @@ observed, PM-owned route surface or foundation cell and is deliberately not a
   lost. It blocks the affected retained traversal edges immediately.
 - One `RouteMaintenance` owns one such delta, its originating settlement, the
   exact expected semantic part/material, one retained engineering team, one
-  optional exact cargo batch and one bounded work-site assembly.
+  optional exact cargo batch and one bounded crew journey. A journey has an
+  explicit purpose (`MUSTER_DEPOT`, `WORKSITE`, or `RETURN_DEPOT`), immutable
+  per-person corridor/cursor and distinct destinations; it is never an
+  inferred path or a second roster.
 - `RouteMaintenance` owns only repair of the retained route. It cannot adopt a
   player road, pick an alternate path, clear another delta, or change route
   waypoints. `RouteConstruction` remains the distinct owner of a strategic
@@ -28,11 +31,15 @@ observed, PM-owned route surface or foundation cell and is deliberately not a
 ```text
 observed route loss
   -> ADMITTED (exact cell + exact team)
+  -> MUSTER_DEPOT (same people walk to the exact depot service stations)
+  -> TOOL_ISSUE (one local durable chest-to-hand receipt)
   -> ASSEMBLING (one retained COLD cursor per engineer)
   -> SUPPLIED (one observed source decrement -> exact cargo)
   -> HOT_WORKSITE (only in naturally loaded player-demanded chunks)
   -> REPAIRING (durable-before-effect intent)
   -> CONFIRMED (exact block/ledger observation)
+  -> RETURN_DEPOT (same tool-holding people walk back to the depot service stations)
+  -> TOOL_RETURN (one local durable hand-to-chest receipt)
   -> CLOSED
 ```
 
@@ -45,6 +52,19 @@ the exact team first reaches its retained support slots in COLD, then the
 loaded scene materializes only the same IDs. The HOT scene may request the
 current repair intent, but it cannot select people, source material, repair
 cell or route edge. The physical executor is the only Minecraft block writer.
+
+Tool custody has the same locality contract as material custody. Each depot
+has a compiled `SettlementDepotServicePort`: a visible chest socket, two
+walkable service stations, an authored threshold and a declared local-topology
+connection. An issue may be prepared only when its selected exact worker has
+arrived at a service station; a return may be prepared only when that exact
+tool holder has returned there. The Minecraft issue and return executors use
+one shared predicate: the body must occupy its own exact canonical service
+station, while the chest is verified only as the owned storage socket. No
+chest-distance radius is a service or navigation rule. A loaded chest elsewhere
+in the world, a loaded worker elsewhere in the world, or two endpoints merely
+belonging to one settlement are deferral/conflict evidence, never permission
+for a remote transfer.
 
 ## Exact physical consequence
 
@@ -79,12 +99,15 @@ becomes `UNKNOWN_AFTER_RESTART`; the effect is never replayed.
 ## Required evidence
 
 - Pure normal path: exact loss -> exact source decrement -> cargo -> receipt
-  removes that delta and reopens only its no-longer-affected edge.
+  removes that delta -> exact tool holder returns through the retained journey
+  -> exact depot receipt -> terminal compaction; it reopens only its
+  no-longer-affected edge.
 - Pure negatives: foreign material, wrong source slot, player/foreign target,
   duplicate owner, competing worker claim and another remaining loss keep the
   edge blocked and preserve the conflict.
-- Snapshot/WAL and graceful restart: before pickup, with cargo, and after
-  `RUNNING` intent; no duplicate item, person, block or availability change.
+- Snapshot/WAL and graceful restart: before issue, during each crew journey,
+  with cargo, after `RUNNING` repair, and after `RUNNING` return; no duplicate
+  item, person, block or availability change.
 - Materialized GameTests: only the retained team/lease can prepare the repair;
   unsupported/foreign blocks fail closed.
 - One disposable native scenario: normal player break -> exact maintenance
