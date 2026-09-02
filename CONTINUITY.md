@@ -187,8 +187,13 @@
   `HIVE_TISSUE` hiveroot. Bootstrap, graybox projection, physical-loss validation and organ
   operational thresholds consume that same plan. The focused non-flat/recovery regression proves
   one west nest rises to the surveyed datum, its other nest does not shift, an ordinary root loss
-  is exact semantic damage, and snapshot recovery preserves the surveyed bootstrap. Focused
-  Frontier topology tests pass; NeoForge materialization/reloaded Foundry evidence remains next.
+  is exact semantic damage, and snapshot recovery preserves the surveyed bootstrap. The new
+  read-only `hive_foundry` diagnostic scopes `COMPILED`/`SETTLED`/`RELOADED` to one named
+  organ plus its exact provider-owned roots; it never loads, projects or repairs. Its focused
+  matching-looking-unclaimed/conflict test and the 41/41 Scene GameTest slice prove compiled
+  ownership and physical claim reload respectively. This is automated evidence, not yet a native
+  non-flat hive visit; bridge/rail-grade, foundation repair/replan and cross-family HOT/COLD
+  evidence remain.
 - V3-AUD-019's raised-route provider now treats one player support break as one bounded
   durable physical-loss set: its directly supported `ROUTE_SURFACE` is observed and
   conflicted with the `ROUTE_FOUNDATION` before Vanilla removes either block. The same

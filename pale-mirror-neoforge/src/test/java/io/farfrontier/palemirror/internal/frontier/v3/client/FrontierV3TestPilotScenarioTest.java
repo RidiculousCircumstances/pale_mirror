@@ -246,6 +246,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsTheReadOnlyHiveFoundryFixtureGate() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"assert_fixture","timeoutMs":30000,"checks":[
+                {"view":"hive_foundry","id":"compiled@organ:west-heart","expect":{"status":"ok","passed":true}}]}],"actions":[]}""");
+        assertEquals(1, parsed.setupCount());
+    }
+
+    @Test
     void permitsTheReadOnlyDeclaredRouteTopologyFixtureGate() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"setup":[{"type":"assert_fixture","timeoutMs":30000,"checks":[

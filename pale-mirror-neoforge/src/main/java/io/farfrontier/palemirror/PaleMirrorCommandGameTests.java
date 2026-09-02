@@ -59,4 +59,14 @@ public final class PaleMirrorCommandGameTests {
                 "the traversal Foundry diagnostic must remain in the registered read-only command tree");
         helper.succeed();
     }
+
+    @GameTest(batch = "pm-frontier-v3-diagnostics-command", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v3HiveFoundryDiagnosticIsPresentInTheRegisteredCommandTree(GameTestHelper helper) {
+        var root = PaleMirrorCommandRegistrar.commandTree().build();
+        var v3 = root.getChild("v3");
+        var inspect = v3 == null ? null : v3.getChild("inspect");
+        helper.assertTrue(inspect != null && inspect.getChild("hive_foundry") != null,
+                "the hive Foundry diagnostic must remain in the registered read-only command tree");
+        helper.succeed();
+    }
 }

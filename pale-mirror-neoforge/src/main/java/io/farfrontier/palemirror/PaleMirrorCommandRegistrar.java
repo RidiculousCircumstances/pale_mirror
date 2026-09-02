@@ -60,6 +60,7 @@ final class PaleMirrorCommandRegistrar {
         inspect.then(diagnosticObject("transit"));
         inspect.then(diagnosticObject("medical"));
         inspect.then(diagnosticObject("traversal_foundry"));
+        inspect.then(diagnosticObject("hive_foundry"));
         inspect.then(diagnosticObject("route_topology"));
         v3.then(inspect);
         v3.then(Commands.literal("advance").requires(source -> source.hasPermission(4))

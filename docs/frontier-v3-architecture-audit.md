@@ -142,8 +142,14 @@ Current implementation boundary: the terrain provider now compiles the same supp
 for both seed-hive sites: every nest datum derives from its declared organ base-support columns,
 and lower organ tissue receives exact owner-specific hiveroot fill.  Bootstrap, projection,
 physical-loss validation and organ-operational thresholds share that immutable plan; no hive
-anchor queries a loaded height map or remains at a hidden fixed Y.  This is pure/non-flat
-recovery evidence, not yet a settled/reloaded Foundry proof.
+anchor queries a loaded height map or remains at a hidden fixed Y. The read-only
+`hive_foundry` scope now audits one named organ and that same plan's exact
+terrain-provider-owned roots at `COMPILED`, `SETTLED` and `RELOADED`, without loading,
+projecting or repairing a cell. Its materialized GameTest reload proof retains both root and
+organ claims as `CURRENT`; matching-looking unclaimed blocks and conflicted claims remain
+explicit mismatches. This is a bounded automated materialization/reload proof, not a native
+player visit to a non-flat hive and not closure of the remaining bridge/rail-grade, foundation
+repair/replan or cross-family HOT/COLD gates.
 
 This correction must not be misreported as
 complete merely because the medical scene has typed port data. The flat provider

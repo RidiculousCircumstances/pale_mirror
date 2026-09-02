@@ -163,6 +163,11 @@ public final class FrontierV3GrayboxCursorGameTests {
                 "the immutable provider-owned root materializes through the normal graybox executor");
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, organTissue), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the raised organ tissue may materialize only over its own claimed hiveroot");
+        FrontierV3GrayboxLedger reloaded = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, reloaded, rootTissue), FrontierV3GrayboxExecutor.ProjectionResult.CURRENT,
+                "a reloaded ledger recognizes the exact owned hiveroot instead of attempting a second projection");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, reloaded, organTissue), FrontierV3GrayboxExecutor.ProjectionResult.CURRENT,
+                "a reloaded ledger retains the same organ tissue provenance above its root");
         helper.assertTrue(level.getBlockState(root).is(Blocks.RED_CONCRETE) && level.getBlockState(organBase).is(Blocks.RED_CONCRETE)
                         && ledger.claim(root) != null && ledger.claim(root).owner().equals("organ:surveyed-hive-heart")
                         && ledger.claim(root).semanticPart().equals(GrayboxSemanticPart.FOUNDATION.name()),

@@ -87,6 +87,18 @@ lookup. They neither load nor project cells; they merely make a naturally
 visited terminal proof practical while keeping foreign world changes visible as
 errors.
 
+One named hive organ is a separate exact scope: `/pale_mirror v3 inspect
+hive_foundry reloaded@organ:west-heart`. Its immutable grammar is the same
+`HiveOrganSupportPlan` used by bootstrap, projection and physical-loss
+accounting: the organ cells must be `HIVE_TISSUE`, while every lower
+terrain-provider-owned hiveroot cell retains that organ's exact `FOUNDATION`
+provenance. `COMPILED` proves that grammar without a world; `SETTLED` and
+`RELOADED` inspect only already-loaded cells. Air with no claim is reported as
+`PENDING`; matching-looking unclaimed blocks and conflicting claims are drift,
+never adopted provenance. This scope does not load, project, repair or change
+the hive; a terminal runtime proof still requires zero pending and unverified
+cells.
+
 For every scoped runtime pass the diagnostic also reports the derived count of
 `OPEN`, `BLOCKED` and `UNVERIFIED` semantic ports, plus the corresponding
 declared topology-edge counts. A port is `OPEN` only when both of its declared
