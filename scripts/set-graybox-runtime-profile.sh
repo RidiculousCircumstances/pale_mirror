@@ -6,11 +6,13 @@ usage() {
   cat <<'EOF'
 Usage: scripts/set-graybox-runtime-profile.sh --target RUNTIME [--restore] [--dry-run]
 
-The profile is for the disposable Pale Mirror graybox server and its matching
-audit client. It moves only known competing gameplay JARs to a reversible
-`.graybox-disabled` suffix. On a server it also disables natural animal,
-monster and NPC spawning. It never touches Pale Mirror, Create, player items,
-client rendering, optimisation libraries, worlds or player data.
+The profile is for the disposable Pale Mirror graybox server. It moves only
+server-only competing gameplay JARs to a reversible `.graybox-disabled` suffix.
+Shared client/server mods remain installed on both sides; PM suppresses their
+activity in the graybox through its world-side ownership boundary. On a server
+the profile also configures natural-spawn policy. It never touches Pale Mirror,
+Create, player items, client rendering, optimisation libraries, worlds or
+player data.
 
 Stop a server/client before changing its runtime and restart it afterwards.
 Use --restore to return the JARs and the recorded server.properties values.
@@ -50,6 +52,7 @@ competing_jars_catalog="$script_dir/../config/graybox-disabled-mods.txt"
 [[ -f "$competing_jars_catalog" ]] || { printf 'Missing graybox mod catalog: %s\n' "$competing_jars_catalog" >&2; exit 1; }
 mapfile -t competing_jars < <(awk 'NF && $1 !~ /^#/ { print }' "$competing_jars_catalog")
 ((${#competing_jars[@]})) || { printf 'Graybox mod catalog is empty: %s\n' "$competing_jars_catalog" >&2; exit 1; }
+"$script_dir/validate-graybox-runtime-profile.sh"
 
 # Pale Mirror Visuals has an exact declared dependency on Villager Overhaul.
 # Keep it loaded as the required rendering/attribute bridge; PM's named-resident

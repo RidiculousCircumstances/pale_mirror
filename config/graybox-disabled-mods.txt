@@ -1,12 +1,6 @@
-# Gameplay mods excluded from the source-authoritative Pale Mirror graybox.
-# This catalog is consumed by both the dedicated-server profile and the
-# matching pack-backed test-pilot client; keep the two physical runtimes exact.
-alexscaves-2.0.10.jar
-born_in_chaos_[Neoforge]_1.21.1_1.7.6.jar
+# Server-only gameplay mods excluded from the source-authoritative Pale Mirror
+# graybox. A mod marked `side = "both"` in the Packwiz manifest must never
+# appear here: ordinary player clients use the standard pack and NeoForge
+# requires an equal network-mod set on both ends. PM's world-side firewall,
+# not a one-sided JAR exclusion, owns suppression of shared-mod activity.
 hostile_tactics-neoforge-1.21.1-0.10.1.jar
-L_Ender's Cataclysm 1.21.1-3.32.jar
-naturalist-2.0.2-neoforge-1.21.1.jar
-Ravents-neoforge-3.0.jar
-rpgtimeline-neoforge-1.21-2.0.4.1.jar
-crimson_curse-1.4.3.1.jar
-mowziesmobs-1.21.1-1.8.2.jar

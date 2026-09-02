@@ -14,6 +14,8 @@ test -f index.toml
 test -f docs/mod-compatibility.md
 test -f docs/testing.md
 
+scripts/validate-graybox-runtime-profile.sh
+
 if find . -path './.git' -prune -o -path './hosted' -prune -o -name '*.jar' -print | grep -q .; then
   echo "JAR files must not be committed; use Packwiz metadata instead" >&2
   exit 1

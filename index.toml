@@ -25,6 +25,10 @@ file = "config/c2me.toml"
 hash = "ac45f77a947efa3fec81b4f9aa3620dea0c21d3b20a319f029336d572e9d67ab"
 
 [[files]]
+file = "config/graybox-disabled-mods.txt"
+hash = "1efa152e3453d2875b0bdfa244a845d41b86be78501925b5d3236893288e25ab"
+
+[[files]]
 file = "config/hostiletactics-server.toml"
 hash = "e053687a6deab135adb59bf414542743cec56c7178cf4a399485701e9b7469cc"
 
@@ -410,7 +414,7 @@ hash = "463a83f786b5f652652b5b0b8503e64d312e3f108828d9527ea897a44a524cb7"
 
 [[files]]
 file = "docs/graybox-runtime-profile.md"
-hash = "bb2b066fa6fa1621d32b5b29d15c67bf46bb60e97bea71f672ccd1452ddb4779"
+hash = "6ebb4b2c0aa1c13d41b7e01d8b564ccbee1612bde2d08ca7b83fa5cdc4bfd135"
 
 [[files]]
 file = "docs/mod-compatibility.md"
@@ -754,7 +758,7 @@ hash = "1ba7237c674a925e707b8ad7032fe51ea14accedae568e39be083f4986a088a5"
 
 [[files]]
 file = "scripts/set-graybox-runtime-profile.sh"
-hash = "0425b3cbd067f8127033b2c348b1aaaeea4541ebfc35a7b3076220d7cbe10f86"
+hash = "a986675eb14d4efb6bc56c30743ada347c582a4531e62b56543013856d8f392a"
 
 [[files]]
 file = "scripts/set-server-performance-profile.sh"
@@ -769,9 +773,13 @@ file = "scripts/update-client.cmd"
 hash = "13d67d3b05ac49f38f24161183e84477b2f25855daaf951a44e4d7d886ecdb3d"
 
 [[files]]
+file = "scripts/validate-graybox-runtime-profile.sh"
+hash = "9a95addb20a45439297d554f78987b60ffc26962de33056221b44180bc5911c9"
+
+[[files]]
 file = "scripts/validate-structure-assets.py"
 hash = "908333795b49b558ba13b0022052fcd3dd130b99c081da0e54900d43155253ee"
 
 [[files]]
 file = "scripts/validate.sh"
-hash = "1ab8e28547365467b0c63c1c51e8e50706738e969b2fb5cf73ef3f9af4ac484a"
+hash = "4f36a45c986bc69dca2cdf77a7cfdeedf857f7e23353aa298e1a4be6f3dc09aa"

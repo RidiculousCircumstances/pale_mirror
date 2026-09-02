@@ -5,19 +5,18 @@ Pale Mirror. The normal Far Frontier pack intentionally contains optional
 content for broader play, but those independent simulations would make a
 graybox test ambiguous.
 
-Apply the profile separately to the disposable server and to the matching
-audit-client runtime while both are stopped:
+Apply the profile to the disposable server while it is stopped:
 
 ```bash
 scripts/set-graybox-runtime-profile.sh --target /home/rd/far-frontier-server
-scripts/set-graybox-runtime-profile.sh --target pale-mirror/pale-mirror-neoforge/build/runs/railway-client
 ```
 
-It reversibly disables Alex's Caves, Born in Chaos, Hostile Tactics, Cataclysm,
-Naturalist, Ravents, RPG Timeline, Crimson Curse and Mowzie's Mobs. These are
-the non-PM sources of creatures, infection, events or time-line authority. No
-separate Blood Moon JAR is installed in the current runtime; this profile covers
-the actual competing sources instead.
+It reversibly disables only Hostile Tactics, which is declared server-only by
+the Packwiz manifest. A mod declared `side = "both"` must stay installed: an
+ordinary player client uses the standard pack and NeoForge requires the same
+network-mod set on the server. PM's entity-admission and world-side ownership
+boundaries, not asymmetric JAR removal, suppress shared-mod activity in the
+graybox. No separate Blood Moon JAR is installed in the current runtime.
 
 The server application keeps `spawn-animals`, `spawn-monsters` and `spawn-npcs`
 enabled. These server properties are not a graybox isolation mechanism:
