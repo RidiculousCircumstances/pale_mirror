@@ -110,7 +110,7 @@ public final class PopulationMigrationProcess {
                         .thenComparing(Household::id)).orElseThrow();
         int arrivalOrdinal = Math.toIntExact(SettlementFacilityCapability.livingResidents(state, target.id())
                 + state.humanPopulation().inboundHousingReservations(target.id()));
-        BlockPosition arrival = FrontierSettlementActorSlots.slot(state.bootstrap().bounds(), target, arrivalOrdinal);
+        BlockPosition arrival = FrontierSettlementActorSlots.slot(state.bootstrap().bounds(), state.bootstrap().terrain(), target, arrivalOrdinal);
         return Optional.of(new Candidate(source, journey(state, person, source, household, target, arrival)));
     }
 

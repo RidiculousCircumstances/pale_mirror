@@ -22,14 +22,14 @@ public final class FrontierSettlementAssaultBattlefield {
         if (!settlement.anchor().equals(sighting.settlementAnchor()) || attackerCount < 1 || attackerCount > SettlementAssault.MAX_ATTACKERS) {
             return Optional.empty();
         }
-        Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(settlement.structures());
+        Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         Set<BlockPosition> occupied = new LinkedHashSet<>();
         for (SubjectId defender : defenderIds) {
             ActorLocation location = state.actorLocations().get(defender);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) return Optional.empty();
         }
-        List<BlockPosition> choices = FrontierSettlementActorSlots.slots(state.bootstrap().bounds(), settlement.anchor(), structureCells,
+        List<BlockPosition> choices = FrontierSettlementActorSlots.slots(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement.anchor(), structureCells,
                 attackerCount + occupied.size() + 16).stream().filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(), structureCells, position))
                 .filter(position -> !occupied.contains(position)).limit(attackerCount).toList();
         return choices.size() == attackerCount ? Optional.of(choices) : Optional.empty();
@@ -41,7 +41,7 @@ public final class FrontierSettlementAssaultBattlefield {
             return Optional.empty();
         }
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
-        Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(settlement.structures());
+        Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
@@ -57,7 +57,7 @@ public final class FrontierSettlementAssaultBattlefield {
     }
 
     static boolean localClearFloor(FrontierWorldState state, Settlement settlement, BlockPosition position) {
-        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), FrontierSettlementActorSlots.intactStructureOccupancy(settlement.structures()), position);
+        return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()), position);
     }
 
     private static boolean localClearFloor(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, BlockPosition position) {

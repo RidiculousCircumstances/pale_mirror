@@ -167,7 +167,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             SettlementStructure structure = FrontierWorldStateSupport.structureById(bootstrap, entry.getKey());
             for (Map.Entry<BlockPosition, StructureDamage.DamageCell> cell : damage.cells().entrySet()) {
-                GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(structure, cell.getKey());
+                GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(bootstrap.terrain(), structure, cell.getKey());
                 if (expected == null || expected.semanticPart() != cell.getValue().semanticPart()) {
                     throw new IllegalArgumentException("structure damage must name one exact intact semantic cell");
                 }

@@ -20,44 +20,44 @@ public final class FrontierSettlementActorSlots {
 
     private FrontierSettlementActorSlots() { }
 
-    public static BlockPosition slot(WorldBounds bounds, Settlement settlement, int ordinal) {
-        Objects.requireNonNull(settlement, "settlement");
-        return slot(bounds, settlement.anchor(), settlement.structures(), ordinal);
+    public static BlockPosition slot(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int ordinal) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(settlement, "settlement");
+        return slot(bounds, terrain, settlement.anchor(), settlement.structures(), ordinal);
     }
 
-    public static BlockPosition slot(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, int ordinal) {
-        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
+    public static BlockPosition slot(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, List<SettlementStructure> structures, int ordinal) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
         if (ordinal < 0) throw new IllegalArgumentException("resident placement ordinal must not be negative");
-        return collect(bounds, anchor, intactStructureOccupancy(structures), ordinal + 1).get(ordinal);
+        return collect(bounds, terrain, anchor, intactStructureOccupancy(terrain, structures), ordinal + 1).get(ordinal);
     }
 
-    static List<BlockPosition> slots(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, int count) {
-        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
+    static List<BlockPosition> slots(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, List<SettlementStructure> structures, int count) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structures, "structures");
         if (count < 0) throw new IllegalArgumentException("resident placement count must not be negative");
-        return collect(bounds, anchor, intactStructureOccupancy(structures), count);
+        return collect(bounds, terrain, anchor, intactStructureOccupancy(terrain, structures), count);
     }
 
     /** Whether an immutable settlement plan leaves this exact support column clear for one body. */
-    static boolean clearFloor(WorldBounds bounds, Settlement settlement, BlockPosition position) {
-        Objects.requireNonNull(settlement, "settlement");
-        return clearFloor(bounds, settlement.anchor(), settlement.structures(), position);
+    static boolean clearFloor(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, BlockPosition position) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(settlement, "settlement");
+        return clearFloor(bounds, terrain, settlement.anchor(), settlement.structures(), position);
     }
 
-    static boolean clearFloor(WorldBounds bounds, BlockPosition anchor, List<SettlementStructure> structures, BlockPosition position) {
-        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor");
+    static boolean clearFloor(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, List<SettlementStructure> structures, BlockPosition position) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(anchor, "anchor");
         Objects.requireNonNull(structures, "structures"); Objects.requireNonNull(position, "position");
-        return clearFloor(bounds, intactStructureOccupancy(structures), position);
+        return clearFloor(bounds, intactStructureOccupancy(terrain, structures), position);
     }
 
     /** One exact immutable occupancy view may serve every candidate of the same pure compilation. */
-    static Set<BlockPosition> intactStructureOccupancy(List<SettlementStructure> structures) {
-        return FrontierGrayboxPlan.intactStructureOccupancy(structures);
+    static Set<BlockPosition> intactStructureOccupancy(TerrainSurfacePlan terrain, List<SettlementStructure> structures) {
+        return FrontierGrayboxPlan.intactStructureOccupancy(terrain, structures);
     }
 
-    static List<BlockPosition> slots(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
-        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structureCells, "structure cells");
+    static List<BlockPosition> slots(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
+        Objects.requireNonNull(bounds, "bounds"); Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(anchor, "anchor"); Objects.requireNonNull(structureCells, "structure cells");
         if (count < 0) throw new IllegalArgumentException("resident placement count must not be negative");
-        return collect(bounds, anchor, structureCells, count);
+        return collect(bounds, terrain, anchor, structureCells, count);
     }
 
     static boolean clearFloor(WorldBounds bounds, Set<BlockPosition> structureCells, BlockPosition position) {
@@ -65,24 +65,24 @@ public final class FrontierSettlementActorSlots {
         return traversable(bounds, structureCells, position);
     }
 
-    private static List<BlockPosition> collect(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
+    private static List<BlockPosition> collect(WorldBounds bounds, TerrainSurfacePlan terrain, BlockPosition anchor, Set<BlockPosition> structureCells, int count) {
         List<BlockPosition> accepted = new ArrayList<>(count);
         if (count == 0) return List.of();
         for (int radius = FIRST_RING_RADIUS; radius <= MAX_RING_RADIUS; radius += RING_INCREMENT) {
             for (int x = -radius; x <= radius; x += RING_INCREMENT) {
-                BlockPosition candidate = anchor.offset(x, 0, -radius);
+                BlockPosition candidate = terrainSurface(terrain, anchor.x() + x, anchor.z() - radius);
                 if (traversable(bounds, structureCells, candidate)) { accepted.add(candidate); if (accepted.size() == count) return List.copyOf(accepted); }
             }
             for (int z = -radius + RING_INCREMENT; z <= radius; z += RING_INCREMENT) {
-                BlockPosition candidate = anchor.offset(radius, 0, z);
+                BlockPosition candidate = terrainSurface(terrain, anchor.x() + radius, anchor.z() + z);
                 if (traversable(bounds, structureCells, candidate)) { accepted.add(candidate); if (accepted.size() == count) return List.copyOf(accepted); }
             }
             for (int x = radius - RING_INCREMENT; x >= -radius; x -= RING_INCREMENT) {
-                BlockPosition candidate = anchor.offset(x, 0, radius);
+                BlockPosition candidate = terrainSurface(terrain, anchor.x() + x, anchor.z() + radius);
                 if (traversable(bounds, structureCells, candidate)) { accepted.add(candidate); if (accepted.size() == count) return List.copyOf(accepted); }
             }
             for (int z = radius - RING_INCREMENT; z > -radius; z -= RING_INCREMENT) {
-                BlockPosition candidate = anchor.offset(-radius, 0, z);
+                BlockPosition candidate = terrainSurface(terrain, anchor.x() - radius, anchor.z() + z);
                 if (traversable(bounds, structureCells, candidate)) { accepted.add(candidate); if (accepted.size() == count) return List.copyOf(accepted); }
             }
         }
@@ -92,5 +92,9 @@ public final class FrontierSettlementActorSlots {
     private static boolean traversable(WorldBounds bounds, Set<BlockPosition> structureCells, BlockPosition position) {
         return bounds.contains(position) && !structureCells.contains(position) && !structureCells.contains(position.offset(0, 1, 0))
                 && !structureCells.contains(position.offset(0, 2, 0));
+    }
+
+    private static BlockPosition terrainSurface(TerrainSurfacePlan terrain, int x, int z) {
+        return new BlockPosition(x, Math.addExact(terrain.supportYAt(x, z), 1), z);
     }
 }

@@ -158,6 +158,21 @@
 - `1bdbd84` establishes the bounded physical settlement-food provisioning boundary: the current settlement cycle consumes the required number of named `minecraft:bread` items every 24,000 ticks, COLD directly from canonical custody and ACTIVE only through a durable `EXACT_ITEM_CONSUMPTION` intent with the exact observed physical remainder. A derived two-cycle reserve protects future food from exports without becoming a second inventory ledger. Depot boards and read-only diagnostics expose `SECURE`, `RATIONED`, `SHORTAGE` and `CONFLICT`. The checked-in `disposable_settlement_provision` pilot starts from 64 exact bread for Northwatch's 37 residents, naturally materializes it, reaches the terminal 27-item/`CONFIRMED` state, survives a graceful restart, and captures the readable exterior `FOOD SECURE · 27 / 74` board frame at `build/frontier-v3-scenarios/disposable_settlement_provision-4dec504d-e3a1-4805-9441-ff2e6fc74a43-northwatch-food-secure.png`. Node 25/25, focused domain/diagnostic tests, economy GameTests 10/10 and the critical gate (guardrails/check, build/package, 245/245 GameTests) pass. The full gate also exposed and fixed a test-only graybox field fixture that had not loaded all of its exact 8×8 boundary chunks before checking COLD materialization.
 - H0.6 closes the final Frontier v3 architecture-audit debt at the declared current limits: bounded noncanonical metrics, a retained schedule-capacity guard, the repeatable seed-41 twelve-front scale/WAL proof, and a 120-second naturally loaded 27-member physical JFR route. The full critical gate passes with 248/248 GameTests; larger physical limits remain separately gated by a fresh same-seed JFR plus terminal causal scenario.
 ### Now
+- V3-AUD-019 now compiles a settlement's finished datum from the exact immutable
+  terrain columns of its structures and public approaches. `SettlementStructureFootprint`
+  owns vertical structure fill, public circulation owns its own footing, and the fixed
+  route grid consumes the same survey rather than a coded `Y=64`; no loaded-world
+  height query or player scaffolding participates. The distinct-datum pure/recovery
+  regression and 41/41 Scene GameTest slice prove the plan and physical placement
+  order. The native `disposable-traversal-foundry-restart` scenario was refreshed from
+  its stale 48-topology/24-port contract to the existing three-port-per-settlement
+  60/36 plan, then passed `COMPILED → SETTLED → RELOADED` with zero
+  pending/mismatch/blockers after graceful restart. Committed as `0774dce1`; focused
+  pure/Node checks and the full critical gate pass (275/275 GameTests, guardrails/check,
+  build and packaged-JAR verification). This is deliberately not full terrain closure:
+  resident perimeter slots still
+  need a bounded planned apron/ingress to elevated sites, then bridge/rail-grade,
+  foundation repair/replan and cross-family HOT/COLD evidence remain.
 - V3-AUD-019's raised-route provider now treats one player support break as one bounded
   durable physical-loss set: its directly supported `ROUTE_SURFACE` is observed and
   conflicted with the `ROUTE_FOUNDATION` before Vanilla removes either block. The same

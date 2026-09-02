@@ -113,12 +113,12 @@ public final class FrontierWorldPhysicalDeltaSupport {
     static FrontierWorldState recordStructureDamage(FrontierWorldState state, StructureDamaged damage) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(damage, "structure damage");
         SettlementStructure structure = FrontierWorldStateSupport.structureById(state.bootstrap(), damage.structureId());
-        GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(structure, damage.position());
+        GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), structure, damage.position());
         if (expected == null || expected.semanticPart() != damage.semanticPart()) throw new IllegalArgumentException("observed damage is not an exact cell of its named structure");
         StructureDamage current = state.structureDamage().getOrDefault(damage.structureId(), StructureDamage.empty(damage.structureId()));
         StructureDamage nextDamage = current.record(damage.position(), damage.semanticPart(), damage.cause());
         Map<SubjectId, StructureDamage> nextDamageIndex = new LinkedHashMap<>(state.structureDamage()); nextDamageIndex.put(damage.structureId(), nextDamage);
-        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(structure) + 2) / 3;
+        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
         StructureCondition currentCondition = state.structureConditions().get(damage.structureId());
         StructureCondition nextCondition = currentCondition == StructureCondition.DESTROYED || nextDamage.cells().size() >= destructiveThreshold
                 ? StructureCondition.DESTROYED : StructureCondition.DAMAGED;

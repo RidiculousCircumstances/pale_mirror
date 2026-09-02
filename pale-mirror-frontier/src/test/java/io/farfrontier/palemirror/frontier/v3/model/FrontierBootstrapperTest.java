@@ -64,9 +64,9 @@ class FrontierBootstrapperTest {
         Settlement settlement = bootstrap.settlements().getFirst();
         int count = settlement.residents().size() + 1;
 
-        List<BlockPosition> batch = FrontierSettlementActorSlots.slots(bootstrap.bounds(), settlement.anchor(), settlement.structures(), count);
+        List<BlockPosition> batch = FrontierSettlementActorSlots.slots(bootstrap.bounds(), bootstrap.terrain(), settlement.anchor(), settlement.structures(), count);
         for (int ordinal = 0; ordinal < count; ordinal++) {
-            assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.slot(bootstrap.bounds(), settlement, ordinal));
+            assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.slot(bootstrap.bounds(), bootstrap.terrain(), settlement, ordinal));
         }
     }
 }

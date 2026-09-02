@@ -133,4 +133,68 @@ class TraversalTopologyTest {
                 "generic snapshot recovery retains the exact sparse survey rather than replacing it with a flat default");
         assertEquals(surveyed.canonicalSha256(), restored.bootstrap().canonicalSha256());
     }
+
+    @Test void fixedGridCarriagewayConsumesTheImmutableSurveyInsteadOfACodedDatum() {
+        FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:grid-terrain-flat"), 91L);
+        Settlement first = flat.settlements().getFirst();
+        BlockPosition gridColumn = new BlockPosition(first.anchor().x(), 0, first.anchor().z() + 36);
+        TerrainSurfacePlan terrain = flat.terrain().withSurveyedSupport(gridColumn.x(), gridColumn.z(), 61);
+        FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:grid-terrain-surveyed"), 91L,
+                FrontierRulesets.production(), terrain);
+
+        assertTrue(FrontierRouteNetwork.surfaceCells(surveyed, RouteTopology.initial())
+                        .contains(new BlockPosition(gridColumn.x(), 62, gridColumn.z())),
+                "the fixed-grid segment takes its datum from the surveyed column");
+    }
+
+    @Test void surveyedSettlementDatumCompilesStructureAndPublicFoundationsWithoutAFlatFallback() {
+        FrontierBootstrap flat = FrontierBootstrapper.create(new WorldId("frontier:terrain-settlement-flat"), 91L);
+        Settlement original = flat.settlements().getFirst();
+        TerrainSurfacePlan terrain = flat.terrain();
+        for (SettlementStructure structure : original.structures()) {
+            for (SurfaceAnchor surface : SettlementStructureFootprint.supportSurfaces(structure)) {
+                terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+            }
+        }
+        for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(original)) {
+            terrain = terrain.withSurveyedSupport(surface.x(), surface.z(), 67);
+        }
+        SettlementStructure lowerStructure = original.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow();
+        BlockPosition lowStructureColumn = SettlementStructureFootprint.supportSurfaces(lowerStructure).iterator().next().support();
+        terrain = terrain.withSurveyedSupport(lowStructureColumn.x(), lowStructureColumn.z(), 63);
+        BlockPosition lowPublicColumn = SettlementLocalCirculation.surfaceCells(original).stream()
+                .filter(position -> original.structures().stream().flatMap(structure -> SettlementStructureFootprint.supportSurfaces(structure).stream())
+                        .noneMatch(surface -> surface.x() == position.x() && surface.z() == position.z()))
+                .filter(position -> !FrontierRouteNetwork.surfaceCells(flat, RouteTopology.initial()).contains(position))
+                .findFirst().orElseThrow();
+        terrain = terrain.withSurveyedSupport(lowPublicColumn.x(), lowPublicColumn.z(), 63);
+
+        FrontierBootstrap surveyed = FrontierBootstrapper.create(new WorldId("frontier:terrain-settlement-surveyed"), 91L,
+                FrontierRulesets.production(), terrain);
+        Settlement settlement = surveyed.settlements().getFirst();
+        SettlementStructure housing = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow();
+        FrontierWorldState state = FrontierWorldState.initial(surveyed);
+        FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
+        BlockPosition structureFooting = new BlockPosition(lowStructureColumn.x(), 64, lowStructureColumn.z());
+        BlockPosition publicFooting = new BlockPosition(lowPublicColumn.x(), 64, lowPublicColumn.z());
+
+        assertEquals(68, settlement.anchor().y(), "the surveyed settlement selects its datum from its declared structures and public approaches");
+        assertEquals(64, surveyed.settlements().get(1).anchor().y(), "one settlement survey never shifts another site");
+        assertEquals(new GrayboxCell(structureFooting, housing.id(), GrayboxMaterial.HOUSING, GrayboxSemanticPart.FOUNDATION),
+                plan.cells().get(structureFooting), "a lower declared column has a structure-owned vertical foundation");
+        assertEquals(new GrayboxCell(publicFooting, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
+                plan.cells().get(publicFooting), "the same immutable site plan supports its public approach instead of floating it");
+        SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
+        assertEquals(68, SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).exteriorApproachSurface().y(),
+                "facility ports retain the site datum instead of a separate flat access convention");
+        assertTrue(FrontierTraversalPlan.compile(state).facilities().containsKey(infirmary.id()),
+                "the terrain-aware facility remains bound to its one canonical public topology");
+
+        FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(structureFooting, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(housing.id()), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
+        assertEquals(StructureCondition.DAMAGED, damaged.structureConditions().get(housing.id()),
+                "foundation loss is a structural consequence, not a materializer-local hole");
+        assertEquals(damaged, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged)),
+                "the distinct facility datum, footing loss and consequence survive recovery");
+    }
 }

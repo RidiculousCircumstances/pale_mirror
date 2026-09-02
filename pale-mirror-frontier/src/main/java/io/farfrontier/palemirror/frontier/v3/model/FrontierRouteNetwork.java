@@ -117,12 +117,12 @@ public final class FrontierRouteNetwork {
         for (int index = 0; index < settlements.size(); index++) {
             Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
             int laneZ = anchor.z() + 36; int laneX = anchor.x() + 36;
-            addCarriagewaySegment(cells, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ));
-            addCarriagewaySegment(cells, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ));
-            if (index % 4 != 3) addCarriagewaySegment(cells, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ));
-            if (index < 8) addCarriagewaySegment(cells, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36));
+            addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ));
+            addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ));
+            if (index % 4 != 3) addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ));
+            if (index < 8) addCarriagewaySegment(cells, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36));
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
@@ -155,12 +155,12 @@ public final class FrontierRouteNetwork {
         for (int index = 0; index < settlements.size(); index++) {
             Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
             int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            if (onCarriagewaySegment(position, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ))
-                    || onCarriagewaySegment(position, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ))
-                    || index % 4 != 3 && onCarriagewaySegment(position, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ))
-                    || index < 8 && onCarriagewaySegment(position, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36))) return true;
+            if (onCarriagewaySegment(position, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ))
+                    || onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ))
+                    || index % 4 != 3 && onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ))
+                    || index < 8 && onCarriagewaySegment(position, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
@@ -184,12 +184,12 @@ public final class FrontierRouteNetwork {
         for (int index = 0; index < settlements.size(); index++) {
             Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
             int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ)));
-            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ)));
+            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ)));
+            highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ)));
             if (index % 4 != 3) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
-                    new BlockPosition(laneX, 64, laneZ), new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ)));
+                    surveyedGridSurface(bootstrap, laneX, laneZ), surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ)));
             if (index < 8) highest = Math.max(highest, surfaceYAtCarriagewayColumn(x, z,
-                    new BlockPosition(laneX, 64, laneZ), new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36)));
+                    surveyedGridSurface(bootstrap, laneX, laneZ), surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36)));
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
@@ -215,12 +215,12 @@ public final class FrontierRouteNetwork {
         for (int index = 0; index < settlements.size(); index++) {
             Settlement settlement = settlements.get(index); BlockPosition anchor = settlement.anchor();
             int laneZ = anchor.z() + 36, laneX = anchor.x() + 36;
-            if (supportsFoundationAt(position, terrain, new BlockPosition(anchor.x(), 64, laneZ), new BlockPosition(laneX, 64, laneZ))
-                    || supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, anchor.z()), new BlockPosition(laneX, 64, laneZ))
-                    || index % 4 != 3 && supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(settlements.get(index + 1).anchor().x() + 36, 64, laneZ))
-                    || index < 8 && supportsFoundationAt(position, terrain, new BlockPosition(laneX, 64, laneZ),
-                    new BlockPosition(laneX, 64, settlements.get(index + 4).anchor().z() + 36))) return true;
+            if (supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, anchor.x(), laneZ), surveyedGridSurface(bootstrap, laneX, laneZ))
+                    || supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, anchor.z()), surveyedGridSurface(bootstrap, laneX, laneZ))
+                    || index % 4 != 3 && supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, settlements.get(index + 1).anchor().x() + 36, laneZ))
+                    || index < 8 && supportsFoundationAt(position, terrain, surveyedGridSurface(bootstrap, laneX, laneZ),
+                    surveyedGridSurface(bootstrap, laneX, settlements.get(index + 4).anchor().z() + 36))) return true;
         }
         for (Settlement settlement : settlements) {
             List<BlockPosition> supply = topology.supplyWaypoints(bootstrap, settlement.id());
@@ -362,6 +362,11 @@ public final class FrontierRouteNetwork {
     private static boolean supportsFoundationAt(BlockPosition position, int terrain, BlockPosition from, BlockPosition to) {
         int surfaceY = surfaceYAtCarriagewayColumn(position.x(), position.z(), from, to);
         return surfaceY != Integer.MIN_VALUE && position.y() < surfaceY && position.y() > terrain;
+    }
+
+    /** One bootstrap-owned surface datum for a fixed-grid junction; never a Minecraft height query. */
+    private static BlockPosition surveyedGridSurface(FrontierBootstrap bootstrap, int x, int z) {
+        return new BlockPosition(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z);
     }
 
     /** Returns the deck elevation at one carriageway column, or a sentinel when it is outside. */

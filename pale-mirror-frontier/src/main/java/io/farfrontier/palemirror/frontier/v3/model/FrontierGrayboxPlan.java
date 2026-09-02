@@ -47,7 +47,7 @@ public final class FrontierGrayboxPlan {
         Objects.requireNonNull(state, "state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
-                addStructure(cells, structure, state.structureConditions().get(structure.id()))));
+                addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         addRoutes(cells, state.bootstrap(), state.routeTopology());
@@ -121,7 +121,7 @@ public final class FrontierGrayboxPlan {
         Objects.requireNonNull(state, "body geometry state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
-                addStructure(cells, structure, state.structureConditions().get(structure.id()))));
+                addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
@@ -143,7 +143,7 @@ public final class FrontierGrayboxPlan {
         Objects.requireNonNull(state, "state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
-                addStructure(cells, structure, state.structureConditions().get(structure.id()))));
+                addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
@@ -170,7 +170,7 @@ public final class FrontierGrayboxPlan {
             // With no aftermath, the small grid-cell candidate query is already an exact contact
             // answer; do not perform one sparse-map lookup for every wall and roof block.
             if (state.physicalDeltas().isEmpty()) return true;
-            if (visitStructureCells(structure, condition, (position, ignored) ->
+            if (visitStructureCells(state.bootstrap().terrain(), structure, condition, (position, ignored) ->
                     candidates.contains(InfectionCell.at(position)) && !state.physicalDeltas().containsKey(position))) return true;
         }
         return false;
@@ -185,7 +185,7 @@ public final class FrontierGrayboxPlan {
     private static Set<InfectionCell> infectedStructureCells(FrontierWorldState state, SettlementStructure structure,
                                                               StructureCondition condition) {
         if (condition == StructureCondition.DESTROYED) return Set.of();
-        int width = structureWidth(structure.kind()), depth = structureDepth(structure.kind());
+        int width = SettlementStructureFootprint.width(structure.kind()), depth = SettlementStructureFootprint.depth(structure.kind());
         int minX = structure.anchor().x() - width / 2, maxX = structure.anchor().x() + (width - 1) / 2;
         int minZ = structure.anchor().z() - depth / 2, maxZ = structure.anchor().z() + (depth - 1) / 2;
         Set<InfectionCell> candidates = new LinkedHashSet<>();
@@ -218,17 +218,17 @@ public final class FrontierGrayboxPlan {
     }
 
     /** Full intact geometry, used to validate observed damage after the desired silhouette changes. */
-    public static GrayboxCell intactStructureCell(SettlementStructure structure, BlockPosition position) {
-        Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(position, "position");
+    public static GrayboxCell intactStructureCell(TerrainSurfacePlan terrain, SettlementStructure structure, BlockPosition position) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structure, "structure"); Objects.requireNonNull(position, "position");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        addStructure(cells, structure, StructureCondition.INTACT);
+        addStructure(cells, terrain, structure, StructureCondition.INTACT);
         return cells.get(position);
     }
 
-    public static int intactStructureCellCount(SettlementStructure structure) {
-        Objects.requireNonNull(structure, "structure");
+    public static int intactStructureCellCount(TerrainSurfacePlan terrain, SettlementStructure structure) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structure, "structure");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        addStructure(cells, structure, StructureCondition.INTACT);
+        addStructure(cells, terrain, structure, StructureCondition.INTACT);
         return cells.size();
     }
 
@@ -237,10 +237,10 @@ public final class FrontierGrayboxPlan {
      * Bootstrap placement and later births deliberately use this same authoritative geometry
      * rather than re-deriving a partial footprint for every candidate coordinate.
      */
-    static java.util.Set<BlockPosition> intactStructureOccupancy(java.util.List<SettlementStructure> structures) {
-        Objects.requireNonNull(structures, "structures");
+    static java.util.Set<BlockPosition> intactStructureOccupancy(TerrainSurfacePlan terrain, java.util.List<SettlementStructure> structures) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(structures, "structures");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
-        structures.forEach(structure -> addStructure(cells, structure, StructureCondition.INTACT));
+        structures.forEach(structure -> addStructure(cells, terrain, structure, StructureCondition.INTACT));
         return java.util.Set.copyOf(cells.keySet());
     }
 
@@ -273,11 +273,20 @@ public final class FrontierGrayboxPlan {
         Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(constructions, "route constructions");
         Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
-            if (structure.id().equals(owner)) return intactStructureCell(structure, position);
+            if (structure.id().equals(owner)) return intactStructureCell(bootstrap.terrain(), structure, position);
         }
         for (HiveOrgan organ : bootstrap.hive().organs()) if (organ.id().equals(owner)) return intactOrganCell(organ, position);
         HiveOrgan added = colony.addedOrgans().get(owner);
         if (added != null) return intactOrganCell(added, position);
+        for (Settlement settlement : bootstrap.settlements()) {
+            if (!settlement.id().equals(owner)) continue;
+            if (SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement).contains(position)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+            }
+            if (SettlementLocalCirculation.surfaceCells(settlement).contains(position)) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+            }
+        }
         if (FrontierRouteNetwork.OWNER.equals(owner)) {
             if (FrontierRouteNetwork.isSurfaceCell(bootstrap, topology, position)) {
                 return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
@@ -308,22 +317,26 @@ public final class FrontierGrayboxPlan {
         return cells.get(position);
     }
 
-    private static void addStructure(Map<BlockPosition, GrayboxCell> cells, SettlementStructure structure, StructureCondition condition) {
+    private static void addStructure(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
         GrayboxMaterial material = switch (structure.kind()) {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
             case WORKSHOP -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
-        visitStructureCells(structure, condition, (position, part) -> {
+        visitStructureCells(terrain, structure, condition, (position, part) -> {
             add(cells, position, structure.id(), material, part);
             return false;
         });
     }
 
     /** Iterates precisely the semantic cells used by materialization, stopping on visitor demand. */
-    private static boolean visitStructureCells(SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
+    private static boolean visitStructureCells(TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
         if (condition == StructureCondition.DESTROYED) return false;
-        int width = structureWidth(structure.kind());
-        int depth = structureDepth(structure.kind());
+        GrayboxSemanticPart foundation = GrayboxSemanticPart.FOUNDATION;
+        for (BlockPosition footing : SettlementStructureFootprint.foundationFill(terrain, structure)) {
+            if (visitor.visit(footing, foundation)) return true;
+        }
+        int width = SettlementStructureFootprint.width(structure.kind());
+        int depth = SettlementStructureFootprint.depth(structure.kind());
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
         };
@@ -357,18 +370,6 @@ public final class FrontierGrayboxPlan {
         return false;
     }
 
-    private static int structureWidth(StructureKind kind) {
-        return switch (kind) {
-            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, INFIRMARY -> 7; case HOUSING -> 6;
-        };
-    }
-
-    private static int structureDepth(StructureKind kind) {
-        return switch (kind) {
-            case HALL, FARM, WORKSHOP, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
-        };
-    }
-
     private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, HiveOrgan organ) {
         GrayboxMaterial material = switch (organ.kind()) {
             case HEART -> GrayboxMaterial.HIVE_HEART; case BROOD -> GrayboxMaterial.HIVE_BROOD; case STORE -> GrayboxMaterial.HIVE_STORE;
@@ -383,8 +384,15 @@ public final class FrontierGrayboxPlan {
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
         FrontierRouteNetwork.RouteFootprint footprint = FrontierRouteNetwork.footprint(bootstrap, topology);
-        footprint.foundationCells().forEach(position ->
-                add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION));
+        footprint.foundationCells().forEach(position -> {
+            if (!cells.containsKey(position)) add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+        });
+        for (Settlement settlement : bootstrap.settlements()) {
+            for (BlockPosition foundation : SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement)) {
+                if (cells.containsKey(foundation)) continue;
+                add(cells, foundation, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+            }
+        }
         footprint.surfaceCells().forEach(position -> {
             GrayboxCell existing = cells.get(position);
             // A Hall's declared sill is the one intentional seam where the public carriageway

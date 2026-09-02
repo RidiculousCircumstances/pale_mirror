@@ -149,7 +149,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 .filter(cell -> cell.ownerId().equals(structure.id())).sorted(java.util.Comparator
                         .comparingInt((GrayboxCell cell) -> cell.position().x()).thenComparingInt(cell -> cell.position().y())
                         .thenComparingInt(cell -> cell.position().z())).toList();
-        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(structure) + 2) / 3;
+        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
         StructureDamaged first = new StructureDamaged(structure.id(), cells.getFirst().position(), cells.getFirst().semanticPart(), "player:test");
         state = state.recordStructureDamage(first);
         assertEquals(StructureCondition.DAMAGED, state.structureConditions().get(structure.id()));

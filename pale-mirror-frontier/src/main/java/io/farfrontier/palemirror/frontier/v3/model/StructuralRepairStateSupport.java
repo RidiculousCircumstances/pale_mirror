@@ -49,7 +49,7 @@ final class StructuralRepairStateSupport {
         if (repairedDamage == null || repairedDamage.cells().isEmpty()) nextDamage.remove(current.causeSubjectId());
         else nextDamage.put(current.causeSubjectId(), repairedDamage);
         SettlementStructure structure = FrontierWorldStateSupport.structureById(state.bootstrap(), current.causeSubjectId());
-        int threshold = (FrontierGrayboxPlan.intactStructureCellCount(structure) + 2) / 3;
+        int threshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
         StructureCondition condition = repairedDamage != null && repairedDamage.cells().size() >= threshold ? StructureCondition.DESTROYED
                 : repairedDamage != null && !repairedDamage.cells().isEmpty() ? StructureCondition.DAMAGED : StructureCondition.INTACT;
         Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(structure.id(), condition);

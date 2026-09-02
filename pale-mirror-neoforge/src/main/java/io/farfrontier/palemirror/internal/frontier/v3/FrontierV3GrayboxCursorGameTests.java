@@ -119,6 +119,28 @@ public final class FrontierV3GrayboxCursorGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void surveyedFacilityFoundationSupportsItsRaisedPublicApproach(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos footing = helper.absolutePos(new BlockPos(26, 8, 4)); BlockPos sill = footing.above();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        GrayboxCell foundation = new GrayboxCell(new BlockPosition(footing.getX(), footing.getY(), footing.getZ()),
+                new SubjectId("structure:surveyed-infirmary"), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.FOUNDATION);
+        GrayboxCell publicSill = new GrayboxCell(new BlockPosition(sill.getX(), sill.getY(), sill.getZ()),
+                new SubjectId("settlement:surveyed"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, publicSill), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "a higher facility approach must not float before its immutable footing is physically present");
+        level.setBlock(footing.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, foundation), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the terrain compiler's facility footing is normal owned materialization, not player scaffolding");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, publicSill), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the public approach may materialize only over that exact claimed facility support");
+        helper.assertTrue(level.getBlockState(footing).is(Blocks.PINK_CONCRETE) && level.getBlockState(sill).is(Blocks.GRAY_CARPET)
+                        && ledger.claim(footing) != null && ledger.claim(sill) != null,
+                "the elevated facility and approach retain distinguishable physical provenance at their distinct datums");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void raisedRouteSupportBreakPreparesItsVanillaDependentDeckAsOneBoundedLossSet(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos foundation = helper.absolutePos(new BlockPos(28, 8, 0));

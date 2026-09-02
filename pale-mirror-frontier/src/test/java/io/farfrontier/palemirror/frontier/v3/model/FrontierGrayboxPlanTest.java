@@ -133,7 +133,7 @@ class FrontierGrayboxPlanTest {
                     plan.cells().get(port.assemblyFloor()), "Hall-owned sill must win the declared public-route seam");
             port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
                     "Hall throat must retain two body-clear cells: " + hall.id()));
-            assertEquals(FrontierGrayboxPlan.intactStructureCell(hall, port.assemblyFloor()), plan.cells().get(port.assemblyFloor()));
+            assertEquals(FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), hall, port.assemblyFloor()), plan.cells().get(port.assemblyFloor()));
         });
     }
 

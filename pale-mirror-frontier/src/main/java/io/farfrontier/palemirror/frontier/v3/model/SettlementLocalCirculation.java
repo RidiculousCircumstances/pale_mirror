@@ -20,9 +20,14 @@ public final class SettlementLocalCirculation {
 
     public static List<SurfaceAnchor> infirmarySidewalk(Settlement settlement) {
         Objects.requireNonNull(settlement, "settlement");
-        SettlementStructure hall = settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
+        return infirmarySidewalk(settlement.structures());
+    }
+
+    static List<SurfaceAnchor> infirmarySidewalk(List<SettlementStructure> structures) {
+        structures = List.copyOf(Objects.requireNonNull(structures, "settlement structures"));
+        SettlementStructure hall = structures.stream().filter(value -> value.kind() == StructureKind.HALL)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no Hall"));
-        SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
+        SettlementStructure infirmary = structures.stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no infirmary"));
         SurfaceAnchor publicRoute = SettlementAccessPort.forHall(hall).routeSurface();
         SurfaceAnchor exterior = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).exteriorApproachSurface();
@@ -30,7 +35,7 @@ public final class SettlementLocalCirculation {
     }
 
     public static TraversalTopology topology(Settlement settlement) {
-        List<List<SurfaceAnchor>> branches = circulationBranches(settlement);
+        List<List<SurfaceAnchor>> branches = circulationBranches(settlement.structures());
         long revision = revision(branches.stream().flatMap(List::stream).toList());
         Map<TraversalNodeId, SurfaceAnchor> nodes = new LinkedHashMap<>();
         Map<String, TraversalTopology.Edge> edges = new LinkedHashMap<>();
@@ -47,17 +52,36 @@ public final class SettlementLocalCirculation {
 
     public static Set<BlockPosition> surfaceCells(Settlement settlement) {
         LinkedHashSet<BlockPosition> cells = new LinkedHashSet<>();
-        circulationBranches(settlement).forEach(branch -> branch.forEach(surface -> cells.add(surface.support())));
+        circulationBranches(settlement.structures()).forEach(branch -> branch.forEach(surface -> cells.add(surface.support())));
         return java.util.Collections.unmodifiableSet(cells);
     }
 
-    private static List<List<SurfaceAnchor>> circulationBranches(Settlement settlement) {
-        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+    static Set<BlockPosition> surfaceCells(List<SettlementStructure> structures) {
+        LinkedHashSet<BlockPosition> cells = new LinkedHashSet<>();
+        circulationBranches(structures).forEach(branch -> branch.forEach(surface -> cells.add(surface.support())));
+        return java.util.Collections.unmodifiableSet(cells);
+    }
+
+    /** Settlement-owned fill under its compiled public pedestrian surfaces. */
+    static Set<BlockPosition> foundationCells(TerrainSurfacePlan terrain, Settlement settlement) {
+        Objects.requireNonNull(terrain, "terrain"); Objects.requireNonNull(settlement, "settlement");
+        LinkedHashSet<BlockPosition> fill = new LinkedHashSet<>();
+        for (BlockPosition surface : surfaceCells(settlement)) {
+            int terrainY = terrain.supportYAt(surface.x(), surface.z());
+            if (terrainY >= surface.y()) throw new IllegalArgumentException("surveyed terrain occupies or exceeds public surface at " + surface);
+            for (int y = terrainY + 1; y < surface.y(); y++) fill.add(new BlockPosition(surface.x(), y, surface.z()));
+        }
+        return Set.copyOf(fill);
+    }
+
+    private static List<List<SurfaceAnchor>> circulationBranches(List<SettlementStructure> structures) {
+        structures = List.copyOf(Objects.requireNonNull(structures, "settlement structures"));
+        SettlementStructure depot = structures.stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no depot"));
-        SurfaceAnchor publicRoute = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
+        SurfaceAnchor publicRoute = SettlementAccessPort.forHall(structures.stream().filter(value -> value.kind() == StructureKind.HALL)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no Hall"))).routeSurface();
         SurfaceAnchor depotExterior = SettlementDepotServicePort.forDepot(depot).exteriorApproach();
-        return List.of(infirmarySidewalk(settlement), manhattanWithFinalGrade(publicRoute, depotExterior));
+        return List.of(infirmarySidewalk(structures), manhattanWithFinalGrade(publicRoute, depotExterior));
     }
 
     private static TraversalNodeId node(SurfaceAnchor surface) {
