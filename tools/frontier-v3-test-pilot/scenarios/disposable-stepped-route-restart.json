@@ -7,7 +7,7 @@
   "setup": [
     { "type": "command", "command": "/gamemode creative PMTestPilot" },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-      { "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
+      { "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "supplyPassable": true, "gradedEdges": 4, "maximumGrade": 1,
         "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } } }
     ] },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -375, "y": 70, "z": -347 }, "settleMs": 1500 }
@@ -21,21 +21,32 @@
     { "type": "wait_until_block", "position": { "x": -373, "y": 65, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
     { "type": "look", "at": { "x": -372, "y": 66, "z": -343 } },
     { "type": "assert_visible_block", "position": { "x": -372, "y": 66, "z": -343 }, "timeoutMs": 30000 },
-    { "type": "wait_until_block", "position": { "x": -372, "y": 66, "z": -343 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
-    { "type": "wait_until_diagnostic", "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
+    { "type": "break", "position": { "x": -372, "y": 65, "z": -343 } },
+    { "type": "wait_until_block", "position": { "x": -372, "y": 65, "z": -343 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_block", "position": { "x": -372, "y": 66, "z": -343 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "-372,65,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_FOUNDATION", "causeKind": "PLAYER" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "-372,66,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_SURFACE", "causeKind": "PLAYER" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "supplyPassable": false, "gradedEdges": 4, "maximumGrade": 1,
       "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "physical_delta", "id": "-372,65,-343" },
+    { "type": "inspect", "view": "physical_delta", "id": "-372,66,-343" },
     { "type": "inspect", "view": "route_topology", "id": "settlement:1" }
   ],
   "assertions": [
-    { "after": 10, "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "gradedEdges": 4, "maximumGrade": 1,
-      "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } } }
+    { "after": 12, "view": "physical_delta", "id": "-372,65,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_FOUNDATION", "causeKind": "PLAYER" } },
+    { "after": 13, "view": "physical_delta", "id": "-372,66,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_SURFACE", "causeKind": "PLAYER" } },
+    { "after": 14, "view": "route_topology", "id": "settlement:1", "expect": { "status": "ok", "supplyPassable": false, "gradedEdges": 4, "maximumGrade": 1,
+      "firstGrade": { "from": { "x": -370, "y": 64, "z": -343 }, "to": { "x": -371, "y": 65, "z": -343 } } } },
+    { "after": 15, "view": "physical_delta", "id": "-372,65,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_FOUNDATION", "causeKind": "PLAYER" } },
+    { "after": 16, "view": "physical_delta", "id": "-372,66,-343", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "route:frontier-network", "semanticPart": "ROUTE_SURFACE", "causeKind": "PLAYER" } }
   ],
   "frames": [
-    { "after": 8, "name": "northwatch-provider-owned-route-grade" }
+    { "after": 7, "name": "northwatch-provider-owned-route-grade" },
+    { "after": 10, "name": "northwatch-broken-route-foundation-and-deck" }
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 8,
+    "afterAction": 13,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -375, "y": 70, "z": -347 }, "settleMs": 1500 }
     ]

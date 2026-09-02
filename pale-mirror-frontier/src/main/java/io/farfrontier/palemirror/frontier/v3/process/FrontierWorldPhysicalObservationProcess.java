@@ -39,6 +39,32 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.recordPhysicalDelta(observed.delta());
     }
 
+    static CommandPlan plan(FrontierWorldState state, PhysicalDeltasObserved observed, long submittedAt) {
+        FrontierWorldState after;
+        try { after = FrontierWorldPhysicalDeltaSupport.recordAll(state, observed.deltas()); }
+        catch (IllegalArgumentException invalid) {
+            return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
+        }
+        List<ProposedEvent> events = new ArrayList<>();
+        events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
+        if (observed.deltas().stream().anyMatch(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)) {
+            for (Settlement settlement : after.bootstrap().settlements()) {
+                if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
+                    PhysicalDelta cause = observed.deltas().stream().filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss).findFirst().orElseThrow();
+                    var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), cause.position(), "loss", Math.addExact(submittedAt, 1L));
+                    events.add(new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(reconsideration)));
+                }
+            }
+        }
+        return new CommandPlan.Accepted(List.copyOf(events));
+    }
+
+    static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                     PhysicalDeltasObserved observed) {
+        if (!subject.equals(FrontierExecutionSubjects.PHYSICAL_EXECUTOR)) throw new IllegalArgumentException("physical delta lacks trusted executor subject");
+        return FrontierWorldPhysicalDeltaSupport.recordAll(state, observed.deltas());
+    }
+
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();

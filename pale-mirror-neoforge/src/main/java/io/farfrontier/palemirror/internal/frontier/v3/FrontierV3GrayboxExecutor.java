@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -14,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltasObserved;
 import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
@@ -89,19 +91,22 @@ final class FrontierV3GrayboxExecutor {
     static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
                                                    BlockPos position, String cause) {
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        Optional<PhysicalDeltaObserved> observed = preparePhysicalDelta(level, ledger, position, cause);
+        Optional<List<PhysicalDelta>> observed = preparePhysicalDeltas(level, ledger, position, cause);
         if (observed.isEmpty()) return BlockBreakObservation.UNMANAGED;
         try {
             io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-            CommandId id = new CommandId("executor:physical-delta-r" + checkpoint.revision().value() + "-p" + position.asLong());
+            List<PhysicalDelta> deltas = observed.orElseThrow();
+            CommandId id = new CommandId("executor:physical-delta-r" + checkpoint.revision().value() + "-p" + position.asLong() + "-n" + deltas.size());
+            FrontierPayload payload = deltas.size() == 1 ? new PhysicalDeltaObserved(deltas.getFirst()) : new PhysicalDeltasObserved(deltas);
             CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), observed.orElseThrow()))
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload))
                     .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
-            PhysicalDelta delta = observed.orElseThrow().delta();
-            FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.physicalDeltaCorrelation(delta.position()),
-                    "physical_delta_observed", delta.ownerId().orElseThrow(), result);
-            ledger.conflict(position); // revoke desired-state authority immediately before Minecraft mutates the block
+            for (PhysicalDelta delta : deltas) {
+                FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.physicalDeltaCorrelation(delta.position()),
+                        deltas.size() == 1 ? "physical_delta_observed" : "physical_deltas_observed", delta.ownerId().orElseThrow(), result);
+                ledger.conflict(toMinecraft(delta.position())); // revoke every affected desired-state claim before Minecraft mutates the support
+            }
             return BlockBreakObservation.ACCEPTED;
         } catch (RuntimeException failed) {
             return BlockBreakObservation.REJECTED;
@@ -130,6 +135,38 @@ final class FrontierV3GrayboxExecutor {
                 new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ()),
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner())),
                 Optional.of(part), cause)));
+    }
+
+    /**
+     * Resolves the bounded immediate Minecraft-survival consequences of one owned break before
+     * the initiating block mutates.  This is a provider rule, not a route-coordinate exception:
+     * it maps immutable semantic claims to the current NeoForge palette's real support rule.
+     */
+    static Optional<List<PhysicalDelta>> preparePhysicalDeltas(ServerLevel level, FrontierV3GrayboxLedger ledger,
+                                                                 BlockPos position, String cause) {
+        Optional<PhysicalDeltaObserved> direct = preparePhysicalDelta(level, ledger, position, cause);
+        if (direct.isEmpty()) return Optional.empty();
+        List<PhysicalDelta> deltas = new ArrayList<>();
+        deltas.add(direct.orElseThrow().delta());
+        BlockPos above = position.above();
+        FrontierV3GrayboxLedger.Claim dependent = ledger.claim(above);
+        if (dependent != null && !dependent.conflicted() && losesMinecraftSurvivalWithBelowRemoved(dependent, above, position)) {
+            preparePhysicalDelta(level, ledger, above, cause + ":survival-after:" + position.asLong())
+                    .map(PhysicalDeltaObserved::delta).ifPresent(deltas::add);
+        }
+        return Optional.of(List.copyOf(deltas));
+    }
+
+    /**
+     * Current graybox's route deck is a carpet on an owned raised-route footing.  Keeping this
+     * palette rule at the physical-provider boundary makes all real vanilla survival cascades
+     * explicit while the pure topology continues to own only semantic support/deck cells.
+     */
+    private static boolean losesMinecraftSurvivalWithBelowRemoved(FrontierV3GrayboxLedger.Claim claim, BlockPos dependent,
+                                                                   BlockPos removedSupport) {
+        return dependent.below().equals(removedSupport)
+                && claim.material().equals(GrayboxMaterial.ROUTE.name())
+                && claim.semanticPart().equals(GrayboxSemanticPart.ROUTE_SURFACE.name());
     }
 
     /** Converts only a still-owned exact cell into canonical evidence and terminally retires its claim. */
@@ -247,6 +284,9 @@ final class FrontierV3GrayboxExecutor {
     }
     private static BlockPos toMinecraft(GrayboxCell cell) {
         return new BlockPos(cell.position().x(), cell.position().y(), cell.position().z());
+    }
+    private static BlockPos toMinecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+        return new BlockPos(position.x(), position.y(), position.z());
     }
 
     /**

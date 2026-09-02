@@ -209,6 +209,45 @@ class RouteTopologyTest {
     }
 
     @Test
+    void routeCutoverRetainsTerminalPatrolEvidenceButNeverPermitsAStaleActivePatrol() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-cutover-patrol-history"), 97L);
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        Settlement settlement = bootstrap.settlements().getFirst();
+        List<BlockPosition> baseline = state.routeTopology().supplyWaypoints(bootstrap, settlement.id());
+        List<BlockPosition> replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(-10, 0, 0),
+                baseline.get(2).offset(-10, 0, 0), baseline.get(2), baseline.get(3), baseline.get(4));
+        ResidentProfile guard = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id()))
+                .filter(resident -> resident.profession() == ResidentProfession.SECURITY_WORKER).findFirst().orElseThrow();
+        SubjectId patrolTask = new SubjectId("task:cutover-patrol");
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:cutover-patrol"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(patrolTask, objective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
+        RoutePatrol active = new RoutePatrol(patrolTask, settlement.id(), guard.id(), baseline, 1, RoutePatrolStatus.EN_ROUTE, Optional.empty());
+        StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(active)
+                .confirmPatrolObstruction(patrolTask, baseline.get(1)).transitionTask(patrolTask, StrategicTaskStatus.COMPLETED);
+        RoutePatrol terminal = plans.routePatrols().get(patrolTask);
+        state = state.withStrategicPlans(plans);
+        int required = FrontierRouteNetwork.constructionCells(bootstrap, state.routeTopology(), settlement.id(), replacement).size();
+        RouteConstruction ready = new RouteConstruction(new SubjectId("construction:cutover-patrol"), settlement.id(), replacement, required,
+                RouteConstructionStatus.READY);
+
+        FrontierWorldState cutOver = RouteConstructionStateSupport.cutover(RouteConstructionStateSupport.begin(state, ready), ready.id());
+        assertEquals(terminal, cutOver.strategicPlans().routePatrols().get(patrolTask));
+        assertEquals(cutOver, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(cutOver)),
+                "the completed patrol is historical evidence and must survive route-replacement recovery");
+
+        RoutePatrol staleActive = new RoutePatrol(patrolTask, settlement.id(), guard.id(), baseline, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> cutOver.withStrategicPlans(StrategicPlanState.empty().addObjective(
+                new StrategicObjective(new SubjectId("objective:stale-patrol"), settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
+                        Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE)).addTask(
+                new StrategicTask(patrolTask, new SubjectId("objective:stale-patrol"), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
+                        Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE)).startPatrol(staleActive)),
+                "only active navigation is required to equal the current topology");
+    }
+
+    @Test
     void observedRouteLossDeterministicallyStartsACanonicalPassableBypass() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-reroute"), 97L);
         SubjectId settlement = bootstrap.settlements().getFirst().id(); List<BlockPosition> baseline = FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement);

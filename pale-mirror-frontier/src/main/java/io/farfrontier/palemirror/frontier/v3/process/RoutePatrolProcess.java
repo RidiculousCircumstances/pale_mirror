@@ -66,6 +66,10 @@ public final class RoutePatrolProcess {
         if (!subject.equals(patrol.settlementId()) || !task.ownerId().equals(subject) || state.strategicPlans().routePatrols().containsKey(patrol.taskId())) {
             throw new IllegalArgumentException("route patrol start has a foreign owner or duplicate task");
         }
+        if (patrol.status() != RoutePatrolStatus.EN_ROUTE
+                || !patrol.route().equals(state.routeTopology().supplyWaypoints(state.bootstrap(), patrol.settlementId()))) {
+            throw new IllegalArgumentException("route patrol start must retain the current canonical route");
+        }
         FrontierWorldState next = state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
         for (SubjectId member : patrol.memberIds()) next = next.withActorBody(member, BodyPosition.above(new SurfaceAnchor(patrol.route().getFirst())));
         return next;

@@ -183,6 +183,21 @@ evidence must alter availability, then HOT/COLD/restart recovery must prove the
 same edge without a hidden sidestep. Only then may this route-return scenario
 also become T0.4 evidence rather than a presentation of the old ambiguity.
 
+The current raised-route provider closes a narrower but real physical-causality gap in
+that foundation: destroying an owned `ROUTE_FOUNDATION` also makes its owned carpet
+deck disappear through Vanilla survival rules. The observer now derives one bounded
+atomic loss set from the provider palette before the initiating block mutates, persists
+both semantic losses in the same command/transaction, and conflicts both desired-state
+claims together. A restart retains both deltas and the blocked topology; it never
+reprojects the carpet over a missing footing. A terminal patrol is correspondingly
+historical evidence of the topology that it actually inspected, while only an
+`EN_ROUTE` patrol must equal the current topology after a bypass cutover. The native
+`disposable-stepped-route-restart` scenario proves ordinary player support break,
+both physical-delta diagnostics and one graceful restart; its trace records the two
+coordinates under one physical-observation command. This is a bounded provider rule,
+not a coordinate exception, and does not close the remaining non-flat/bridge/rail and
+HOT/COLD exit gates.
+
 ### V3-AUD-017 — route people are encoded as a historical pair, not an exact unit
 
 The accepted human-capability contract distinguishes exact crew members from

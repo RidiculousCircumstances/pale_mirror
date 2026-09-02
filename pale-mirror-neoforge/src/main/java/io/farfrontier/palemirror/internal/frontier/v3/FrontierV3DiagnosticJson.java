@@ -384,10 +384,12 @@ final class FrontierV3DiagnosticJson {
         var topology = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement);
         var grades = topology.edges().stream().filter(edge -> edge.grade() > 0).toList();
         int maximumGrade = grades.stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.TraversalTopology.Edge::grade).max().orElse(0);
+        boolean supplyPassable = state.routeTopology().supplyPassable(state.bootstrap(), settlement);
         String firstGrade = grades.isEmpty() ? "null" : "{\"from\":" + position(topology.nodes().get(grades.getFirst().from()).support())
                 + ",\"to\":" + position(topology.nodes().get(grades.getFirst().to()).support()) + "}";
         return base("route_topology", id, checkpoint) + ",\"status\":\"ok\",\"topology\":\"" + quote(topology.id().value())
                 + "\",\"revision\":" + topology.revision() + ",\"nodes\":" + topology.nodes().size() + ",\"edges\":" + topology.edges().size()
+                + ",\"supplyPassable\":" + supplyPassable
                 + ",\"gradedEdges\":" + grades.size() + ",\"maximumGrade\":" + maximumGrade + ",\"firstGrade\":" + firstGrade + "}";
     }
 

@@ -118,6 +118,31 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void raisedRouteSupportBreakPreparesItsVanillaDependentDeckAsOneBoundedLossSet(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos foundation = helper.absolutePos(new BlockPos(28, 8, 0));
+        BlockPos deck = foundation.above();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        level.setBlock(foundation.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, routeFoundation(foundation)), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the raised route must first own its support");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, routeSurface(deck)), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "the route deck must be an owned physical dependent, not scenery");
+
+        var observed = FrontierV3GrayboxExecutor.preparePhysicalDeltas(level, ledger, foundation, "player:test").orElseThrow();
+        helper.assertValueEqual(observed.size(), 2, "breaking one raised support must durably prepare both the direct and vanilla-survival loss");
+        helper.assertTrue(observed.getFirst().position().equals(new BlockPosition(foundation.getX(), foundation.getY(), foundation.getZ()))
+                        && observed.get(1).position().equals(new BlockPosition(deck.getX(), deck.getY(), deck.getZ()))
+                        && ledger.claim(foundation) != null && !ledger.claim(foundation).conflicted()
+                        && ledger.claim(deck) != null && !ledger.claim(deck).conflicted(),
+                "preparation has no repair or world-write authority before the durable command accepts");
+        level.destroyBlock(foundation, false);
+        helper.assertTrue(level.getBlockState(deck).isAir(),
+                "Minecraft removes the unsupported carpet, so it must already be included in the same canonical observation");
+        helper.succeed();
+    }
+
     private static GrayboxCell cell(int x, int y, int z, String owner) {
         return new GrayboxCell(new BlockPosition(x, y, z), new SubjectId(owner), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
     }

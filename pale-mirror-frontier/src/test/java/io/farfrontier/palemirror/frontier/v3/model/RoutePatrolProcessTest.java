@@ -40,7 +40,7 @@ class RoutePatrolProcessTest {
 
     @Test
     void activePatrolGuardCannotBeReassignedToAConcurrentSupplyOperation() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-claim"), 713L));
+        FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(new WorldId("frontier:patrol-claim"), 713L).initialState();
         Settlement settlement = state.bootstrap().settlements().getFirst();
         java.util.List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
         SubjectId guard = guards.getFirst().id(), scout = guards.get(1).id();
@@ -53,6 +53,9 @@ class RoutePatrolProcessTest {
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startPatrol(new RoutePatrol(taskId, settlement.id(), RouteUnitManifest.patrol(taskId, guard, java.util.List.of(scout)), route, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty())))
                 .withActorBody(guard, FrontierTestPositions.bodyAboveSupport(route.getFirst())).withActorBody(scout, FrontierTestPositions.bodyAboveSupport(route.getFirst()));
+
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "a patrol on a persisted surveyed grade must hydrate from the same exact topology");
 
         SubjectId selected = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentRole.GUARD).orElseThrow().id();
 

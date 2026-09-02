@@ -28,6 +28,9 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (command.payload() instanceof PhysicalDeltaObserved observed) {
             return FrontierWorldPhysicalObservationProcess.plan(state, observed, command.submittedAt().ticks());
         }
+        if (command.payload() instanceof PhysicalDeltasObserved observed) {
+            return FrontierWorldPhysicalObservationProcess.plan(state, observed, command.submittedAt().ticks());
+        }
         if (command.payload() instanceof ResourceDeposited deposited) {
             return FrontierWorldPhysicalObservationProcess.planResourceDeposit(state, deposited);
         }
@@ -85,6 +88,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case PhysicalIntentTransition transition -> reduceTransition(state, event.subject(), transition);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
+            case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed);
             case ExactItemDestroyed destroyed -> reduceDestroyed(state, event.subject(), destroyed);

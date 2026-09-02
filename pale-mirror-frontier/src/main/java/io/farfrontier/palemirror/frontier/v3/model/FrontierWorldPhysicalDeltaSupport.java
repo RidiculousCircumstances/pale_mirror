@@ -3,11 +3,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /** Pure bounded validation and domain consequences for observed physical block deltas. */
-final class FrontierWorldPhysicalDeltaSupport {
+public final class FrontierWorldPhysicalDeltaSupport {
     static final int MAX_PHYSICAL_DELTAS = 65_536;
 
     private FrontierWorldPhysicalDeltaSupport() { }
@@ -36,19 +38,38 @@ final class FrontierWorldPhysicalDeltaSupport {
     }
 
     static FrontierWorldState record(FrontierWorldState state, PhysicalDelta delta) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(delta, "physical delta");
-        if (state.physicalDeltas().containsKey(delta.position())) throw new IllegalArgumentException("physical delta is already recorded at this position");
-        if (state.physicalDeltas().size() >= MAX_PHYSICAL_DELTAS) throw new IllegalArgumentException("physical delta retention limit exceeded");
-        validateCurrent(state, delta);
-        Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas()); next.put(delta.position(), delta);
+        return recordAll(state, List.of(delta));
+    }
+
+    /** Validates every member against the same pre-effect state, then publishes the whole causal set. */
+    public static FrontierWorldState recordAll(FrontierWorldState state, List<PhysicalDelta> deltas) {
+        Objects.requireNonNull(state, "state");
+        deltas = List.copyOf(Objects.requireNonNull(deltas, "physical deltas"));
+        if (deltas.isEmpty() || deltas.size() > PhysicalDeltasObserved.MAX_ATOMIC_DELTAS) {
+            throw new IllegalArgumentException("physical observation must contain 1.." + PhysicalDeltasObserved.MAX_ATOMIC_DELTAS + " deltas");
+        }
+        if (state.physicalDeltas().size() > MAX_PHYSICAL_DELTAS - deltas.size()) {
+            throw new IllegalArgumentException("physical delta retention limit exceeded");
+        }
+        HashSet<BlockPosition> positions = new HashSet<>();
+        for (PhysicalDelta delta : deltas) {
+            Objects.requireNonNull(delta, "physical delta");
+            if (!positions.add(delta.position())) throw new IllegalArgumentException("physical observation contains a duplicate position");
+            if (state.physicalDeltas().containsKey(delta.position())) throw new IllegalArgumentException("physical delta is already recorded at this position");
+            validateCurrent(state, delta);
+        }
+        Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas());
+        deltas.forEach(delta -> next.put(delta.position(), delta));
         FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
-        if (isKnownRouteLoss(delta)) {
+        for (PhysicalDelta delta : deltas) {
+            if (!isKnownRouteLoss(delta)) continue;
             RouteTopology topology = changed.routeTopology().blockAffectedSupplyEdges(changed.bootstrap(), delta.position());
             Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
             changed.operations().forEach((operationId, operation) -> operations.put(operationId, operation.blockTravelAt(delta.position())));
             changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeTopology(topology).operations(operations));
         }
-        if (isKnownWorksiteStagingLoss(delta)) {
+        for (PhysicalDelta delta : deltas) {
+            if (!isKnownWorksiteStagingLoss(delta)) continue;
             SubjectId projectId = delta.ownerId().orElseThrow();
             RouteConstruction project = changed.routeConstructions().get(projectId);
             if (project != null && project.status() == RouteConstructionStatus.BUILDING) {
@@ -61,8 +82,12 @@ final class FrontierWorldPhysicalDeltaSupport {
                 changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects).sceneLeases(leases));
             }
         }
-        if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().orElseThrow().value().startsWith("structure:")) return changed;
-        return changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+        for (PhysicalDelta delta : deltas) {
+            if (delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().orElseThrow().value().startsWith("structure:")) {
+                changed = changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+            }
+        }
+        return changed;
     }
 
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {

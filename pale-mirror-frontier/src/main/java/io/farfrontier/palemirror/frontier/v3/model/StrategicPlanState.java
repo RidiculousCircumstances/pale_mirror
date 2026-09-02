@@ -223,7 +223,8 @@ public final class StrategicPlanState {
                 infectionKnowledge, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, next, settlementAssaults);
     }
 
-    void validate(FrontierBootstrap bootstrap, HumanPopulation humanPopulation) {
+    void validate(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
+        Objects.requireNonNull(routeTopology, "route topology");
         infectionKnowledge.validate(bootstrap);
         // Resource-site geometry is immutable for one bootstrap.  Validation may visit many
         // retained terminal objectives after an unrelated state transition, so compiling the
@@ -246,7 +247,12 @@ public final class StrategicPlanState {
                     || resident.profession() != ResidentProfession.SECURITY_WORKER)) {
                 throw new IllegalArgumentException("route patrol has a foreign or non-security member");
             }
-            if (!patrol.route().equals(FrontierRouteNetwork.supplyWaypoints(bootstrap, settlement.id()))) {
+            // An in-flight patrol is navigation state and must still follow the exact current
+            // topology.  Terminal patrols are retained historical evidence: a completed
+            // bypass deliberately replaces their route, so revalidating that evidence against
+            // the replacement would quarantine a correct recovered world.
+            if (patrol.status() == RoutePatrolStatus.EN_ROUTE
+                    && !patrol.route().equals(routeTopology.supplyWaypoints(bootstrap, settlement.id()))) {
                 throw new IllegalArgumentException("route patrol does not retain its canonical route");
             }
         });

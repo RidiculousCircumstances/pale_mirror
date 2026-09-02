@@ -154,6 +154,20 @@ test('restart runner slices action-relative assertions without a second scenario
   assert.throws(() => validateScenario({ ...recoverable, restart: { mode: 'graceful', afterAction: 3 } }), /restart needs/);
 });
 
+test('stepped-route recovery binds each physical-loss assertion to its producing diagnostic action', async () => {
+  const steppedRoute = JSON.parse(await readFile(new URL('../scenarios/disposable-stepped-route-restart.json', import.meta.url), 'utf8'));
+  const foundation = steppedRoute.assertions.find((value) => value.view === 'physical_delta' && value.id === '-372,65,-343');
+  const deck = steppedRoute.assertions.find((value) => value.view === 'physical_delta' && value.id === '-372,66,-343');
+  assert.equal(steppedRoute.actions[foundation.after - 1].type, 'wait_until_diagnostic');
+  assert.equal(steppedRoute.actions[foundation.after - 1].id, foundation.id);
+  assert.equal(steppedRoute.actions[deck.after - 1].type, 'wait_until_diagnostic');
+  assert.equal(steppedRoute.actions[deck.after - 1].id, deck.id);
+  const segments = restartSegments(steppedRoute);
+  assert.equal(segments.before.assertions.length, 2);
+  assert.equal(segments.after.assertions.filter((value) => value.view === 'physical_delta').length, 2);
+  assert.equal(segments.after.assertions.find((value) => value.view === 'route_topology').after, 1);
+});
+
 test('native pilot may advance only the bounded canonical v3 clock', () => {
   const advance = { ...scenario, actions: [{ type: 'fast_forward', ticks: 24_000 }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(advance));

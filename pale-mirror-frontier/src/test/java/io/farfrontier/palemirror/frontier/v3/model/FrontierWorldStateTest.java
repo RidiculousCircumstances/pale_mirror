@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
@@ -192,6 +193,37 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> changed.recordPhysicalDelta(known));
         assertThrows(IllegalArgumentException.class, () -> baseline.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(1, 64, 1),
                 PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, java.util.Optional.of(organ.id()), java.util.Optional.of(GrayboxSemanticPart.WALL), "bad")));
+    }
+
+    @Test
+    void dependentPhysicalLossesCommitAtomicallyOrLeaveTheWholeTopologyUntouched() {
+        FrontierWorldState baseline = FrontierV3FixtureCatalog.steppedRouteConfiguration(
+                new WorldId("frontier:atomic-dependent-loss"), 91L).initialState();
+        var plan = FrontierGrayboxPlan.compile(baseline);
+        GrayboxCell foundation = plan.cells().values().stream()
+                .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_FOUNDATION)
+                .filter(cell -> plan.cells().get(new BlockPosition(cell.position().x(), cell.position().y() + 1, cell.position().z())) != null)
+                .findFirst().orElseThrow();
+        BlockPosition deckPosition = new BlockPosition(foundation.position().x(), foundation.position().y() + 1, foundation.position().z());
+        GrayboxCell deck = plan.cells().get(deckPosition);
+        assertEquals(GrayboxSemanticPart.ROUTE_SURFACE, deck.semanticPart());
+        PhysicalDelta foundationLoss = new PhysicalDelta(foundation.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "player:test");
+        PhysicalDelta deckLoss = new PhysicalDelta(deckPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test:survival-after");
+
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldPhysicalDeltaSupport.recordAll(baseline, List.of(foundationLoss,
+                new PhysicalDelta(new BlockPosition(0, 64, 0), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                        java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "forged"))));
+        assertTrue(baseline.physicalDeltas().isEmpty(), "the first member cannot escape from a rejected atomic observation");
+
+        FrontierWorldState changed = FrontierWorldPhysicalDeltaSupport.recordAll(baseline, List.of(foundationLoss, deckLoss));
+        assertEquals(2, changed.physicalDeltas().size());
+        assertTrue(!FrontierGrayboxPlan.compile(changed).cells().containsKey(foundation.position()));
+        assertTrue(!FrontierGrayboxPlan.compile(changed).cells().containsKey(deckPosition));
+        PhysicalDeltasObserved observed = new PhysicalDeltasObserved(List.of(foundationLoss, deckLoss));
+        assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
     }
 
     @Test
