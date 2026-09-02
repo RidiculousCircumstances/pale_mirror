@@ -218,6 +218,10 @@ public final class FrontierV3CargoHandoffGameTests {
         GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
 
+        helper.assertValueEqual(FrontierV3RouteMaintenanceExecutor.naturalDemandReadiness(level, target),
+                FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED,
+                "a merely loaded fixture column is not an ordinary player demand for remote maintenance extraction");
+
         FrontierV3GrayboxExecutor.retainKnownLoss(level, ledger, cell);
         helper.assertTrue(level.getBlockState(target).isAir(),
                 "recording a COLD canonical loss must not write or erase a world block on first visit");

@@ -47,14 +47,14 @@ class FrontierV3PhysicalIntentSchedulingTest {
     }
 
     @Test
-    void unloadedRouteMaintenancePickupDoesNotStarveALaterLoadedRepair() {
+    void naturallyUnavailableRouteMaintenancePickupDoesNotStarveALaterLoadedRepair() {
         PhysicalIntent deferredPickup = intent("1", PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING);
         PhysicalIntent runnablePickup = intent("4", PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING);
 
         assertEquals(runnablePickup, FrontierV3PhysicalIntentScheduling.firstActionable(List.of(runnablePickup, deferredPickup), candidate ->
                 candidate.equals(deferredPickup) ? FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED
                         : FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE).orElseThrow(),
-                "a naturally COLD source may defer only its own exact repair, never all route maintenance");
+                "an unloaded or player-undemanded source may defer only its own exact repair, never all route maintenance");
     }
 
     private static PhysicalIntent intent(String suffix, PhysicalIntentKind kind) {

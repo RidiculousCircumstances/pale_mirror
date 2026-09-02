@@ -71,17 +71,18 @@ final class FrontierV3RouteMaintenanceExecutor {
         BlockPosition origin = wholeBlock(intent);
         if (origin == null || materialTarget(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
         BlockPos position = new BlockPos(origin.x(), origin.y(), origin.z());
-        if (!level.hasChunkAt(position)) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
-        return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+        // Being resident in the server chunk cache is not a player demand for a physical
+        // extraction.  Treat it exactly like any other naturally unavailable endpoint, or a
+        // nearby unrelated chunk load can win deterministic selection and then no-op before a
+        // later actually demanded repair gets a turn.
+        return naturalDemandReadiness(level, position);
     }
 
     private static FrontierV3PhysicalIntentScheduling.Readiness workReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition origin = wholeBlock(intent);
         if (origin == null || target(state, intent) == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
         BlockPos position = new BlockPos(origin.x(), origin.y(), origin.z());
-        if (!FrontierV3PhysicalDemand.exists(level, position)) {
-            return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
-        }
+        if (naturalDemandReadiness(level, position) == FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
             return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         }
@@ -91,6 +92,13 @@ final class FrontierV3RouteMaintenanceExecutor {
         // projection delay, not a failed repair.
         if (claim == null && level.getBlockState(position).isAir()) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+    }
+
+    /** A loaded endpoint may be physically mutated only in ordinary nearby player demand. */
+    static FrontierV3PhysicalIntentScheduling.Readiness naturalDemandReadiness(ServerLevel level, BlockPos position) {
+        return FrontierV3PhysicalDemand.exists(level, position)
+                ? FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE
+                : FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
