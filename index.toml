@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "1db283c60e64518ce5f187f5bdb54bac28972d0da37af3b7d29b1d030c98c630"
+hash = "8e350762025e978b5b8ab5b1fb4e798c2fac0f945ed4f12f9dfacc3938c1b763"
 
 [[files]]
 file = "config/README.md"
@@ -719,6 +719,14 @@ hash = "a98bad792dc1b95a156c16f276e1313792bb526658f7c442e6f476f694178d73"
 [[files]]
 file = "scripts/bootstrap-client.sh"
 hash = "e986175ab41833ef5c4aab7c77c5069e4574e31333ebbc46c9087ce5591b0da5"
+
+[[files]]
+file = "scripts/frontier-v3-deploy-preflight.sh"
+hash = "6309e12d3e99cd15a417bb4728b46adef7688e1d13078bbfe33e416b29ff4722"
+
+[[files]]
+file = "scripts/frontier-v3-deploy-verify.sh"
+hash = "be6e35f47dd239ac815f83584bb21e2030e6f8564725739218f218526b768896"
 
 [[files]]
 file = "scripts/install-client.ps1"

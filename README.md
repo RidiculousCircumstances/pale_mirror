@@ -226,6 +226,40 @@ To publish newly built private artifacts to the stable `current` URLs, run:
 scripts/publish-client-artifacts.sh
 ```
 
+Before a Frontier v3 disposable-server deployment, make a clean detached Pale
+Mirror worktree for the exact commit, then run the read-only stop gate. It
+rejects a dirty tree, a different source commit, a non-Java-22 runtime, a
+checksum mismatch or a different `level-name` before any server/world mutation
+occurs:
+
+```bash
+git -C pale-mirror worktree add --detach /tmp/pale-mirror-release <commit>
+scripts/frontier-v3-deploy-preflight.sh \
+  --source-repo /tmp/pale-mirror-release \
+  --source-ref '<commit>' \
+  --artifact /tmp/pale-mirror-release/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar \
+  --sha512 "$(sha512sum /tmp/pale-mirror-release/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar | awk '{print $1}')" \
+  --target /home/rd/far-frontier-server \
+  --level-name frontier-v3-live-rNN \
+  --java /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java \
+  --service far-frontier-v3-live.service
+```
+
+It is deliberately not a deployment command: publish/install and exact
+fresh-world reset remain explicit follow-up operations. Immediately after a
+restart, prove the *new* process rather than relying on an older `Done` line:
+
+```bash
+started_at=$(date +%s) # capture immediately before restarting the service
+# restart the verified service here
+scripts/frontier-v3-deploy-verify.sh \
+  --target /home/rd/far-frontier-server \
+  --level-name frontier-v3-live-rNN \
+  --sha512 '<same pinned SHA-512>' \
+  --service far-frontier-v3-live.service \
+  --not-before "$started_at"
+```
+
 `far-frontier-client-host.service` serves the repository and ignored `hosted/`
 artifact directory on the LAN/Tailscale interfaces at port `8092`; it is independent
 of the development-only `packwiz serve` process.
