@@ -39,23 +39,17 @@ mods_dir="$runtime/mods"
 profile_dir="$runtime/.far-frontier-graybox-profile"
 properties="$runtime/server.properties"
 properties_backup="$profile_dir/server.properties.before-graybox"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+competing_jars_catalog="$script_dir/../config/graybox-disabled-mods.txt"
 
 # These mods create their own actors, infection, events or time-line authority.
 # In a source-graybox run they compete with PM's exact population and
 # reverse-causality model. Dependencies are deliberately left installed: a
 # dormant library cannot create world events, and retaining it keeps the profile
 # reversible without guessing a transitive dependency graph.
-competing_jars=(
-  'alexscaves-2.0.10.jar'
-  'born_in_chaos_[Neoforge]_1.21.1_1.7.6.jar'
-  'hostile_tactics-neoforge-1.21.1-0.10.1.jar'
-  "L_Ender's Cataclysm 1.21.1-3.32.jar"
-  'naturalist-2.0.2-neoforge-1.21.1.jar'
-  'Ravents-neoforge-3.0.jar'
-  'rpgtimeline-neoforge-1.21-2.0.4.1.jar'
-  'crimson_curse-1.4.3.1.jar'
-  'mowziesmobs-1.21.1-1.8.2.jar'
-)
+[[ -f "$competing_jars_catalog" ]] || { printf 'Missing graybox mod catalog: %s\n' "$competing_jars_catalog" >&2; exit 1; }
+mapfile -t competing_jars < <(awk 'NF && $1 !~ /^#/ { print }' "$competing_jars_catalog")
+((${#competing_jars[@]})) || { printf 'Graybox mod catalog is empty: %s\n' "$competing_jars_catalog" >&2; exit 1; }
 
 # Pale Mirror Visuals has an exact declared dependency on Villager Overhaul.
 # Keep it loaded as the required rendering/attribute bridge; PM's named-resident
