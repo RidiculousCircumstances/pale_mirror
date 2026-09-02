@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.process.EngineeringEquipmentProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,6 +25,78 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Pure admission regressions for the distinct in-place route-maintenance owner. */
 class RouteMaintenanceProcessTest {
+    @Test
+    void runningMaterialPickupRecoversOnlyFromItsExactObservedSourcePostcondition() {
+        FrontierWorldState initial = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
+                new WorldId("frontier:route-maintenance-running-material"), 41L).initialState();
+        RouteMaintenance maintenance = initial.routeMaintenances().get(new SubjectId("maintenance:route--380-64--304"));
+        PhysicalIntent prepared = initial.physicalIntents().values().stream().filter(intent -> intent.causeSubjectId().equals(maintenance.id()))
+                .filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
+                .findFirst().orElseThrow();
+        FrontierWorldState running = initial.transitionPhysicalIntent(prepared.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(running));
+        PhysicalIntent recoveredIntent = recovered.physicalIntents().get(prepared.id());
+        RouteMaintenanceMaterialLoadObservation observation = new RouteMaintenanceMaterialLoadObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:running-maintenance-material"), recoveredIntent.id(), maintenance.id(),
+                maintenance.plannedCargoId(), prepared.subjectIds().get(4), maintenance.plannedCargoItemId(), 0);
+
+        RouteMaintenanceMaterialLoadObservation forgedSource = new RouteMaintenanceMaterialLoadObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:running-maintenance-forged-source"), recoveredIntent.id(), maintenance.id(),
+                maintenance.plannedCargoId(), new SubjectId("item:foreign-source"), maintenance.plannedCargoItemId(), 0);
+        assertThrows(IllegalArgumentException.class, () -> RouteMaintenanceStateSupport.confirm(recovered, recoveredIntent, forgedSource,
+                new java.util.LinkedHashMap<>(recovered.physicalIntents())), "a recovered source receipt cannot adopt another chest stack");
+
+        FrontierWorldState confirmed = RouteMaintenanceStateSupport.confirm(recovered, recoveredIntent, observation,
+                new java.util.LinkedHashMap<>(recovered.physicalIntents()));
+        FrontierWorldState loaded = RouteMaintenanceStateSupport.reduceMaterialLoaded(confirmed, FrontierRouteNetwork.OWNER,
+                new RouteMaintenanceMaterialLoaded(maintenance.id(), new CargoBatch(maintenance.plannedCargoId(), FrontierRouteNetwork.OWNER,
+                        List.of(maintenance.plannedCargoItemId()))));
+        assertEquals(maintenance.plannedCargoId(), loaded.routeMaintenances().get(maintenance.id()).cargoId().orElseThrow());
+        assertFalse(loaded.inventory().items().containsKey(prepared.subjectIds().get(4)),
+                "a recovered confirmed pickup consumes only the observed one-unit source");
+        assertEquals(new InventoryCustody.Cargo(maintenance.plannedCargoId()), loaded.inventory().items().get(maintenance.plannedCargoItemId()).custody());
+
+        FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(recovered, recoveredIntent,
+                new java.util.LinkedHashMap<>(recovered.physicalIntents()));
+        assertEquals(RouteMaintenanceStatus.CONFLICT, conflicted.routeMaintenances().get(maintenance.id()).status());
+        assertEquals(1, conflicted.inventory().items().get(prepared.subjectIds().get(4)).count(),
+                "a missing or altered recovered source never fabricates the cargo transfer");
+        assertTrue(conflicted.routeMaintenances().get(maintenance.id()).cargoId().isEmpty());
+    }
+
+    @Test
+    void runningRepairRecoversOnlyFromItsExactObservedTargetPostcondition() {
+        FrontierWorldState initial = FrontierV3FixtureCatalog.routeMaintenanceColdSourceFairnessConfiguration(
+                new WorldId("frontier:route-maintenance-running-repair"), 41L).initialState();
+        RouteMaintenance maintenance = initial.routeMaintenances().get(new SubjectId("maintenance:route--140-64--304"));
+        PhysicalIntent prepared = RouteMaintenanceProcess.workIntent(maintenance, maintenance.plannedCargoId(), maintenance.plannedCargoItemId());
+        FrontierWorldState running = RouteMaintenanceProcess.reducePrepared(initial, FrontierRouteNetwork.OWNER, prepared)
+                .transitionPhysicalIntent(prepared.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(running));
+        PhysicalIntent recoveredIntent = recovered.physicalIntents().get(prepared.id());
+        RouteMaintenanceObservation observation = new RouteMaintenanceObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:running-maintenance-repair"), recoveredIntent.id(), maintenance.id(),
+                maintenance.plannedCargoItemId(), maintenance.repairCell());
+
+        FrontierWorldState confirmed = RouteMaintenanceStateSupport.complete(recovered, recoveredIntent, observation,
+                new java.util.LinkedHashMap<>(recovered.physicalIntents()));
+        assertEquals(RouteMaintenanceStatus.READY, confirmed.routeMaintenances().get(maintenance.id()).status());
+        assertFalse(confirmed.physicalDeltas().containsKey(maintenance.repairCell()),
+                "only the matching recovered receipt may clear its exact route loss");
+        assertTrue(confirmed.physicalDeltas().containsKey(new BlockPosition(-380, 64, -304)),
+                "one repair receipt never clears a different retained route loss");
+        assertFalse(confirmed.inventory().cargo().containsKey(maintenance.plannedCargoId()),
+                "the confirmed repair consumes its one exact cargo unit once");
+
+        FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(recovered, recoveredIntent,
+                new java.util.LinkedHashMap<>(recovered.physicalIntents()));
+        assertEquals(RouteMaintenanceStatus.CONFLICT, conflicted.routeMaintenances().get(maintenance.id()).status());
+        assertTrue(conflicted.physicalDeltas().containsKey(maintenance.repairCell()),
+                "a missing or altered recovered target keeps the original route loss visible");
+        assertTrue(conflicted.inventory().cargo().containsKey(maintenance.plannedCargoId()),
+                "a missing or altered recovered target does not consume its cargo");
+    }
+
     @Test
     void independentRouteLossesRetainDistinctTeamsAndAdvanceInDeterministicRotation() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-maintenance-parallel"), 41L);
