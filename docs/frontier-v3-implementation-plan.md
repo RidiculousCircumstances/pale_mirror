@@ -164,6 +164,13 @@ player road into topology, or perform a bypass cutover. Exit evidence is the
 normal/conflict/restart matrix plus the native player break -> repair ->
 same-edge recovery scenario defined by that contract.
 
+The route-maintenance owner is deliberately bounded but not globally serial:
+each repair cell may retain one exact operation, while distinct cells may make
+fair bounded progress when their people, cargo and physical endpoints differ.
+An unavailable COLD source is a per-intent deferral; it is never authority to
+stall a loaded independent repair. This is required before route-maintenance
+closure can claim a living multi-settlement world.
+
 ## Target dependency graph
 
 ```text

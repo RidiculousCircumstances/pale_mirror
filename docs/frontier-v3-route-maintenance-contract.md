@@ -23,8 +23,11 @@ observed, PM-owned route surface or foundation cell and is deliberately not a
   bypass and its eventual topology cutover.
 - The maintenance operation itself, its cargo and all physical intents use
   stable IDs. At most one active maintenance operation exists for a repair
-  cell; all active operation, team, cargo and scene claims are mutually
-  exclusive with patrol, migration, cargo and construction claims.
+  cell. Distinct repair cells may progress concurrently, bounded by
+  `RouteMaintenanceStateSupport.MAX_MAINTENANCE`, but only with disjoint exact
+  teams, cargo identities and nonterminal source-stack reservations. All active
+  operation, team, cargo and scene claims are mutually exclusive with patrol,
+  migration, cargo and construction claims.
 
 ## Canonical lifecycle
 
@@ -86,6 +89,10 @@ Neither step force-loads a chunk. A loaded source chest does not authorize
 remote repair, and a loaded target does not authorize source extraction. A
 player/foreign block, changed chest slot, missing body or altered restart
 postcondition is an observed conflict rather than permission to overwrite.
+When two distinct repairs await one maintenance chest, the chest is a visible
+physical bottleneck, not a global simulation lock: an unavailable source
+defers only that exact pickup, and a later loaded repair with another exact
+unreserved source remains runnable.
 
 ## Persistence and recovery
 
