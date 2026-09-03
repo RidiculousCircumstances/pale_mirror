@@ -7,7 +7,9 @@ public enum HiveMobilizationConflictReason {
     /** A server stop split durable release admission from an unconfirmed world effect. */
     UNKNOWN_AFTER_RESTART,
     /** A naturally loaded retained assembly target is physically obstructed; no hidden sidestep exists. */
-    ASSEMBLY_PATH_BLOCKED;
+    ASSEMBLY_PATH_BLOCKED,
+    /** The retained departure facts no longer admit the selected operation; no replacement group is chosen. */
+    DEPARTURE_UNAVAILABLE;
 
     public int wireTag() { return FrontierWireTags.tag(this); }
 }

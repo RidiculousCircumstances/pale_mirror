@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDeparted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStarted;
@@ -30,7 +31,7 @@ final class HiveMobilizationPayloadCodecs {
     private HiveMobilizationPayloadCodecs() { }
 
     static PayloadCodecs codecs() {
-        return new PayloadCodecs(List.of(new StartedCodec(), new ReleaseStartedCodec(), new CocoonReleasedCodec(), new AssemblyAdvancedCodec(), new ConflictedCodec()));
+        return new PayloadCodecs(List.of(new StartedCodec(), new ReleaseStartedCodec(), new CocoonReleasedCodec(), new AssemblyAdvancedCodec(), new DepartedCodec(), new ConflictedCodec()));
     }
 
     private static final class StartedCodec implements PayloadCodec {
@@ -55,6 +56,13 @@ final class HiveMobilizationPayloadCodecs {
             writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationAssemblyAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort())); }
     }
+    private static final class DepartedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_mobilization_departed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationDeparted departed = (HiveMobilizationDeparted) payload;
+            writeSubject(output, departed.mobilizationId()); SettlementAssaultPayloadCodecs.write(output, departed.assault()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes,
+                input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input))); }
+    }
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationConflicted conflicted = (HiveMobilizationConflicted) payload;
@@ -65,7 +73,8 @@ final class HiveMobilizationPayloadCodecs {
 
     private static void write(DataOutputStream output, HiveMobilization value) throws IOException {
         writeSubject(output, value.id()); writeSubject(output, value.hiveId()); writeSubject(output, value.nestId()); writeSubject(output, value.taskId());
-        writeSubject(output, value.settlementId()); writeSubject(output, value.overseerId()); writeSubjects(output, value.memberIds()); writeSubjects(output, value.releasedMemberIds());
+        writeSubject(output, value.settlementId()); writeSubject(output, value.sighting().scoutId()); writePosition(output, value.sighting().settlementAnchor()); output.writeLong(value.sighting().observedAt());
+        writeSubject(output, value.overseerId()); writeSubjects(output, value.memberIds()); writeSubjects(output, value.releasedMemberIds());
         output.writeBoolean(value.releasingMemberId().isPresent()); if (value.releasingMemberId().isPresent()) writeSubject(output, value.releasingMemberId().orElseThrow());
         output.writeBoolean(value.assembly().isPresent()); if (value.assembly().isPresent()) writeAssembly(output, value.assembly().orElseThrow());
         output.writeByte(value.status().wireTag()); output.writeBoolean(value.conflictReason().isPresent());
@@ -74,14 +83,17 @@ final class HiveMobilizationPayloadCodecs {
     }
 
     private static HiveMobilization read(DataInputStream input) throws IOException {
-        SubjectId id = readSubject(input), hive = readSubject(input), nest = readSubject(input), task = readSubject(input), settlement = readSubject(input), overseer = readSubject(input);
+        SubjectId id = readSubject(input), hive = readSubject(input), nest = readSubject(input), task = readSubject(input), settlement = readSubject(input);
+        io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge.Sighting sighting = new io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge.Sighting(
+                settlement, readSubject(input), readPosition(input), input.readLong());
+        SubjectId overseer = readSubject(input);
         List<SubjectId> members = readSubjects(input), released = readSubjects(input);
         Optional<SubjectId> releasing = input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
         Optional<HiveTaskAssembly> assembly = input.readBoolean() ? Optional.of(readAssembly(input)) : Optional.empty();
         HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
         Optional<HiveMobilizationConflictReason> conflict = input.readBoolean()
                 ? Optional.of(FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte())) : Optional.empty();
-        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, conflict,
+        return new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, status, conflict,
                 readBlockage(input), input.readLong());
     }
 
@@ -121,6 +133,12 @@ final class HiveMobilizationPayloadCodecs {
     }
     private static List<SubjectId> readSubjects(DataInputStream input) throws IOException {
         List<SubjectId> result = new ArrayList<>(); for (int index = 0, count = input.readUnsignedByte(); index < count; index++) result.add(readSubject(input)); return List.copyOf(result);
+    }
+    private static void writePosition(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.model.BlockPosition value) throws IOException {
+        output.writeInt(value.x()); output.writeInt(value.y()); output.writeInt(value.z());
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.BlockPosition readPosition(DataInputStream input) throws IOException {
+        return new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(input.readInt(), input.readInt(), input.readInt());
     }
     private static void writeSubject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }
     private static SubjectId readSubject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }

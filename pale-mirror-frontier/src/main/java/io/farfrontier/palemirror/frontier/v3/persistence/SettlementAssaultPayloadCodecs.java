@@ -55,7 +55,6 @@ final class SettlementAssaultPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int status = input.readUnsignedByte();
-                if (status >= SettlementAssaultStatus.values().length) throw new IllegalArgumentException("unknown settlement assault status");
                 return new SettlementAssaultTransition(assault, FrontierWireTags.require(SettlementAssaultStatus.class, status));
             });
         }
@@ -87,14 +86,13 @@ final class SettlementAssaultPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int outcome = input.readUnsignedByte();
-                if (outcome >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
                 return new SettlementAssaultResolved(assault, FrontierWireTags.require(SettlementAssaultOutcome.class, outcome));
             });
         }
     }; }
 
-    private static void write(DataOutputStream output, SettlementAssault assault) throws IOException {
-        subject(output, assault.id()); subject(output, assault.taskId()); subject(output, assault.hiveId());
+    static void write(DataOutputStream output, SettlementAssault assault) throws IOException {
+        subject(output, assault.id()); subject(output, assault.taskId()); subject(output, assault.hiveId()); subject(output, assault.overseerId());
         subject(output, assault.sighting().settlementId()); subject(output, assault.sighting().scoutId());
         position(output, assault.sighting().settlementAnchor()); output.writeLong(assault.sighting().observedAt());
         output.writeByte(assault.attackers().size());
@@ -108,8 +106,8 @@ final class SettlementAssaultPayloadCodecs {
         output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
     }
 
-    private static SettlementAssault read(DataInputStream input) throws IOException {
-        SubjectId id = subject(input), task = subject(input), hive = subject(input);
+    static SettlementAssault read(DataInputStream input) throws IOException {
+        SubjectId id = subject(input), task = subject(input), hive = subject(input), overseer = subject(input);
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(subject(input), subject(input), position(input), input.readLong());
         List<SettlementAssaultAttacker> attackers = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
@@ -121,14 +119,11 @@ final class SettlementAssaultPayloadCodecs {
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) defenders.add(subject(input));
         int status = input.readUnsignedByte(), epoch = input.readInt();
         Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
-        if (status >= SettlementAssaultStatus.values().length) throw new IllegalArgumentException("unknown settlement assault status");
-        return new SettlementAssault(id, task, hive, sighting, attackers, defenders, FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
+        return new SettlementAssault(id, task, hive, sighting, overseer, attackers, defenders, FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
     }
 
     private static SettlementAssaultOutcome readOutcome(DataInputStream input) throws IOException {
-        int value = input.readUnsignedByte();
-        if (value >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
-        return FrontierWireTags.require(SettlementAssaultOutcome.class, value);
+        return FrontierWireTags.require(SettlementAssaultOutcome.class, input.readUnsignedByte());
     }
 
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }

@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveMobilizationProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
@@ -87,7 +88,7 @@ class HiveMobilizationProcessTest {
 
         FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
-        HiveMobilization impostor = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.settlementId(),
+        HiveMobilization impostor = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.sighting(),
                 valid.memberIds().getFirst(), valid.memberIds(), valid.releasedMemberIds(), valid.releasingMemberId(), valid.status(), valid.conflictReason(), valid.startedAt());
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceStarted(active, fixture.hive(), new HiveMobilizationStarted(impostor)),
                 "canonical validation must reject a breach member masquerading as a remote controller");
@@ -109,7 +110,7 @@ class HiveMobilizationProcessTest {
                 .map(Bioform::id).filter(id -> !valid.memberIds().contains(id)).findFirst().orElseThrow();
         java.util.List<SubjectId> overloadedMembers = new java.util.ArrayList<>(valid.memberIds());
         overloadedMembers.add(extra);
-        HiveMobilization overloaded = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.settlementId(),
+        HiveMobilization overloaded = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.sighting(),
                 valid.overseerId(), overloadedMembers, valid.status(), valid.startedAt());
         FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
                 assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
@@ -227,6 +228,130 @@ class HiveMobilizationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(progressed,
                 progressed.bootstrap().hive().id(), advanced), "a stale event may not replay the same retained edge");
         assertEquals(progressed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(progressed)));
+    }
+
+    @Test void completeAssemblyAtomicallyTransfersTheSameRosterAndOverseerToItsAssault() {
+        Mobilized assembled = assemble(fixture());
+        HiveMobilization initial = assembled.mobilization();
+        SubjectId hive = assembled.state().bootstrap().hive().id();
+
+        FrontierWorldState state = assembled.state();
+        HiveMobilizationDeparted departedEvent = null;
+        SettlementAssault started = null;
+        HiveTaskAssembly finalAssembly = null;
+        FrontierWorldState completeStaging = null;
+        for (int step = 0; step < 256; step++) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(initial.id());
+            List<ProposedEvent> planned = HiveMobilizationProcess.planAssemblyProgress(state,
+                    HiveMobilizationProcess.assemblyProgress(initial.id(), 300L + step * 20L));
+            HiveMobilizationAssemblyAdvanced advanced = assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, planned.getFirst().payload());
+            state = HiveMobilizationProcess.reduceAssemblyAdvanced(state, hive, advanced);
+            if (!state.hiveColony().mobilizations().get(initial.id()).assembly().orElseThrow().complete()) continue;
+            finalAssembly = state.hiveColony().mobilizations().get(initial.id()).assembly().orElseThrow();
+            completeStaging = state;
+            HiveMobilizationDeparted departed = planned.stream().map(ProposedEvent::payload)
+                    .filter(HiveMobilizationDeparted.class::isInstance).map(HiveMobilizationDeparted.class::cast).findFirst().orElseThrow();
+            started = departed.assault();
+            departedEvent = departed;
+            assertEquals(initial.memberIds(), started.attackerIds(), "departure must not reselect nearby forms");
+            assertEquals(initial.overseerId(), started.overseerId(), "the retained controller must cross the operation boundary");
+            assertEquals(finalAssembly.members().entrySet().stream().collect(java.util.stream.Collectors.toMap(
+                    java.util.Map.Entry::getKey, entry -> entry.getValue().destinationSurface().support())),
+                    started.attackers().stream().collect(java.util.stream.Collectors.toMap(SettlementAssaultAttacker::actorId,
+                            attacker -> attacker.route().getFirst())), "every assault route begins at its exact retained staging surface");
+            state = HiveMobilizationProcess.reduceDeparted(state, hive, departed);
+            break;
+        }
+        assertTrue(finalAssembly != null && started != null && departedEvent != null && completeStaging != null,
+                "the bounded exact assembly must reach one departure transition");
+        HiveMobilizationDeparted exactDeparture = departedEvent;
+        SettlementAssault exactAssault = started;
+        FrontierWorldState exactStaging = completeStaging;
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(assembled.state(), hive, exactDeparture),
+                "an incomplete group may not forge a departure");
+        SettlementAssault tamperedAssault = new SettlementAssault(exactAssault.id(), exactAssault.taskId(), exactAssault.hiveId(),
+                exactAssault.sighting(), exactAssault.overseerId(), exactAssault.attackers(), exactAssault.defenderUnit(),
+                SettlementAssaultStatus.WAITING_FOR_BATTLE, exactAssault.nextStrikeEpoch(), exactAssault.outcome());
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(exactStaging,
+                hive, new HiveMobilizationDeparted(initial.id(), tamperedAssault)),
+                "a durable departure payload may not alter its deterministic initial assault state");
+        HiveMobilization departed = state.hiveColony().mobilizations().get(initial.id());
+        assertEquals(HiveMobilizationStatus.DEPARTED, departed.status());
+        assertEquals(started, state.strategicPlans().settlementAssaults().get(started.id()));
+        FrontierWorldState departedState = state;
+        assertTrue(initial.memberIds().stream().allMatch(member -> departedState.hiveColony().bioformLifecycles().get(member).phase()
+                == BioformLifecyclePhase.ACTIVE && HivePhysiologySupport.availableForIndependentOperation(departedState, member)),
+                "the same materialized organisms become active only after their completed exact transfer");
+        assertTrue(initial.memberIds().stream().allMatch(member -> departedState.ambientLeases().get(member) == null
+                || departedState.ambientLeases().get(member).status() == AmbientLeaseStatus.CLOSED),
+                "the operation hand-off must close only its obsolete assembly HOT authority");
+        assertTrue(initial.memberIds().stream().allMatch(member -> FrontierSceneAdmission.reservedFromGenericAmbient(departedState, member)),
+                "the unresolved COLD assault, rather than a generic patrol, exclusively owns its departed roster");
+        AmbientActorLease unrelatedAmbient = AmbientActorProcess.nextLease(departedState, initial.memberIds().getFirst(), new SimInstant(9_999L));
+        assertThrows(IllegalArgumentException.class, () -> AmbientLeaseStateProcess.prepare(departedState, unrelatedAmbient),
+                "a direct ambient command may not bypass COLD assault custody");
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceDeparted(departedState, hive,
+                new HiveMobilizationDeparted(initial.id(), exactAssault)), "a completed hand-off cannot be replayed");
+        assertEquals(departedState, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departedState)));
+        SubjectId departedTaskId = started.taskId();
+        assertThrows(IllegalArgumentException.class, () -> departedState.withStrategicPlans(departedState.strategicPlans()
+                .transitionTask(departedTaskId, StrategicTaskStatus.BLOCKED)),
+                "a terminal task may not detach itself from its still-unresolved exact assault");
+        FrontierWorldState released = HiveSettlementAssaultProcess.reduceResolved(departedState, hive,
+                new SettlementAssaultResolved(exactAssault.id(), SettlementAssaultOutcome.ABORTED));
+        assertFalse(FrontierSceneAdmission.reserved(released, initial.memberIds().getFirst()));
+        assertEquals(initial.memberIds().getFirst(), AmbientActorProcess.nextLease(released, initial.memberIds().getFirst(),
+                new SimInstant(10_000L)).actorId(), "resolved COLD custody returns the same active identity to ordinary ambient admission");
+    }
+
+    @Test void finalHotAssemblyArrivalUsesTheSameAtomicDepartureTransaction() {
+        PreFinalAssembly preFinal = preFinalAssembly(assemble(fixture()));
+        HiveTaskAssembly.Member member = preFinal.mobilization().assembly().orElseThrow().members().get(preFinal.advancingId());
+        AmbientActorLease lease = new AmbientActorLease(preFinal.advancingId(),
+                preFinal.state().actorLocations().get(preFinal.advancingId()).body(), new SimInstant(700L), 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY, member.nextSurface().standingBody());
+        FrontierWorldState hot = preFinal.state().withChanges(FrontierWorldStateUpdate.begin()
+                .ambientLeases(java.util.Map.of(preFinal.advancingId(), lease)));
+        CommandId commandId = new CommandId("command:hive-mobilization-final-hot-arrival");
+
+        CommandPlan plan = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, commandId,
+                hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(700L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(commandId), new HiveMobilizationAssemblyAdvanced(preFinal.mobilization().id(), preFinal.advancingId(), member.cursor())));
+
+        List<ProposedEvent> events = assertInstanceOf(CommandPlan.Accepted.class, plan).events();
+        assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, events.getFirst().payload());
+        assertInstanceOf(HiveMobilizationDeparted.class, events.get(1).payload());
+        HiveMobilizationDeparted departed = assertInstanceOf(HiveMobilizationDeparted.class, events.get(1).payload());
+        SettlementAssault started = departed.assault();
+        assertEquals(preFinal.mobilization().memberIds(), started.attackerIds());
+        assertEquals(preFinal.mobilization().overseerId(), started.overseerId());
+
+        FrontierWorldState state = HiveMobilizationProcess.reduceAssemblyAdvanced(hot, hot.bootstrap().hive().id(),
+                assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, events.getFirst().payload()));
+        state = HiveMobilizationProcess.reduceDeparted(state, state.bootstrap().hive().id(),
+                departed);
+        assertEquals(HiveMobilizationStatus.DEPARTED, state.hiveColony().mobilizations().get(preFinal.mobilization().id()).status());
+        assertEquals(started, state.strategicPlans().settlementAssaults().get(started.id()));
+        assertEquals(AmbientLeaseStatus.CLOSED, state.ambientLeases().get(preFinal.advancingId()).status(),
+                "the observed final HOT cursor may not remain an obsolete assembly lease after departure");
+    }
+
+    @Test void finalColdAssemblyConflictsInsteadOfReselectingWhenItsRetainedSightingExpires() {
+        PreFinalAssembly preFinal = preFinalAssembly(assemble(fixture()));
+        FrontierWorldState stale = preFinal.state().withStrategicPlans(preFinal.state().strategicPlans()
+                .withHiveSettlementKnowledge(HiveSettlementKnowledge.empty()));
+
+        List<ProposedEvent> events = HiveMobilizationProcess.planAssemblyProgress(stale,
+                HiveMobilizationProcess.assemblyProgress(preFinal.mobilization().id(), 700L));
+
+        HiveMobilizationAssemblyAdvanced advanced = assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, events.getFirst().payload());
+        HiveMobilizationConflicted conflicted = assertInstanceOf(HiveMobilizationConflicted.class, events.get(1).payload());
+        assertEquals(HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE, conflicted.reason());
+        assertTrue(events.stream().map(ProposedEvent::payload).noneMatch(SettlementAssaultStarted.class::isInstance));
+        FrontierWorldState afterAdvance = HiveMobilizationProcess.reduceAssemblyAdvanced(stale, stale.bootstrap().hive().id(), advanced);
+        FrontierWorldState afterConflict = HiveMobilizationProcess.reduceConflicted(afterAdvance, afterAdvance.bootstrap().hive().id(), conflicted);
+        assertEquals(HiveMobilizationStatus.CONFLICT, afterConflict.hiveColony().mobilizations().get(preFinal.mobilization().id()).status());
+        assertTrue(afterConflict.strategicPlans().settlementAssaults().isEmpty(), "stale local knowledge may not be replaced by an ambient re-selection");
     }
 
     @Test void coldAssemblyProgressWaitsForTheWholeExactGroupToLeaveAmbientHotCustody() {
@@ -365,6 +490,19 @@ class HiveMobilizationProcessTest {
         return new Mobilized(state, mobilization);
     }
 
+    private static PreFinalAssembly preFinalAssembly(Mobilized assembled) {
+        FrontierWorldState state = assembled.state();
+        for (int step = 0; step < 256; step++) {
+            HiveMobilization mobilization = state.hiveColony().mobilizations().get(assembled.mobilization().id());
+            HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
+            SubjectId advancing = assembly.safeAdvances().getFirst();
+            if (assembly.advance(advancing).complete()) return new PreFinalAssembly(state, mobilization, advancing);
+            state = HiveMobilizationProcess.reduceAssemblyAdvanced(state, state.bootstrap().hive().id(),
+                    new HiveMobilizationAssemblyAdvanced(mobilization.id(), advancing, assembly.members().get(advancing).cursor()));
+        }
+        throw new AssertionError("bounded retained assembly did not reach its final edge");
+    }
+
     private static Fixture fixture() { return fixture(TerrainSurfacePlan.uniform(63)); }
 
     private static Fixture fixture(TerrainSurfacePlan terrain) {
@@ -393,4 +531,5 @@ class HiveMobilizationProcessTest {
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }
     private record Mobilized(FrontierWorldState state, HiveMobilization mobilization) { }
+    private record PreFinalAssembly(FrontierWorldState state, HiveMobilization mobilization, SubjectId advancingId) { }
 }

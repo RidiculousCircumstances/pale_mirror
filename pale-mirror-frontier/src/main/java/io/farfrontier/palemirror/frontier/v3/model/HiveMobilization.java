@@ -15,7 +15,7 @@ import java.util.Optional;
  * durable physical release boundary.</p>
  */
 public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId,
-                               SubjectId settlementId, SubjectId overseerId, List<SubjectId> memberIds,
+                               SubjectId settlementId, HiveSettlementKnowledge.Sighting sighting, SubjectId overseerId, List<SubjectId> memberIds,
                                List<SubjectId> releasedMemberIds, Optional<SubjectId> releasingMemberId,
                                Optional<HiveTaskAssembly> assembly, HiveMobilizationStatus status, Optional<HiveMobilizationConflictReason> conflictReason,
                                Optional<HiveAssemblyBlockage> assemblyBlockage, long startedAt) {
@@ -27,6 +27,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         Objects.requireNonNull(nestId, "hive mobilization nest");
         Objects.requireNonNull(taskId, "hive mobilization task");
         Objects.requireNonNull(settlementId, "hive mobilization settlement");
+        Objects.requireNonNull(sighting, "hive mobilization sighting");
         Objects.requireNonNull(overseerId, "hive mobilization overseer");
         memberIds = List.copyOf(Objects.requireNonNull(memberIds, "hive mobilization members"));
         releasedMemberIds = List.copyOf(Objects.requireNonNull(releasedMemberIds, "released hive mobilization members"));
@@ -40,6 +41,9 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         }
         if (!memberIds.contains(overseerId)) {
             throw new IllegalArgumentException("hive mobilization overseer must be one exact member");
+        }
+        if (!settlementId.equals(sighting.settlementId())) {
+            throw new IllegalArgumentException("hive mobilization sighting must retain its exact settlement");
         }
         if (releasedMemberIds.stream().distinct().count() != releasedMemberIds.size()
                 || !memberIds.subList(0, releasedMemberIds.size()).equals(releasedMemberIds)) {
@@ -61,9 +65,10 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (releasingMemberId.isPresent() && !expectedReleasingMember.equals(releasingMemberId)) {
             throw new IllegalArgumentException("releasing hive mobilization member is not the exact next cocoon occupant");
         }
-        if (status == HiveMobilizationStatus.ASSEMBLING && assembly.isEmpty()
-                || status != HiveMobilizationStatus.ASSEMBLING && status != HiveMobilizationStatus.CONFLICT && assembly.isPresent()) {
-            throw new IllegalArgumentException("only an assembling or conflicted complete mobilization retains one exact assembly plan");
+        if ((status == HiveMobilizationStatus.ASSEMBLING || status == HiveMobilizationStatus.DEPARTED) && assembly.isEmpty()
+                || status != HiveMobilizationStatus.ASSEMBLING && status != HiveMobilizationStatus.DEPARTED
+                && status != HiveMobilizationStatus.CONFLICT && assembly.isPresent()) {
+            throw new IllegalArgumentException("only an assembling, departed or conflicted complete mobilization retains one exact assembly plan");
         }
         if (assembly.isPresent() && (!releasedMemberIds.equals(memberIds) || !assembly.orElseThrow().members().keySet().equals(java.util.Set.copyOf(memberIds)))) {
             throw new IllegalArgumentException("hive assembly must retain every and only physically released member");
@@ -78,17 +83,17 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         }
     }
 
-    public HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId, SubjectId settlementId,
+    public HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId, HiveSettlementKnowledge.Sighting sighting,
                             SubjectId overseerId, List<SubjectId> memberIds, HiveMobilizationStatus status, long startedAt) {
-        this(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, List.of(), Optional.empty(), Optional.empty(), status, Optional.empty(), Optional.empty(), startedAt);
+        this(id, hiveId, nestId, taskId, sighting.settlementId(), sighting, overseerId, memberIds, List.of(), Optional.empty(), Optional.empty(), status, Optional.empty(), Optional.empty(), startedAt);
     }
 
     /** Convenience constructor for ordinary non-assembly fixtures. */
-    public HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId, SubjectId settlementId,
+    public HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId, HiveSettlementKnowledge.Sighting sighting,
                             SubjectId overseerId, List<SubjectId> memberIds, List<SubjectId> releasedMemberIds,
                             Optional<SubjectId> releasingMemberId, HiveMobilizationStatus status,
                             Optional<HiveMobilizationConflictReason> conflictReason, long startedAt) {
-        this(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds, releasingMemberId,
+        this(id, hiveId, nestId, taskId, sighting.settlementId(), sighting, overseerId, memberIds, releasedMemberIds, releasingMemberId,
                 Optional.empty(), status, conflictReason, Optional.empty(), startedAt);
     }
 
@@ -96,7 +101,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (status != HiveMobilizationStatus.WAKING || releasedMemberIds.size() == memberIds.size()) {
             throw new IllegalArgumentException("only a waking mobilization with an unreleased cocoon may begin physical release");
         }
-        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds,
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
                 nextUnreleasedMember(), Optional.empty(), HiveMobilizationStatus.RELEASING, Optional.empty(), Optional.empty(), startedAt);
     }
 
@@ -111,7 +116,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
             throw new IllegalArgumentException("only the final cocoon release may retain a complete hive assembly");
         }
         HiveMobilizationStatus next = complete ? HiveMobilizationStatus.ASSEMBLING : HiveMobilizationStatus.WAKING;
-        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, released, Optional.empty(), completedAssembly, next, Optional.empty(), Optional.empty(), startedAt);
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, released, Optional.empty(), completedAssembly, next, Optional.empty(), Optional.empty(), startedAt);
     }
 
     /** Advances exactly one already retained assembly cursor without changing its port or roster. */
@@ -119,8 +124,17 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (status != HiveMobilizationStatus.ASSEMBLING) {
             throw new IllegalArgumentException("only an assembling mobilization may advance its retained cursor");
         }
-        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds,
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
                 Optional.empty(), Optional.of(assembly.orElseThrow().advance(memberId)), status, Optional.empty(), Optional.empty(), startedAt);
+    }
+
+    /** Transfers only a complete retained group to the operation that selected it. */
+    public HiveMobilization depart() {
+        if (status != HiveMobilizationStatus.ASSEMBLING || !assembly.orElseThrow().complete()) {
+            throw new IllegalArgumentException("only a complete exact assembly may depart");
+        }
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
+                Optional.empty(), assembly, HiveMobilizationStatus.DEPARTED, Optional.empty(), Optional.empty(), startedAt);
     }
 
     public HiveMobilization conflict(HiveMobilizationConflictReason reason) {
@@ -133,7 +147,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (status == HiveMobilizationStatus.CONFLICT) {
             throw new IllegalArgumentException("a conflicted mobilization cannot conflict again");
         }
-        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds, Optional.empty(), assembly,
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds, Optional.empty(), assembly,
                 HiveMobilizationStatus.CONFLICT, Optional.of(reason), blockage, startedAt);
     }
 

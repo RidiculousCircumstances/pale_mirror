@@ -80,6 +80,23 @@ public final class FrontierSceneAdmission {
     }
 
     /**
+     * A generic ambient goal may not take an actor that a strategic engagement, assault or
+     * already-prepared scene owns. An ordinary en-route logistics operation is intentionally
+     * excluded: its own ambient body is the legal precursor to its later scene hand-off.
+     */
+    public static boolean reservedFromGenericAmbient(FrontierWorldState state, SubjectId actorId) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
+        return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
+                || state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED
+                && engagement.attackerIds().contains(actorId))
+                || state.strategicPlans().settlementAssaults().values().stream().anyMatch(assault -> assault.status() != SettlementAssaultStatus.RESOLVED
+                && assault.attackerIds().contains(actorId))
+                || FrontierEngineeringWorkSceneSupport.nextCandidate(state).stream()
+                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId));
+    }
+
+    /**
      * Exact read-only reservation index for one immutable canonical revision. Materialization
      * may reuse it for many actor observations; it does not retain, order or alter canonical
      * state. This prevents recompiling every COLD scene candidate once per candidate body.
@@ -91,6 +108,15 @@ public final class FrontierSceneAdmission {
                 .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
         state.operations().values().stream().filter(operation -> operation.stage() == OperationStage.EN_ROUTE)
                 .forEach(operation -> reserved.addAll(operation.participantIds()));
+        // A strategic COLD engagement owns its exact actors before a physical scene candidate
+        // exists.  Otherwise an ambient visit between departure and battlefield arrival could
+        // recreate one of the same identities as an unrelated patrol body.
+        state.strategicPlans().routeEngagements().values().stream()
+                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
+                .forEach(engagement -> reserved.addAll(engagement.attackerIds()));
+        state.strategicPlans().settlementAssaults().values().stream()
+                .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
+                .forEach(assault -> reserved.addAll(assault.attackerIds()));
         state.coldEngagementSceneCandidates().forEach(candidate -> reserved.addAll(candidate.actorIds()));
         state.coldSettlementAssaultSceneCandidates().forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A completed engineering assembly is the next exclusive physical owner, even before
@@ -110,6 +136,10 @@ public final class FrontierSceneAdmission {
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
                 || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
                 && operation.participantIds().contains(actorId))
+                || state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED
+                && engagement.attackerIds().contains(actorId))
+                || state.strategicPlans().settlementAssaults().values().stream().anyMatch(assault -> !assault.id().equals(assaultId)
+                && assault.status() != SettlementAssaultStatus.RESOLVED && assault.attackerIds().contains(actorId))
                 || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId))
                 || state.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> !candidate.assaultId().equals(assaultId)
                 && candidate.memberPositions().containsKey(actorId));

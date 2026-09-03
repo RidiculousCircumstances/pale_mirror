@@ -54,21 +54,46 @@ public final class HiveSettlementAssaultProcess {
         SettlementAssault assault = assault(state, task, sighting.orElseThrow());
         if (assault == null) {
             // A visible operation may wake exact cocoon occupants, but it may not pull them
-            // through an intact block or pretend that a chunk visit created an attacker. The
-            // separate mobilization owner retains this active task until its physical release
-            // and later assembly/assault continuation are implemented.
+            // through an intact block or pretend that a chunk visit created an attacker.
+            // Mobilisation retains the active task until the same roster reaches its Ganglion
+            // staging surfaces, where the dedicated departure transition owns admission.
             return HiveMobilizationProcess.forSettlementAssault(state, task, sighting.orElseThrow(), action.dueAt().ticks())
                     .<List<ProposedEvent>>map(mobilization -> List.of(transition(task, StrategicTaskStatus.ACTIVE),
                             new ProposedEvent(mobilization.hiveId(), new HiveMobilizationStarted(mobilization))))
                     .orElseGet(() -> List.of(transition(task, StrategicTaskStatus.BLOCKED)));
         }
+        List<ProposedEvent> events = new ArrayList<>(admit(state, assault, action.dueAt().ticks()));
+        events.addFirst(transition(task, StrategicTaskStatus.ACTIVE));
+        return List.copyOf(events);
+    }
+
+    /**
+     * Builds the one post-assembly transaction.  The caller supplies the speculative final
+     * retained assembly so this method never looks for nearby replacement bioforms or geometry.
+     */
+    static List<ProposedEvent> planAssemblyDeparture(FrontierWorldState state, HiveMobilization mobilization,
+                                                      HiveTaskAssembly completedAssembly, long now) {
+        if (mobilization.status() != HiveMobilizationStatus.ASSEMBLING || !completedAssembly.complete()
+                || !mobilization.assembly().orElseThrow().members().keySet().equals(completedAssembly.members().keySet())) {
+            return List.of();
+        }
+        StrategicTask task = state.strategicPlans().tasks().get(mobilization.taskId());
+        if (task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || task.status() != StrategicTaskStatus.ACTIVE
+                || !task.ownerId().equals(mobilization.hiveId()) || !targetGeometryExists(state, mobilization.sighting())
+                || !currentSightingSupportsDeparture(state, mobilization, now) || !hasFreshLocalTerritory(state, mobilization.sighting(), now)) {
+            return List.of(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationConflicted(mobilization.id(),
+                    HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE, Optional.empty())));
+        }
+        SettlementAssault assault = assaultFromAssembly(state, task, mobilization, completedAssembly);
+        if (assault == null) {
+            return List.of(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationConflicted(mobilization.id(),
+                    HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE, Optional.empty())));
+        }
         List<ProposedEvent> events = new ArrayList<>();
-        events.add(transition(task, StrategicTaskStatus.ACTIVE));
-        events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
-        events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
-        events.add(schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-        events.add(schedule(DefenderEquipmentProcess.review(assault, action.dueAt().ticks() + 1L)));
-        events.add(schedule(DefenderEquipmentReturnProcess.review(assault, action.dueAt().ticks() + 1L)));
+        // One payload owns both ends of the custody transfer. A separate start event would
+        // expose a departed roster without a strategic owner between WAL reductions.
+        events.add(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationDeparted(mobilization.id(), assault)));
+        events.addAll(postAdmission(state, assault, now));
         return List.copyOf(events);
     }
 
@@ -78,7 +103,7 @@ public final class HiveSettlementAssaultProcess {
                 && assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE)
                 || !action.id().equals(progress(assault, action.dueAt().ticks()).id())) return List.of();
         if (assault.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE) {
-            List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
+            List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
             if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
             if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
                 return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
@@ -101,7 +126,7 @@ public final class HiveSettlementAssaultProcess {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
         if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT
                 || !action.id().equals(combat(assault, action.dueAt().ticks()).id())) return List.of();
-        List<SubjectId> attackers = livingAttackers(state, assault), defenders = livingDefenders(state, assault);
+        List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
             return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
@@ -127,8 +152,13 @@ public final class HiveSettlementAssaultProcess {
         StrategicTask task = state.strategicPlans().tasks().get(assault.taskId());
         if (!subject.equals(assault.hiveId()) || task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
                 || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(subject)
-                || !state.strategicPlans().hiveSettlementKnowledge().entries().getOrDefault(assault.settlementId(), assault.sighting()).equals(assault.sighting())) {
+                || !isExactOverseer(state, assault.overseerId()) || state.strategicPlans().settlementAssaults().containsKey(assault.id())) {
             throw new IllegalArgumentException("settlement assault start has a foreign owner, stale sighting or inactive task");
+        }
+        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.taskId().equals(assault.taskId())).findFirst().orElse(null);
+        if (mobilization != null) {
+            throw new IllegalArgumentException("a cocoon mobilisation may start its assault only through its atomic departure payload");
         }
         return state.withStrategicPlans(state.strategicPlans().startSettlementAssault(assault));
     }
@@ -161,7 +191,7 @@ public final class HiveSettlementAssaultProcess {
         if (!subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.COLD_COMBAT || !coldAvailable(state, assault)
                 || strike.epoch() != assault.nextStrikeEpoch()) throw new IllegalArgumentException("invalid COLD settlement assault strike");
         boolean hiveTurn = (strike.epoch() & 1) == 0;
-        if (hiveTurn != assault.attackerIds().contains(strike.attackerId()) || hiveTurn == assault.attackerIds().contains(strike.targetId())
+        if (hiveTurn != assault.combatantAttackerIds().contains(strike.attackerId()) || hiveTurn == assault.combatantAttackerIds().contains(strike.targetId())
                 || !alive(state, strike.attackerId()) || !alive(state, strike.targetId()) || !damage(state, strike.attackerId()).equals(strike.damage())) {
             throw new IllegalArgumentException("settlement assault strike does not match exact combatants");
         }
@@ -197,10 +227,36 @@ public final class HiveSettlementAssaultProcess {
                 .filter(value -> alive(state, value.id())).filter(value -> availableBioform(state, value.id(), null))
                 .sorted(Comparator.comparingLong((Bioform value) -> distanceSquared(state.actorLocations().get(value.id()).supportingSurface().support(), sighting.settlementAnchor()))
                         .thenComparing(Bioform::id)).toList();
+        Bioform overseer = eligible.stream().filter(Bioform::isOverseer).findFirst().orElse(null);
+        if (overseer == null) return null;
         List<Bioform> selected = new ArrayList<>();
         eligible.stream().filter(Bioform::isExplosiveAssaulter).limit(1).forEach(selected::add);
-        eligible.stream().filter(Bioform::isDefender).limit(2).forEach(selected::add);
-        if (selected.stream().noneMatch(Bioform::isExplosiveAssaulter) || selected.stream().noneMatch(Bioform::isDefender)) return null;
+        eligible.stream().filter(Bioform::isDefender).filter(value -> !value.id().equals(overseer.id())).limit(2).forEach(selected::add);
+        if (selected.stream().noneMatch(Bioform::isExplosiveAssaulter) || selected.stream().filter(Bioform::isDefender).count() != 2) return null;
+        selected.add(overseer);
+        if (!HiveCommandCapacity.admits(state.bootstrap().ruleset(), overseer.id(), selected.stream().map(Bioform::id).toList(), allBioforms(state))) return null;
+        return assault(state, task, sighting, overseer.id(), selected.stream().map(Bioform::id).toList(),
+                selected.stream().collect(java.util.stream.Collectors.toMap(Bioform::id,
+                        value -> state.actorLocations().get(value.id()).supportingSurface())));
+    }
+
+    /**
+     * Compiles the only admissible first state of an assault handed off by a completed
+     * mobilisation.  Package-visible for the departure reducer: a durable payload is evidence
+     * of the planner's decision, never authority to alter its exact routes or defender unit.
+     */
+    static SettlementAssault assaultFromAssembly(FrontierWorldState state, StrategicTask task, HiveMobilization mobilization,
+                                                 HiveTaskAssembly completedAssembly) {
+        if (mobilization.memberIds().stream().anyMatch(id -> !alive(state, id))
+                || !isExactOverseer(state, mobilization.overseerId())
+                || !HiveCommandCapacity.admits(state.bootstrap().ruleset(), mobilization.overseerId(), mobilization.memberIds(), allBioforms(state))) return null;
+        Map<SubjectId, SurfaceAnchor> starts = completedAssembly.members().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey, entry -> entry.getValue().destinationSurface()));
+        return assault(state, task, mobilization.sighting(), mobilization.overseerId(), mobilization.memberIds(), starts);
+    }
+
+    private static SettlementAssault assault(FrontierWorldState state, StrategicTask task, HiveSettlementKnowledge.Sighting sighting,
+                                             SubjectId overseerId, List<SubjectId> attackers, Map<SubjectId, SurfaceAnchor> starts) {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
                 .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())
@@ -211,18 +267,51 @@ public final class HiveSettlementAssaultProcess {
                         .thenComparing(ResidentProfile::id))
                 .limit(SettlementAssault.MAX_DEFENDERS).map(ResidentProfile::id).toList();
         if (defenders.isEmpty()) return null;
-        List<BlockPosition> floors = FrontierSettlementAssaultBattlefield.attackerFloors(state, sighting, defenders, selected.size()).orElse(null);
+        List<BlockPosition> floors = FrontierSettlementAssaultBattlefield.attackerFloors(state, sighting, defenders, attackers.size()).orElse(null);
         if (floors == null) return null;
         return new SettlementAssault(new SubjectId("assault:" + task.id().value().substring("task:".length())), task.id(), task.ownerId(), sighting,
-                java.util.stream.IntStream.range(0, selected.size()).mapToObj(index -> new SettlementAssaultAttacker(selected.get(index).id(),
-                        approach(state, state.actorLocations().get(selected.get(index).id()).supportingSurface().support(), floors.get(index)), 0)).toList(),
+                overseerId, java.util.stream.IntStream.range(0, attackers.size()).mapToObj(index -> new SettlementAssaultAttacker(attackers.get(index),
+                        approach(state, starts.get(attackers.get(index)).support(), floors.get(index)), 0)).toList(),
                 defenders, SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
+    }
+
+    private static List<ProposedEvent> admit(FrontierWorldState state, SettlementAssault assault, long now) {
+        List<ProposedEvent> events = new ArrayList<>();
+        events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultStarted(assault)));
+        events.addAll(postAdmission(state, assault, now));
+        return List.copyOf(events);
+    }
+
+    /** Effects and schedules that follow an already atomically admitted assault. */
+    private static List<ProposedEvent> postAdmission(FrontierWorldState state, SettlementAssault assault, long now) {
+        List<ProposedEvent> events = new ArrayList<>();
+        events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
+        events.add(schedule(progress(assault, now + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
+        events.add(schedule(DefenderEquipmentProcess.review(assault, now + 1L)));
+        events.add(schedule(DefenderEquipmentReturnProcess.review(assault, now + 1L)));
+        return List.copyOf(events);
     }
 
     private static boolean targetGeometryExists(FrontierWorldState state, HiveSettlementKnowledge.Sighting sighting) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), sighting.settlementId());
         return settlement.anchor().equals(sighting.settlementAnchor()) && settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.HALL).anyMatch(value -> state.structureConditions().get(value.id()) != StructureCondition.DESTROYED);
+    }
+
+    private static boolean currentSightingSupportsDeparture(FrontierWorldState state, HiveMobilization mobilization, long now) {
+        HiveSettlementKnowledge.Sighting current = state.strategicPlans().hiveSettlementKnowledge().entries().get(mobilization.settlementId());
+        return current != null && current.settlementAnchor().equals(mobilization.sighting().settlementAnchor())
+                && current.observedAt() >= mobilization.sighting().observedAt()
+                && current.observedAt() >= Math.subtractExact(now, state.bootstrap().ruleset().cadence().hiveSettlementKnowledgeMaxAge());
+    }
+
+    private static boolean isExactOverseer(FrontierWorldState state, SubjectId actorId) {
+        return allBioforms(state).get(actorId) != null && allBioforms(state).get(actorId).isOverseer() && alive(state, actorId);
+    }
+
+    private static Map<SubjectId, Bioform> allBioforms(FrontierWorldState state) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Bioform::id, value -> value));
     }
 
     private static boolean availableBioform(FrontierWorldState state, SubjectId id, SettlementAssault currentAssault) {
@@ -248,12 +337,12 @@ public final class HiveSettlementAssaultProcess {
                 && !FrontierSceneAdmission.reservedByOtherThanSettlementAssault(state, id, assault.id()));
     }
 
-    private static List<SubjectId> livingAttackers(FrontierWorldState state, SettlementAssault assault) { return assault.attackerIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
+    private static List<SubjectId> livingCombatantAttackers(FrontierWorldState state, SettlementAssault assault) { return assault.combatantAttackerIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
     private static List<SubjectId> livingDefenders(FrontierWorldState state, SettlementAssault assault) { return assault.defenderIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
     private static boolean alive(FrontierWorldState state, SubjectId actor) { return state.actorLocations().get(actor) != null && state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE; }
     private static SubjectId choose(List<SubjectId> values, int epoch) { return values.get(Math.floorMod(epoch, values.size())); }
     private static SettlementAssaultOutcome outcome(FrontierWorldState state, SettlementAssault assault) {
-        boolean attackers = !livingAttackers(state, assault).isEmpty(), defenders = !livingDefenders(state, assault).isEmpty();
+        boolean attackers = !livingCombatantAttackers(state, assault).isEmpty(), defenders = !livingDefenders(state, assault).isEmpty();
         if (attackers && !defenders) return SettlementAssaultOutcome.HIVE_VICTORY;
         if (!attackers && defenders) return SettlementAssaultOutcome.SETTLEMENT_VICTORY;
         if (!attackers) return SettlementAssaultOutcome.ABORTED;

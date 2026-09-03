@@ -79,7 +79,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
             "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
             "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
-            "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_conflicted");
+            "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted");
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
             "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
@@ -356,7 +356,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced", "frontier.route_engagement_transition", "frontier.route_engagement_strike",
                     "frontier.route_engagement_resolved", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
-                    "frontier.hive_mobilization_started");
+                    "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
             case "population" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
@@ -395,7 +395,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
-                    "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_conflicted",
+                    "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",
                     "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

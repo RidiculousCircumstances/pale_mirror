@@ -3,6 +3,9 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecyclePhase;
@@ -19,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvan
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDeparted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
@@ -29,6 +33,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -141,7 +146,12 @@ public final class HiveMobilizationProcess {
         HiveTaskAssembly next = assembly.advance(advancing);
         ProposedEvent advanced = new ProposedEvent(mobilization.hiveId(), new HiveMobilizationAssemblyAdvanced(mobilization.id(), advancing,
                 assembly.members().get(advancing).cursor()));
-        return next.complete() ? List.of(advanced) : List.of(advanced, retry);
+        if (!next.complete()) return List.of(advanced, retry);
+        List<ProposedEvent> departure = HiveSettlementAssaultProcess.planAssemblyDeparture(state, mobilization, next, action.dueAt().ticks());
+        List<ProposedEvent> events = new ArrayList<>(departure.size() + 1);
+        events.add(advanced);
+        events.addAll(departure);
+        return List.copyOf(events);
     }
 
     /** Reducer validation preserves the same topology, exact body and one-step cursor relation. */
@@ -177,11 +187,53 @@ public final class HiveMobilizationProcess {
                 state.hiveColony().advanceMobilizationAssembly(mobilization.id(), advanced.bioformId())));
     }
 
+    /** Reducer for the exact completed-assembly custody hand-off; never an external command. */
+    public static FrontierWorldState reduceDeparted(FrontierWorldState state, SubjectId subject, HiveMobilizationDeparted departed) {
+        HiveMobilization mobilization = requireMobilization(state, subject, departed.mobilizationId());
+        HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
+        if (mobilization.status() != HiveMobilizationStatus.ASSEMBLING || !assembly.complete()
+                || mobilization.memberIds().stream().anyMatch(id -> {
+                    ActorLocation actor = state.actorLocations().get(id);
+                    HiveTaskAssembly.Member member = assembly.members().get(id);
+                    return actor == null || member == null || !actor.supportingSurface().equals(member.destinationSurface());
+                })) {
+            throw new IllegalArgumentException("only the exact complete staged group may depart");
+        }
+        if (!departed.assault().taskId().equals(mobilization.taskId()) || !departed.assault().hiveId().equals(mobilization.hiveId())
+                || !departed.assault().sighting().equals(mobilization.sighting()) || !departed.assault().overseerId().equals(mobilization.overseerId())
+                || !departed.assault().attackerIds().equals(mobilization.memberIds())
+                || state.strategicPlans().settlementAssaults().containsKey(departed.assault().id())) {
+            throw new IllegalArgumentException("departure must retain one new exact assault for its completed same roster");
+        }
+        StrategicTask task = state.strategicPlans().tasks().get(mobilization.taskId());
+        SettlementAssault expected = task == null ? null
+                : HiveSettlementAssaultProcess.assaultFromAssembly(state, task, mobilization, assembly);
+        if (!departed.assault().equals(expected)) {
+            throw new IllegalArgumentException("departure payload must equal the deterministic same-roster assault admission");
+        }
+        // The complete staging positions are the COLD assault's only starting authority.  Close
+        // only the same exact assembly leases in this transaction so no old HOT goal can keep
+        // an actor stranded at the Ganglion or compete with the newly admitted operation.
+        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases());
+        for (SubjectId memberId : mobilization.memberIds()) {
+            AmbientActorLease lease = leases.get(memberId);
+            if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
+                if (lease.goal() != AmbientGoalKind.HIVE_TASK_ASSEMBLY) {
+                    throw new IllegalArgumentException("departing hive bioform has foreign ambient authority");
+                }
+                leases.put(memberId, lease.withStatus(AmbientLeaseStatus.CLOSED));
+            }
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().hiveColony(state.hiveColony().departMobilization(mobilization.id()))
+                .ambientLeases(leases).strategicPlans(state.strategicPlans().startSettlementAssault(departed.assault())));
+    }
+
     public static FrontierWorldState reduceConflicted(FrontierWorldState state, SubjectId subject, HiveMobilizationConflicted conflicted) {
         HiveMobilization mobilization = requireMobilization(state, subject, conflicted.mobilizationId());
         boolean releaseConflict = conflicted.reason() == HiveMobilizationConflictReason.COCOON_CHANGED
                 || conflicted.reason() == HiveMobilizationConflictReason.UNKNOWN_AFTER_RESTART;
-        boolean assemblyConflict = conflicted.reason() == HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED;
+        boolean assemblyConflict = conflicted.reason() == HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED
+                || conflicted.reason() == HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE;
         if (!((releaseConflict && (mobilization.status() == HiveMobilizationStatus.WAKING || mobilization.status() == HiveMobilizationStatus.RELEASING))
                 || (assemblyConflict && mobilization.status() == HiveMobilizationStatus.ASSEMBLING))) {
             throw new IllegalArgumentException("hive mobilization conflict does not match its durable physical boundary");
@@ -209,7 +261,7 @@ public final class HiveMobilizationProcess {
                 allBioforms(state).collect(Collectors.toUnmodifiableMap(Bioform::id, value -> value)))) return Optional.empty();
         String suffix = task.id().value().substring("task:".length());
         return Optional.of(new HiveMobilization(new SubjectId("mobilization:" + suffix), state.bootstrap().hive().id(), nest.id(), task.id(),
-                sighting.settlementId(), overseer.id(), members, HiveMobilizationStatus.WAKING, now));
+                sighting, overseer.id(), members, HiveMobilizationStatus.WAKING, now));
     }
 
     private static Stream<Bioform> allBioforms(FrontierWorldState state) {

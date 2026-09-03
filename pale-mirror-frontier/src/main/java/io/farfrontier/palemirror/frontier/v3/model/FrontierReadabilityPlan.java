@@ -132,6 +132,8 @@ public final class FrontierReadabilityPlan {
                     "WAKE SEQUENCE · " + mobilization.releasedMemberIds().size() + "/" + mobilization.memberIds().size());
             case ASSEMBLING -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
                     "ASSEMBLY · " + mobilization.memberIds().size() + " FORMED");
+            case DEPARTED -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
+                    "EXPEDITION DEPARTED · " + mobilization.memberIds().size());
             case CONFLICT -> new MobilizationReadout(FrontierObjectBoard.Tone.WARNING, "WAKE INTERRUPTED · INSPECT COCOONS");
         };
     }

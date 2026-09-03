@@ -117,7 +117,7 @@ class HiveSettlementAssaultProcessTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
-        for (int step = 0; step < 8; step++) {
+        for (int step = 0; step < 256; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
@@ -253,7 +253,7 @@ class HiveSettlementAssaultProcessTest {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = FrontierTestPositions.deployBioform(state, scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.isExplosiveAssaulter() || bioform.isDefender()) {
+            if (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer()) {
                 state = FrontierTestPositions.deployBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).body());
             }
         }

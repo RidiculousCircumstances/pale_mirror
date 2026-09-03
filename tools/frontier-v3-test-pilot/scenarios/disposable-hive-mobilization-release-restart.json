@@ -15,12 +15,11 @@
   ],
   "actions": [
     { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "ASSEMBLING", "assemblyComplete": false, "hotMembers": 4 }, "timeoutMs": 60000 },
-    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "ASSEMBLING", "assemblyComplete": true, "hotMembers": 4 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "DEPARTED", "assemblyComplete": true, "members": 4, "closedAssemblyLeases": 4, "assault": "assault:development-hive-mobilization" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "hive-assembly:mobilization:development-hive-mobilization", "expect": { "status": "ok", "eventKind": "hive_assembly_advanced" }, "timeoutMs": 30000 },
-    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "ASSEMBLING", "assemblyComplete": true, "hotMembers": 4 }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "DEPARTED", "assemblyComplete": true, "members": 4, "closedAssemblyLeases": 4, "assault": "assault:development-hive-mobilization" }, "timeoutMs": 30000 },
     { "type": "look", "at": { "x": 412, "y": 66, "z": 407 } },
-    { "type": "assert_visible_board", "text": "ASSEMBLY · 4 FORMED", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
-    { "type": "look_nearest_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 48, "timeoutMs": 30000 }
+    { "type": "assert_visible_board", "text": "EXPEDITION DEPARTED · 4", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 }
   ],
   "restart": {
     "mode": "graceful",
@@ -28,17 +27,16 @@
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 412, "y": 67, "z": 401 }, "settleMs": 1500 },
       { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
-        { "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING" } }
+        { "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ACTIVE" } }
       ] }
     ]
   },
   "assertions": [
-    { "after": 2, "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "ASSEMBLING", "assemblyComplete": true, "hotMembers": 4 } },
+    { "after": 2, "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "DEPARTED", "assemblyComplete": true, "members": 4, "closedAssemblyLeases": 4, "assault": "assault:development-hive-mobilization" } },
     { "after": 3, "view": "trace", "id": "hive-assembly:mobilization:development-hive-mobilization", "expect": { "status": "ok", "eventKind": "hive_assembly_advanced" } },
-    { "after": 4, "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "ASSEMBLING", "assemblyComplete": true, "hotMembers": 4 } }
+    { "after": 4, "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "DEPARTED", "assemblyComplete": true, "members": 4, "closedAssemblyLeases": 4, "assault": "assault:development-hive-mobilization" } }
   ],
   "frames": [
-    { "after": 6, "name": "east-hive-assembly-after-restart" },
-    { "after": 7, "name": "east-hive-assembled-bioforms" }
+    { "after": 6, "name": "east-hive-expedition-after-restart" }
   ]
 }

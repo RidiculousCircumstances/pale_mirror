@@ -222,7 +222,7 @@ final class FrontierDevelopmentScenarios {
         // excludes cocoon-retained identities; this fixture explicitly owns only its test
         // precondition, rather than relying on an impossible direct COLD movement later.
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.isExplosiveAssaulter() || bioform.isDefender()) {
+            if (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer()) {
                 state = deployFixtureBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).supportingSurface().support());
             }
         }

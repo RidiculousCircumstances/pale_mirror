@@ -182,7 +182,7 @@ class HumanTacticalFunctionProjectionTest {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = FrontierTestPositions.deployBioform(state, scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
-                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+                .filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).body());
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);

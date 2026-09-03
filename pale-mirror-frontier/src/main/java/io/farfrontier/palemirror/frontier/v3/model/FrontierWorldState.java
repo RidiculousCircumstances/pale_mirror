@@ -59,14 +59,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         RouteMaintenanceStateSupport.validateAmbientAssemblyLeases(routeMaintenances, ambientLeases);
         MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents); Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
-        for (HiveMobilization mobilization : hiveColony.mobilizations().values()) {
-            StrategicTask task = strategicPlans.tasks().get(mobilization.taskId());
-            boolean knownSettlement = bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(mobilization.settlementId()));
-            if (task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || task.status() != StrategicTaskStatus.ACTIVE
-                    || !task.ownerId().equals(bootstrap.hive().id()) || !knownSettlement) {
-                throw new IllegalArgumentException("hive mobilization must retain one active exact assault task and settlement target");
-            }
-        }
+        HiveMobilizationStateSupport.validateTaskCustody(bootstrap, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);

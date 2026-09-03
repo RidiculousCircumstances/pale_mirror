@@ -14,10 +14,13 @@ public enum HiveMobilizationStatus {
     RELEASING,
     /** Every selected member has an observed opened cocoon and is ready for local assembly. */
     ASSEMBLING,
+    /** The retained complete group has atomically transferred to its named operation. */
+    DEPARTED,
     /** A loaded-world pre/postcondition disagreed; no body is invented or moved. */
     CONFLICT;
 
     public int wireTag() { return FrontierWireTags.tag(this); }
 
-    public boolean terminal() { return this == CONFLICT; }
+    /** A departed group is no longer owned by cocoon mobilisation; its operation owns it. */
+    public boolean terminal() { return this == DEPARTED || this == CONFLICT; }
 }

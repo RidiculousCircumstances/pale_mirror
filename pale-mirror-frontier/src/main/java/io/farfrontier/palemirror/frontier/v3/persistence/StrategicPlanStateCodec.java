@@ -55,7 +55,7 @@ public final class StrategicPlanStateCodec {
         }
         writeCount(output, plans.settlementAssaults().size());
         for (SettlementAssault assault : plans.settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id)).toList()) {
-            writeSubject(output, assault.id()); writeSubject(output, assault.taskId()); writeSubject(output, assault.hiveId());
+            writeSubject(output, assault.id()); writeSubject(output, assault.taskId()); writeSubject(output, assault.hiveId()); writeSubject(output, assault.overseerId());
             writeSubject(output, assault.sighting().settlementId()); writeSubject(output, assault.sighting().scoutId());
             writePosition(output, assault.sighting().settlementAnchor()); output.writeLong(assault.sighting().observedAt());
             writeCount(output, assault.attackers().size());
@@ -187,7 +187,7 @@ public final class StrategicPlanStateCodec {
         }
         Map<SubjectId, SettlementAssault> assaults = new LinkedHashMap<>();
         if (hasSettlementAssaults) for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = readSubject(input), task = readSubject(input), hive = readSubject(input);
+            SubjectId id = readSubject(input), task = readSubject(input), hive = readSubject(input), overseer = readSubject(input);
             HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(readSubject(input), readSubject(input), readPosition(input), input.readLong());
             List<SettlementAssaultAttacker> attackers = new ArrayList<>();
             for (int attacker = 0, attackerCount = readCount(input); attacker < attackerCount; attacker++) {
@@ -199,7 +199,7 @@ public final class StrategicPlanStateCodec {
             for (int defender = 0, defenderCount = readCount(input); defender < defenderCount; defender++) defenders.add(readSubject(input));
             int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
-            if (status >= SettlementAssaultStatus.values().length || assaults.put(id, new SettlementAssault(id, task, hive, sighting, attackers, defenders,
+            if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers, defenders,
                     FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
             }
@@ -322,8 +322,7 @@ public final class StrategicPlanStateCodec {
         return FrontierWireTags.require(RouteEngagementOutcome.class, value);
     }
     private static SettlementAssaultOutcome readAssaultOutcome(DataInputStream input) throws IOException {
-        int value = input.readUnsignedByte(); if (value >= SettlementAssaultOutcome.values().length) throw new IllegalArgumentException("unknown settlement assault outcome");
-        return FrontierWireTags.require(SettlementAssaultOutcome.class, value);
+        return FrontierWireTags.require(SettlementAssaultOutcome.class, input.readUnsignedByte());
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

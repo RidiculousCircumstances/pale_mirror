@@ -214,6 +214,23 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 
+    /** Atomically releases completed cocoon-task custody to its exact operation. */
+    public HiveColony departMobilization(SubjectId mobilizationId) {
+        HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
+        if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
+        Map<SubjectId, HiveMobilization> nextMobilizations = new LinkedHashMap<>(mobilizations);
+        nextMobilizations.put(mobilizationId, current.depart());
+        Map<SubjectId, BioformLifecycle> nextLifecycles = new LinkedHashMap<>(bioformLifecycles);
+        for (SubjectId member : current.memberIds()) {
+            BioformLifecycle lifecycle = nextLifecycles.get(member);
+            if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.ASSEMBLING) {
+                throw new IllegalArgumentException("only exact assembled members may depart cocoon custody");
+            }
+            nextLifecycles.put(member, lifecycle.active());
+        }
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, nextLifecycles, nextMobilizations);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
@@ -251,7 +268,9 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
                 if (!mobilization.status().terminal() && !activeMobilized.add(member)) {
                     throw new IllegalArgumentException("bioform may not belong to multiple active hive mobilizations");
                 }
-                BioformLifecyclePhase expected = mobilization.releasedMemberIds().contains(member)
+                BioformLifecyclePhase expected = mobilization.status() == HiveMobilizationStatus.DEPARTED
+                        ? BioformLifecyclePhase.ACTIVE
+                        : mobilization.releasedMemberIds().contains(member)
                         ? BioformLifecyclePhase.ASSEMBLING
                         : (mobilization.status().terminal() ? null : BioformLifecyclePhase.WAKING);
                 if (expected != null && lifecycle.phase() != expected) {

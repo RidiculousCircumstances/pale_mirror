@@ -63,6 +63,7 @@ JFR, restart or player-visible gates in the implementation plan.
 | V3-AUD-033 | P1 | Confirmed defect | The first cocoon lifecycle cut allowed COLD assault/engagement planners and development fixtures to move a dormant exact bioform directly. This violates custody, can create a canonical body outside its owned cocoon and lets a strategic planner silently mobilize a sleeper. |
 | V3-AUD-034 | P1 | Confirmed defect | The new task-driven cocoon release executor could persist `RELEASING` on ordinary player demand before the bounded graybox projector had claimed and placed that exact cocoon. Its next tick then correctly found no owned block and durably conflicted the operation, turning normal first materialization into a false `COCOON_CHANGED` outcome. The pure semantic baseline also described a cocoon as `HIVE_HIBERNACULUM` while projection used `HIVE_COCOON`. |
 | V3-AUD-035 | P2 | Confirmed defect | Four checked-in development fixtures advanced the normal engine through up to 12,000 ticks, then decoded every sampled checkpoint with an unpinned generic codec. Each decode reconstructed the same immutable twelve-settlement bootstrap, including full structure occupancy and access-port validation. A complete gate therefore spent minutes repeatedly compiling already-proven genesis geometry and obscured the real route-planning regression. |
+| V3-AUD-036 | P1 | Confirmed defect | `HiveRouteEngagementProcess.attackers` directly selects active bomber/defender bodies by distance and `RouteEngagement` persists no Relay-coverage fact or exact Overseer. Consequently a remote coordinated interception can begin without the mobile controller required by the accepted hive physiology contract, and neither controller loss nor recovery has an owner. |
 
 ## Remediation status
 
@@ -107,6 +108,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-033 | CLOSED | Exact cocoon custody is now a cross-component invariant owned by `HiveLifecycleStateSupport`: a `DORMANT` or `RECOVERING` bioform retains its one exact HIBERNACULUM-slot body and no active ambient lease. COLD patrol, route-engagement and settlement-assault selection exclude cocoon-retained IDs; fixtures must declare an explicit deployment. `BioformLifecycleStateCodec` retains the schema-105 lifecycle bytes outside the aggregate codec. Focused lifecycle/state/selection tests, Scene 41/41 and the normal-player `disposable_hive_cocoon_wake_restart` proof (break → durable physical delta → graceful restart → same exact `ACTIVE`/`HOT` Zombie) pass; the complete critical gate passes: `guardrails`, `check`, build/package verification and 278/278 GameTests. |
 | V3-AUD-034 | CLOSED | The release gate treats an absent provenance claim as `PENDING` projection work and opens only a physically exact claimed `HIVE_COCOON`; an exact prior claim plus a changed block remains a visible conflict. The reusable pure classification regression and exact baseline-palette check pass. Native `disposable-hive-mobilization-release-restart` run `d6a28a3e-e6e6-46e2-b663-7bbf69ac0b67` proves naturally demanded four-body `WAKING → ASSEMBLING → HOT` after graceful restart; its clean frame displays `ASSEMBLY · 4 FORMED`. A full-gate regression exposed a separate local-planning cost error: compiling the entire three-wide world route footprint to service one engineering approach made one exact worksite spend minutes in allocation/JIT. `EngineeringApproachCorridor` now lazily memoizes only bounded candidate columns from the analytic declared graph; it does not compile materialization geometry. The exact conflict-drain regression has a two-second local-compilation ceiling, while preserving the same approach result and terminal HOT-drain assertions. The final critical gate passes (`guardrails`, `check`, build/package and 278/278 GameTests). |
 | V3-AUD-035 | CLOSED | A generic codec now has a process-local access-ordered cache of at most eight immutable bootstraps, keyed by the complete world/seed/ruleset/terrain header; all cache access is synchronized and it retains no mutable canonical state. A pinned codec remains the explicit runtime path, while repeated generic checkpoint inspection no longer recompiles the same genesis geometry. Header mismatch still fails before mutable hydration, and focused cache-isolation, 25-profile catalog and exact maintenance-compilation regressions pass in 15 seconds or less; the final critical gate passes (`guardrails`, `check`, build/package and 278/278 GameTests). |
+| V3-AUD-036 | OPEN | Replace direct active-body interception selection with one exact operation-admission boundary: either retain a fresh bounded stationary Relay-coverage proof for the full operation, or retain one exact mobile Overseer plus its weighted subordinate roster. Persist controller/coverage facts in the engagement, make HOT/COLD progression and scene admission consume that same authority, and implement bounded signal-memory → instinct → reclaim recovery after controller loss. Normal remote start, no-controller rejection, Relay-covered local start, controller loss, reclaim and restart must all be covered before the finding closes. |
 
 ## Findings and required corrections
 
@@ -171,7 +173,22 @@ turns into an implicit flight edge.  Focused state/codec checks, a 44-test Scene
 native graceful-restart `disposable-hive-mobilization-release-restart` scenario prove the
 four-member group reaches terminal assembled HOT custody after the retained approaches; its
 post-restart trace has no path-blocked event.  This proves the assembly family, not arbitrary
-terrain replan, bridge/rail grades or a completed assault departure.
+terrain replan or bridge/rail grades.
+
+The previously open assault-departure seam is now closed at schema-111/envelope-23.  A
+mobilisation retains its original Scout sighting, exact Overseer and exact assembly roster;
+the final retained COLD or observed HOT cursor creates one ordered transaction:
+`hive_mobilization_assembly_advanced -> hive_mobilization_departed ->
+settlement_assault_started`.  The correction found that this was not truly atomic: those two
+events briefly exposed an invalid departed roster without an assault. `HiveMobilizationDeparted`
+now carries the exact `SettlementAssault`, and its one reducer first verifies every actor on its
+persisted staging surface, closes only its assembly leases, changes only those identities from
+`ASSEMBLING` to `ACTIVE`, and starts that same ordered roster/controller assault in the same
+state update. Missing/stale target facts yield the durable
+`DEPARTURE_UNAVAILABLE` conflict rather than a fresh ambient-body selection.  Focused tests
+cover COLD completion, final HOT receipt, stale-sighting conflict, stale departure replay and
+snapshot/WAL round trips.  This closes only the assembly-to-assault ownership seam; controller
+loss/signal-memory degradation and return/recovery remain open operation cuts.
 
 The road family exposed a separate decision defect while tracing the promised replan path.  A
 known route loss correctly created a same-cell `RouteMaintenance`, and construction correctly

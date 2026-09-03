@@ -14,7 +14,7 @@ import java.util.Optional;
  * inferred operation target.  The retained sighting is the sole strategic discovery authority;
  * defenders are exact resident identities captured at admission, not an aggregate population.</p>
  */
-public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
+public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting, SubjectId overseerId,
                          List<SettlementAssaultAttacker> attackers, SettlementDefenderUnit defenderUnit,
                          SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
     public static final int MAX_ATTACKERS = 16;
@@ -25,6 +25,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         Objects.requireNonNull(taskId, "assault task");
         Objects.requireNonNull(hiveId, "assault hive");
         Objects.requireNonNull(sighting, "assault sighting");
+        Objects.requireNonNull(overseerId, "assault overseer");
         attackers = List.copyOf(attackers);
         Objects.requireNonNull(defenderUnit, "assault defender unit");
         Objects.requireNonNull(status, "assault status");
@@ -32,6 +33,9 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         if (attackers.isEmpty() || attackers.size() > MAX_ATTACKERS
                 || attackers.stream().map(SettlementAssaultAttacker::actorId).distinct().count() != attackers.size()) {
             throw new IllegalArgumentException("assault must retain one to sixteen distinct attackers");
+        }
+        if (!attackers.stream().map(SettlementAssaultAttacker::actorId).toList().contains(overseerId)) {
+            throw new IllegalArgumentException("assault must retain its exact mobile Overseer");
         }
         if (!id.value().startsWith("assault:") || !defenderUnit.id().equals(new SubjectId("unit:" + id.value().substring("assault:".length())))
                 || !defenderUnit.settlementId().equals(sighting.settlementId())) {
@@ -43,17 +47,18 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         }
     }
 
-    /** Compatibility constructor; retained member ordering deterministically fixes the first leader. */
     public SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
-                             List<SettlementAssaultAttacker> attackers, List<SubjectId> defenderIds,
+                             SubjectId overseerId, List<SettlementAssaultAttacker> attackers, List<SubjectId> defenderIds,
                              SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
-        this(id, taskId, hiveId, sighting, attackers, SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenderIds),
+        this(id, taskId, hiveId, sighting, overseerId, attackers, SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenderIds),
                 status, nextStrikeEpoch, outcome);
     }
 
     public SubjectId settlementId() { return sighting.settlementId(); }
     public BlockPosition settlementAnchor() { return sighting.settlementAnchor(); }
     public List<SubjectId> attackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).toList(); }
+    /** The Overseer is physically present but does not become an interchangeable attack source. */
+    public List<SubjectId> combatantAttackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).filter(id -> !id.equals(overseerId)).toList(); }
     public List<SubjectId> defenderIds() { return defenderUnit.memberIds(); }
     public boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
 
@@ -70,21 +75,21 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
             } else next.add(attacker);
         }
         if (!found) throw new IllegalArgumentException("assault has no named attacker");
-        return new SettlementAssault(id, taskId, hiveId, sighting, next, defenderUnit, status, nextStrikeEpoch, outcome);
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, next, defenderUnit, status, nextStrikeEpoch, outcome);
     }
 
     public SettlementAssault withStatus(SettlementAssaultStatus next) {
         if (next == SettlementAssaultStatus.RESOLVED) {
             throw new IllegalArgumentException("resolved assault requires an exact outcome");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderUnit, next, nextStrikeEpoch, Optional.empty());
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, next, nextStrikeEpoch, Optional.empty());
     }
 
     public SettlementAssault afterStrike(int expectedEpoch) {
         if (status != SettlementAssaultStatus.COLD_COMBAT || nextStrikeEpoch != expectedEpoch) {
             throw new IllegalArgumentException("assault strike does not match its current COLD epoch");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderUnit, status,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, status,
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
@@ -93,13 +98,13 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 || result != SettlementAssaultOutcome.ABORTED && status != SettlementAssaultStatus.COLD_COMBAT) {
             throw new IllegalArgumentException("only COLD assault combat may choose a combat outcome");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderUnit, SettlementAssaultStatus.RESOLVED,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, SettlementAssaultStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(Objects.requireNonNull(result, "assault outcome")));
     }
 
     public SettlementAssault abort() {
         if (status == SettlementAssaultStatus.RESOLVED) throw new IllegalArgumentException("resolved assault cannot be aborted");
-        return new SettlementAssault(id, taskId, hiveId, sighting, attackers, defenderUnit, SettlementAssaultStatus.RESOLVED,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, SettlementAssaultStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(SettlementAssaultOutcome.ABORTED));
     }
 }

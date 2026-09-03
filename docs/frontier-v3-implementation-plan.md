@@ -567,7 +567,13 @@ not depend on a player or Narrator.
   biomass, consumption, carcass and recycling.
 - Purposeful territorial Sentinels and exact observation delivery; stationary
   relay coverage inside the hive and a mandatory mobile Overseer for every
-  coordinated expedition outside that coverage.
+  coordinated expedition outside that coverage. Every route interception,
+  assault and future expedition must persist exactly one of those authorities;
+  direct nearest-body selection is prohibited. The operation retains the
+  selected controller/coverage fact, weighted roster and signal state through
+  HOT/COLD/restart, then degrades through bounded signal memory, instinct and
+  later reclaim rather than silently replanning after controller loss
+  (`V3-AUD-036`).
 - Task/threat-driven cocoon waking, assembly, return and recovery; chunk load
   never wakes a body or creates ambient wandering.
 - Synaptic signal memory and explicit degraded instincts after Relay/Overseer

@@ -116,12 +116,12 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Schema 109/envelope 19 retains cocoon/lifecycle, exact task mobilisation and
-the one-edge expected-cursor COLD assembly receipt only as
-an exact phase
-plus an optional hibernaculum slot; wounds, structural/reserve biomass and
-controller ownership remain later owning-process cuts rather than duplicated
-prematurely in this profile.
+ambient lease. Schema 111/envelope 23 retains cocoon/lifecycle, exact task
+mobilisation, its original settlement sighting, exact Overseer and the one-edge
+expected-cursor assembly receipt plus one terminal departure payload containing
+the exact assault it owns. Wounds,
+structural/reserve biomass and controller-loss behaviour remain later owning-process
+cuts rather than duplicated prematurely in this profile.
 
 Graybox colour/geometry must expose chassis, important mutation and current
 assignment without creating a cohort or hidden population multiplier.
@@ -179,11 +179,12 @@ interrupted operation instead of being misrepresented as the executor's receipt.
 Patrol, route-engagement and settlement-assault selection reject cocoon-retained
 or task-committed bioforms. Before a group is admitted, its exact non-Overseer
 members consume a persisted ruleset command weight derived from chassis and
-visible mutations; an overloaded/forged group fails closed. Departure and
-return/recovery remain later operation boundaries; chunk loading and direct
-body moves are never wake authority.
+visible mutations; an overloaded/forged group fails closed. The completed group
+can depart only through the atomic retained-roster operation boundary below;
+return/recovery and controller-loss behaviour remain later operation boundaries.
+Chunk loading and direct body moves are never wake authority.
 
-#### Assembly/departure contract (next vertical)
+#### Assembly/departure contract
 
 `ASSEMBLING` must not mean “spawn the released bodies near the nest.” The task
 will retain one exact `HiveTaskAssembly`: its named Ganglion departure port,
@@ -199,15 +200,18 @@ The compiler may use the selected members' own open Hibernaculum trays as
 their first support surfaces, but it must not traverse another organ's tissue,
 invent a height, or treat an unloaded Minecraft block as an edge. Every
 retained edge has the ordinary 3D grade/clearance/capability evidence; an
-off-grade or organ-obstructed plan fails visibly before departure. The later
+off-grade or organ-obstructed plan fails visibly before departure. The
 COLD/HOT progression owner advances only this cursor from observed arrival. A
 loaded obstruction or missing body will be one member-specific durable
 deferral/conflict; it neither teleports a replacement nor asks COLD to route
-around it. Until that owner is registered, a retained assembly cannot depart
-or create an assault. Only when all exact members occupy their retained staging
-slots may one atomic transition create the existing first-class settlement
-assault from those identities. That transition retains the same Overseer and
-group roster; it may not reselect whichever ambient forms happen to be closest.
+around it. Only when all exact members occupy their retained staging slots may
+one atomic transaction advance the final cursor, record `DEPARTED`, change only
+those exact staged identities to `ACTIVE`, and create the existing first-class
+settlement assault from those identities. That transition retains the original
+Scout sighting, same Overseer and group roster; it may not reselect whichever
+ambient forms happen to be closest. If the retained target facts are stale or
+the exact group is no longer admissible, it records `DEPARTURE_UNAVAILABLE` and
+does not create an assault.
 
 ### Biomass, wounds and consumption
 

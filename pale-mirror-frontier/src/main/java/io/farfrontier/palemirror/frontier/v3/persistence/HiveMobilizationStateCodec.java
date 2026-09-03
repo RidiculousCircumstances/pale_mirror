@@ -28,6 +28,9 @@ final class HiveMobilizationStateCodec {
             FrontierWorldStateCodec.writeString(output, mobilization.nestId().value());
             FrontierWorldStateCodec.writeString(output, mobilization.taskId().value());
             FrontierWorldStateCodec.writeString(output, mobilization.settlementId().value());
+            FrontierWorldStateCodec.writeString(output, mobilization.sighting().scoutId().value());
+            FrontierWorldStateCodec.writePosition(output, mobilization.sighting().settlementAnchor());
+            output.writeLong(mobilization.sighting().observedAt());
             FrontierWorldStateCodec.writeString(output, mobilization.overseerId().value());
             FrontierWorldStateCodec.writeCount(output, mobilization.memberIds().size());
             for (SubjectId member : mobilization.memberIds()) FrontierWorldStateCodec.writeString(output, member.value());
@@ -53,6 +56,8 @@ final class HiveMobilizationStateCodec {
             SubjectId nest = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId task = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+            io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge.Sighting sighting = new io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge.Sighting(
+                    settlement, new SubjectId(FrontierWorldStateCodec.readString(input)), FrontierWorldStateCodec.readPosition(input), input.readLong());
             SubjectId overseer = new SubjectId(FrontierWorldStateCodec.readString(input));
             List<SubjectId> members = new ArrayList<>();
             for (int member = 0, memberCount = FrontierWorldStateCodec.readCount(input); member < memberCount; member++) {
@@ -69,7 +74,7 @@ final class HiveMobilizationStateCodec {
             Optional<io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason> reason = input.readBoolean()
                     ? Optional.of(FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason.class, input.readUnsignedByte()))
                     : Optional.empty();
-            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, reason,
+            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, status, reason,
                     readBlockage(input), input.readLong());
             if (mobilizations.put(id, mobilization) != null) throw new IllegalArgumentException("duplicate hive mobilization");
         }

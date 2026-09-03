@@ -19,6 +19,9 @@ public final class AmbientLeaseStateProcess {
         if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
         }
+        if (FrontierSceneAdmission.reservedFromGenericAmbient(state, lease.actorId())) {
+            throw new IllegalArgumentException("a strategic scene or engagement exclusively owns the ambient actor");
+        }
         if (state.sceneLeases().values().stream().anyMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
                 && scene.members().stream().anyMatch(member -> member.actorId().equals(lease.actorId())))) throw new IllegalArgumentException("scene-leased actor cannot receive an ambient lease");
         AmbientActorLease previous = state.ambientLeases().get(lease.actorId());

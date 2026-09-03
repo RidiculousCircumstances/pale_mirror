@@ -47,6 +47,7 @@ class SettlementAssaultTest {
         assertThrows(IllegalArgumentException.class, () -> assault(task, List.of(new SubjectId("bioform:west-0")),
                 List.of(new SubjectId("resident:1-1"), new SubjectId("resident:1-1"))));
         assertThrows(IllegalArgumentException.class, () -> new SettlementAssault(new SubjectId("assault:northwatch"), task.id(), task.ownerId(), sighting(),
+                new SubjectId("bioform:west-0"),
                 List.of(new SettlementAssaultAttacker(new SubjectId("bioform:west-0"), List.of(new BlockPosition(0, 64, 0), sighting().settlementAnchor()), 0)),
                 List.of(new SubjectId("resident:1-1")), SettlementAssaultStatus.RESOLVED, 0, Optional.empty()));
     }
@@ -54,6 +55,7 @@ class SettlementAssaultTest {
     private static SettlementAssault assault(StrategicTask task, List<SubjectId> attackers, List<SubjectId> defenders) {
         HiveSettlementKnowledge.Sighting sighting = sighting();
         return new SettlementAssault(new SubjectId("assault:northwatch"), task.id(), task.ownerId(), sighting,
+                attackers.getFirst(),
                 attackers.stream().map(id -> new SettlementAssaultAttacker(id,
                         List.of(new BlockPosition(0, 64, 0), sighting.settlementAnchor()), 0)).toList(), defenders,
                 SettlementAssaultStatus.APPROACHING, 0, Optional.empty());

@@ -26,6 +26,9 @@ final class FrontierV3HiveMobilizationDiagnostic {
                     || mobilization.status() == HiveMobilizationStatus.CONFLICT && mobilization.assembly().isPresent())) {
                 return assembly(checkpoint, state, level, mobilization);
             }
+            if (mobilization != null && mobilization.status() == HiveMobilizationStatus.DEPARTED) {
+                return departed(checkpoint, state, mobilization);
+            }
         } catch (IllegalArgumentException invalid) {
             return FrontierV3DiagnosticJson.bounded("hive_mobilization", id, checkpoint,
                     base(id, checkpoint) + ",\"status\":\"not_found\"}");
@@ -98,6 +101,19 @@ final class FrontierV3HiveMobilizationDiagnostic {
         return "{\"schema\":1,\"kind\":\"hive_mobilization\",\"id\":\"" + quote(id)
                 + "\",\"world\":\"" + quote(checkpoint.worldId().value()) + "\",\"revision\":"
                 + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
+    }
+
+    private static String departed(CheckpointImage checkpoint, FrontierWorldState state, HiveMobilization mobilization) {
+        String assaultId = state.strategicPlans().settlementAssaults().values().stream()
+                .filter(assault -> assault.taskId().equals(mobilization.taskId()))
+                .map(assault -> assault.id().value()).findFirst().orElse("");
+        long closed = mobilization.memberIds().stream().map(state.ambientLeases()::get)
+                .filter(lease -> lease == null || lease.status() == AmbientLeaseStatus.CLOSED).count();
+        return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
+                base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"DEPARTED\""
+                        + ",\"assemblyComplete\":true,\"overseer\":\"" + quote(mobilization.overseerId().value())
+                        + "\",\"members\":" + mobilization.memberIds().size() + ",\"closedAssemblyLeases\":" + closed
+                        + ",\"assault\":\"" + quote(assaultId) + "\",\"detail\":\"exact_roster_transferred\"}");
     }
 
     private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
