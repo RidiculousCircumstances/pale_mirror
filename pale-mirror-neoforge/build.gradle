@@ -79,7 +79,14 @@ if (frontierV3PilotCatalog.getProperty("${frontierV3PilotProfile}.runner") != 'd
 }
 def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
 def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
-def frontierV3GrayboxDisabledModsCatalog = new File(rootProject.projectDir.parentFile, 'config/graybox-disabled-mods.txt')
+// The graybox disabled-mod catalogue is owned by the companion pack, not by a
+// source checkout.  A release is deliberately built from a detached worktree,
+// which need not be a sibling of that pack.  Keep the normal workspace layout
+// as the default, but permit the verified pack input to be supplied explicitly.
+def frontierV3GrayboxDisabledModsCatalogOverride = providers.gradleProperty('frontierV3GrayboxDisabledModsCatalog').orNull
+def frontierV3GrayboxDisabledModsCatalog = frontierV3GrayboxDisabledModsCatalogOverride == null
+        ? new File(rootProject.projectDir.parentFile, 'config/graybox-disabled-mods.txt')
+        : file(frontierV3GrayboxDisabledModsCatalogOverride)
 if (!frontierV3GrayboxDisabledModsCatalog.isFile()) {
     throw new GradleException("Frontier v3 pack-pilot requires the shared graybox mod catalog at ${frontierV3GrayboxDisabledModsCatalog}")
 }
