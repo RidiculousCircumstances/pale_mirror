@@ -31,7 +31,9 @@ public enum PhysicalIntentKind {
     /** One exact cargo unit restores one observed retained route surface or foundation cell. */
     ROUTE_MAINTENANCE,
     /** One exact maintenance-depot stack becomes cargo for one retained-route repair. */
-    ROUTE_MAINTENANCE_MATERIAL_LOADING;
+    ROUTE_MAINTENANCE_MATERIAL_LOADING,
+    /** One exact depot stack visibly crosses to one named settlement service worker. */
+    SETTLEMENT_SERVICE_INPUT_ISSUE;
 
     public int wireTag() {
         return switch (this) {
@@ -53,6 +55,7 @@ public enum PhysicalIntentKind {
             case EQUIPMENT_RETURN -> 15;
             case ROUTE_MAINTENANCE -> 16;
             case ROUTE_MAINTENANCE_MATERIAL_LOADING -> 17;
+            case SETTLEMENT_SERVICE_INPUT_ISSUE -> 18;
         };
     }
 }

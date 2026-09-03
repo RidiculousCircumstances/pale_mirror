@@ -39,7 +39,7 @@ final class SettlementServiceWorkStateSupport {
                     && (facility.kind() != StructureKind.INFIRMARY || worker.profession() != ResidentProfession.MEDICAL_WORKER
                     || !infection.containsKey(((SettlementServiceTarget.Infection) work.target()).cell())
                     || !InfectionTreatmentWorksite.candidates(bootstrap, ((SettlementServiceTarget.Infection) work.target()).cell())
-                    .contains(work.station()))) {
+                    .contains(work.workStation()))) {
                 throw new IllegalArgumentException("decontamination service work must retain an active infirmary, medic and infection cell");
             }
             if (work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR
@@ -48,20 +48,42 @@ final class SettlementServiceWorkStateSupport {
                     || FrontierGrayboxPlan.intactStructureCell(bootstrap.terrain(), facility, cell.position()) == null)) {
                 throw new IllegalArgumentException("structural service work must retain one engineer and exact settlement structure cell");
             }
-            PhysicalIntent intent = intents.get(work.intentId());
-            if (intent == null || !intent.causeSubjectId().equals(work.id()) || !intent.subjectIds().contains(work.inputItemId())
-                    || work.kind() == SettlementServiceWorkKind.DECONTAMINATION && intent.kind() != PhysicalIntentKind.DECONTAMINATION
-                    || work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR && intent.kind() != PhysicalIntentKind.STRUCTURAL_REPAIR) {
-                throw new IllegalArgumentException("service work must retain its exact typed endpoint intent");
+            validateDepotSource(bootstrap, work);
+            PhysicalIntent inputIssue = intents.get(work.inputIssueIntentId());
+            PhysicalIntent endpoint = intents.get(work.endpointIntentId());
+            if (inputIssue == null || inputIssue.kind() != PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE
+                    || !inputIssue.causeSubjectId().equals(work.id())
+                    || !inputIssue.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))
+                    || endpoint == null || !endpoint.causeSubjectId().equals(work.id())
+                    || !endpoint.subjectIds().contains(work.inputItemId())
+                    || work.kind() == SettlementServiceWorkKind.DECONTAMINATION && endpoint.kind() != PhysicalIntentKind.DECONTAMINATION
+                    || work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR && endpoint.kind() != PhysicalIntentKind.STRUCTURAL_REPAIR) {
+                throw new IllegalArgumentException("service work must retain exact input-issue and endpoint intents");
             }
             if (work.phase().active()) {
-                if (!activeWorkers.add(work.workerId()) || !activeIntents.add(work.intentId())) {
+                if (!activeWorkers.add(work.workerId()) || !activeIntents.add(work.inputIssueIntentId()) || !activeIntents.add(work.endpointIntentId())) {
                     throw new IllegalArgumentException("active service work cannot share a worker or physical intent");
                 }
-                if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
-                    throw new IllegalArgumentException("active service work cannot retain a terminal endpoint intent");
+                if (endpoint.status() == PhysicalIntentStatus.CONFIRMED || endpoint.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        || inputIssue.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        || (work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH_INPUT
+                        || work.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) && inputIssue.status() == PhysicalIntentStatus.CONFIRMED
+                        || (work.phase() == SettlementServiceWorkPhase.APPROACH_WORK || work.phase() == SettlementServiceWorkPhase.WORKING
+                        || work.phase() == SettlementServiceWorkPhase.EFFECT_READY) && inputIssue.status() != PhysicalIntentStatus.CONFIRMED) {
+                    throw new IllegalArgumentException("service work has invalid input/endpoint intent phase");
                 }
             }
+        }
+    }
+
+    private static void validateDepotSource(FrontierBootstrap bootstrap, SettlementServiceWork work) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, work.settlementId());
+        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("service work settlement has no depot"));
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        if (!work.inputSource().containerId().equals(FrontierWorldState.depotId(work.settlementId()))
+                || !port.stations().contains(work.inputStation())) {
+            throw new IllegalArgumentException("service work source must be the settlement depot's declared service port");
         }
     }
 }

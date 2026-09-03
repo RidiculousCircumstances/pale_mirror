@@ -3,8 +3,9 @@
 Status: accepted implementation contract for `MAT-003`. The persisted aggregate,
 immutable decontamination worksite compiler, closed `SERVICE_WORK` cause and
 snapshot codec exist; exact-worker death blocks the same aggregate and leaves
-its in-flight endpoint intent unknown. Planner, HOT executor and endpoint
-hand-off remain open.
+its in-flight intents unknown. The aggregate now retains two semantic stations,
+two immutable corridors and a durable exact source-to-worker hand-off. Planner,
+HOT executor and endpoint hand-off remain open.
 
 ## Purpose
 
@@ -24,18 +25,22 @@ settlement service task. It owns:
 
 - one stable work ID, settlement, exact living qualified resident and an
   exclusive derived service assignment;
-- one semantic facility, one exact input item, one target and one existing
-  physical intent ID; and
-- one semantic service station. A facility-internal form uses a declared
-  immutable facility port; a field form (initially decontamination) owns a
-  bounded admission-time worksite compiled from the immutable terrain provider
-  and its exact target. The latter is a persisted plan of the work, not a
+- one semantic facility, one exact input item with its retained active source
+  slot, one target, one durable input-issue intent and one existing endpoint
+  effect intent; and
+- two semantic stations. The input station is the declared immutable service
+  port of that exact source container. The work station is a declared immutable
+  facility port for an internal form, or a bounded admission-time target-relative
+  field worksite for a field form (initially decontamination). Neither is a
   Minecraft navigator result or a new mutable global plan.
-- a bounded immutable pedestrian topology and current cursor from the
-  resident's canonical surface to the declared service station;
-- the persisted phase `PREPARED`, `APPROACH`, `WORKING`, `EFFECT_READY`,
-  `BLOCKED`, `UNKNOWN_AFTER_RESTART` or terminal outcome, plus bounded work
-  progress; and
+- a bounded immutable pedestrian topology with the retained source-station
+  cursor and work-station cursor: the exact resident reaches the former, the
+  exact item visibly transfers from that source to that resident, then that
+  same resident reaches the latter. No aggregate or executor may skip, merge
+  or infer either leg;
+- the persisted phase `PREPARED`, `APPROACH_INPUT`, `INPUT_ISSUE_PENDING`,
+  `APPROACH_WORK`, `WORKING`, `EFFECT_READY`, `BLOCKED`,
+  `UNKNOWN_AFTER_RESTART` or terminal outcome, plus bounded work progress; and
 - one typed `SERVICE_WORK` scene cause/lease while the work is HOT.
 
 The initial human forms are only settlement structural repair and settlement
@@ -52,18 +57,20 @@ therefore excludes the resident from all conflicting civilian/tactical work.
 ## Lifecycle
 
 1. A canonical planner admits exactly one eligible resident, intact facility,
-   active exact input and valid target. It compiles the one bounded topology
-   and creates the work plus the existing prepared endpoint intent atomically.
-2. COLD advances only the work's next retained topology edge/cursor. It may
-   not choose a new entrance, height, station, worker or target. A loaded
-   obstruction is one typed block/conflict fact, never a detour.
+   active exact source slot and valid target. It compiles both bounded legs and
+   creates the work plus its prepared input-issue and endpoint intents atomically.
+2. COLD advances only the work's next retained topology edge/cursor. At the
+   retained input station the durable input-issue boundary moves the same exact
+   item to the same resident; it may not choose a new entrance, height, station,
+   worker, source slot or target. A loaded obstruction is one typed block/conflict
+   fact, never a detour.
 3. Natural player demand may prepare a `SERVICE_WORK` lease with that same
    resident and cursor. HOT movement advances the same cursor only after
    observed arrival. The actor is a normal exact Villager, not a generated
    service entity.
-4. At the retained station, the HOT executor performs bounded visible work and
-   records persisted work progress. It may make the endpoint intent eligible
-   only at `EFFECT_READY`.
+4. At the retained work station, the HOT executor performs bounded visible work
+   with the exact actor-held item and records persisted work progress. It may
+   make the endpoint intent eligible only at `EFFECT_READY`.
 5. The existing repair/decontamination executor remains the only
    durable-before-effect block/overlay and exact-item mutation. It consumes the
    same item, observes the same target, then emits its existing typed receipt.
@@ -81,15 +88,16 @@ world.
 
 ## Spatial and physical rules
 
-Every target has a semantic service station supplied by the owning immutable
-plan. A facility form uses its declared port/station. A field form compiles one
-bounded worksite from a finite target-relative station catalogue at admission,
-then persists that selected typed support/body position with the work. A target
-block, structure centre, infection-cell origin or arbitrary loaded pathfinding
-result is not itself a station. The topology uses typed support and body values,
-satisfies Foundry throat/clearance rules, and remains bounded. Foundry reports
-physical drift; it never clears the route, repairs the target or alters
-canonical work.
+Every source and target has a semantic station supplied by the owning immutable
+plan. The exact input source maps to its declared service port; a facility form
+uses its declared work port; a field form compiles one bounded worksite from a
+finite target-relative station catalogue at admission, then persists that
+selected typed support/body position with the work. A target block, structure
+centre, infection-cell origin, chest centre or arbitrary loaded pathfinding
+result is not itself a station. Both retained legs use typed support and body
+values, satisfy Foundry throat/clearance rules, and remain bounded. Foundry
+reports physical drift; it never clears a route, moves an item, repairs a
+target or alters canonical work.
 
 The HOT executor tests only the next retained body for collision. A full block,
 missing support, changed station, dead/missing exact body or stolen input is
@@ -99,10 +107,11 @@ worker; the observed consequence is authoritative.
 
 ## Persistence and recovery
 
-The work record, traversal, cursor, phase, progress, exact input and target
-are snapshot/WAL state. Service-work payloads and the scene cause use explicit
-stable wire tags. This is a fresh-world format change: pre-cut snapshot/WAL
-bytes fail before hydration, and affected worlds are explicitly recreated.
+The work record, both stations, source slot, input-issue and endpoint intent,
+both traversal cursors, phase, progress, exact input and target are snapshot/WAL
+state. Service-work payloads and the scene cause use explicit stable wire tags.
+This is a fresh-world format change: pre-cut snapshot/WAL bytes fail before
+hydration, and affected worlds are explicitly recreated.
 
 On restart, a lease becomes `UNKNOWN_AFTER_RESTART` until its exact naturally
 loaded body and endpoint postcondition are inspected. The system cannot repeat

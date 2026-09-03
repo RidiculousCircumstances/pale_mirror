@@ -759,8 +759,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
-        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
-        if (operation == null) throw new IllegalArgumentException("unknown operation travel");
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id")); if (operation == null) throw new IllegalArgumentException("unknown operation travel");
         RouteOperation completed = operation.completeTravelSegment();
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), completed);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
@@ -770,7 +769,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(intent, "physical intent");
         if (physicalIntents.containsKey(intent.id())) throw new IllegalArgumentException("physical intent identity already exists: " + intent.id().value());
         SceneStrikeStateSupport.validateIntent(this, intent); ResourceSitePhysicalIntentStateSupport.validateIntent(this, intent);
-        ProductionTransformationStateSupport.validateIntent(this, intent); CargoLoadingStateSupport.validateIntent(this, intent);
+        ProductionTransformationStateSupport.validateIntent(this, intent); CargoLoadingStateSupport.validateIntent(this, intent); SettlementServiceInputIssueStateSupport.validateIntent(this, intent);
         if (HumanEquipmentStateSupport.owns(intent)) HumanEquipmentStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
@@ -876,6 +875,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             return ProductionTransformationStateSupport.complete(this, current, production, next);
         }
+        if (SettlementServiceInputIssueStateSupport.owns(current)) return SettlementServiceInputIssueStateSupport.complete(this, current, SettlementServiceInputIssueStateSupport.requireReceipt(evidence), next);
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.complete(this, current, evidence, next);
         if (HiveNutrientTransferStateSupport.isEndpointIntent(current)) return HiveNutrientTransferStateSupport.completeEndpoint(this, current, evidence, next);
         if (HumanEquipmentStateSupport.owns(current)) return HumanEquipmentStateSupport.complete(this, current, evidence, next);

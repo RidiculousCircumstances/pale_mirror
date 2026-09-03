@@ -87,6 +87,9 @@ final class PhysicalEffectObservationStateCodec {
             } else if (observation instanceof RouteMaintenanceMaterialLoadObservation loading) {
                 output.writeByte(18); string(output, loading.id().value()); string(output, loading.intentId().value()); string(output, loading.maintenanceId().value());
                 string(output, loading.cargoId().value()); string(output, loading.sourceItemId().value()); string(output, loading.cargoItemId().value()); output.writeByte(loading.sourceRemainingCount());
+            } else if (observation instanceof SettlementServiceInputIssueObservation issue) {
+                output.writeByte(19); string(output, issue.id().value()); string(output, issue.intentId().value()); string(output, issue.workId().value());
+                string(output, issue.workerId().value()); string(output, issue.itemId().value()); FrontierWorldStateCodec.writeCustody(output, issue.sourceSlot());
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -117,6 +120,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 17 -> new RouteMaintenanceObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), FrontierWorldStateCodec.readPosition(input));
                 case 18 -> new RouteMaintenanceMaterialLoadObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)),
                         new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
+                case 19 -> serviceInputIssue(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
@@ -166,6 +170,12 @@ final class PhysicalEffectObservationStateCodec {
         InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
         if (!(custody instanceof InventoryCustody.ContainerSlot target)) throw new IllegalArgumentException("equipment return target must be a container slot");
         return new EquipmentReturnObservation(id, intentId, assault, resident, item, target);
+    }
+    private static SettlementServiceInputIssueObservation serviceInputIssue(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        SubjectId work = new SubjectId(text(input)), worker = new SubjectId(text(input)), item = new SubjectId(text(input));
+        InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+        if (!(custody instanceof InventoryCustody.ContainerSlot source)) throw new IllegalArgumentException("service input issue source must be a container slot");
+        return new SettlementServiceInputIssueObservation(id, intentId, work, worker, item, source);
     }
 
     private static void string(DataOutputStream output, String value) throws IOException { FrontierWorldStateCodec.writeString(output, value); }

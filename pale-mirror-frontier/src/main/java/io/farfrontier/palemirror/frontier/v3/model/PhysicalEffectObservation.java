@@ -8,7 +8,7 @@ public sealed interface PhysicalEffectObservation permits CargoHandoffObservatio
         ExplosionObservation, ProductionTransformationObservation, ResourceSiteHarvestObservation, ResourceSitePreparationObservation,
         RouteConstructionMaterialLoadObservation, RouteConstructionObservation, SceneStrikeObservation, StructuralRepairObservation,
         HiveNutrientDepartureObservation, HiveNutrientArrivalObservation, EquipmentIssueObservation, EquipmentReturnObservation,
-        RouteMaintenanceObservation, RouteMaintenanceMaterialLoadObservation {
+        RouteMaintenanceObservation, RouteMaintenanceMaterialLoadObservation, SettlementServiceInputIssueObservation {
     PhysicalObservationId id();
     PhysicalIntentId intentId();
 }

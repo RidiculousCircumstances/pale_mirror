@@ -19,7 +19,8 @@ public enum PhysicalPostcondition {
     EQUIPMENT_ISSUED_OBSERVED,
     EQUIPMENT_RETURNED_OBSERVED,
     ROUTE_MAINTENANCE_OBSERVED,
-    ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED;
+    ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED,
+    SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED;
 
     public int wireTag() {
         return switch (this) {
@@ -41,6 +42,7 @@ public enum PhysicalPostcondition {
             case EQUIPMENT_RETURNED_OBSERVED -> 15;
             case ROUTE_MAINTENANCE_OBSERVED -> 16;
             case ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED -> 17;
+            case SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED -> 18;
         };
     }
 }

@@ -115,6 +115,11 @@ public record PhysicalIntent(
                     throw new IllegalArgumentException("equipment return must bind assault, defender, exact stack and typed target slot without an area radius");
                 }
             }
+            case SETTLEMENT_SERVICE_INPUT_ISSUE -> {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED || subjectIds.size() != 3) {
+                    throw new IllegalArgumentException("service input issue must bind work, worker and exact stack without an area radius");
+                }
+            }
         }
         if (kind != PhysicalIntentKind.EQUIPMENT_RETURN && targetSlot.isPresent()) {
             throw new IllegalArgumentException("only equipment return may retain a typed target slot");

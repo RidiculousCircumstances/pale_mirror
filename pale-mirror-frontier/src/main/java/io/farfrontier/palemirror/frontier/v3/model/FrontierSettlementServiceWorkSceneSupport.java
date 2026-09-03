@@ -19,12 +19,12 @@ public final class FrontierSettlementServiceWorkSceneSupport {
         if (hasScene(state, work.id()) || !sceneEligible(work.phase())) return Optional.empty();
         ActorLocation worker = state.actorLocations().get(work.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE
-                || !worker.supportingSurface().equals(work.traversal().linearCorridorSurfaces().get(work.traversalCursor()))) {
+                || !worker.supportingSurface().equals(currentSurface(work))) {
             return Optional.empty();
         }
         if (state.structureConditions().get(work.facilityId()) != StructureCondition.INTACT) return Optional.empty();
         return Optional.of(new Candidate(work.id(), work.settlementId(), work.workerId(), work.facilityId(),
-                work.traversal().linearCorridorSurfaces().get(work.traversalCursor()).support()));
+                currentSurface(work).support()));
     }
 
     public static SettlementServiceWork require(FrontierWorldState state, SettlementServiceWorkSceneCause cause) {
@@ -48,8 +48,16 @@ public final class FrontierSettlementServiceWorkSceneSupport {
     }
 
     static boolean sceneEligible(SettlementServiceWorkPhase phase) {
-        return phase == SettlementServiceWorkPhase.PREPARED || phase == SettlementServiceWorkPhase.APPROACH
+        return phase == SettlementServiceWorkPhase.PREPARED || phase == SettlementServiceWorkPhase.APPROACH_INPUT
+                || phase == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING || phase == SettlementServiceWorkPhase.APPROACH_WORK
                 || phase == SettlementServiceWorkPhase.WORKING;
+    }
+
+    static SurfaceAnchor currentSurface(SettlementServiceWork work) {
+        return switch (work.phase()) {
+            case PREPARED, APPROACH_INPUT, INPUT_ISSUE_PENDING -> work.inputTraversal().linearCorridorSurfaces().get(work.inputTraversalCursor());
+            case APPROACH_WORK, WORKING, EFFECT_READY, BLOCKED, UNKNOWN_AFTER_RESTART, COMPLETED -> work.workTraversal().linearCorridorSurfaces().get(work.workTraversalCursor());
+        };
     }
 
     private static boolean hasScene(FrontierWorldState state, SubjectId workId) {

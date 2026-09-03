@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -75,27 +76,54 @@ class FrontierWorldStateTest {
         SubjectId facility = new SubjectId("structure:1-infirmary");
         ActorLocation medicLocation = baseline.actorLocations().get(medic.id());
         InfectionCell cell = null; SettlementServiceWorkTraversal.Plan plan = null;
-        for (int[] offset : List.of(new int[] { 28, 0 }, new int[] { -28, 0 }, new int[] { 0, 28 }, new int[] { 0, -28 })) {
-            InfectionCell candidate = InfectionCell.at(medicLocation.supportingSurface().support().offset(offset[0], 0, offset[1]));
-            try { plan = SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), medicLocation, candidate, workId); cell = candidate; break; }
+        SettlementStructure infirmary = FrontierWorldStateSupport.structure(FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), facility);
+        for (int[] offset : List.of(new int[] { 12, 0 }, new int[] { -12, 0 }, new int[] { 0, 12 }, new int[] { 0, -12 })) {
+            InfectionCell candidate = InfectionCell.at(infirmary.anchor().offset(offset[0], 0, offset[1]));
+            try { plan = SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(),
+                    FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, candidate, workId); cell = candidate; break; }
             catch (IllegalArgumentException unavailable) { /* Try the next finite test fixture candidate. */ }
         }
         if (cell == null || plan == null) throw new AssertionError("test fixture has no bounded service-work corridor");
         InfectionCell selectedCell = cell;
         SettlementServiceWork work = new SettlementServiceWork(workId, SettlementServiceWorkKind.DECONTAMINATION, new SubjectId("settlement:1"),
-                medic.id(), facility, plan.station(), new SubjectId("item:service-reagent"), new SettlementServiceTarget.Infection(selectedCell),
-                new PhysicalIntentId("intent:service-decontamination-1"), plan.traversal(), 0, SettlementServiceWorkPhase.PREPARED, 0);
-        PhysicalIntent intent = new PhysicalIntent(work.intentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED, work.id(),
-                List.of(work.id(), facility, work.inputItemId()), new FixedPosition(FixedScalar.whole(selectedCell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
+                medic.id(), facility, new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1), plan.inputStation(), plan.workStation(),
+                new SubjectId("item:service-reagent"), new SettlementServiceTarget.Infection(selectedCell),
+                new PhysicalIntentId("intent:service-input-issue-1"), new PhysicalIntentId("intent:service-decontamination-1"),
+                plan.inputTraversal(), 0, plan.workTraversal(), 0, SettlementServiceWorkPhase.PREPARED, 0);
+        PhysicalIntent inputIssue = new PhysicalIntent(work.inputIssueIntentId(), PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE,
+                PhysicalIntentStatus.PREPARED, work.id(), List.of(work.id(), medic.id(), work.inputItemId()),
+                new FixedPosition(FixedScalar.whole(plan.inputStation().x()), FixedScalar.whole(plan.inputStation().y()), FixedScalar.whole(plan.inputStation().z())),
+                0, PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);
+        PhysicalIntent endpoint = new PhysicalIntent(work.endpointIntentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED, work.id(),
+                List.of(work.id(), medic.id(), work.inputItemId()), new FixedPosition(FixedScalar.whole(selectedCell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
                 0, PhysicalPostcondition.DECONTAMINATION_OBSERVED);
         ExactInventory inventory = baseline.inventory().store(new ExactItemStack(work.inputItemId(), work.settlementId(), "minecraft:glowstone_dust", 1,
-                new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)));
+                        new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)))
+                .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.ACTIVE);
         FrontierWorldState state = baseline.withChanges(FrontierWorldStateUpdate.begin().infection(withInfection(baseline.infection(), selectedCell)).inventory(inventory)
-                .serviceWorks(Map.of(work.id(), work)).physicalIntents(Map.of(intent.id(), intent)));
+                .serviceWorks(Map.of(work.id(), work)).physicalIntents(Map.of(inputIssue.id(), inputIssue, endpoint.id(), endpoint)));
 
         assertEquals(work, state.serviceWorks().get(work.id()));
         assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(state).assignment(medic.id()).kind());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        SettlementServiceWork atSource = work;
+        while (atSource.inputTraversalCursor() < atSource.inputTraversal().linearCorridorSurfaces().size() - 1) {
+            atSource = atSource.withInputTraversalCursor(atSource.inputTraversalCursor() + 1);
+        }
+        FrontierWorldState sourceReady = state.withActorBody(medic.id(), atSource.inputStation().standingBody())
+                .withChanges(FrontierWorldStateUpdate.begin().serviceWorks(Map.of(atSource.id(), atSource)));
+        SettlementServiceInputIssueStateSupport.validateIntent(sourceReady, inputIssue);
+        FrontierWorldState sourceRunning = sourceReady.transitionPhysicalIntent(inputIssue.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        SettlementServiceInputIssueObservation issueReceipt = new SettlementServiceInputIssueObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-input-issue-1"), inputIssue.id(), work.id(), medic.id(),
+                work.inputItemId(), work.inputSource());
+        FrontierWorldState issued = sourceRunning.transitionPhysicalIntent(inputIssue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(issueReceipt));
+        assertEquals(new InventoryCustody.Actor(medic.id()), issued.inventory().items().get(work.inputItemId()).custody());
+        assertEquals(SettlementServiceWorkPhase.APPROACH_WORK, issued.serviceWorks().get(work.id()).phase());
+        FrontierWorldState stolen = sourceReady.withInventory(sourceReady.inventory().moveObservedItem(work.inputItemId(), work.inputSource(),
+                new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000001"))));
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateIntent(stolen, inputIssue));
         SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:service-work-snapshot"), state.bootstrap().worldId(),
                 new SettlementServiceWorkSceneCause(work.id()), medicLocation.supportingSurface().support(), new SimInstant(100L), 1L,
                 SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))),
@@ -110,19 +138,24 @@ class FrontierWorldStateTest {
         FrontierWorldState afterDeath = withScene.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
                 .recordActorDeath(new ActorDied(lease.id(), medic.id(), medicLocation.body(), "test:service-worker-death"), 101L);
         assertEquals(SettlementServiceWorkPhase.BLOCKED, afterDeath.serviceWorks().get(work.id()).phase());
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.intentId()).status());
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.inputIssueIntentId()).status());
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.endpointIntentId()).status());
         SettlementServiceWork forgedStation = new SettlementServiceWork(work.id(), work.kind(), work.settlementId(), work.workerId(), work.facilityId(),
-                medicLocation.supportingSurface(), work.inputItemId(), work.target(), work.intentId(), TraversalTopology.corridor(
-                new TraversalTopologyId("topology:forged-service-station"), 0L, work.id(), TraversalKind.PEDESTRIAN,
-                java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(medicLocation.supportingSurface())), 0, work.phase(), work.completedWorkTicks());
+                work.inputSource(), medicLocation.supportingSurface(), medicLocation.supportingSurface(), work.inputItemId(), work.target(), work.inputIssueIntentId(), work.endpointIntentId(),
+                TraversalTopology.corridor(new TraversalTopologyId("topology:forged-service-input"), 0L, work.id(), TraversalKind.PEDESTRIAN,
+                        java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(medicLocation.supportingSurface())), 0,
+                TraversalTopology.corridor(new TraversalTopologyId("topology:forged-service-work"), 0L, work.id(), TraversalKind.PEDESTRIAN,
+                        java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(medicLocation.supportingSurface())), 0, work.phase(), work.completedWorkTicks());
         assertThrows(IllegalArgumentException.class, () -> baseline.withChanges(FrontierWorldStateUpdate.begin()
                 .infection(withInfection(baseline.infection(), selectedCell)).inventory(inventory).serviceWorks(Map.of(work.id(), forgedStation))
-                .physicalIntents(Map.of(intent.id(), intent))));
+                .physicalIntents(Map.of(inputIssue.id(), inputIssue, endpoint.id(), endpoint))));
         SettlementServiceWork duplicateWorker = new SettlementServiceWork(new SubjectId("service:decontamination-2"), SettlementServiceWorkKind.DECONTAMINATION,
-                new SubjectId("settlement:1"), medic.id(), facility, plan.station(), new SubjectId("item:service-reagent-2"),
-                new SettlementServiceTarget.Infection(selectedCell), new PhysicalIntentId("intent:service-decontamination-2"),
-                SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), medicLocation, selectedCell,
-                        new SubjectId("service:decontamination-2")).traversal(), 0,
+                new SubjectId("settlement:1"), medic.id(), facility, work.inputSource(), plan.inputStation(), plan.workStation(), new SubjectId("item:service-reagent-2"),
+                new SettlementServiceTarget.Infection(selectedCell), new PhysicalIntentId("intent:service-input-issue-2"), new PhysicalIntentId("intent:service-decontamination-2"),
+                SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, selectedCell,
+                        new SubjectId("service:decontamination-2")).inputTraversal(), 0,
+                SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, selectedCell,
+                        new SubjectId("service:decontamination-2")).workTraversal(), 0,
                 SettlementServiceWorkPhase.PREPARED, 0);
         assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin()
                 .serviceWorks(Map.of(work.id(), work, duplicateWorker.id(), duplicateWorker))));

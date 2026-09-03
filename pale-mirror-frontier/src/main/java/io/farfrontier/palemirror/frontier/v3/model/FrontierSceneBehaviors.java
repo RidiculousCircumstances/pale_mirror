@@ -586,7 +586,7 @@ public final class FrontierSceneBehaviors {
                 return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
             }
             boolean lifecycleMatches = switch (lease.status()) {
-                case PREPARED -> work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH;
+                case PREPARED -> work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH_INPUT;
                 case HOT -> FrontierSettlementServiceWorkSceneSupport.sceneEligible(work.phase()) || work.phase() == SettlementServiceWorkPhase.BLOCKED;
                 case DRAINING -> work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.BLOCKED;
                 case UNKNOWN_AFTER_RESTART -> work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
@@ -618,10 +618,12 @@ public final class FrontierSceneBehaviors {
             Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
             works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = intents.get(work.intentId());
-            if (intent != null && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
-                    || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)) {
-                intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+            for (io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId : java.util.List.of(work.inputIssueIntentId(), work.endpointIntentId())) {
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = intents.get(intentId);
+                if (intent != null && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
+                        || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)) {
+                    intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+                }
             }
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works));
         }
