@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Bounded mutable expansion beyond the immutable two-nest bootstrap hive. */
 public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, Bioform> spawnedBioforms,
@@ -183,11 +184,11 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
     }
 
     /** Confirms the named cocoon after its exact owned Minecraft block was physically removed. */
-    public HiveColony confirmMobilizationRelease(SubjectId mobilizationId, SubjectId memberId) {
+    public HiveColony confirmMobilizationRelease(SubjectId mobilizationId, SubjectId memberId, Optional<HiveTaskAssembly> completedAssembly) {
         HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
         if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
         Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
-        next.put(mobilizationId, current.confirmRelease(memberId));
+        next.put(mobilizationId, current.confirmRelease(memberId, completedAssembly));
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 

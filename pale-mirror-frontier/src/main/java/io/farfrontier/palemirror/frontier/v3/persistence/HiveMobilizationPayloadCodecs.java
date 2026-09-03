@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
+import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -58,6 +59,7 @@ final class HiveMobilizationPayloadCodecs {
         writeSubject(output, value.id()); writeSubject(output, value.hiveId()); writeSubject(output, value.nestId()); writeSubject(output, value.taskId());
         writeSubject(output, value.settlementId()); writeSubject(output, value.overseerId()); writeSubjects(output, value.memberIds()); writeSubjects(output, value.releasedMemberIds());
         output.writeBoolean(value.releasingMemberId().isPresent()); if (value.releasingMemberId().isPresent()) writeSubject(output, value.releasingMemberId().orElseThrow());
+        output.writeBoolean(value.assembly().isPresent()); if (value.assembly().isPresent()) writeAssembly(output, value.assembly().orElseThrow());
         output.writeByte(value.status().wireTag()); output.writeBoolean(value.conflictReason().isPresent());
         if (value.conflictReason().isPresent()) output.writeByte(value.conflictReason().orElseThrow().wireTag()); output.writeLong(value.startedAt());
     }
@@ -66,10 +68,28 @@ final class HiveMobilizationPayloadCodecs {
         SubjectId id = readSubject(input), hive = readSubject(input), nest = readSubject(input), task = readSubject(input), settlement = readSubject(input), overseer = readSubject(input);
         List<SubjectId> members = readSubjects(input), released = readSubjects(input);
         Optional<SubjectId> releasing = input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
+        Optional<HiveTaskAssembly> assembly = input.readBoolean() ? Optional.of(readAssembly(input)) : Optional.empty();
         HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
         Optional<HiveMobilizationConflictReason> conflict = input.readBoolean()
                 ? Optional.of(FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte())) : Optional.empty();
-        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, status, conflict, input.readLong());
+        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, conflict, input.readLong());
+    }
+
+    private static void writeAssembly(DataOutputStream output, HiveTaskAssembly assembly) throws IOException {
+        writeSubject(output, assembly.ganglionId()); output.writeByte(assembly.members().size());
+        for (var entry : assembly.members().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue().topology()); output.writeShort(entry.getValue().cursor());
+        }
+    }
+    private static HiveTaskAssembly readAssembly(DataInputStream input) throws IOException {
+        SubjectId ganglion = readSubject(input); java.util.Map<SubjectId, HiveTaskAssembly.Member> members = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            SubjectId actor = readSubject(input);
+            if (members.put(actor, new HiveTaskAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) {
+                throw new IllegalArgumentException("duplicate hive assembly member");
+            }
+        }
+        return new HiveTaskAssembly(ganglion, members);
     }
 
     private static void writeSubjects(DataOutputStream output, List<SubjectId> values) throws IOException {

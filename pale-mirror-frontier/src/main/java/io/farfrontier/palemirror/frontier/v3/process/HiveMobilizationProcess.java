@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCocoonPlan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCocoonSlot;
+import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyCorridor;
+import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyPortPlan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCommandCapacity;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
@@ -18,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
+import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNest;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
@@ -97,12 +100,15 @@ public final class HiveMobilizationProcess {
         if (actor == null || !actor.body().equals(expected)) {
             throw new IllegalArgumentException("cocoon release may not move an already relocated exact body");
         }
+        Optional<HiveTaskAssembly> completedAssembly = mobilization.releasedMemberIds().size() + 1 == mobilization.memberIds().size()
+                ? Optional.of(HiveAssemblyCorridor.compile(state, mobilization,
+                HiveAssemblyPortPlan.compile(state.bootstrap(), state.hiveColony(), mobilization))) : Optional.empty();
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(state.hiveColony().bioformLifecycles());
         lifecycles.put(released.bioformId(), lifecycle.assembling());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(released.bioformId(), actor.withBody(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, lifecycle.homeSlot().orElseThrow()))));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(
-                state.hiveColony().withBioformLifecycles(lifecycles).confirmMobilizationRelease(mobilization.id(), released.bioformId())));
+                state.hiveColony().withBioformLifecycles(lifecycles).confirmMobilizationRelease(mobilization.id(), released.bioformId(), completedAssembly)));
     }
 
     public static FrontierWorldState reduceConflicted(FrontierWorldState state, SubjectId subject, HiveMobilizationConflicted conflicted) {

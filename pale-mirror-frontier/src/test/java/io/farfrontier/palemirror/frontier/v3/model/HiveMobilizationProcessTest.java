@@ -141,12 +141,40 @@ class HiveMobilizationProcessTest {
         }
         HiveMobilization assembled = state.hiveColony().mobilizations().get(after.id());
         assertEquals(HiveMobilizationStatus.ASSEMBLING, assembled.status());
+        HiveTaskAssembly assembly = assembled.assembly().orElseThrow();
+        assertEquals(assembled.memberIds(), assembly.members().keySet().stream()
+                .sorted(java.util.Comparator.comparingInt(assembled.memberIds()::indexOf)).toList(),
+                "assembly retains the same exact group rather than reselecting ambient bioforms");
+        assertTrue(assembly.members().values().stream().allMatch(member -> member.topology().edges().stream()
+                .allMatch(edge -> edge.kind() == TraversalKind.GROUND_BIOFORM
+                        && edge.capabilities().equals(java.util.Set.of(TraversalCapability.GROUND_BIOFORM)))),
+                "every retained assembly edge is a distinct bioform topology, not a pedestrian or fixed-coordinate shortcut");
         FrontierWorldState assembledState = state;
         assertTrue(assembled.memberIds().stream().allMatch(member -> HivePhysiologySupport.permitsAmbientLease(assembledState, member)));
         assertTrue(assembled.memberIds().stream().noneMatch(member -> HivePhysiologySupport.availableForIndependentOperation(assembledState, member)),
                 "the assembled group remains owned by its original task until its later departure boundary");
         assertTrue(AmbientActorProcess.nextLease(state, first, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(203L)).actorId().equals(first));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test void finalAssemblyRetainsASurveyedNonFlatGanglionApproach() {
+        Mobilized flat = start(fixture());
+        SurfaceAnchor raisedStage = HiveAssemblyPortPlan.compile(flat.state().bootstrap(), flat.state().hiveColony(), flat.mobilization())
+                .memberStagingSurfaces().get(flat.mobilization().memberIds().getFirst());
+        TerrainSurfacePlan steppedTerrain = TerrainSurfacePlan.uniform(63)
+                .withSurveyedSupport(raisedStage.x(), raisedStage.z(), 64);
+
+        Mobilized assembled = assemble(fixture(steppedTerrain));
+        HiveTaskAssembly plan = assembled.mobilization().assembly().orElseThrow();
+        HiveTaskAssembly.Member first = plan.members().get(assembled.mobilization().memberIds().getFirst());
+
+        assertEquals(64, first.destinationSurface().y(), "the semantic Ganglion port consumes its surveyed terrain datum");
+        assertTrue(first.topology().edges().stream().anyMatch(edge -> edge.grade() == 1),
+                "a retained bioform topology must include the surveyed one-block approach rather than flattening or teleporting it");
+        assertTrue(first.topology().edges().stream().allMatch(edge -> edge.grade() <= 1
+                        && edge.kind() == TraversalKind.GROUND_BIOFORM
+                        && edge.traversableBy(TraversalCapability.GROUND_BIOFORM)),
+                "the non-flat approach remains a bounded open bioform topology");
     }
 
     @Test void playerBrokenCocoonInterruptsOnlyItsInFlightMobilizationAndReleasesTheExactOccupant() {
@@ -201,8 +229,33 @@ class HiveMobilizationProcessTest {
                 new io.farfrontier.palemirror.frontier.v3.api.SimInstant(202L)));
     }
 
-    private static Fixture fixture() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-mobilization"), 8128L));
+    private static Mobilized start(Fixture fixture) {
+        List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        FrontierWorldState state = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+        HiveMobilizationStarted started = assertInstanceOf(HiveMobilizationStarted.class, planned.get(1).payload());
+        state = HiveMobilizationProcess.reduceStarted(state, fixture.hive(), started);
+        return new Mobilized(state, state.hiveColony().mobilizations().get(started.mobilization().id()));
+    }
+
+    private static Mobilized assemble(Fixture fixture) {
+        Mobilized started = start(fixture);
+        FrontierWorldState state = started.state();
+        for (SubjectId member : started.mobilization().memberIds()) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(started.mobilization().id());
+            state = HiveMobilizationProcess.reduceReleaseStarted(state, fixture.hive(), new HiveMobilizationReleaseStarted(current.id()));
+            state = HiveMobilizationProcess.reduceCocoonReleased(state, fixture.hive(), new HiveMobilizationCocoonReleased(current.id(), member));
+        }
+        HiveMobilization mobilization = state.hiveColony().mobilizations().get(started.mobilization().id());
+        return new Mobilized(state, mobilization);
+    }
+
+    private static Fixture fixture() { return fixture(TerrainSurfacePlan.uniform(63)); }
+
+    private static Fixture fixture(TerrainSurfacePlan terrain) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-mobilization"), 8128L,
+                FrontierRulesets.production(), terrain));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         FrontierWorldState initial = state;
         Bioform scout = initial.bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
@@ -225,4 +278,5 @@ class HiveMobilizationProcessTest {
     }
 
     private record Fixture(FrontierWorldState state, SubjectId hive, StrategicTask task, HiveSettlementKnowledge.Sighting sighting) { }
+    private record Mobilized(FrontierWorldState state, HiveMobilization mobilization) { }
 }

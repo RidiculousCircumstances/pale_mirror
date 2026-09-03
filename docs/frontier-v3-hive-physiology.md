@@ -93,7 +93,7 @@ only its currently implemented `GANGLION`/`BROOD`/`STORE`/`HIBERNACULUM` organs;
 the first growth output, and the remaining organ types must not be fabricated
 until their own owning process exists. That organ-vocabulary cut was schema 103
 and persistence envelope 12; the current physiology cut supersedes it with schema
-108/envelope 17, still fresh-world-only. The retired `HEART` byte `0` is intentionally
+109/envelope 18, still fresh-world-only. The retired `HEART` byte `0` is intentionally
 unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
@@ -116,7 +116,7 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Schema 108/envelope 17 adds cocoon/lifecycle and exact task mobilisation only as
+ambient lease. Schema 109/envelope 18 adds cocoon/lifecycle and exact task mobilisation only as
 an exact phase
 plus an optional hibernaculum slot; wounds, structural/reserve biomass and
 controller ownership remain later owning-process cuts rather than duplicated
@@ -181,6 +181,32 @@ members consume a persisted ruleset command weight derived from chassis and
 visible mutations; an overloaded/forged group fails closed. Departure and
 return/recovery remain later operation boundaries; chunk loading and direct
 body moves are never wake authority.
+
+#### Assembly/departure contract (next vertical)
+
+`ASSEMBLING` must not mean “spawn the released bodies near the nest.” The task
+will retain one exact `HiveTaskAssembly`: its named Ganglion departure port,
+one distinct staging surface per released member, and one bounded
+`GROUND_BIOFORM` topology/cursor per member. The port is compiled from the
+same immutable nest/terrain plan as the organ supports; a consumer never
+derives it from a fixed coordinate relative to a nest anchor. Its outward
+orientation is selected deterministically from the retained target settlement,
+then retained in the task assembly rather than recalculated from a later world
+query.
+
+The compiler may use the selected members' own open Hibernaculum trays as
+their first support surfaces, but it must not traverse another organ's tissue,
+invent a height, or treat an unloaded Minecraft block as an edge. Every
+retained edge has the ordinary 3D grade/clearance/capability evidence; an
+off-grade or organ-obstructed plan fails visibly before departure. The later
+COLD/HOT progression owner advances only this cursor from observed arrival. A
+loaded obstruction or missing body will be one member-specific durable
+deferral/conflict; it neither teleports a replacement nor asks COLD to route
+around it. Until that owner is registered, a retained assembly cannot depart
+or create an assault. Only when all exact members occupy their retained staging
+slots may one atomic transition create the existing first-class settlement
+assault from those identities. That transition retains the same Overseer and
+group roster; it may not reselect whichever ambient forms happen to be closest.
 
 ### Biomass, wounds and consumption
 

@@ -46,6 +46,14 @@ class FrontierGrayboxPlanTest {
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.ownerId().value().equals("organ:west-ganglion")
                 && cell.semanticPart() == GrayboxSemanticPart.HIVE_TISSUE));
         assertTrue(first.cells().values().stream().anyMatch(cell -> cell.material() == GrayboxMaterial.ROUTE));
+        state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.GANGLION).forEach(ganglion -> {
+            for (int y = 1; y <= 2; y++) {
+                assertEquals(null, first.cells().get(ganglion.anchor().offset(2, y, 0)), "Ganglion east throat is a real semantic opening");
+                assertEquals(null, first.cells().get(ganglion.anchor().offset(-2, y, 0)), "Ganglion west throat is a real semantic opening");
+                assertEquals(null, first.cells().get(ganglion.anchor().offset(0, y, 2)), "Ganglion south throat is a real semantic opening");
+                assertEquals(null, first.cells().get(ganglion.anchor().offset(0, y, -2)), "Ganglion north throat is a real semantic opening");
+            }
+        });
         assertEquals(state.infection(), first.infection());
     }
 

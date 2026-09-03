@@ -340,10 +340,11 @@ public final class FrontierGrayboxPlan {
             return 25;
         }
         // addOrgan creates a 5x5 top (25 cells) plus the three lower perimeter rings
-        // (3 * 16). A STORE adds its otherwise hollow central socket at y=0. Keep this
+        // (3 * 16). A GANGLION reserves four two-cell exterior throats, while a STORE adds
+        // its otherwise hollow central socket at y=0. Keep this
         // exact geometry formula beside the compiler instead of allocating a temporary
         // position/cell map on every infection or storage capability check.
-        return 25 + 3 * 16 + (organ.containerId().isPresent() ? 1 : 0);
+        return 25 + 3 * 16 - (organ.kind() == HiveOrganKind.GANGLION ? 8 : 0) + (organ.containerId().isPresent() ? 1 : 0);
     }
 
     /** Exact organ-owned tissue plus terrain-provider hiveroot for damage accounting. */
@@ -446,7 +447,14 @@ public final class FrontierGrayboxPlan {
             return;
         }
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) for (int y = 0; y <= 3; y++) {
-            if (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2) add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+            // The four exact two-cell Ganglion throats are semantic ports, not a later mob
+            // exception: task assembly retains one exterior port, while the physical grammar
+            // visibly exposes all valid directions without a hidden anchor offset.
+            boolean ganglionThroat = organ.kind() == HiveOrganKind.GANGLION && y > 0 && y < 3
+                    && (Math.abs(x) == 2 && z == 0 || Math.abs(z) == 2 && x == 0);
+            if (!ganglionThroat && (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2)) {
+                add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+            }
         }
         // A STORE is hollow like the other organs, but its exact chest must stand on a planned
         // tissue socket rather than on an arbitrary world block.
