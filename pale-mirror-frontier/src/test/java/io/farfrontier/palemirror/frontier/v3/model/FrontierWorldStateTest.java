@@ -49,6 +49,7 @@ class FrontierWorldStateTest {
         assertEquals(2 + state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS, state.inventory().items().size());
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());
+        assertTrue(state.serviceWorks().isEmpty());
         assertTrue(state.operations().isEmpty());
         assertTrue(state.physicalIntents().isEmpty());
         assertTrue(state.structureConditions().values().stream().allMatch(condition -> condition == StructureCondition.INTACT));
@@ -59,6 +60,44 @@ class FrontierWorldStateTest {
             assertEquals(new FixedRatio(new FixedScalar(500_000L)), state.infection().get(new InfectionCell(centre.x() + 1, centre.z())));
             assertEquals(new FixedRatio(new FixedScalar(250_000L)), state.infection().get(new InfectionCell(centre.x() + 1, centre.z() + 1)));
         }
+    }
+
+    @Test
+    void serviceWorkRetainsExactWorkerIntentCursorAndSnapshotBytes() {
+        FrontierWorldState baseline = initial();
+        ResidentProfile medic = baseline.humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(new SubjectId("settlement:1")))
+                .filter(value -> value.profession() == ResidentProfession.MEDICAL_WORKER).findFirst().orElseThrow();
+        SubjectId workId = new SubjectId("service:decontamination-1");
+        InfectionCell cell = baseline.infection().keySet().iterator().next();
+        SubjectId facility = new SubjectId("structure:1-infirmary");
+        SurfaceAnchor workerSurface = baseline.actorLocations().get(medic.id()).supportingSurface();
+        SurfaceAnchor station = workerSurface;
+        // A stationary worker has a one-node route; use it to prove the explicit lower bound without a fake spatial detour.
+        TraversalTopology traversal = TraversalTopology.corridor(new TraversalTopologyId("topology:service-decontamination-1"), 0L,
+                workId, TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(workerSurface));
+        SettlementServiceWork work = new SettlementServiceWork(workId, SettlementServiceWorkKind.DECONTAMINATION, new SubjectId("settlement:1"),
+                medic.id(), facility, workerSurface, new SubjectId("item:service-reagent"), new SettlementServiceTarget.Infection(cell),
+                new PhysicalIntentId("intent:service-decontamination-1"), traversal, 0, SettlementServiceWorkPhase.PREPARED, 0);
+        PhysicalIntent intent = new PhysicalIntent(work.intentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED, work.id(),
+                List.of(work.id(), facility, work.inputItemId()), new FixedPosition(FixedScalar.whole(cell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(cell.originAtY(0).z())),
+                0, PhysicalPostcondition.DECONTAMINATION_OBSERVED);
+        ExactInventory inventory = baseline.inventory().store(new ExactItemStack(work.inputItemId(), work.settlementId(), "minecraft:glowstone_dust", 1,
+                new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)));
+        FrontierWorldState state = baseline.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
+                .serviceWorks(Map.of(work.id(), work)).physicalIntents(Map.of(intent.id(), intent)));
+
+        assertEquals(work, state.serviceWorks().get(work.id()));
+        assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(state).assignment(medic.id()).kind());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        SettlementServiceWork duplicateWorker = new SettlementServiceWork(new SubjectId("service:decontamination-2"), SettlementServiceWorkKind.DECONTAMINATION,
+                new SubjectId("settlement:1"), medic.id(), facility, workerSurface, new SubjectId("item:service-reagent-2"),
+                new SettlementServiceTarget.Infection(cell), new PhysicalIntentId("intent:service-decontamination-2"),
+                TraversalTopology.corridor(new TraversalTopologyId("topology:service-decontamination-2"), 0L, new SubjectId("service:decontamination-2"),
+                        TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(workerSurface)), 0,
+                SettlementServiceWorkPhase.PREPARED, 0);
+        assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin()
+                .serviceWorks(Map.of(work.id(), work, duplicateWorker.id(), duplicateWorker))));
     }
 
     @Test

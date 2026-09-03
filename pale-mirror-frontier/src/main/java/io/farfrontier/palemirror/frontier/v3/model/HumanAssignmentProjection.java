@@ -49,6 +49,9 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                 .filter(maintenance -> maintenance.status() != RouteMaintenanceStatus.CONFLICT)
                 .forEach(maintenance -> maintenance.team().memberIds().forEach(id -> claim(values, id,
                         HumanAssignmentKind.ENGINEERING_RECOVERY, maintenance.id())));
+        state.serviceWorks().values().stream().sorted(Comparator.comparing(SettlementServiceWork::id))
+                .filter(work -> work.phase().active())
+                .forEach(work -> claim(values, work.workerId(), HumanAssignmentKind.SETTLEMENT_SERVICE, work.id()));
         state.humanPopulation().medicalOperations().values().stream().sorted(Comparator.comparing(MedicalEvacuationOperation::id))
                 .filter(MedicalEvacuationOperation::active)
                 .forEach(operation -> {

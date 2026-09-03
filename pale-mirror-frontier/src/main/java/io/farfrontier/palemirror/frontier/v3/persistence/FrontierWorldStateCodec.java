@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.*; import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 120; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 121; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -28,6 +28,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeCompanyRegistry(output, state.companies());
                 writeInventory(output, state.inventory());
                 writeProductionJobs(output, state.productionJobs());
+                SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
                 writeLogisticsHistory(output, state.logisticsHistory());
@@ -60,6 +61,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             EconomicLedger economics = readEconomicLedger(input, true);
             CompanyRegistry companies = readCompanyRegistry(input, true, true, true);
             ExactInventory inventory = readInventory(input, economics); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, true);
+            Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
             LogisticsHistory history = readLogisticsHistory(input);
             Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, true);
@@ -72,7 +74,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, VERSION);
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
-            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, contracts, operations, history,
+            FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             return state;
@@ -785,8 +787,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             case 3 -> new InventoryCustody.WorldCarrier(UUID.fromString(readString(input))); case 4 -> new InventoryCustody.Actor(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown inventory custody");
         };
-    }
-    static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
+    } static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
     }
     static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

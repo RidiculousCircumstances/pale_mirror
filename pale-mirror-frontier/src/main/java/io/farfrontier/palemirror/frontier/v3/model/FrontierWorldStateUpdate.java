@@ -28,6 +28,7 @@ public final class FrontierWorldStateUpdate {
         INFECTION,
         INVENTORY,
         PRODUCTION_JOBS,
+        SERVICE_WORKS,
         CONTRACTS,
         OPERATIONS,
         LOGISTICS_HISTORY,
@@ -53,6 +54,7 @@ public final class FrontierWorldStateUpdate {
     private Map<InfectionCell, FixedRatio> infection;
     private ExactInventory inventory;
     private Map<SubjectId, ProductionJob> productionJobs;
+    private Map<SubjectId, SettlementServiceWork> serviceWorks;
     private Map<SubjectId, SupplyContract> contracts;
     private Map<SubjectId, RouteOperation> operations;
     private LogisticsHistory logisticsHistory;
@@ -91,6 +93,9 @@ public final class FrontierWorldStateUpdate {
     }
     public FrontierWorldStateUpdate productionJobs(Map<SubjectId, ProductionJob> next) {
         mark(Component.PRODUCTION_JOBS); productionJobs = require(next, "production jobs"); return this;
+    }
+    public FrontierWorldStateUpdate serviceWorks(Map<SubjectId, SettlementServiceWork> next) {
+        mark(Component.SERVICE_WORKS); serviceWorks = require(next, "settlement service works"); return this;
     }
     public FrontierWorldStateUpdate contracts(Map<SubjectId, SupplyContract> next) {
         mark(Component.CONTRACTS); contracts = require(next, "contracts"); return this;
@@ -149,6 +154,7 @@ public final class FrontierWorldStateUpdate {
     Map<InfectionCell, FixedRatio> infection(FrontierWorldState state) { return changed(Component.INFECTION, infection, state.infection()); }
     ExactInventory inventory(FrontierWorldState state) { return changed(Component.INVENTORY, inventory, state.inventory()); }
     Map<SubjectId, ProductionJob> productionJobs(FrontierWorldState state) { return changed(Component.PRODUCTION_JOBS, productionJobs, state.productionJobs()); }
+    Map<SubjectId, SettlementServiceWork> serviceWorks(FrontierWorldState state) { return changed(Component.SERVICE_WORKS, serviceWorks, state.serviceWorks()); }
     Map<SubjectId, SupplyContract> contracts(FrontierWorldState state) { return changed(Component.CONTRACTS, contracts, state.contracts()); }
     Map<SubjectId, RouteOperation> operations(FrontierWorldState state) { return changed(Component.OPERATIONS, operations, state.operations()); }
     LogisticsHistory logisticsHistory(FrontierWorldState state) { return changed(Component.LOGISTICS_HISTORY, logisticsHistory, state.logisticsHistory()); }
