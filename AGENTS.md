@@ -145,6 +145,10 @@ never add an ad-hoc HUD toggle to a scenario.
 - A change that raises a physical-scene or active-mob limit requires a
   reproducible same-seed JFR capture and a causal proof of operation → lease →
   actor/cargo ownership. TPS alone is not acceptance evidence.
+- A `bastion/mobs/empty` GameTest must address only its own template interior.
+  Coordinates beyond that tiny template can overlap a neighbouring parallel
+  test cell; use one local interior fixture position rather than an arbitrary
+  large offset, and prove the affected full GameTest gate once.
 
 ## Frontier v3 materialization completeness discipline
 

@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 118 and persistence-envelope v32 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 119 and persistence-envelope v33 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -248,7 +248,7 @@
   durable-before-effect receipt after observed output readiness. Death, stolen
   input, a broken station or a blocked route must visibly block/conflict that
   same job; recovery inspects the retained stage and exact chest postcondition.
-  This has been recorded in the normative MAT-002 gate. Schema 118/envelope 32 now retain the explicit
+  This has been recorded in the normative MAT-002 gate. Schema 119/envelope 33 now retain the explicit
   wire-tagged `ProductionWorkProgress` (`APPROACH`, `INPUT_READY`,
   `PROCESSING`, `OUTPUT_READY`) and one bounded immutable pedestrian topology
   plus cursor from the exact crafter's canonical surface through the named
@@ -274,13 +274,21 @@
   leaves the worker insufficiently legible for M3. The next type-safe reducer boundary is also present: an executor must submit
   one observed `ProductionWorkTraversalAdvanced` or `ProductionWorkProgressed`
   fact; it cannot directly alter a job or skip a retained station/stage.
-- MAT-002 readability follow-up (uncommitted): the semantic workshop port now
+- MAT-002 readability follow-up: the semantic workshop port now
   leaves a three-wide, two-high loading portal while preserving its one centre
   traversal throat; the side apertures are explicitly presentation-only and
   cannot create a second pathfinding edge. Its immutable input/work station
   supports are now distinct cyan/magenta, provenance-owned, traversable floor
   cells—not containers, a second inventory, or executor offsets. The exact
-  station grammar forces the schema-118/envelope-32 fresh-world reset. Focused
+  station grammar forces the schema-119/envelope-33 fresh-world reset. Each
+  accepted observed arrival atomically advances the job cursor and the HOT
+  lease's exact worker body position; a mismatched recovered lease fails
+  closed rather than resuming from an inferred station. The dedicated Scene
+  GameTest covers approach/input/processing, retained station, exact worker
+  death and finalization; `disposable_materialized_production_work_restart`
+  also passed in a fresh disposable world with one visible client, a captured
+  processing frame and a graceful restart preserving the exact bread receipt.
+  Focused
   graybox/foundry tests pass. Native run `652d7777-f5c8-4a40-adcb-b572c953275d`
   proves `HOT → PROCESSING` with `resident:1-15` on the magenta work station,
   then terminal fulfillment and graceful exact-receipt recovery. The pilot now

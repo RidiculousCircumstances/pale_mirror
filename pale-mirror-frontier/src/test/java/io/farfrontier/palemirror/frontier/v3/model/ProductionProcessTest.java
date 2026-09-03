@@ -108,6 +108,23 @@ class ProductionProcessTest {
         FrontierWorldState advanced = ProductionProcess.reduceWorkTraversalAdvanced(hot, prepared.settlementId(),
                 new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, nextStation, nextCursor));
         assertEquals(nextCursor, advanced.productionJobs().get(workJob.id()).traversalCursor());
+        assertEquals(nextStation, advanced.sceneLeases().get(leaseId).memberPosition(workJob.workerId()),
+                "one observed arrival must atomically advance both the work cursor and persisted HOT-body position");
+        FrontierWorldState recoveredAdvance = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced));
+        assertEquals(nextStation, recoveredAdvance.sceneLeases().get(leaseId).memberPosition(workJob.workerId()),
+                "restart recovery must retain the current work station rather than the initial workshop approach");
+        byte[] preAtomicCursorSchema = new FrontierWorldStateCodec().encode(advanced);
+        preAtomicCursorSchema[4] = 118;
+        assertThrows(IllegalArgumentException.class, () -> new FrontierWorldStateCodec().decode(preAtomicCursorSchema),
+                "the former schema must fail closed because its HOT lease did not retain the current worker cursor");
+        SceneLease staleLease = advanced.sceneLeases().get(leaseId).withMemberPositions(java.util.Map.of(workJob.workerId(), worker.body()));
+        FrontierWorldState staleCursor = advanced.withChanges(FrontierWorldStateUpdate.begin()
+                .sceneLeases(java.util.Map.of(leaseId, staleLease)));
+        int cursorAfterNext = nextCursor + 1;
+        BodyPosition stationAfterNext = workJob.workTraversal().linearCorridorSurfaces().get(cursorAfterNext).standingBody();
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(staleCursor, settlementId,
+                        new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, stationAfterNext, cursorAfterNext)),
+                "a malformed recovered HOT lease must fail closed rather than advance a split worker cursor");
         FrontierWorldState blocked = hot.withStrategicPlans(hot.strategicPlans().transitionTask(prepared.taskId(), StrategicTaskStatus.BLOCKED))
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         FrontierWorldState closed = blocked.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(prepared.job().workerId(), worker.body(), worker.condition().health())));

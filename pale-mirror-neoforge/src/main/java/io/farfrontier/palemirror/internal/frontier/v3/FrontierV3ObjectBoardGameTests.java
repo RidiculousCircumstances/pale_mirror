@@ -26,7 +26,7 @@ public final class FrontierV3ObjectBoardGameTests {
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void objectBoardIsBrightOwnedAndStableAcrossSavedDataReload(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(8, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "structure:board-depot", FrontierObjectBoard.Tone.SETTLEMENT, "Northreach\nDEPOT\nOPERATIONAL");
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
         helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
@@ -43,7 +43,7 @@ public final class FrontierV3ObjectBoardGameTests {
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void movedBoardBecomesConflictInsteadOfBeingSilentlyRestored(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(16, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "organ:board-ganglion", FrontierObjectBoard.Tone.HIVE, "HIVE\nGANGLION\nACTIVE");
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
         helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
@@ -59,7 +59,7 @@ public final class FrontierV3ObjectBoardGameTests {
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void ownedBoardUpdatesItsReadableTextWithoutReplacingItsBody(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(24, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard prior = board(position, "organ:board-updated-ganglion", FrontierObjectBoard.Tone.WARNING,
                 "HIVE\nGANGLION\nACTIVE\nINFECTION · SATURATED");
         FrontierObjectBoard current = board(position, "organ:board-updated-ganglion", FrontierObjectBoard.Tone.WARNING,
@@ -77,7 +77,7 @@ public final class FrontierV3ObjectBoardGameTests {
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void localBoardUsesCompactOccludedPhysicalPresentation(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(27, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "site:board-local-field", FrontierObjectBoard.Tone.SETTLEMENT,
                 "Northwatch\nWHEAT FIELD\nGROWING · STAGE 0/7");
         helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, FrontierV3ObjectBoardLedger.get(level), board), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
@@ -92,7 +92,7 @@ public final class FrontierV3ObjectBoardGameTests {
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void contextualCardMayOnlyUseTheExactClaimedBoardBody(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(30, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "site:board-owned-field", FrontierObjectBoard.Tone.SETTLEMENT,
                 "Northwatch\nWHEAT FIELD\nGROWING · STAGE 0/7");
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
@@ -134,6 +134,8 @@ public final class FrontierV3ObjectBoardGameTests {
     private static FrontierObjectBoard board(BlockPos position, String owner, FrontierObjectBoard.Tone tone, String text) {
         return new FrontierObjectBoard(new SubjectId(owner), new BlockPosition(position.getX(), position.getY(), position.getZ()), tone, text);
     }
+    /** The bastion test template is deliberately tiny: never address a neighbouring GameTest cell. */
+    private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }
     private static Display.TextDisplay display(ServerLevel level, BlockPos position) {
         return level.getEntitiesOfClass(Display.TextDisplay.class, new AABB(position).inflate(1.0D)).stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("the v3 board display is missing"));

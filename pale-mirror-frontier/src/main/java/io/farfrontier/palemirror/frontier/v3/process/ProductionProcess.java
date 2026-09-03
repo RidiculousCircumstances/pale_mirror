@@ -209,9 +209,12 @@ public final class ProductionProcess {
         int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
         int workCursor = job.workTraversal().linearCorridorSurfaces().size() - 1;
         SurfaceAnchor observedStation = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor());
-        FrontierProductionWorkSceneSupport.requireHotLease(state, job, progressed.leaseId());
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, progressed.leaseId());
         if (!progressed.observedWorker().equals(observedStation.standingBody())) {
             throw new IllegalArgumentException("production work progress must name the observed retained worker station");
+        }
+        if (!lease.memberPosition(job.workerId()).equals(observedStation.standingBody())) {
+            throw new IllegalArgumentException("production work progress must retain the HOT worker at its current station");
         }
         boolean legal = switch (current.stage()) {
             case APPROACH -> next.equals(ProductionWorkProgress.inputReady()) && job.traversalCursor() == inputCursor;
@@ -234,7 +237,8 @@ public final class ProductionProcess {
         if (!advanced.observedWorker().equals(job.workTraversal().linearCorridorSurfaces().get(advanced.nextCursor()).standingBody())) {
             throw new IllegalArgumentException("production work traversal must name its observed next retained station");
         }
-        return replaceJob(state, job.withWorkTraversal(job.workTraversal(), advanced.nextCursor()));
+        return FrontierProductionWorkSceneSupport.advanceWorker(state, job, job.withWorkTraversal(job.workTraversal(), advanced.nextCursor()),
+                advanced.leaseId(), advanced.observedWorker());
     }
 
     /**

@@ -317,7 +317,7 @@ public final class FrontierV3CargoHandoffGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void grayboxProjectsOnlyAFreshSupportedCellWithSemanticProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos position = helper.absolutePos(new BlockPos(24, 8, 0));
+        BlockPos position = interior(helper);
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         GrayboxCell cell = grayboxCell(position, "structure:graybox-fresh", GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
@@ -336,7 +336,7 @@ public final class FrontierV3CargoHandoffGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void grayboxRecordsForeignObstructionWithoutOverwritingIt(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos position = helper.absolutePos(new BlockPos(28, 8, 0));
+        BlockPos position = interior(helper);
         level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         GrayboxCell cell = grayboxCell(position, "structure:graybox-obstructed", GrayboxMaterial.HALL, GrayboxSemanticPart.WALL);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
@@ -352,7 +352,7 @@ public final class FrontierV3CargoHandoffGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void grayboxDriftBecomesTerminalConflictInsteadOfTemplateRepair(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos position = helper.absolutePos(new BlockPos(32, 8, 0));
+        BlockPos position = interior(helper);
         GrayboxCell cell = grayboxCell(position, "structure:graybox-drift", GrayboxMaterial.HOUSING, GrayboxSemanticPart.WALL);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
@@ -558,6 +558,8 @@ public final class FrontierV3CargoHandoffGameTests {
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }
+    /** The bastion test template is deliberately tiny: projection fixtures stay in their own cell. */
+    private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }
     /** GameTest-only store; filesystem restart behavior is covered by the server-runtime test. */
     private static final class EphemeralStore implements FrontierStore {
         @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
