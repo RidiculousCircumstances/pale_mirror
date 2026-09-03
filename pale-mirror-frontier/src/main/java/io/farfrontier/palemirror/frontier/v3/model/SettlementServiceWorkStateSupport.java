@@ -37,7 +37,9 @@ final class SettlementServiceWorkStateSupport {
             }
             if (work.kind() == SettlementServiceWorkKind.DECONTAMINATION
                     && (facility.kind() != StructureKind.INFIRMARY || worker.profession() != ResidentProfession.MEDICAL_WORKER
-                    || !infection.containsKey(((SettlementServiceTarget.Infection) work.target()).cell()))) {
+                    || !infection.containsKey(((SettlementServiceTarget.Infection) work.target()).cell())
+                    || !InfectionTreatmentWorksite.candidates(bootstrap, ((SettlementServiceTarget.Infection) work.target()).cell())
+                    .contains(work.station()))) {
                 throw new IllegalArgumentException("decontamination service work must retain an active infirmary, medic and infection cell");
             }
             if (work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR

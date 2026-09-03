@@ -21,8 +21,13 @@ settlement service task. It owns:
 
 - one stable work ID, settlement, exact living qualified resident and an
   exclusive derived service assignment;
-- one semantic facility and its declared port/stations, one exact input item,
-  one target, and one existing physical intent ID;
+- one semantic facility, one exact input item, one target and one existing
+  physical intent ID; and
+- one semantic service station. A facility-internal form uses a declared
+  immutable facility port; a field form (initially decontamination) owns a
+  bounded admission-time worksite compiled from the immutable terrain provider
+  and its exact target. The latter is a persisted plan of the work, not a
+  Minecraft navigator result or a new mutable global plan.
 - a bounded immutable pedestrian topology and current cursor from the
   resident's canonical surface to the declared service station;
 - the persisted phase `PREPARED`, `APPROACH`, `WORKING`, `EFFECT_READY`,
@@ -74,11 +79,14 @@ world.
 ## Spatial and physical rules
 
 Every target has a semantic service station supplied by the owning immutable
-plan. A target block, structure centre, infection-cell origin or arbitrary
-loaded pathfinding result is not a station. The topology uses typed support and
-body values, satisfies Foundry throat/clearance rules, and remains bounded.
-Foundry reports physical drift; it never clears the route, repairs the target
-or alters canonical work.
+plan. A facility form uses its declared port/station. A field form compiles one
+bounded worksite from a finite target-relative station catalogue at admission,
+then persists that selected typed support/body position with the work. A target
+block, structure centre, infection-cell origin or arbitrary loaded pathfinding
+result is not itself a station. The topology uses typed support and body values,
+satisfies Foundry throat/clearance rules, and remains bounded. Foundry reports
+physical drift; it never clears the route, repairs the target or alters
+canonical work.
 
 The HOT executor tests only the next retained body for collision. A full block,
 missing support, changed station, dead/missing exact body or stolen input is
