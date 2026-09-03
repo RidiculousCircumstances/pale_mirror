@@ -12,6 +12,9 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
+import io.farfrontier.palemirror.frontier.v3.model.HumanAssignmentProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -255,6 +258,9 @@ final class FrontierV3DiagnosticJson {
         String role = resident != null ? resident.role().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
+        var assignment = resident == null ? null : HumanAssignmentProjection.compile(state).assignment(subject);
+        boolean harvestSceneCandidate = resident != null && FrontierResourceSiteHarvestSceneSupport.nextCandidate(state)
+                .map(candidate -> candidate.workerId().equals(subject)).orElse(false);
         var lifecycle = bioform == null ? null : state.hiveColony().bioformLifecycles().get(subject);
         String cocoonHome = lifecycle == null || lifecycle.homeSlot().isEmpty() ? "null" : "{\"hibernaculum\":\""
                 + quote(lifecycle.homeSlot().orElseThrow().hibernaculumId().value()) + "\",\"slot\":"
@@ -268,6 +274,10 @@ final class FrontierV3DiagnosticJson {
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition
+                + ",\"assignment\":\"" + (assignment == null ? "NONE" : assignment.kind().name())
+                + "\",\"assignmentOwner\":\"" + quote(assignment == null ? "" : assignment.ownerId().map(SubjectId::value).orElse(""))
+                + "\",\"harvestSceneCandidate\":" + harvestSceneCandidate
+                + ",\"sceneReserved\":" + FrontierSceneAdmission.reserved(state, subject)
                 + (lifecycle == null ? "" : ",\"lifecycle\":\"" + lifecycle.phase().name() + "\",\"cocoonHome\":" + cocoonHome)
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
@@ -648,6 +658,7 @@ final class FrontierV3DiagnosticJson {
         return base("intent", id, checkpoint) + ",\"status\":\"ok\",\"intentKind\":\"" + intent.kind()
                 + "\",\"intentStatus\":\"" + intent.status() + "\",\"causeSubject\":\"" + quote(intent.causeSubjectId().value())
                 + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]"
+                + ",\"receiptId\":\"" + quote(intent.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST
                     ? harvestReadiness.map(FrontierV3DiagnosticJson::harvestReadiness).orElse("") : "")
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE

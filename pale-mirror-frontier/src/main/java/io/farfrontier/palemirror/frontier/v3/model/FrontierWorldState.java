@@ -330,7 +330,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
         FrontierSceneLeaseValidationSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, operations, routeConstructions,
-                routeMaintenances, strategicPlans, sceneLeases, activelyAmbientLeased);
+                routeMaintenances, strategicPlans, resourceSites, sceneLeases, activelyAmbientLeased);
         }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
@@ -907,7 +907,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), death.body().supportingSurface().support());
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         nextActors.put(death.actorId(), current.deadAt(death.body()));
-        HumanPopulation nextPopulation = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick); return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(nextPopulation));
+        FrontierSceneBehaviors.SceneDeathOutcome outcome = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick);
+        return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
+                .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents()));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
     public FrontierWorldState compactTerminalLogistics(SubjectId operationId, long terminalAtTick) {

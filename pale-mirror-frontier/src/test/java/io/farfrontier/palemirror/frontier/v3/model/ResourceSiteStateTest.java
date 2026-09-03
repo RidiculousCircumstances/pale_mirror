@@ -27,13 +27,26 @@ class ResourceSiteStateTest {
         ResourceSiteLifecycle growing = preparing.prepared();
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) growing = growing.advanceGrowth();
         assertEquals(ResourceSitePhase.READY, growing.phase());
+        SubjectId jobId = new SubjectId("job:site-harvest-1-wheat-field-1");
+        ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
+        ActorLocation worker = baseline.actorLocations().get(new SubjectId("resident:1-1"));
         ResourceSiteHarvestJob harvest = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("task:field-harvest-1"), siteId,
                 new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
-                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"));
+                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(),
+                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId),
+                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId).linearCorridorSurfaces().size() - 1);
         ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvested();
         assertEquals(ResourceSitePhase.GROWING, harvested.phase());
         assertEquals(2L, harvested.growthEpoch()); assertEquals(0, harvested.growthStage());
+    }
+
+    private static ResourceSiteHarvestProgress completeProgress() {
+        ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted();
+        for (int index = 0; index < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; index++) {
+            progress = progress.prepareNextCrop().confirmPreparedCrop();
+        }
+        return progress;
     }
 
     @Test

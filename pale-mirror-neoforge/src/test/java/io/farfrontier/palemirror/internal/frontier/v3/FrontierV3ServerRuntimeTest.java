@@ -139,7 +139,10 @@ class FrontierV3ServerRuntimeTest {
                 operation.currentPosition(), java.util.Optional.empty(), operation.participantIds());
         SceneMemberPosition capture = new SceneMemberPosition(participant, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(12, 64, -12),
                 overlapped.actorLocations().get(participant).condition().health());
-        lease = lease.withAmbientHandoff(java.util.Set.of(participant));
+        java.util.Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.BodyPosition> capturedPositions =
+                new java.util.LinkedHashMap<>(lease.memberPositions());
+        capturedPositions.put(participant, capture.body());
+        lease = lease.withMemberPositions(capturedPositions).withAmbientHandoff(java.util.Set.of(participant));
         SceneLeaseHandoff handoff = new SceneLeaseHandoff(lease, List.of(capture));
         SceneLease handoffLease = lease;
 

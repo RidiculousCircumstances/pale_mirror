@@ -26,7 +26,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.INDUSTRIAL_WORK, job.id()));
-        state.resourceSites().sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
+        state.resourceSites().sites().values().stream().filter(site -> site.phase() == ResourceSitePhase.HARVESTING).sorted(Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
                 .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.FIELD_HARVEST, job.id()));

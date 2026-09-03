@@ -134,46 +134,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     private static CommandPlan planSceneReleased(FrontierWorldState state, FrontierCommand command, SceneLeaseReleased released) {
         SceneLease lease = state.sceneLeases().get(released.leaseId());
         if (lease == null) return FrontierWorldCommandPlanner.rejected("scene lease is unknown");
-        if (FrontierSceneBehaviors.isSettlementAssault(lease)) {
-            try {
-                SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, FrontierSceneBehaviors.settlementAssault(lease));
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(assault.hiveId(), released), new ProposedEvent(assault.hiveId(),
-                        new ScheduleEffect.Created(HiveSettlementAssaultProcess.combat(assault, command.submittedAt().ticks() + 20L)))));
-            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), released))); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), released))); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
-        RouteOperation operation = state.operations().get(logistics.operationId());
-        if (operation == null) return FrontierWorldCommandPlanner.rejected("scene lease has no owning operation");
-        if (logistics.engagementId().isPresent()) {
-            RouteEngagement engagement = state.strategicPlans().routeEngagements().get(logistics.engagementId().orElseThrow());
-            if (engagement == null) return FrontierWorldCommandPlanner.rejected("scene lease has no canonical engagement");
-            if (engagement.status() == RouteEngagementStatus.HOT) {
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
-                        new ProposedEvent(operation.settlementId(), new ScheduleEffect.Created(
-                                HiveRouteEngagementProcess.combat(engagement, command.submittedAt().ticks() + 20L)))));
-            }
-            if (operation.stage() == OperationStage.INTERRUPTED && engagement.status() == RouteEngagementStatus.RESOLVED
-                    && engagement.outcome().filter(outcome -> outcome == RouteEngagementOutcome.ABORTED).isPresent()) {
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released)));
-            }
-            return FrontierWorldCommandPlanner.rejected("scene lease cannot resume its interrupted engagement");
-        }
-        if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
-            List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(operation.settlementId(), released));
-            events.addAll(SupplyOperationProcess.failed(state, operation, "actor-death"));
-            return new CommandPlan.Accepted(List.copyOf(events));
-        }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(operation.settlementId(), released),
-                new ProposedEvent(operation.settlementId(), new ScheduleEffect.Created(
-                        SupplyOperationProcess.operationProgress(operation, command.submittedAt().ticks() + 100L)))));
+        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.releaseEvents(state, lease, command.submittedAt().ticks(), released)); }
+        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
     private static CommandPlan planRecoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
@@ -181,30 +143,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent()) {
             return FrontierWorldCommandPlanner.rejected("scene recovery evidence does not bind one unresolved restart lease");
         }
-        if (FrontierSceneBehaviors.isSettlementAssault(lease)) {
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
-            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), unresolved))); }
-            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
-        LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
-        if (logistics.engagementId().isPresent()) return FrontierWorldCommandPlanner.rejected("engagement scene recovery needs its own outcome policy");
-        RouteOperation operation = state.operations().get(logistics.operationId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
-            return FrontierWorldCommandPlanner.rejected("scene recovery evidence has no active route operation");
-        }
-        try {
-            List<ProposedEvent> events = new ArrayList<>();
-            events.add(new ProposedEvent(operation.settlementId(), unresolved));
-            events.addAll(SupplyOperationProcess.failed(state, operation, "scene-recovery-unresolved"));
-            return new CommandPlan.Accepted(List.copyOf(events));
-        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.recoveryUnresolvedEvents(state, lease, unresolved)); }
+        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
     private static CommandPlan planActorDied(FrontierWorldState state, ActorDied death) {

@@ -65,7 +65,12 @@ public final class FrontierSceneLeaseStateSupport {
             actors.put(capture.actorId(), new ActorLocation(capture.body(), actor.condition().withHealth(capture.health())));
             ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
         }
-        return copy(state, actors, withPreparedLease(state, handoff.lease()), ambient, state.strategicPlans());
+        // The observed body is the sole admissible replacement for the outgoing ambient
+        // position. Validate the incoming scene lease against that captured state, not against
+        // the predecessor's historical grid cell: otherwise a normal moving Villager can never
+        // enter any exact HOT scene without being despawned and recreated.
+        FrontierWorldState captureState = copy(state, actors, state.sceneLeases(), ambient, state.strategicPlans());
+        return copy(captureState, actors, withPreparedLease(captureState, handoff.lease()), ambient, captureState.strategicPlans());
     }
 
     static FrontierWorldState transition(FrontierWorldState state, SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {

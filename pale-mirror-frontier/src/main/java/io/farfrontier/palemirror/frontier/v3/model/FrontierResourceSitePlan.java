@@ -120,7 +120,13 @@ public final class FrontierResourceSitePlan {
             minZ = farm.anchor().z() - halfDepth - FIELD_CLEARANCE - FIELD_SIDE;
         }
         for (int x = minX; x < minX + FIELD_SIDE; x++) {
-            for (int z = minZ; z < minZ + FIELD_SIDE; z++) slots.add(new BlockPosition(x, farm.anchor().y(), z));
+            // This stable index is also the worker's physical work order.  A serpentine row
+            // order keeps every subsequent crop station adjacent; row-major order would make
+            // each row boundary an invisible seven-cell jump or require a second navigator.
+            int startZ = (x - minX) % 2 == 0 ? minZ : minZ + FIELD_SIDE - 1;
+            int endZ = (x - minX) % 2 == 0 ? minZ + FIELD_SIDE : minZ - 1;
+            int step = (x - minX) % 2 == 0 ? 1 : -1;
+            for (int z = startZ; z != endZ; z += step) slots.add(new BlockPosition(x, farm.anchor().y(), z));
         }
         return List.copyOf(slots);
     }

@@ -132,6 +132,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validHarvestResult(JsonObject action) {
         return requiredId(action, "siteId", "site:") && requiredId(action, "intentId", "intent:")
                 && requiredId(action, "itemId", "item:") && (!action.has("settlementId") || requiredId(action, "settlementId", "settlement:"))
+                && (!action.has("workerId") || requiredId(action, "workerId", "resident:"))
                 && timeout(action, 300_000L);
     }
 

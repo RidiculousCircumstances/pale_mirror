@@ -13,33 +13,37 @@
     ] }
   ],
   "actions": [
-    { "type": "wait_until_block", "position": { "x": 388, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 90000 },
-    { "type": "look", "at": { "x": 388, "y": 64, "z": -355 } },
-    { "type": "assert_visible_block", "position": { "x": 388, "y": 64, "z": -355 }, "timeoutMs": 10000 },
-    { "type": "look", "at": { "x": 392, "y": 67, "z": -357 } },
-    { "type": "assert_visible_board", "text": "WHEAT FIELD", "position": { "x": 392, "y": 67, "z": -357 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "fast_forward", "ticks": 24000 },
-    { "type": "wait_until_harvest_result", "siteId": "site:4-wheat-field", "intentId": "intent:site-harvest-4-wheat-field-1", "itemId": "item:site-harvest-4-wheat-field-1-wheat", "settlementId": "settlement:4", "timeoutMs": 180000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "site", "id": "site:4-wheat-field" },
+    { "type": "inspect", "view": "actor", "id": "resident:4-31" },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:4-31", "expect": { "status": "ok", "assignment": "FIELD_HARVEST", "ambientLease": "CLOSED" }, "timeoutMs": 90000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 10000 },
+    { "type": "wait_until_harvest_result", "siteId": "site:4-wheat-field", "intentId": "intent:site-harvest-4-wheat-field-1", "itemId": "item:site-harvest-4-wheat-field-1-wheat", "settlementId": "settlement:4", "workerId": "resident:4-31", "timeoutMs": 180000 },
     { "type": "wait_until_container_item", "containerId": "container:4-depot", "item": "minecraft:bread", "count": 64, "slot": 0, "timeoutMs": 30000 },
     { "type": "inspect", "view": "site", "id": "site:4-wheat-field" },
     { "type": "inspect", "view": "container", "id": "container:4-depot" }
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 7,
+    "afterAction": 9,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -326 }, "settleMs": 1000 },
       { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
         { "view": "container", "id": "container:4-depot", "expect": { "status": "ok", "surface": "ACTIVE" } },
-        { "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } }
+        { "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthEpoch": 1, "activeWork": "job:site-harvest-4-wheat-field-1" } }
       ] }
     ]
   },
   "assertions": [
-    { "after": 9, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } },
-    { "after": 10, "view": "container", "id": "container:4-depot", "expect": { "status": "ok", "surface": "ACTIVE" } }
+    { "after": 10, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } },
+    { "after": 11, "view": "container", "id": "container:4-depot", "expect": { "status": "ok", "surface": "ACTIVE" } }
   ],
   "frames": [
-    { "after": 5, "name": "field-board-visible" }
+    { "after": 4, "name": "mature-field-visible" },
+    { "after": 9, "name": "farmer-harvesting-visible" }
   ]
 }

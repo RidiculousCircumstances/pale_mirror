@@ -232,16 +232,16 @@ public final class FrontierV3AmbientActorGameTests {
                 "HOT ambient bodies must stay outside uncontrolled vanilla target/combat AI");
         helper.assertTrue(farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D) > farmerBefore + 0.1D,
                 "the farmer must visibly work around its assigned facility rather than freeze at its hand-off point");
-        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, scout, scoutLease, 0L)
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, scout, scoutLease, 0L)
                         .distanceToSqr(scoutLease.handoffBody().x() + 0.5D, scoutLease.handoffBody().y(), scoutLease.handoffBody().z() + 0.5D)
-                    > FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
+                    > FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
                         .distanceToSqr(farmerLease.handoffBody().x() + 0.5D, farmerLease.handoffBody().y(), farmerLease.handoffBody().z() + 0.5D),
                 "a scout patrol must use a wider role-specific perimeter than a farmer work cycle");
-        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
                         .distanceToSqr(farmerLease.goalBody().x() + 0.5D, farmerLease.goalBody().y(), farmerLease.goalBody().z() + 0.5D) > 25.0D,
                 "ambient local motion must remain anchored at the exact exterior hand-off slot, not cross a semantic-object centre");
-        helper.assertTrue(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 0L)
-                        .distanceToSqr(FrontierV3AmbientActorExecutor.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
+                        .distanceToSqr(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
                 "a durable ambient work lease must produce a continuing cycle rather than one static target");
         farmerBody.discard(); scoutBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
         }));

@@ -53,7 +53,7 @@ public final class ResourceSiteHarvestProcess {
         if (farmer == null) return blocked(task);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
-        ResourceSiteHarvestJob job = job(lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
+        ResourceSiteHarvestJob job = job(state, lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
         PhysicalIntent intent = intent(site, job);
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
                 new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)));
@@ -71,6 +71,64 @@ public final class ResourceSiteHarvestProcess {
         return state.preparePhysicalIntent(intent);
     }
 
+    public static FrontierWorldState reduceProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().values().stream().filter(value -> value.activeWork()
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.id().equals(progressed.jobId())).orElse(false)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("resource-site harvest progress has no active job"));
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (!subject.equals(lifecycle.siteId())) {
+            throw new IllegalArgumentException("resource-site harvest progress has a foreign owner");
+        }
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.advanceHarvest(job, progressed.completedCropSlots())));
+    }
+
+    public static FrontierWorldState reduceCropPrepared(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestCropPrepared prepared) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().values().stream().filter(value -> value.activeWork()
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.id().equals(prepared.jobId())).orElse(false)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("resource-site harvest crop preparation has no active job"));
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (!subject.equals(lifecycle.siteId())) throw new IllegalArgumentException("resource-site harvest crop preparation has a foreign owner");
+        if (!job.atCurrentCropStation()) throw new IllegalArgumentException("resource-site harvest crop preparation requires its exact retained workstation");
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.prepareHarvestCrop(job, prepared.cropSlotIndex())));
+    }
+
+    public static FrontierWorldState reduceTraversalAdvanced(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestTraversalAdvanced advanced) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().values().stream().filter(value -> value.activeWork()
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.id().equals(advanced.jobId())).orElse(false)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("resource-site field-work traversal has no active job"));
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (!subject.equals(lifecycle.siteId())) throw new IllegalArgumentException("resource-site field-work traversal has a foreign owner");
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.advanceHarvestTraversal(job, advanced.nextCursor())));
+    }
+
+    /**
+     * An ambient body is free to complete a sub-cell local turn between harvest admission and
+     * the first loaded scene tick.  The durable hand-off observation, rather than that stale
+     * admission sample, is therefore the only correct start of an otherwise unstarted field
+     * topology.  Later cursor progress is never rebased.
+     */
+    public static FrontierWorldState rebaseForAmbientHandoff(FrontierWorldState state, SubjectId subject,
+                                                              ResourceSiteHarvestSceneLeaseHandoff handoff) {
+        ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, FrontierSceneBehaviors.resourceSiteHarvest(handoff.lease()));
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        ResourceSite site = site(state, job.siteId());
+        if (!subject.equals(site.settlementId()) || handoff.ambientMembers().size() != 1
+                || !handoff.ambientMembers().getFirst().actorId().equals(job.workerId())) {
+            throw new IllegalArgumentException("resource-site field-work hand-off must capture its one exact farmer");
+        }
+        SceneMemberPosition capture = handoff.ambientMembers().getFirst();
+        ActorLocation current = state.actorLocations().get(job.workerId());
+        if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("resource-site field-work hand-off has no living farmer");
+        }
+        TraversalTopology rebased = ResourceSiteHarvestTraversal.compile(state.bootstrap(), site,
+                new ActorLocation(capture.body(), current.condition()), job.id());
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.rebaseUnstartedHarvestTraversal(job, rebased)));
+    }
+
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); validateBinding(state, lifecycle, intent);
         ResourceSiteHarvestJob job = harvest(lifecycle, intent.id()); StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
@@ -78,6 +136,7 @@ public final class ResourceSiteHarvestProcess {
             return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.BLOCKED));
         }
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
+        if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest output cannot complete before every crop is observed");
         ResourceSiteLifecycle next = lifecycle.harvested();
         return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(lifecycle.siteId(),
                 new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
@@ -126,6 +185,13 @@ public final class ResourceSiteHarvestProcess {
         if (worker == null || !worker.id().equals(job.workerId()) || worker.profession() != ResidentProfession.AGRICULTURAL_WORKER) {
             throw new IllegalArgumentException("resource-site harvest worker is unavailable");
         }
+        if (lifecycle.phase() == ResourceSitePhase.READY) {
+            ActorLocation location = state.actorLocations().get(job.workerId());
+            if (location == null || !job.traversal().equals(ResourceSiteHarvestTraversal.compile(state.bootstrap(), site, location, job.id()))
+                    || job.traversalCursor() != 0) {
+                throw new IllegalArgumentException("resource-site harvest must pin its worker's immutable field-work traversal at admission");
+            }
+        }
         if (lifecycle.phase() == ResourceSitePhase.HARVESTING) {
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
             if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(java.util.Optional.of(job.id()))) {
@@ -139,10 +205,15 @@ public final class ResourceSiteHarvestProcess {
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");
     }
 
-    private static ResourceSiteHarvestJob job(ResourceSiteLifecycle lifecycle, StrategicTask task, ResidentProfile farmer, InventoryCustody.ContainerSlot outputSlot) {
+    private static ResourceSiteHarvestJob job(FrontierWorldState state, ResourceSiteLifecycle lifecycle, StrategicTask task, ResidentProfile farmer,
+                                              InventoryCustody.ContainerSlot outputSlot) {
         String suffix = lifecycle.siteId().value().substring("site:".length()) + "-" + lifecycle.growthEpoch();
-        return new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-" + suffix), task.id(), lifecycle.siteId(), farmer.id(),
-                new SubjectId("item:site-harvest-" + suffix + "-wheat"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix));
+        SubjectId jobId = new SubjectId("job:site-harvest-" + suffix);
+        ResourceSite site = site(state, lifecycle.siteId()); ActorLocation worker = state.actorLocations().get(farmer.id());
+        if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
+        return new ResourceSiteHarvestJob(jobId, task.id(), lifecycle.siteId(), farmer.id(),
+                new SubjectId("item:site-harvest-" + suffix + "-wheat"), outputSlot, new PhysicalIntentId("intent:site-harvest-" + suffix),
+                ResourceSiteHarvestProgress.notStarted(), ResourceSiteHarvestTraversal.compile(state.bootstrap(), site, worker, jobId), 0);
     }
 
     private static PhysicalIntent intent(ResourceSite site, ResourceSiteHarvestJob job) {

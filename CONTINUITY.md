@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 112 and persistence-envelope v24 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 114 and persistence-envelope v26 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -204,6 +204,35 @@
   `./gradlew guardrails` gate pass; two formatting-only line wraps in the
   pre-existing V3-AUD-036 WIP were required by `verifyJavaStyle` and do not
   change its behaviour.
+- MAT-001 is M2-closed, with narrow M3 evidence: schema 114/envelope 26 retain
+  one exact field cursor plus a durable pending-crop authority. The registered
+  field-work HOT scene uses the named farmer and processes only the next
+  physical crop cell; durable pending authority comes before its block effect,
+  and only the exact observed AIR frontier moves the cursor. The 64-wheat depot
+  receipt is rejected before all 64 observations. Death blocks the task, marks
+  the field conflict and leaves a terminal intent trail without allowing
+  reassignment. Focused normal/early-receipt/death/recovery tests and Scene
+  44/44 pass. Native `disposable_redwillow_harvest`
+  `5110c424-f5b0-4321-894e-a6fdec3b7f36` found the exact visible named farmer,
+  gracefully restarted while the same work remained `HARVESTING`, then reached
+  its one `CONFIRMED` receipt and normal bread transformation. The clean
+  pre-restart frame is
+  `build/frontier-v3-scenarios/disposable_redwillow_harvest-28f640db-6137-4b58-9ad6-87c5a1d2d0d2-farmer-harvesting-visible.png`.
+  The complete critical gate now passes with 282/282 GameTests, package verification
+  and `npm test` 34/34. Its closed-air GameTest fixture waits for Minecraft's
+  measured crop light precondition (not an arbitrary tick delay), so field
+  placement no longer flakes while light propagation is pending. Unbriefed
+  field-work comprehension and aggregate crop growth remain M3/MAT-008.
+- MAT-001 route correction (2026-09-03): native diagnosis proved that an exact
+  ambient-to-scene hand-off can succeed while direct `moveToward` leaves the
+  farmer unable to reach the field. The job now persists a bounded immutable
+  terrain/occupancy-compiled pedestrian topology from its canonical worker
+  surface to all 64 serpentine field workstations and one cursor. HOT advances
+  only an observed next node before it may prepare the next crop; a body/cursor
+  mismatch is visible conflict rather than an inferred catch-up. Focused pure
+  normal, pre-arrival-negative and snapshot recovery tests pass. The native
+  causal/restart scenario subsequently passed; no deployment follows from this
+  source-only materialization slice.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

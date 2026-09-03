@@ -46,6 +46,19 @@ class FrontierWorldProcessCatalogTest {
     }
 
     @Test
+    void fieldWorkPhysicalCommandsHaveTheResourceSiteOwnerBeforeAnExecutorCanSubmitThem() {
+        DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        for (String type : List.of(
+                "frontier.resource_site_harvest_crop_prepared",
+                "frontier.resource_site_harvest_progressed",
+                "frontier.resource_site_harvest_traversal_advanced",
+                "frontier.resource_site_harvest_scene_lease_prepared",
+                "frontier.resource_site_harvest_scene_lease_handoff")) {
+            assertEquals("resource-sites", registry.requireCommandOwner(type), type);
+        }
+    }
+
+    @Test
     void noDomainDescriptorMayFallBackToTheGlobalWorldPayloadSet() {
         java.util.Set<String> worldPayloads = FrontierWorldProcessCatalog.allWorldPayloadTypes();
         for (var descriptor : FrontierWorldProcessCatalog.descriptors()) {

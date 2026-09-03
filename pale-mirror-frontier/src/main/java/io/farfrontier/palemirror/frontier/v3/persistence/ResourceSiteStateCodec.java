@@ -50,7 +50,9 @@ final class ResourceSiteStateCodec {
         if (work instanceof ResourceSiteHarvestJob harvest) {
             output.writeByte(1); writeIdentity(output, harvest); FrontierWorldStateCodec.writeString(output, harvest.taskId().value());
             FrontierWorldStateCodec.writeString(output, harvest.workerId().value());
-            FrontierWorldStateCodec.writeString(output, harvest.outputItemId().value()); FrontierWorldStateCodec.writeCustody(output, harvest.outputSlot()); return;
+            FrontierWorldStateCodec.writeString(output, harvest.outputItemId().value()); FrontierWorldStateCodec.writeCustody(output, harvest.outputSlot());
+            output.writeByte(harvest.progress().completedCropSlots()); output.writeByte(harvest.progress().pendingCropSlotIndex());
+            TraversalTopologyStateCodec.write(output, harvest.traversal()); output.writeShort(harvest.traversalCursor()); return;
         }
         throw new IllegalArgumentException("unknown resource-site work type");
     }
@@ -61,7 +63,8 @@ final class ResourceSiteStateCodec {
         return switch (kind) {
             case 0 -> new ResourceSitePreparationJob(id, site, intent);
             case 1 -> new ResourceSiteHarvestJob(id, new SubjectId(FrontierWorldStateCodec.readString(input)), site, new SubjectId(FrontierWorldStateCodec.readString(input)),
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOutputSlot(input), intent);
+                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOutputSlot(input), intent,
+                    new ResourceSiteHarvestProgress(input.readUnsignedByte(), input.readByte()), TraversalTopologyStateCodec.read(input), input.readUnsignedShort());
             default -> throw new IllegalArgumentException("unknown resource-site work type");
         };
     }

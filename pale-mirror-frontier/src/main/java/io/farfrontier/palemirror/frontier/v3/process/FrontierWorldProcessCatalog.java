@@ -66,6 +66,11 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> RESOURCE_SITES = types(
             "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started",
             "frontier.resource_site_prepared", "frontier.resource_site_harvest_started",
+            "frontier.resource_site_harvest_crop_prepared",
+            "frontier.resource_site_harvest_progressed",
+            "frontier.resource_site_harvest_traversal_advanced",
+            "frontier.resource_site_harvest_scene_lease_prepared",
+            "frontier.resource_site_harvest_scene_lease_handoff",
             "frontier.resource_site_conflict_observed");
     private static final Set<String> HIVE = types(
             "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed",
@@ -262,7 +267,13 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> populationCommands() { return types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
-    private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
+    private static Set<String> resourceCommands() { return types(
+            "frontier.resource_site_conflict_observed",
+            "frontier.resource_site_harvest_crop_prepared",
+            "frontier.resource_site_harvest_progressed",
+            "frontier.resource_site_harvest_traversal_advanced",
+            "frontier.resource_site_harvest_scene_lease_prepared",
+            "frontier.resource_site_harvest_scene_lease_handoff"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
             "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced",
             "frontier.hive_mobilization_conflicted"); }
@@ -381,7 +392,10 @@ public final class FrontierWorldProcessCatalog {
             case "resource-sites" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
-                    "frontier.resource_site_harvest_started", "frontier.resource_site_conflict_observed",
+                    "frontier.resource_site_harvest_started", "frontier.resource_site_harvest_crop_prepared",
+                    "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_traversal_advanced", "frontier.resource_site_harvest_scene_lease_prepared",
+                    "frontier.resource_site_harvest_scene_lease_handoff",
+                    "frontier.resource_site_conflict_observed",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",

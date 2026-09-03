@@ -36,9 +36,10 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs economyCodecs() { return new PayloadCodecs(List.of(new ProductionStartedCodec(), new ProductionCompletedCodec(),
             new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
             MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled())); }
-    static PayloadCodecs resourceSiteCodecs() { return new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
+    static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
-            ResourceSitePayloadCodecs.conflictObserved())); }
+            ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(), ResourceSitePayloadCodecs.harvestTraversalAdvanced(),
+            ResourceSitePayloadCodecs.conflictObserved())), ResourceSiteHarvestScenePayloadCodecs.codecs()); }
     static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(), HiveMobilizationPayloadCodecs.codecs(), new PayloadCodecs(List.of(new InfectionCodec(),
             new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
             new HiveNutrientTransferStartedCodec(), new HiveNutrientTransferAdvancedCodec(), new HiveNutrientTransferCompletedCodec(),

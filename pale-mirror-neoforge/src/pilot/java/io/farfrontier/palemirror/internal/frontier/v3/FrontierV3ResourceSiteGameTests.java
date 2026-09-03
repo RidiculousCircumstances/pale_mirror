@@ -25,7 +25,7 @@ import java.util.List;
 public final class FrontierV3ResourceSiteGameTests {
     private FrontierV3ResourceSiteGameTests() { }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareGrayboxBaseline(level, site);
@@ -70,7 +70,7 @@ public final class FrontierV3ResourceSiteGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-cold", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-cold", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void coldCompletedFieldProjectsOnceFromNeutralBaselineButNeverOverwritesForeignBlocks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-cold-game-test");
         prepareGrayboxBaseline(level, site);
@@ -88,7 +88,7 @@ public final class FrontierV3ResourceSiteGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-foreign", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-foreign", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void foreignFieldCellIsNeverAdoptedOrOverwritten(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareBaseline(level, site); BlockPosition foreign = site.cropSlots().getFirst(); BlockPos position = minecraft(foreign);
@@ -101,7 +101,7 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-irrigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-irrigation", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void irrigationIsOwnedFieldInfrastructureAndItsLossIsNeverRepairedBlindly(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-irrigation-game-test");
         prepareBaseline(level, site);
@@ -118,7 +118,7 @@ public final class FrontierV3ResourceSiteGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-explosion", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void externalBlastRetainsOneFieldWitnessAcrossSavedDataReload(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
@@ -147,11 +147,9 @@ public final class FrontierV3ResourceSiteGameTests {
     private static ResourceSite field(BlockPos origin) {
         return field(origin, "site:resource-site-game-test");
     }
-    /** Fits every 8x8 field and its one-cell light border inside the GameTest's own loaded chunk. */
+    /** Fits every managed field cell and light border inside this test's independently allocated full-air template. */
     private static BlockPos fixtureOrigin(GameTestHelper helper) {
-        BlockPos template = helper.absolutePos(new BlockPos(0, 8, 0));
-        return new BlockPos(Math.floorDiv(template.getX(), 16) * 16 + 4, template.getY(),
-                Math.floorDiv(template.getZ(), 16) * 16 + 4);
+        return helper.absolutePos(new BlockPos(4, 30, 4));
     }
     private static ResourceSite field(BlockPos origin, String id) {
         List<BlockPosition> crops = new ArrayList<>(64);
@@ -160,7 +158,7 @@ public final class FrontierV3ResourceSiteGameTests {
                 ResourceSiteKind.WHEAT_FIELD, crops);
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
-        // fixtureOrigin keeps every managed slot inside this test's naturally loaded chunk.
+        // fixtureOrigin keeps every managed slot inside this test's own full-air template.
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             // Production accepts grass or dirt; use dirt in the delayed fixture because
             // grass can receive a random tick before the ownership assertion runs.
@@ -173,7 +171,7 @@ public final class FrontierV3ResourceSiteGameTests {
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static void prepareGrayboxBaseline(ServerLevel level, ResourceSite site) {
-        // fixtureOrigin keeps every managed slot inside this test's naturally loaded chunk.
+        // fixtureOrigin keeps every managed slot inside this test's own full-air template.
         site.soilSlots().forEach(soil -> { BlockPos position = minecraft(soil); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
             level.setBlock(position, Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), 3); });
         site.irrigationSlots().forEach(irrigation -> { BlockPos position = minecraft(irrigation); level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);

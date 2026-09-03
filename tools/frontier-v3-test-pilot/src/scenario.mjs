@@ -187,6 +187,7 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'wait_until_harvest_result' && (!requiredId(action.siteId, 'site:') || !requiredId(action.intentId, 'intent:')
           || !requiredId(action.itemId, 'item:') || (action.settlementId !== undefined && !requiredId(action.settlementId, 'settlement:'))
+          || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:'))
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
         throw new Error('wait_until_harvest_result needs exact site, intent, item identities and timeoutMs 0..300000');
       }

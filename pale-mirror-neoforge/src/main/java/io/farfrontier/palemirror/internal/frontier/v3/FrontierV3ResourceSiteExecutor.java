@@ -76,8 +76,8 @@ final class FrontierV3ResourceSiteExecutor {
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(target.site().id());
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return BlockBreakObservation.UNMANAGED;
-        if (!matches(level, target.site(), claim.stage())) {
-            recordPlayerConflict(level, runtime, ledger, target.site(), firstMismatch(level, target.site(), claim.stage()).orElse(canonical(position)), cause);
+        if (!matchesClaim(level, target.site(), claim)) {
+            recordPlayerConflict(level, runtime, ledger, target.site(), firstMismatchClaim(level, target.site(), claim).orElse(canonical(position)), cause);
             return BlockBreakObservation.UNMANAGED;
         }
         try {
@@ -107,6 +107,32 @@ final class FrontierV3ResourceSiteExecutor {
                 && level.getBlockState(position).equals(crop(claim.stage()));
     }
 
+    /** Exact partial field state after a retained harvest cursor, never a cosmetic interpolation. */
+    static boolean matchesHarvestProgress(ServerLevel level, ResourceSite site, int completedCropSlots) {
+        if (completedCropSlots < 0 || completedCropSlots > site.cropSlots().size()) return false;
+        if (!loaded(level, site)) return false;
+        for (int index = 0; index < site.cropSlots().size(); index++) {
+            BlockState expected = index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE);
+            if (!level.getBlockState(minecraft(site.cropSlots().get(index))).equals(expected)) return false;
+        }
+        return true;
+    }
+
+    static boolean matchesClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+        return claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > 0
+                ? matchesHarvestProgress(level, site, claim.harvestedCropSlots()) : matches(level, site, claim.stage());
+    }
+
+    private static Optional<BlockPosition> firstMismatchClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim.stage() != ResourceSiteLifecycle.MATURE_STAGE || claim.harvestedCropSlots() == 0) return firstMismatch(level, site, claim.stage());
+        for (int index = 0; index < site.cropSlots().size(); index++) {
+            BlockPosition slot = site.cropSlots().get(index);
+            BlockState expected = index < claim.harvestedCropSlots() ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE);
+            if (!level.getBlockState(minecraft(slot)).equals(expected)) return Optional.of(slot);
+        }
+        return Optional.empty();
+    }
+
     private static void projectOneGrowthStage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Set<SubjectId> pendingRecovery = RECOVERY_SITES.getOrDefault(runtime, Set.of());
         List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
@@ -116,9 +142,16 @@ final class FrontierV3ResourceSiteExecutor {
         int index = Math.floorMod(STAGE_CURSORS.getOrDefault(runtime, 0), candidates.size());
         STAGE_CURSORS.put(runtime, (index + 1) % candidates.size()); ResourceSiteLifecycle lifecycle = candidates.get(index);
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+        // Canonical admission can outrun the bounded physical growth projector by one turn.
+        // It still owns that single catch-up from a pre-mature claim to the initial mature
+        // field.  Once the claim is mature, however, every subsequent cell change belongs to
+        // the harvest cursor; revalidating a partial field here would create a second writer.
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (lifecycle.phase() == ResourceSitePhase.HARVESTING && claim != null
+                && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE) return;
         StageProjectionResult result = projectStage(level, ledger, site, lifecycle.growthStage());
         if (result == StageProjectionResult.CONFLICT) {
-            FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id()); int observedStage = claim == null ? lifecycle.growthStage() : claim.stage();
+            FrontierV3ResourceSiteLedger.Claim observedClaim = ledger.claim(site.id()); int observedStage = observedClaim == null ? lifecycle.growthStage() : observedClaim.stage();
             recordConflict(runtime, ledger, site, firstMismatch(level, site, observedStage).orElse(site.cropSlots().getFirst()), "observed:resource-site-stage");
         }
     }
@@ -127,6 +160,7 @@ final class FrontierV3ResourceSiteExecutor {
         if (desiredStage < 0 || desiredStage > 7) throw new IllegalArgumentException("resource-site crop stage is invalid");
         if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        boolean wroteNeutralBaseline = false;
         if (claim == null) {
             // A COLD-completed field has a durable canonical stage but no historical Minecraft
             // effect to inspect.  A neutral footprint is the only safe admission proof: claim
@@ -134,10 +168,14 @@ final class FrontierV3ResourceSiteExecutor {
             if (!baseline(level, site)) return StageProjectionResult.CONFLICT;
             ledger.reserve(site.id(), projectionClaim(site));
             if (!placeWholeField(level, site)) { ledger.conflict(site.id()); return StageProjectionResult.CONFLICT; }
-            ledger.activate(site.id()); claim = ledger.claim(site.id());
+            ledger.activate(site.id()); claim = ledger.claim(site.id()); wroteNeutralBaseline = true;
         }
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return StageProjectionResult.CONFLICT;
-        if (!matches(level, site, claim.stage())) return StageProjectionResult.CONFLICT;
+        // `placeWholeField` has just checked the complete neutral projection in this same
+        // server turn. Re-interpreting that owned write as foreign drift creates a false
+        // conflict without an intervening world observation. Established claims still must
+        // match their exact physical stage/cursor before any later desired-state write.
+        if (!wroteNeutralBaseline && !matchesClaim(level, site, claim)) return StageProjectionResult.CONFLICT;
         if (claim.stage() == desiredStage) return StageProjectionResult.CURRENT;
         for (BlockPosition crop : site.cropSlots()) level.setBlock(minecraft(crop), crop(desiredStage), 3);
         if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
@@ -278,11 +316,10 @@ final class FrontierV3ResourceSiteExecutor {
                         site.irrigationSlots().stream().filter(irrigation -> !level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState())))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
-        // Starting an exact harvest atomically changes the canonical lifecycle
-        // from READY to HARVESTING.  Its field still belongs to this executor,
-        // however: the bounded cursor may not yet have materialized the final
-        // mature crop stage when that hand-off happens.  Keep projecting the
-        // same canonical stage until the harvest receipt owns the reset.
+        // Growth owns complete-stage projection until the field has physically reached its
+        // initial mature frontier. After that one catch-up, a named harvest job owns every
+        // partial crop change. Player/world deltas remain observable through the separate
+        // physical-delta boundary rather than a competing desired-state writer.
         return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
                 || lifecycle.phase() == ResourceSitePhase.HARVESTING;
     }

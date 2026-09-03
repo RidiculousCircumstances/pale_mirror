@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
@@ -21,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestObservation;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -39,7 +41,12 @@ final class FrontierV3ResourceSiteHarvestExecutor {
      * turn ahead of its loaded crop blocks.  That is not player drift and
      * must not turn a harvest into an irreversible conflict.
      */
-    enum Precondition { READY, WAITING_FOR_FIELD_PROJECTION, CONFLICT }
+    /**
+     * Read-only distinction between a field that may admit work and one whose
+     * retained worker has already made visible, owned progress.  The latter is
+     * neither another admission candidate nor a world conflict.
+     */
+    enum Precondition { READY, WAITING_FOR_FIELD_PROJECTION, HARVESTING, CONFLICT }
 
     /** Immutable loaded-world probe for the read-only operator diagnostic boundary. */
     record Readiness(boolean fieldLoaded, boolean depotLoaded, String depotSurface, boolean ownedChestPresent,
@@ -103,6 +110,28 @@ final class FrontierV3ResourceSiteHarvestExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent); if (target == null) { unknown(runtime, intent.id(), "missing-canonical-target"); return; }
+        // The output is an atomic depot receipt, but it is not eligible until the same retained
+        // worker cursor has observed every physical crop cell.  Do not turn a prepared intent
+        // into a substitute for field work.
+        if (!target.job().progress().complete()) {
+            // This durable transition is the single cross-boundary readiness fact: the exact
+            // mature field and receiving depot were observed in naturally loaded chunks.  It
+            // lets the pure scene-admission model reserve its named farmer without guessing
+            // loaded-world state, while still occurring before the first crop effect.
+            if (intent.status() == PhysicalIntentStatus.PREPARED) {
+                Readiness readiness = readiness(level, state, intent.id()).orElse(null);
+                if (readiness != null && readiness.precondition() == Precondition.READY
+                        && readiness.fieldMatchesMatureStage() && readiness.outputSlotEmpty()) {
+                    transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "field-ready");
+                }
+            }
+            return;
+        }
+        // The same progress authority closes its HOT worker scene before the field lifecycle
+        // consumes the active job into GROWING.  A receipt one server turn earlier makes a
+        // still-DRAINING lease point at a vanished job, so defer rather than relying on tick
+        // registration order or weakening the scene invariant.
+        if (hasOpenHarvestScene(state, target.job().id())) return;
         if (!loaded(level, target.site()) || !level.hasChunkAt(target.chestPosition())) return;
         ContainerSurface surface = state.inventory().surfaces().get(target.job().outputSlot().containerId());
         if (surface == null || surface.status() == ContainerSurfaceStatus.CONFLICT) { unknown(runtime, intent.id(), "depot-conflict"); return; }
@@ -111,7 +140,11 @@ final class FrontierV3ResourceSiteHarvestExecutor {
                 new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.job().outputSlot().containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "missing-depot"); return; }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-        if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, target, ledger, chest); return; }
+        if (intent.status() == PhysicalIntentStatus.RUNNING) {
+            if (completeRunning(level, target.site(), ledger, chest, target.output())) { confirm(runtime, intent, target); }
+            else { fail(runtime, ledger, target, "completion-postcondition-conflict"); }
+            return;
+        }
         Precondition precondition = precondition(level, target.site(), ledger.claim(target.site().id()), chest, target.output());
         if (precondition == Precondition.WAITING_FOR_FIELD_PROJECTION) return;
         if (precondition != Precondition.READY) { fail(runtime, ledger, target, "field-or-depot-precondition"); return; }
@@ -120,10 +153,33 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         confirm(runtime, intent, target);
     }
 
-    private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Target target,
-                                       FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest) {
-        if (completePostcondition(level, target, ledger, chest)) { confirm(runtime, target.intent(), target); return; }
-        fail(runtime, ledger, target, "restart-postcondition-conflict");
+    /**
+     * The one exact completion boundary for an intent that was already RUNNING while its named
+     * farmer advanced the 64-cell HOT cursor.  A complete owned field with an empty exact depot
+     * slot is the normal first completion and may perform the one atomic receipt.  The same
+     * complete postcondition after restart only acknowledges the existing receipt.  Every other
+     * partial or altered world is conflict evidence, never a reason to manufacture wheat.
+     */
+    static boolean completeRunning(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger,
+                                   ChestBlockEntity chest, ExactItemStack output) {
+        if (completePostcondition(level, site, ledger, chest, output)) return true;
+        if (!fullyHarvested(level, site, ledger) || !(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)
+                || !chest.getItem(slot.slot()).isEmpty()) return false;
+        return apply(level, ledger, site, chest, output);
+    }
+
+    private static boolean fullyHarvested(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger) {
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                && claim.harvestedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
+    }
+
+    private static boolean hasOpenHarvestScene(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId) {
+        return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .filter(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED)
+                .anyMatch(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(jobId));
     }
 
     static Precondition precondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest, ExactItemStack output) {
@@ -145,9 +201,17 @@ final class FrontierV3ResourceSiteHarvestExecutor {
                 && FrontierV3ResourceSiteExecutor.matches(level, site, claim.stage())) {
             return Precondition.WAITING_FOR_FIELD_PROJECTION;
         }
-        return claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
-                && FrontierV3ResourceSiteExecutor.matches(level, site, ResourceSiteLifecycle.MATURE_STAGE)
-                ? Precondition.READY : Precondition.CONFLICT;
+        boolean untouchedMature = claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() == 0
+                && FrontierV3ResourceSiteExecutor.matches(level, site, ResourceSiteLifecycle.MATURE_STAGE);
+        boolean fullyWorked = claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                && claim.harvestedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
+        boolean partialWork = claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                && claim.harvestedCropSlots() > 0
+                && claim.harvestedCropSlots() < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, claim.harvestedCropSlots());
+        if (untouchedMature || fullyWorked) return Precondition.READY;
+        return partialWork ? Precondition.HARVESTING : Precondition.CONFLICT;
     }
 
     private static boolean completePostcondition(ServerLevel level, Target target, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest) {
@@ -157,7 +221,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     static boolean completePostcondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest, ExactItemStack expected) {
         if (!(expected.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id()); ItemStack output = chest.getItem(slot.slot());
-        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && claim.stage() == 0
+        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && claim.stage() == 0 && claim.harvestedCropSlots() == 0
                 && FrontierV3ResourceSiteExecutor.matches(level, site, 0) && FrontierV3CargoHandoffExecutor.exactMatch(output, expected);
     }
 

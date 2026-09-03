@@ -34,7 +34,7 @@ final class ResourceSitePhysicalIntentStateSupport {
     }
 
     static boolean ownsNonterminalSubject(ResourceSiteState sites, SubjectId subject) {
-        return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.siteId().equals(subject)
+        return sites.sites().values().stream().filter(lifecycle -> lifecycle.phase() == ResourceSitePhase.HARVESTING).anyMatch(lifecycle -> lifecycle.siteId().equals(subject)
                 || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent());
@@ -54,6 +54,7 @@ final class ResourceSitePhysicalIntentStateSupport {
     static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
+        if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest receipt cannot precede every observed crop");
         validateHarvestReceipt(state.bootstrap(), intent, receipt); if (!receipt.siteId().equals(job.siteId()) || !receipt.workerId().equals(job.workerId())) {
             throw new IllegalArgumentException("resource-site harvest receipt has a foreign site or worker");
         }

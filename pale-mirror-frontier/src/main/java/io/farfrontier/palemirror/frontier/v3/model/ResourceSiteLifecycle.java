@@ -36,8 +36,15 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                     throw new IllegalArgumentException("harvesting resource site must retain one mature harvest job");
                 }
             }
-            case CONFLICT, DESTROYED -> {
-                if (activeWork.isPresent()) throw new IllegalArgumentException("terminal resource-site condition cannot retain active work");
+            case CONFLICT -> {
+                // A failed harvest retains its exact job only as causal evidence for its
+                // terminal unknown intent. It is never eligible for a new assignment.
+                if (activeWork.isPresent() && activeWork.filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
+                    throw new IllegalArgumentException("resource-site conflict may retain only its failed harvest identity");
+                }
+            }
+            case DESTROYED -> {
+                if (activeWork.isPresent()) throw new IllegalArgumentException("destroyed resource-site condition cannot retain active work");
             }
         }
     }
@@ -61,13 +68,53 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         if (phase != ResourceSitePhase.READY) throw new IllegalStateException("resource site is not ready for harvest");
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.HARVESTING, growthEpoch, growthStage, Optional.of(job));
     }
+    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
+                || completedCropSlots != active.progress().completedCropSlots() + 1) {
+            throw new IllegalArgumentException("resource-site harvest progress is stale or invalid");
+        }
+        return new ResourceSiteLifecycle(siteId, phase, growthEpoch, growthStage,
+                Optional.of(active.withProgress(active.progress().confirmPreparedCrop())));
+    }
+    public ResourceSiteLifecycle advanceHarvestTraversal(ResourceSiteHarvestJob expected, int nextCursor) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)) {
+            throw new IllegalArgumentException("resource-site field-work traversal is stale or invalid");
+        }
+        return new ResourceSiteLifecycle(siteId, phase, growthEpoch, growthStage, Optional.of(active.advanceTraversal(nextCursor)));
+    }
+    public ResourceSiteLifecycle rebaseUnstartedHarvestTraversal(ResourceSiteHarvestJob expected, TraversalTopology traversal) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)) {
+            throw new IllegalArgumentException("resource-site field-work hand-off is stale or invalid");
+        }
+        return new ResourceSiteLifecycle(siteId, phase, growthEpoch, growthStage, Optional.of(active.rebaseUnstartedTraversal(traversal)));
+    }
+    public ResourceSiteLifecycle prepareHarvestCrop(ResourceSiteHarvestJob expected, int cropSlotIndex) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
+                || cropSlotIndex != active.progress().nextCropSlotIndex()) {
+            throw new IllegalArgumentException("resource-site harvest crop preparation is stale or invalid");
+        }
+        return new ResourceSiteLifecycle(siteId, phase, growthEpoch, growthStage,
+                Optional.of(active.withProgress(active.progress().prepareNextCrop())));
+    }
     public ResourceSiteLifecycle harvested() {
-        if (phase != ResourceSitePhase.HARVESTING) throw new IllegalStateException("resource site has no active harvest");
+        if (phase != ResourceSitePhase.HARVESTING || activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(ResourceSiteHarvestJob::progress).filter(ResourceSiteHarvestProgress::complete).isEmpty()) {
+            throw new IllegalStateException("resource site has no fully observed harvest");
+        }
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty());
     }
     public ResourceSiteLifecycle conflicted() {
         if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");
-        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.CONFLICT, growthEpoch, growthStage, Optional.empty());
+        Optional<ResourceSiteWork> retainedHarvest = activeWork.filter(ResourceSiteHarvestJob.class::isInstance);
+        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.CONFLICT, growthEpoch, growthStage, retainedHarvest);
     }
     public ResourceSiteLifecycle destroyed() { return new ResourceSiteLifecycle(siteId, ResourceSitePhase.DESTROYED, growthEpoch, growthStage, Optional.empty()); }
 }

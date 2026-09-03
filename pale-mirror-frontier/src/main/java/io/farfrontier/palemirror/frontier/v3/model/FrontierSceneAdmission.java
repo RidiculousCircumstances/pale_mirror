@@ -93,6 +93,8 @@ public final class FrontierSceneAdmission {
                 || state.strategicPlans().settlementAssaults().values().stream().anyMatch(assault -> assault.status() != SettlementAssaultStatus.RESOLVED
                 && assault.attackerIds().contains(actorId))
                 || FrontierEngineeringWorkSceneSupport.nextCandidate(state).stream()
+                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId))
+                || FrontierResourceSiteHarvestSceneSupport.nextCandidate(state).stream()
                 .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId));
     }
 
@@ -125,6 +127,9 @@ public final class FrontierSceneAdmission {
         // after restart), leaving the worksite indefinitely unavailable to itself.
         FrontierEngineeringWorkSceneSupport.nextCandidate(state)
                 .ifPresent(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+        // Field work uses the typed atomic ambient-to-scene hand-off.  It deliberately is not
+        // a pre-lease COLD reservation: the loaded Villager must remain available for that
+        // hand-off rather than be drained and respawned at a guessed canonical surface.
         return Set.copyOf(reserved);
     }
 

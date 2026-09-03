@@ -73,7 +73,8 @@ canonical predicate. Do not use it to wait for a transient phase such as
 `wait_until_harvest_result` waits for all three terminal facts together:
 
 - the named physical intent is `CONFIRMED`;
-- the named exact 64-wheat stack has `CONTAINER_SLOT` custody in the depot;
+- the confirmation retains its immutable receipt and names the exact 64-wheat
+  identity; the stack may subsequently be consumed by ordinary production;
 - the named site entered its next `GROWING` epoch.
 
 This is the pattern for future domain waits: model the player-meaningful result,

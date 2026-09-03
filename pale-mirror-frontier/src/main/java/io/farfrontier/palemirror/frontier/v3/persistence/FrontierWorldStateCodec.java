@@ -1,14 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
-import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus; import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId; import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.WorldId;
-import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
-import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.*; import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 112; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 114; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -735,6 +728,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeByte(2); writeString(output, engineering.projectId().value()); output.writeInt(engineering.workCellIndex()); return;
         }
         if (cause instanceof MedicalTreatmentSceneCause medical) { output.writeByte(3); writeString(output, medical.operationId().value()); return; }
+        if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4); writeString(output, harvest.jobId().value()); return; }
         throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
     }
     private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
@@ -743,10 +737,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             case 1 -> new SceneCauseKind.Assault(new SubjectId(readString(input)), new SubjectId(readString(input)));
             case 2 -> new SceneCauseKind.Engineering(new SubjectId(readString(input)), input.readInt());
             case 3 -> new SceneCauseKind.Medical(new SubjectId(readString(input)));
+            case 4 -> new SceneCauseKind.ResourceSiteHarvest(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown scene cause kind");
         };
     }
-    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering, SceneCauseKind.Medical {
+    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering, SceneCauseKind.Medical,
+            SceneCauseKind.ResourceSiteHarvest {
         SceneCauseKind LOGISTICS = new Logistics();
         SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
         final class Logistics implements SceneCauseKind {
@@ -767,6 +763,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         record Medical(SubjectId operationId) implements SceneCauseKind {
             @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
                 return new MedicalTreatmentSceneCause(operationId);
+            }
+        }
+        record ResourceSiteHarvest(SubjectId jobId) implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
+                return new ResourceSiteHarvestSceneCause(jobId);
             }
         }
     }

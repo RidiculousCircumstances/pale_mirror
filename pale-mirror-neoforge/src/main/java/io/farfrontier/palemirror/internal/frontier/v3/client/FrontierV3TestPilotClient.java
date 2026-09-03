@@ -585,24 +585,28 @@ public final class FrontierV3TestPilotClient {
     }
 
     /**
-     * Waits for one complete physical harvest result: the intent is durably confirmed,
-     * the exact wheat stack has canonical depot custody, and the site entered its next
-     * growth epoch.  It intentionally never treats READY/HARVESTING as success.
+     * Waits for one complete physical harvest result: the durable intent carries an exact
+     * receipt for its named wheat identity and the site entered its next growth epoch. The
+     * stack may already have become a real production input, so current item custody is not
+     * evidence that the completed receipt did or did not happen.
      */
     private static void waitUntilHarvestResult(Minecraft minecraft, JsonObject action) {
         String siteId = action.get("siteId").getAsString(); String intentId = action.get("intentId").getAsString(); String itemId = action.get("itemId").getAsString();
         long tick = minecraft.level.getGameTime();
         ObservedDiagnostic site = diagnostics.get(new DiagnosticIdentity("site", siteId));
         ObservedDiagnostic intent = diagnostics.get(new DiagnosticIdentity("intent", intentId));
-        ObservedDiagnostic item = diagnostics.get(new DiagnosticIdentity("item", itemId));
-        if (fresh(site) && fresh(intent) && fresh(item) && harvestComplete(site.value(), intent.value(), item.value())) {
+        if (fresh(site) && fresh(intent) && harvestComplete(site.value(), intent.value(), itemId)) {
             advance("wait_until_harvest_result"); return;
         }
         if ((tick - actionStartedTick) % 20L == 0L) {
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect intent " + intentId);
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect item " + itemId);
             if (action.has("settlementId")) minecraft.player.connection.sendCommand("pale_mirror v3 inspect settlement " + action.get("settlementId").getAsString());
+            // The terminal outcome is owned by site/intent/item, but a duration-bearing scene
+            // also needs its named worker's lease/body evidence when it is still pending.  This
+            // is read-only scenario telemetry; it neither selects a replacement worker nor
+            // changes admission.
+            if (action.has("workerId")) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + action.get("workerId").getAsString());
         }
         long timeoutMs = action.get("timeoutMs").getAsLong();
         if ((tick - actionStartedTick) * 50L >= timeoutMs) {
@@ -652,13 +656,13 @@ public final class FrontierV3TestPilotClient {
         if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("fixture preconditions did not converge: " + checks);
     }
 
-    private static boolean harvestComplete(JsonObject site, JsonObject intent, JsonObject item) {
+    private static boolean harvestComplete(JsonObject site, JsonObject intent, String itemId) {
         if (!"ok".equals(string(site, "status")) || !"GROWING".equals(string(site, "phase")) || site.get("growthEpoch").getAsLong() < 2L
                 || !"ok".equals(string(intent, "status")) || !"CONFIRMED".equals(string(intent, "intentStatus"))
-                || !"RESOURCE_SITE_HARVEST".equals(string(intent, "intentKind"))
-                || !"ok".equals(string(item, "status")) || !"minecraft:wheat".equals(string(item, "itemKind")) || item.get("count").getAsInt() != 64) return false;
-        JsonObject custody = item.getAsJsonObject("custody");
-        return custody != null && "CONTAINER_SLOT".equals(string(custody, "kind"));
+                || !"RESOURCE_SITE_HARVEST".equals(string(intent, "intentKind")) || string(intent, "receiptId").isBlank()
+                || !intent.has("subjects") || !intent.get("subjects").isJsonArray()) return false;
+        return java.util.stream.StreamSupport.stream(intent.getAsJsonArray("subjects").spliterator(), false)
+                .anyMatch(value -> value.isJsonPrimitive() && itemId.equals(value.getAsString()));
     }
 
     private static String string(JsonObject object, String member) {
