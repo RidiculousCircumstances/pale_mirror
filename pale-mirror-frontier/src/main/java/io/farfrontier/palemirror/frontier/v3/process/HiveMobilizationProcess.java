@@ -29,6 +29,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -146,9 +147,14 @@ public final class HiveMobilizationProcess {
     /** Reducer validation preserves the same topology, exact body and one-step cursor relation. */
     public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, HiveMobilizationAssemblyAdvanced advanced) {
         HiveMobilization mobilization = requireMobilization(state, subject, advanced.mobilizationId());
-        if (mobilization.status() != HiveMobilizationStatus.ASSEMBLING || mobilization.memberIds().stream().map(state.ambientLeases()::get)
-                .anyMatch(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED)) {
-            throw new IllegalArgumentException("hive assembly cursor may not advance while its exact group is HOT or inactive");
+        List<io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease> active = mobilization.memberIds().stream().map(state.ambientLeases()::get)
+                .filter(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED).toList();
+        if (mobilization.status() != HiveMobilizationStatus.ASSEMBLING
+                || (!active.isEmpty() && (active.stream().anyMatch(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT
+                || lease.goal() != io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind.HIVE_TASK_ASSEMBLY)
+                || state.ambientLeases().get(advanced.bioformId()) == null
+                || state.ambientLeases().get(advanced.bioformId()).status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT))) {
+            throw new IllegalArgumentException("hive assembly cursor may advance only from COLD or its exact HOT task lease");
         }
         HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
         HiveTaskAssembly.Member member = assembly.members().get(advanced.bioformId());
@@ -159,17 +165,29 @@ public final class HiveMobilizationProcess {
         HiveTaskAssembly next = assembly.advance(advanced.bioformId());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(advanced.bioformId(), actor.withBody(BodyPosition.above(next.members().get(advanced.bioformId()).currentSurface())));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(
+        Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
+        io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease lease = ambient.get(advanced.bioformId());
+        if (lease != null && lease.status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT) {
+            HiveTaskAssembly.Member advancedMember = next.members().get(advanced.bioformId());
+            SurfaceAnchor target = advancedMember.arrived() ? advancedMember.currentSurface() : advancedMember.nextSurface();
+            ambient.put(advanced.bioformId(), lease.withGoal(io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind.HIVE_TASK_ASSEMBLY,
+                    target.standingBody()));
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(ambient).hiveColony(
                 state.hiveColony().advanceMobilizationAssembly(mobilization.id(), advanced.bioformId())));
     }
 
     public static FrontierWorldState reduceConflicted(FrontierWorldState state, SubjectId subject, HiveMobilizationConflicted conflicted) {
         HiveMobilization mobilization = requireMobilization(state, subject, conflicted.mobilizationId());
-        if (mobilization.status() != HiveMobilizationStatus.WAKING && mobilization.status() != HiveMobilizationStatus.RELEASING) {
-            throw new IllegalArgumentException("only an unconfirmed cocoon release may become a mobilization conflict");
+        boolean releaseConflict = conflicted.reason() == HiveMobilizationConflictReason.COCOON_CHANGED
+                || conflicted.reason() == HiveMobilizationConflictReason.UNKNOWN_AFTER_RESTART;
+        boolean assemblyConflict = conflicted.reason() == HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED;
+        if (!((releaseConflict && (mobilization.status() == HiveMobilizationStatus.WAKING || mobilization.status() == HiveMobilizationStatus.RELEASING))
+                || (assemblyConflict && mobilization.status() == HiveMobilizationStatus.ASSEMBLING))) {
+            throw new IllegalArgumentException("hive mobilization conflict does not match its durable physical boundary");
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().hiveColony(
-                state.hiveColony().conflictMobilization(mobilization.id(), conflicted.reason())));
+                state.hiveColony().conflictMobilization(mobilization.id(), conflicted.reason(), conflicted.assemblyBlockage())));
     }
 
     private static Optional<HiveMobilization> selectNest(FrontierWorldState state, StrategicTask task,

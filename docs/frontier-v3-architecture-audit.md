@@ -157,6 +157,22 @@ explicit mismatches. This is a bounded automated materialization/reload proof, n
 player visit to a non-flat hive and not closure of the remaining bridge/rail-grade, foundation
 repair/replan or cross-family HOT/COLD gates.
 
+The hive assembly family now supplies the first cross-family HOT proof for this contract.  Its
+pure compiler retains a bounded deterministic 3D `GROUND_BIOFORM` corridor from each exact
+cocoon-release surface to its exact Ganglion staging surface, including organ and hiveroot body
+clearance.  The loaded executor may move only toward that next retained surface and advances the
+cursor only after observed arrival.  A full loaded body-column obstruction, missing support or
+missing/foreign body becomes durable `ASSEMBLY_PATH_BLOCKED` evidence naming the actor, expected
+cursor and retained target; it never asks Minecraft navigation for a substitute path.  Thin
+route/infection overlays of at most one eighth block are explicitly the same surface rather than
+a false wall.  A one-block descending retained edge is physically staged as exact horizontal
+walk-off followed by bounded vertical settling, so it neither collides with the upper ledge nor
+turns into an implicit flight edge.  Focused state/codec checks, a 44-test Scene slice and the
+native graceful-restart `disposable-hive-mobilization-release-restart` scenario prove the
+four-member group reaches terminal assembled HOT custody after the retained approaches; its
+post-restart trace has no path-blocked event.  This proves the assembly family, not arbitrary
+terrain replan, bridge/rail grades or a completed assault departure.
+
 This correction must not be misreported as
 complete merely because the medical scene has typed port data. The flat provider
 does not claim physical excavation or a non-flat entrance: its infirmary

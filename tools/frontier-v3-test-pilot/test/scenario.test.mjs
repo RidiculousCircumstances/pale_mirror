@@ -181,6 +181,16 @@ test('stepped-route recovery binds each physical-loss assertion to its producing
   assert.equal(segments.after.assertions.find((value) => value.view === 'route_topology').after, 1);
 });
 
+test('hive assembly recovery requests its terminal mobilisation evidence again after restart', async () => {
+  const hiveAssembly = JSON.parse(await readFile(new URL('../scenarios/disposable-hive-mobilization-release-restart.json', import.meta.url), 'utf8'));
+  const segments = restartSegments(hiveAssembly);
+  const terminal = segments.after.assertions.find((value) => value.view === 'hive_mobilization');
+  assert.equal(terminal.after, 1);
+  assert.equal(segments.after.actions[terminal.after - 1].type, 'wait_until_diagnostic');
+  assert.equal(segments.after.actions[terminal.after - 1].view, terminal.view);
+  assert.equal(segments.after.actions[terminal.after - 1].id, terminal.id);
+});
+
 test('native pilot may advance only the bounded canonical v3 clock', () => {
   const advance = { ...scenario, actions: [{ type: 'fast_forward', ticks: 24_000 }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(advance));

@@ -18,7 +18,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
                                SubjectId settlementId, SubjectId overseerId, List<SubjectId> memberIds,
                                List<SubjectId> releasedMemberIds, Optional<SubjectId> releasingMemberId,
                                Optional<HiveTaskAssembly> assembly, HiveMobilizationStatus status, Optional<HiveMobilizationConflictReason> conflictReason,
-                               long startedAt) {
+                               Optional<HiveAssemblyBlockage> assemblyBlockage, long startedAt) {
     public static final int MAX_MEMBERS = 12;
 
     public HiveMobilization {
@@ -34,6 +34,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         assembly = Objects.requireNonNull(assembly, "hive mobilization assembly");
         Objects.requireNonNull(status, "hive mobilization status");
         conflictReason = Objects.requireNonNull(conflictReason, "hive mobilization conflict reason");
+        assemblyBlockage = Objects.requireNonNull(assemblyBlockage, "hive mobilization assembly blockage");
         if (memberIds.isEmpty() || memberIds.size() > MAX_MEMBERS || memberIds.stream().distinct().count() != memberIds.size()) {
             throw new IllegalArgumentException("hive mobilization must retain one to " + MAX_MEMBERS + " distinct exact members");
         }
@@ -47,6 +48,10 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (startedAt < 0L) throw new IllegalArgumentException("hive mobilization start must be non-negative");
         if (status == HiveMobilizationStatus.CONFLICT != conflictReason.isPresent()) {
             throw new IllegalArgumentException("only a conflicted hive mobilization retains a conflict reason");
+        }
+        if (assemblyBlockage.isPresent() != (status == HiveMobilizationStatus.CONFLICT
+                && conflictReason.orElseThrow() == HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED)) {
+            throw new IllegalArgumentException("only an assembly path conflict retains its exact blocked edge");
         }
         if (status == HiveMobilizationStatus.RELEASING != releasingMemberId.isPresent()) {
             throw new IllegalArgumentException("only a releasing mobilization retains its one exact in-flight occupant");
@@ -63,11 +68,19 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (assembly.isPresent() && (!releasedMemberIds.equals(memberIds) || !assembly.orElseThrow().members().keySet().equals(java.util.Set.copyOf(memberIds)))) {
             throw new IllegalArgumentException("hive assembly must retain every and only physically released member");
         }
+        if (assemblyBlockage.isPresent()) {
+            HiveAssemblyBlockage blockage = assemblyBlockage.orElseThrow();
+            HiveTaskAssembly.Member member = assembly.orElseThrow().members().get(blockage.actorId());
+            if (member == null || member.arrived() || member.cursor() != blockage.expectedCursor()
+                    || !member.nextSurface().equals(blockage.target())) {
+                throw new IllegalArgumentException("hive assembly blockage is not the exact retained next edge");
+            }
+        }
     }
 
     public HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId, SubjectId taskId, SubjectId settlementId,
                             SubjectId overseerId, List<SubjectId> memberIds, HiveMobilizationStatus status, long startedAt) {
-        this(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, List.of(), Optional.empty(), Optional.empty(), status, Optional.empty(), startedAt);
+        this(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, List.of(), Optional.empty(), Optional.empty(), status, Optional.empty(), Optional.empty(), startedAt);
     }
 
     /** Convenience constructor for ordinary non-assembly fixtures. */
@@ -76,7 +89,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
                             Optional<SubjectId> releasingMemberId, HiveMobilizationStatus status,
                             Optional<HiveMobilizationConflictReason> conflictReason, long startedAt) {
         this(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds, releasingMemberId,
-                Optional.empty(), status, conflictReason, startedAt);
+                Optional.empty(), status, conflictReason, Optional.empty(), startedAt);
     }
 
     public HiveMobilization startRelease() {
@@ -84,7 +97,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
             throw new IllegalArgumentException("only a waking mobilization with an unreleased cocoon may begin physical release");
         }
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds,
-                nextUnreleasedMember(), Optional.empty(), HiveMobilizationStatus.RELEASING, Optional.empty(), startedAt);
+                nextUnreleasedMember(), Optional.empty(), HiveMobilizationStatus.RELEASING, Optional.empty(), Optional.empty(), startedAt);
     }
 
     public HiveMobilization confirmRelease(SubjectId memberId, Optional<HiveTaskAssembly> completedAssembly) {
@@ -98,7 +111,7 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
             throw new IllegalArgumentException("only the final cocoon release may retain a complete hive assembly");
         }
         HiveMobilizationStatus next = complete ? HiveMobilizationStatus.ASSEMBLING : HiveMobilizationStatus.WAKING;
-        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, released, Optional.empty(), completedAssembly, next, Optional.empty(), startedAt);
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, released, Optional.empty(), completedAssembly, next, Optional.empty(), Optional.empty(), startedAt);
     }
 
     /** Advances exactly one already retained assembly cursor without changing its port or roster. */
@@ -107,16 +120,21 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
             throw new IllegalArgumentException("only an assembling mobilization may advance its retained cursor");
         }
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds,
-                Optional.empty(), Optional.of(assembly.orElseThrow().advance(memberId)), status, Optional.empty(), startedAt);
+                Optional.empty(), Optional.of(assembly.orElseThrow().advance(memberId)), status, Optional.empty(), Optional.empty(), startedAt);
     }
 
     public HiveMobilization conflict(HiveMobilizationConflictReason reason) {
+        return conflict(reason, Optional.empty());
+    }
+
+    public HiveMobilization conflict(HiveMobilizationConflictReason reason, Optional<HiveAssemblyBlockage> blockage) {
         Objects.requireNonNull(reason, "hive mobilization conflict reason");
+        blockage = Objects.requireNonNull(blockage, "hive mobilization assembly blockage");
         if (status == HiveMobilizationStatus.CONFLICT) {
             throw new IllegalArgumentException("a conflicted mobilization cannot conflict again");
         }
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds, Optional.empty(), assembly,
-                HiveMobilizationStatus.CONFLICT, Optional.of(reason), startedAt);
+                HiveMobilizationStatus.CONFLICT, Optional.of(reason), blockage, startedAt);
     }
 
     private Optional<SubjectId> nextUnreleasedMember() {

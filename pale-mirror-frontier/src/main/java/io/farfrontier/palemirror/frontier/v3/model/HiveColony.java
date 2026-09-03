@@ -193,10 +193,15 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
     }
 
     public HiveColony conflictMobilization(SubjectId mobilizationId, HiveMobilizationConflictReason reason) {
+        return conflictMobilization(mobilizationId, reason, java.util.Optional.empty());
+    }
+
+    public HiveColony conflictMobilization(SubjectId mobilizationId, HiveMobilizationConflictReason reason,
+                                           java.util.Optional<HiveAssemblyBlockage> assemblyBlockage) {
         HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
         if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
         Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
-        next.put(mobilizationId, current.conflict(reason));
+        next.put(mobilizationId, current.conflict(reason, assemblyBlockage));
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 

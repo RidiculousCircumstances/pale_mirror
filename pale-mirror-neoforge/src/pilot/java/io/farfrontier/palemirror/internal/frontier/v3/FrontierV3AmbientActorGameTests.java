@@ -1,4 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -340,6 +341,8 @@ public final class FrontierV3AmbientActorGameTests {
         BlockPosition anchor = new BlockPosition(floor.getX(), floor.getY(), floor.getZ());
         helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
                 "a canonical floor with two clear body cells admits its exact assembly cursor");
+        helper.assertTrue(FrontierV3StandingPosition.hasExactStandingColumn(level, anchor),
+                "a retained cursor needs both its exact support and those two clear body cells");
         helper.assertValueEqual(FrontierV3StandingPosition.aboveExactFloor(level, anchor), floor.above(),
                 "the exact cursor resolves only to the feet cell directly above its retained support");
         level.setBlock(floor.above(), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
@@ -347,10 +350,57 @@ public final class FrontierV3AmbientActorGameTests {
                 "a player block at the exact feet cell is a loaded-world deferral, not an invitation to climb it");
         helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, anchor) == null,
                 "an obstruction at the exact feet cell may not be reinterpreted as a higher floor");
+        level.setBlock(floor.above(), Blocks.LIME_CARPET.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3StandingPosition.hasExactStandingColumn(level, anchor),
+                "the owned thin infection/route overlay is traversable at the same retained surface, not a higher route");
+        helper.assertValueEqual(FrontierV3StandingPosition.aboveExactFloor(level, anchor), floor.above(),
+                "a thin overlay preserves the exact canonical feet cell rather than changing its floor");
         level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3); level.setBlock(floor, Blocks.AIR.defaultBlockState(), 3);
         helper.assertTrue(FrontierV3StandingPosition.hasExactHeadroom(level, anchor),
-                "headroom checks only the exact canonical body cells; ordinary Minecraft collision remains the support authority");
+                "headroom remains a narrow volume observation independent from a floor claim");
+        helper.assertFalse(FrontierV3StandingPosition.hasExactStandingColumn(level, anchor),
+                "a removed retained support is a loaded-world blocker, not an invitation to fall or choose another floor");
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-assembly-headroom", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void retainedMotionStopsAtAnExactBlockedEdgeInsteadOfSideStepping(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
+        prepareMotionArena(level, origin, 5, 3);
+        Zombie body = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create retained-motion bioform");
+        body.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); body.setNoAi(true); body.setPersistenceRequired();
+        level.setBlock(origin.offset(1, 1, 0), Blocks.GRAY_CONCRETE.defaultBlockState(), 3);
+        helper.assertTrue(level.addFreshEntity(body), "the retained-motion fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> driveMotion(helper, level, body,
+                new Vec3(origin.getX() + 3.5D, origin.getY(), origin.getZ() + 0.5D), 20, () -> {
+            helper.assertTrue(body.getX() < origin.getX() + 0.75D
+                            && Math.abs(body.getZ() - (origin.getZ() + 0.5D)) < 0.1D,
+                    "a retained edge may step onto its own thin support but cannot take a hidden lateral substitute around a full blocker: body=" + body.position());
+            body.discard(); helper.succeed();
+        }));
+    }
+
+    @GameTest(batch = "pm-frontier-v3-assembly-grade", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 120)
+    public static void retainedMotionWalksDownOneDeclaredGradeWithoutAnAlternateRoute(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos upperFeet = helper.absolutePos(new BlockPos(8, 12, 0));
+        BlockPos lowerFeet = upperFeet.offset(1, -1, 0);
+        prepareFloor(level, upperFeet); prepareFloor(level, lowerFeet);
+        Zombie body = net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create descending retained-motion bioform");
+        body.setPos(upperFeet.getX() + 0.5D, upperFeet.getY(), upperFeet.getZ() + 0.5D);
+        body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the descending retained-motion fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> driveMotion(helper, level, body,
+                new Vec3(lowerFeet.getX() + 0.5D, lowerFeet.getY(), lowerFeet.getZ() + 0.5D), 80, () -> {
+            helper.assertTrue(body.getX() > upperFeet.getX() + 1.0D
+                            && body.getBlockY() == lowerFeet.getY(),
+                    "a retained one-block descending edge must walk forward then settle on its declared lower support: body="
+                            + body.position() + ", upper=" + upperFeet + ", lower=" + lowerFeet);
+            body.discard(); helper.succeed();
+        }));
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 260)

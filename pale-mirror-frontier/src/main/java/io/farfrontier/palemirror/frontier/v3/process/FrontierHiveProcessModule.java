@@ -49,6 +49,11 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             state.bootstrap().ruleset().cadence().migrationStepInterval())))));
             return new CommandPlan.Accepted(List.copyOf(events));
         }
+        if (command.payload() instanceof HiveMobilizationAssemblyAdvanced advanced) {
+            try { HiveMobilizationProcess.reduceAssemblyAdvanced(state, state.bootstrap().hive().id(), advanced); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), advanced)));
+        }
         if (command.payload() instanceof HiveMobilizationConflicted conflicted) {
             try { HiveMobilizationProcess.reduceConflicted(state, state.bootstrap().hive().id(), conflicted); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }

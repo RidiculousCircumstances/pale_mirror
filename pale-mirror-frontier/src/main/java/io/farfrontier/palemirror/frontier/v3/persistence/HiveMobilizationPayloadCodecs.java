@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
+import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
@@ -57,9 +58,9 @@ final class HiveMobilizationPayloadCodecs {
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationConflicted conflicted = (HiveMobilizationConflicted) payload;
-            writeSubject(output, conflicted.mobilizationId()); output.writeByte(conflicted.reason().wireTag()); }); }
+            writeSubject(output, conflicted.mobilizationId()); output.writeByte(conflicted.reason().wireTag()); writeBlockage(output, conflicted.assemblyBlockage()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationConflicted(readSubject(input),
-                FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte()))); }
+                FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte()), readBlockage(input))); }
     }
 
     private static void write(DataOutputStream output, HiveMobilization value) throws IOException {
@@ -68,7 +69,8 @@ final class HiveMobilizationPayloadCodecs {
         output.writeBoolean(value.releasingMemberId().isPresent()); if (value.releasingMemberId().isPresent()) writeSubject(output, value.releasingMemberId().orElseThrow());
         output.writeBoolean(value.assembly().isPresent()); if (value.assembly().isPresent()) writeAssembly(output, value.assembly().orElseThrow());
         output.writeByte(value.status().wireTag()); output.writeBoolean(value.conflictReason().isPresent());
-        if (value.conflictReason().isPresent()) output.writeByte(value.conflictReason().orElseThrow().wireTag()); output.writeLong(value.startedAt());
+        if (value.conflictReason().isPresent()) output.writeByte(value.conflictReason().orElseThrow().wireTag());
+        writeBlockage(output, value.assemblyBlockage()); output.writeLong(value.startedAt());
     }
 
     private static HiveMobilization read(DataInputStream input) throws IOException {
@@ -79,7 +81,22 @@ final class HiveMobilizationPayloadCodecs {
         HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
         Optional<HiveMobilizationConflictReason> conflict = input.readBoolean()
                 ? Optional.of(FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte())) : Optional.empty();
-        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, conflict, input.readLong());
+        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, conflict,
+                readBlockage(input), input.readLong());
+    }
+
+    private static void writeBlockage(DataOutputStream output, Optional<HiveAssemblyBlockage> blockage) throws IOException {
+        output.writeBoolean(blockage.isPresent());
+        if (blockage.isEmpty()) return;
+        HiveAssemblyBlockage value = blockage.orElseThrow();
+        writeSubject(output, value.actorId()); output.writeShort(value.expectedCursor());
+        output.writeInt(value.target().x()); output.writeInt(value.target().y()); output.writeInt(value.target().z());
+    }
+
+    private static Optional<HiveAssemblyBlockage> readBlockage(DataInputStream input) throws IOException {
+        if (!input.readBoolean()) return Optional.empty();
+        return Optional.of(new HiveAssemblyBlockage(readSubject(input), input.readUnsignedShort(),
+                io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt())));
     }
 
     private static void writeAssembly(DataOutputStream output, HiveTaskAssembly assembly) throws IOException {

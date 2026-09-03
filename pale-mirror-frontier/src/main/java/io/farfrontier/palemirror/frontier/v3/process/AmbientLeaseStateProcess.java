@@ -71,6 +71,18 @@ public final class AmbientLeaseStateProcess {
                 throw new IllegalArgumentException("HOT engineering assembly may return to COLD only at its exact cursor");
             }
         }
+        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.status() == HiveMobilizationStatus.ASSEMBLING)
+                .filter(value -> value.assembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
+                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive assembly"); })
+                .orElse(null);
+        if (mobilization != null) {
+            HiveTaskAssembly.Member member = mobilization.assembly().orElseThrow().members().get(release.actorId());
+            if (current.goal() != AmbientGoalKind.HIVE_TASK_ASSEMBLY
+                    || !release.body().supportingSurface().equals(member.currentSurface())) {
+                throw new IllegalArgumentException("HOT hive task assembly may return to COLD only at its exact retained cursor");
+            }
+        }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health())));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));

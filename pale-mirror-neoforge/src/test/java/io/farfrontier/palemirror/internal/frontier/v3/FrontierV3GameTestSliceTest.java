@@ -11,6 +11,7 @@ class FrontierV3GameTestSliceTest {
     void sceneSliceIncludesOnlyTheFastHotColdBatches() {
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-handoff"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-restart-reclaim"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-assembly-grade"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-route-maintenance"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-resource-harvest"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "core-integration"));

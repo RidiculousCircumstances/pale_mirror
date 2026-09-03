@@ -76,7 +76,7 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
-                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness) {
+                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness) {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness, Optional.empty());
     }
 
@@ -85,7 +85,7 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
-                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness,
+                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
                          Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness) {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, assemblyReadiness,
                 containerReadiness, Optional.empty(), Optional.empty());
@@ -96,7 +96,7 @@ final class FrontierV3DiagnosticJson {
                          Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
-                         Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> assemblyReadiness,
+                         Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
                          Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness,
                          Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
                          Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness) {
@@ -338,7 +338,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state,
-                                    Optional<FrontierV3AmbientActorExecutor.AssemblyReadiness> readiness) {
+                                    Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> readiness) {
         SubjectId subject = subject(id).orElse(null); RouteOperation operation = subject == null ? null : state.operations().get(subject);
         if (operation == null) return unavailable("operation", id, checkpoint, "not_found");
         String members = operation.participantIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
@@ -405,7 +405,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"length\":" + member.corridor().size() + ",\"current\":" + position(member.currentSurface().support()) + ",\"next\":" + next + "}";
     }
 
-    private static String assemblyReadiness(FrontierV3AmbientActorExecutor.AssemblyReadiness value) {
+    private static String assemblyReadiness(FrontierV3OperationAssemblyDiagnostic.Readiness value) {
         String members = value.members().stream().map(member -> "{\"actor\":\"" + quote(member.actorId().value())
                 + "\",\"current\":" + position(member.current()) + ",\"next\":" + nullablePosition(member.next())
                 + ",\"observed\":" + nullablePosition(member.observed()) + ",\"observedExact\":" + nullablePosition(member.observedExact())

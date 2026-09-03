@@ -176,8 +176,8 @@ class FrontierV3DiagnosticJsonTest {
         var operation = state.operations().values().iterator().next();
         var entry = operation.activeAssembly().orElseThrow().members().entrySet().iterator().next();
         var member = entry.getValue();
-        var readiness = new FrontierV3AmbientActorExecutor.AssemblyReadiness(java.util.List.of(
-                new FrontierV3AmbientActorExecutor.AssemblyMemberReadiness(entry.getKey(), member.currentSurface().support(),
+        var readiness = new FrontierV3OperationAssemblyDiagnostic.Readiness(java.util.List.of(
+                new FrontierV3OperationAssemblyDiagnostic.MemberReadiness(entry.getKey(), member.currentSurface().support(),
                         member.nextSurface().support(), member.currentSurface().support(), new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 64.0D, 8.5D), "OCCUPIED",
                         "minecraft:gray_carpet", "minecraft:stone", "minecraft:air", "minecraft:air", java.util.List.of("minecraft:villager"))));
 

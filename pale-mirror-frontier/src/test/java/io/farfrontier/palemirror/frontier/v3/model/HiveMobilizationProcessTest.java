@@ -47,6 +47,32 @@ class HiveMobilizationProcessTest {
         assertInstanceOf(CommandPlan.Accepted.class, plan);
     }
 
+    @Test void registeredPhysicalAssemblyArrivalAdmitsOnlyTheExactHotCursor() {
+        Mobilized assembled = assemble(fixture());
+        HiveMobilization mobilization = assembled.mobilization();
+        SubjectId actorId = mobilization.assembly().orElseThrow().safeAdvances().getFirst();
+        HiveTaskAssembly.Member member = mobilization.assembly().orElseThrow().members().get(actorId);
+        AmbientActorLease lease = new AmbientActorLease(actorId, assembled.state().actorLocations().get(actorId).body(),
+                new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY,
+                member.nextSurface().standingBody());
+        FrontierWorldState hot = assembled.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
+        CommandId commandId = new CommandId("command:hive-mobilization-assembly-arrival");
+        HiveMobilizationAssemblyAdvanced arrival = new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor());
+
+        CommandPlan accepted = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, commandId,
+                hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(commandId), arrival));
+        assertInstanceOf(CommandPlan.Accepted.class, accepted,
+                "the registered physical executor may commit only its retained HOT assembly cursor");
+
+        CommandId staleId = new CommandId("command:hive-mobilization-assembly-arrival-stale");
+        CommandPlan rejected = FrontierWorldRuntimeDefinition.planCommand(hot, new FrontierCommand(1, staleId,
+                hot.bootstrap().worldId(), Revision.ZERO, new SimInstant(300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                CauseChain.root(staleId), new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, member.cursor() + 1)));
+        assertInstanceOf(CommandPlan.Rejected.class, rejected,
+                "a physical executor cannot invent a later assembly cursor without observed arrival");
+    }
+
     @Test void remoteAssaultRequiresOneExactDormantOverseerAndRejectsAnImpostorController() {
         Fixture fixture = fixture();
         List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
@@ -221,6 +247,48 @@ class HiveMobilizationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(hot,
                 hot.bootstrap().hive().id(), new HiveMobilizationAssemblyAdvanced(mobilization.id(), hotMember,
                         mobilization.assembly().orElseThrow().members().get(hotMember).cursor())));
+    }
+
+    @Test void hotAssemblyArrivalAdvancesTheSameCursorThenRetargetsOnlyThatExactBody() {
+        Mobilized assembled = assemble(fixture());
+        HiveMobilization mobilization = assembled.mobilization();
+        SubjectId actorId = mobilization.assembly().orElseThrow().safeAdvances().getFirst();
+        HiveTaskAssembly.Member before = mobilization.assembly().orElseThrow().members().get(actorId);
+        AmbientActorLease lease = new AmbientActorLease(actorId, assembled.state().actorLocations().get(actorId).body(), new SimInstant(300L), 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.HIVE_TASK_ASSEMBLY, before.nextSurface().standingBody());
+        FrontierWorldState hot = assembled.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(java.util.Map.of(actorId, lease)));
+
+        assertEquals(AmbientGoalKind.HIVE_TASK_ASSEMBLY, AmbientActorProcess.nextLease(assembled.state(), actorId, new SimInstant(300L)).goal());
+        FrontierWorldState advanced = HiveMobilizationProcess.reduceAssemblyAdvanced(hot, hot.bootstrap().hive().id(),
+                new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, before.cursor()));
+
+        HiveTaskAssembly.Member after = advanced.hiveColony().mobilizations().get(mobilization.id()).assembly().orElseThrow().members().get(actorId);
+        assertEquals(before.cursor() + 1, after.cursor());
+        assertEquals(after.currentSurface().standingBody(), advanced.actorLocations().get(actorId).body());
+        assertEquals(after.arrived() ? after.currentSurface().standingBody() : after.nextSurface().standingBody(),
+                advanced.ambientLeases().get(actorId).goalBody(), "the HOT body receives only its next retained edge");
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(advanced,
+                advanced.bootstrap().hive().id(), new HiveMobilizationAssemblyAdvanced(mobilization.id(), actorId, before.cursor())),
+                "a stale physical arrival must not replay an already observed edge");
+    }
+
+    @Test void onlyALoadedAssemblyPathBlockMayConflictAnAssemblingMobilization() {
+        Mobilized assembled = assemble(fixture());
+        HiveTaskAssembly assembly = assembled.mobilization().assembly().orElseThrow();
+        SubjectId actor = assembly.safeAdvances().getFirst();
+        HiveTaskAssembly.Member member = assembly.members().get(actor);
+        HiveAssemblyBlockage blockage = new HiveAssemblyBlockage(actor, member.cursor(), member.nextSurface());
+        FrontierWorldState conflicted = HiveMobilizationProcess.reduceConflicted(assembled.state(), assembled.state().bootstrap().hive().id(),
+                new HiveMobilizationConflicted(assembled.mobilization().id(), HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED, java.util.Optional.of(blockage)));
+
+        assertEquals(HiveMobilizationStatus.CONFLICT, conflicted.hiveColony().mobilizations().get(assembled.mobilization().id()).status());
+        assertEquals(java.util.Optional.of(blockage), conflicted.hiveColony().mobilizations().get(assembled.mobilization().id()).assemblyBlockage());
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceConflicted(assembled.state(), assembled.state().bootstrap().hive().id(),
+                new HiveMobilizationConflicted(assembled.mobilization().id(), HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED,
+                        java.util.Optional.of(new HiveAssemblyBlockage(actor, member.cursor() + 1, member.nextSurface())))));
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceConflicted(assembled.state(),
+                assembled.state().bootstrap().hive().id(), new HiveMobilizationConflicted(assembled.mobilization().id(),
+                        HiveMobilizationConflictReason.COCOON_CHANGED)));
     }
 
     @Test void playerBrokenCocoonInterruptsOnlyItsInFlightMobilizationAndReleasesTheExactOccupant() {

@@ -263,7 +263,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
-            "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_conflicted"); }
+            "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced",
+            "frontier.hive_mobilization_conflicted"); }
     /**
      * These are the two physical-observation payloads that advance an already declared
      * engineering journey.  The infrastructure process verifies the exact HOT lease and

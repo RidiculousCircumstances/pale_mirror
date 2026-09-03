@@ -91,15 +91,36 @@ final class FrontierV3ControlledMobMotion {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
-        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE || horizontalDistance <= 1.0E-8D) return;
-        double vertical = Math.copySign(Math.min(Math.abs(delta.y), VERTICAL_SPEED), delta.y);
+        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) return;
+        if (horizontalDistance <= 1.0E-8D) {
+            settleExactDescent(actor, delta.y);
+            return;
+        }
+        // A descending retained edge is a physical walk-off, not a downward impulse.  Pushing
+        // into the lower block while the body still overlaps the upper support makes vanilla
+        // collision cancel the whole X/Z step at a one-block lip.  Keep the exact retained
+        // lateral edge, then a later exact-X/Z turn settles vertically onto the declared lower
+        // support. Ascents remain bounded controlled lifts; neither case can invent an alternate
+        // edge.
+        double vertical = delta.y < 0.0D ? 0.0D : Math.min(delta.y, VERTICAL_SPEED);
         double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, horizontalDistance);
         Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
-        for (Vec3 step : List.of(direct, new Vec3(-direct.z, vertical, direct.x), new Vec3(direct.z, vertical, -direct.x))) {
+        // A retained operation/assembly edge has one persisted next support. Letting the
+        // physical actuator try a side-step or a lifted alternate here would make a blocked
+        // canonical edge look successful without any topology command. Free local ambience is
+        // deliberately different: it may use those presentation-only alternatives because it
+        // owns no retained route cursor.
+        List<Vec3> candidates = continuous ? List.of(direct, new Vec3(-direct.z, vertical, direct.x),
+                new Vec3(direct.z, vertical, -direct.x)) : List.of(direct);
+        for (Vec3 step : candidates) {
             Vec3 before = actor.position();
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
             if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) {
+                // This is still the same retained X/Z edge, not a new route: it is only the
+                // bounded collision step needed to enter an exact thin support such as the
+                // graybox infection/route surface. A full block fails noCollision here; a
+                // lateral candidate exists only for non-canonical continuous ambience.
                 Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
                 if (!level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
                 before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
@@ -116,6 +137,20 @@ final class FrontierV3ControlledMobMotion {
             actor.hasImpulse = true;
             return;
         }
+    }
+
+    /**
+     * Completes only the vertical half of an already-reached retained descending edge.
+     * NoAI bodies do not reliably run the vanilla travel/gravity path, so merely waiting after
+     * the horizontal walk-off can leave a body hovering at the old datum.  This is deliberately
+     * staged: an actor never applies a downward vector while its body can still collide with the
+     * upper ledge, and it cannot use this branch to choose a different X/Z position.
+     */
+    private static void settleExactDescent(Mob actor, double verticalDelta) {
+        if (verticalDelta >= -ARRIVAL_DISTANCE) return;
+        Vec3 before = actor.position();
+        actor.move(MoverType.SELF, new Vec3(0.0D, -Math.min(Math.abs(verticalDelta), VERTICAL_SPEED), 0.0D));
+        if (actor.position().y < before.y - 1.0E-8D) actor.hasImpulse = true;
     }
 
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous) { }

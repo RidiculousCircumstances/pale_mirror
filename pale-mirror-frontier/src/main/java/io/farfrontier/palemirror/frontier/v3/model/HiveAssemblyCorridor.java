@@ -36,13 +36,19 @@ public final class HiveAssemblyCorridor {
         }
         Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
         Set<SurfaceAnchor> allStagingSurfaces = Set.copyOf(port.memberStagingSurfaces().values());
-        Set<BlockPosition> intactOrgans = FrontierGrayboxPlan.intactOrganOccupancy(java.util.stream.Stream.concat(
-                state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream()).toList());
+        List<HiveOrgan> hiveOrgans = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                state.hiveColony().addedOrgans().values().stream()).toList();
+        Set<BlockPosition> intactOrgans = FrontierGrayboxPlan.intactOrganOccupancy(hiveOrgans);
+        // The materializer emits both tissue and the terrain-provider's HIVE_TISSUE roots.
+        // A corridor that sees only the former can retain a body edge that is physically full.
+        Set<BlockPosition> physicalHiveCells = new LinkedHashSet<>(intactOrgans);
+        hiveOrgans.forEach(organ -> physicalHiveCells.addAll(HiveOrganSupportPlan.foundationCells(state.bootstrap().terrain(), organ)));
+        Set<SurfaceAnchor> blockedBodySurfaces = blockedBodySurfaces(state, physicalHiveCells);
         for (SubjectId member : mobilization.memberIds()) {
             HiveOrgan home = homeHibernaculum(state, member);
             SurfaceAnchor start = releasedSurface(state, member, home);
             SurfaceAnchor destination = port.memberStagingSurfaces().get(member);
-            List<SurfaceAnchor> surfaces = route(state, home, start, destination, allStagingSurfaces, intactOrgans);
+            List<SurfaceAnchor> surfaces = route(state, home, start, destination, allStagingSurfaces, intactOrgans, blockedBodySurfaces);
             TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:hive-assembly:"
                     + mobilization.id().value() + ":" + member.value()), 0L, mobilization.id(), TraversalKind.GROUND_BIOFORM,
                     Set.of(TraversalCapability.GROUND_BIOFORM), surfaces);
@@ -57,8 +63,9 @@ public final class HiveAssemblyCorridor {
 
     private static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
                                              SurfaceAnchor destination, Set<SurfaceAnchor> allStagingSurfaces,
-                                             Set<BlockPosition> intactOrgans) {
-        if (!traversable(state, home, start, intactOrgans) || !traversable(state, home, destination, intactOrgans)) {
+                                             Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
+        if (!traversable(state, home, start, intactOrgans, blockedBodySurfaces)
+                || !traversable(state, home, destination, intactOrgans, blockedBodySurfaces)) {
             throw new IllegalArgumentException("hive assembly has no valid tray or Ganglion port endpoint");
         }
         Map<SurfaceAnchor, SurfaceAnchor> previous = new HashMap<>();
@@ -75,7 +82,8 @@ public final class HiveAssemblyCorridor {
             if (current.surface().equals(destination)) return materialize(start, destination, previous);
             for (Step step : STEPS) {
                 SurfaceAnchor next = surfaceAt(state, home, current.surface().x() + step.x(), current.surface().z() + step.z());
-                if ((!next.equals(destination) && allStagingSurfaces.contains(next)) || !traversable(state, home, next, intactOrgans)
+                if ((!next.equals(destination) && allStagingSurfaces.contains(next))
+                        || !traversable(state, home, next, intactOrgans, blockedBodySurfaces)
                         || Math.abs(next.y() - current.surface().y()) > 1) continue;
                 int nextCost = Math.addExact(current.cost(), 1);
                 if (nextCost >= cost.getOrDefault(next, Integer.MAX_VALUE)) continue;
@@ -87,10 +95,41 @@ public final class HiveAssemblyCorridor {
     }
 
     private static boolean traversable(FrontierWorldState state, HiveOrgan home, SurfaceAnchor surface,
-                                       Set<BlockPosition> intactOrgans) {
+                                       Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
         if (!state.bootstrap().bounds().contains(surface.support())) return false;
+        if (blockedBodySurfaces.contains(surface)) return false;
         if (insideTray(home, surface)) return true;
         return !intactOrgans.contains(surface.support()) && surface.y() == state.bootstrap().terrain().supportYAt(surface.x(), surface.z());
+    }
+
+    /**
+     * Every retained ground-bioform surface requires both air cells above its support.  Compile
+     * that two-cell clearance from the same bounded immutable organ geometry that materializes
+     * the hive, plus each still occupied cocoon.  A floor-only check is insufficient on a grade:
+     * a cocoon or organ cell can occupy the body's head while standing on the lower support.
+     * Members of the completed release group are ASSEMBLING and therefore no longer contribute a
+     * cocoon cell; an unrelated dormant or recovering organism still does.
+     */
+    private static Set<SurfaceAnchor> blockedBodySurfaces(FrontierWorldState state, Set<BlockPosition> physicalHiveCells) {
+        Set<BlockPosition> occupiedCells = new LinkedHashSet<>(physicalHiveCells);
+        state.hiveColony().bioformLifecycles().entrySet().stream()
+                .filter(entry -> entry.getValue().phase().occupiesCocoon())
+                .forEach(entry -> {
+                    HiveCocoonSlot slot = entry.getValue().homeSlot().orElseThrow();
+                    HiveOrgan home = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                                    state.hiveColony().addedOrgans().values().stream())
+                            .filter(organ -> organ.id().equals(slot.hibernaculumId()) && organ.kind() == HiveOrganKind.HIBERNACULUM)
+                            .findFirst().orElseThrow(() -> new IllegalArgumentException("occupied cocoon has no HIBERNACULUM"));
+                    occupiedCells.add(HiveCocoonPlan.cocoonCell(home, slot));
+                });
+        Set<SurfaceAnchor> blocked = new LinkedHashSet<>();
+        for (BlockPosition cell : occupiedCells) {
+            // A solid cell blocks a body whose feet or head would occupy it. It remains legal
+            // to stand on that cell itself when it is the named semantic support surface.
+            blocked.add(new SurfaceAnchor(cell.offset(0, -1, 0)));
+            blocked.add(new SurfaceAnchor(cell.offset(0, -2, 0)));
+        }
+        return Set.copyOf(blocked);
     }
 
     private static SurfaceAnchor surfaceAt(FrontierWorldState state, HiveOrgan home, int x, int z) {

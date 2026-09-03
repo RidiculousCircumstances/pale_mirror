@@ -20,7 +20,8 @@ public final class FrontierV3GameTestSlice {
         if (configuredSlice.isBlank()) return true;
         return switch (configuredSlice) {
             case SCENE -> batchName.startsWith("pm-frontier-v3-scene-") || batchName.startsWith("pm-frontier-v3-ambient-")
-                    || batchName.startsWith("pm-frontier-v3-scout-") || batchName.equals("pm-frontier-v3-route-maintenance");
+                    || batchName.startsWith("pm-frontier-v3-assembly-") || batchName.startsWith("pm-frontier-v3-scout-")
+                    || batchName.equals("pm-frontier-v3-route-maintenance");
             case ECONOMY -> batchName.equals("pm-frontier-v3-exact-consumption") || batchName.equals("pm-frontier-v3-production")
                     || batchName.equals("pm-frontier-v3-cargo-loading") || batchName.equals("pm-frontier-v3-hive-nutrient")
                     || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue")

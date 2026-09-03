@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
+import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 
@@ -39,6 +40,7 @@ final class HiveMobilizationStateCodec {
             output.writeByte(mobilization.status().wireTag());
             output.writeBoolean(mobilization.conflictReason().isPresent());
             if (mobilization.conflictReason().isPresent()) output.writeByte(mobilization.conflictReason().orElseThrow().wireTag());
+            writeBlockage(output, mobilization.assemblyBlockage());
             output.writeLong(mobilization.startedAt());
         }
     }
@@ -67,10 +69,26 @@ final class HiveMobilizationStateCodec {
             Optional<io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason> reason = input.readBoolean()
                     ? Optional.of(FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason.class, input.readUnsignedByte()))
                     : Optional.empty();
-            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, reason, input.readLong());
+            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, assembly, status, reason,
+                    readBlockage(input), input.readLong());
             if (mobilizations.put(id, mobilization) != null) throw new IllegalArgumentException("duplicate hive mobilization");
         }
         return Map.copyOf(mobilizations);
+    }
+
+    private static void writeBlockage(DataOutputStream output, Optional<HiveAssemblyBlockage> blockage) throws IOException {
+        output.writeBoolean(blockage.isPresent());
+        if (blockage.isEmpty()) return;
+        HiveAssemblyBlockage value = blockage.orElseThrow();
+        FrontierWorldStateCodec.writeString(output, value.actorId().value());
+        output.writeShort(value.expectedCursor());
+        output.writeInt(value.target().x()); output.writeInt(value.target().y()); output.writeInt(value.target().z());
+    }
+
+    private static Optional<HiveAssemblyBlockage> readBlockage(DataInputStream input) throws IOException {
+        if (!input.readBoolean()) return Optional.empty();
+        return Optional.of(new HiveAssemblyBlockage(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedShort(),
+                io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt())));
     }
 
     private static void writeAssembly(DataOutputStream output, HiveTaskAssembly assembly) throws IOException {

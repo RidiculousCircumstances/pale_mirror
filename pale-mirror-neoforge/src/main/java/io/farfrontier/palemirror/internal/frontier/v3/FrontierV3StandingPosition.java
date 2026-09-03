@@ -2,8 +2,10 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Read-only conversion from a canonical floor anchor to the first place a body may stand.
@@ -52,8 +54,8 @@ final class FrontierV3StandingPosition {
         // A thin route or infection surface is physical geometry.  The retained support is
         // therefore the only legal floor: never climb a player obstruction or consult a
         // heightmap to invent a different world datum for the same canonical cursor.
-        return !level.getBlockState(anchor).isAir() && level.getBlockState(feet).isAir()
-                && level.getBlockState(feet.above()).isAir() ? feet : null;
+        return !level.getBlockState(anchor).isAir() && clearExactBodyCell(level, feet)
+                && clearExactBodyCell(level, feet.above()) ? feet : null;
     }
 
     private static BlockPos firstLegacyStandingPosition(ServerLevel level, BlockPos anchor, int startY) {
@@ -69,6 +71,25 @@ final class FrontierV3StandingPosition {
     /** The exact canonical body column, without accepting a new floor on top of an obstruction. */
     static boolean hasExactHeadroom(ServerLevel level, BlockPosition anchor) {
         BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(floor) && level.getBlockState(floor.above()).isAir() && level.getBlockState(floor.above(2)).isAir();
+        return level.hasChunkAt(floor) && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
+    }
+
+    /** A retained movement cursor needs its exact physical support as well as two clear body cells. */
+    static boolean hasExactStandingColumn(ServerLevel level, BlockPosition anchor) {
+        BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
+        return level.hasChunkAt(floor) && !level.getBlockState(floor).isAir()
+                && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
+    }
+
+    /**
+     * An infection/route overlay is a thin physical surface, not a substitute floor or a wall.
+     * It may occupy the retained feet cell while an entity takes the matching bounded vertical
+     * collision step.  Anything taller remains an exact-edge obstruction; this never accepts a
+     * player block by climbing it or by choosing a neighbouring column.
+     */
+    private static boolean clearExactBodyCell(ServerLevel level, BlockPos position) {
+        if (level.getBlockState(position).isAir()) return true;
+        VoxelShape collision = level.getBlockState(position).getCollisionShape(level, position);
+        return !collision.isEmpty() && collision.max(Direction.Axis.Y) <= 0.125D;
     }
 }

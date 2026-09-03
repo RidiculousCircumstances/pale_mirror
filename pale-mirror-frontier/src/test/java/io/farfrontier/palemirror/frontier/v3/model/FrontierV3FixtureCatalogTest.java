@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.HiveMobilizationProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -105,6 +106,36 @@ class FrontierV3FixtureCatalogTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(hibernaculum);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/4"), "the physical tray must explain its own waking state without a HUD");
+    }
+
+    @Test
+    void hiveAssemblyRoutesRetainTwoCellClearanceAgainstEveryUnreleasedHiveCell() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.hiveMobilizationConfiguration(
+                new WorldId("frontier:hive-mobilization-cocoon-clearance"), 41L).initialState();
+        HiveMobilization initial = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        for (SubjectId member : initial.memberIds()) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(initial.id());
+            state = HiveMobilizationProcess.reduceReleaseStarted(state, initial.hiveId(), new HiveMobilizationReleaseStarted(current.id()));
+            state = HiveMobilizationProcess.reduceCocoonReleased(state, initial.hiveId(), new HiveMobilizationCocoonReleased(current.id(), member));
+        }
+        FrontierWorldState assembledState = state;
+        HiveTaskAssembly assembly = assembledState.hiveColony().mobilizations().get(initial.id()).assembly().orElseThrow();
+        java.util.Set<BlockPosition> occupiedHiveCells = new java.util.LinkedHashSet<>(FrontierGrayboxPlan.intactOrganOccupancy(
+                assembledState.bootstrap().hive().organs()));
+        assembledState.bootstrap().hive().organs().forEach(organ -> occupiedHiveCells.addAll(
+                HiveOrganSupportPlan.foundationCells(assembledState.bootstrap().terrain(), organ)));
+        assembledState.hiveColony().bioformLifecycles().entrySet().stream()
+                .filter(entry -> entry.getValue().phase().occupiesCocoon()).map(entry -> {
+                    HiveCocoonSlot slot = entry.getValue().homeSlot().orElseThrow();
+                    HiveOrgan tray = assembledState.bootstrap().hive().organs().stream().filter(organ -> organ.id().equals(slot.hibernaculumId())).findFirst().orElseThrow();
+                    return HiveCocoonPlan.cocoonCell(tray, slot);
+                }).forEach(occupiedHiveCells::add);
+        java.util.Set<SurfaceAnchor> bodyColumnsBlockedByHive = occupiedHiveCells.stream()
+                .flatMap(cell -> java.util.stream.Stream.of(new SurfaceAnchor(cell.offset(0, -1, 0)), new SurfaceAnchor(cell.offset(0, -2, 0))))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        assertTrue(assembly.members().values().stream().flatMap(member -> member.corridor().stream())
+                        .noneMatch(bodyColumnsBlockedByHive::contains),
+                "a retained HOT/COLD bioform corridor must preserve both body cells above every materialized hive cell, including hiveroot");
     }
 
     @Test
