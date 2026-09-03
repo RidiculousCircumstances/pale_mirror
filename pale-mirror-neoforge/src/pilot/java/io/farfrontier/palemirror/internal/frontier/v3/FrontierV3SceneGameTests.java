@@ -19,7 +19,6 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
-import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -525,7 +524,7 @@ public final class FrontierV3SceneGameTests {
             BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position); addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), position);
         }
         SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
-                .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
+                .anyMatch(bioform -> bioform.id().equals(actor) && bioform.isExplosiveAssaulter())).findFirst().orElseThrow();
         helper.runAfterDelay(1L, () -> {
             Entity bomberBody = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(bomber)).findFirst().orElseThrow().entityId());
             helper.assertTrue(bomberBody != null, "the exact HOT bomber body must be materialized");
@@ -598,7 +597,7 @@ public final class FrontierV3SceneGameTests {
         helper.runAfterDelay(2L, () -> {
             try {
                 SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
-                        .anyMatch(bioform -> bioform.id().equals(actor) && bioform.role() == BioformRole.BOMBER)).findFirst().orElseThrow();
+                        .anyMatch(bioform -> bioform.id().equals(actor) && bioform.isExplosiveAssaulter())).findFirst().orElseThrow();
                 Entity bomberBody = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(bomber)).findFirst().orElseThrow().entityId());
                 helper.assertTrue(bomberBody != null, "the real TNT fixture must retain its exact bomber body"); bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
                 lease.members().stream().filter(member -> member.actorId().value().startsWith("resident:")).findFirst().map(SceneMember::entityId).map(level::getEntity)
@@ -671,7 +670,7 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
         body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
         if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
+                FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());

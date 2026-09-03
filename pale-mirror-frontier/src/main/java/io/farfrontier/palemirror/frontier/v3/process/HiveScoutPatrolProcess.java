@@ -155,7 +155,7 @@ public final class HiveScoutPatrolProcess {
 
     private static Bioform scout(FrontierWorldState state, SubjectId scoutId) {
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), scoutId);
-        if (scout.role() != BioformRole.SCOUT) throw new IllegalArgumentException("hive patrol requires an exact Scout");
+        if (!scout.isScout()) throw new IllegalArgumentException("hive patrol requires an exact Sentinel Scout");
         return scout;
     }
 }

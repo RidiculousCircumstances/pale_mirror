@@ -548,15 +548,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
         writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId()); writeSubject(output, job.consumedItemId()); writeString(output, job.consumptionIntentId().value());
         writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().wireTag()); writePosition(output, job.organ().anchor());
-        writeSubject(output, job.bioform().id()); output.writeByte(job.bioform().role().wireTag()); writePosition(output, job.bioform().position());
+        writeSubject(output, job.bioform().id()); BioformProfileStateCodec.write(output, job.bioform());
     }
     private static HiveGrowthJob readHiveGrowthJob(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder item = readSubject(input);
         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
         SubjectIdHolder organId = readSubject(input); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
-        SubjectIdHolder bioformId = readSubject(input); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
+        SubjectIdHolder bioformId = readSubject(input); Bioform bioform = BioformProfileStateCodec.read(input, bioformId.value(), hive.value(), nest.value());
         return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), consumption, new HiveOrgan(organId.value(), hive.value(), nest.value(), FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
-                new Bioform(bioformId.value(), hive.value(), nest.value(), FrontierWireTags.require(BioformRole.class, role), position));
+                bioform);
     }
     private static void writeHiveNutrientTransfer(DataOutputStream output, HiveNutrientTransfer transfer) throws IOException {
         writeSubject(output, transfer.id()); writeSubject(output, transfer.hiveId()); writeSubject(output, transfer.requesterTaskId());

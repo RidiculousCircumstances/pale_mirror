@@ -91,8 +91,9 @@ The Java organ vocabulary now uses the complete accepted set with explicit
 non-reused tags (`GANGLION=10` through `SENSOR=18`). The seed profile creates
 only its currently implemented `GANGLION`/`BROOD`/`STORE` organs; `RELAY` is
 the first growth output, and the remaining organ types must not be fabricated
-until their own owning process exists. This cut is schema 103 and persistence
-envelope 12, fresh-world-only. The retired `HEART` byte `0` is intentionally
+until their own owning process exists. That organ-vocabulary cut was schema 103
+and persistence envelope 12; the current profile cut supersedes it with schema
+104/envelope 13, still fresh-world-only. The retired `HEART` byte `0` is intentionally
 unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
@@ -108,10 +109,19 @@ One bioform remains one canonical organism. The model separates four axes:
 - **lifecycle**, vitality, wounds, structural biomass, reserve biomass,
   controller and physical custody.
 
-The current `WORKER/SCOUT/GUARD/BOMBER` role enum is therefore a transitional
-projection, not the final source of body, capability and task truth. Graybox
-colour/geometry must expose chassis, important mutation and current assignment
-without creating a cohort or hidden population multiplier.
+The initial Java profile cut is schema 104 and persistence envelope 13. It
+removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
+`SENTINEL + SCOUT`, a defender is `DEFEND`, and the current bomber is
+`RUNT + EXPLOSIVE + ASSAULT`. Chassis, visible mutation set and current
+assignment are canonical fields and independent stable-tag persistence values.
+Vitality remains the existing exact `ActorLocation.condition`; current body
+position and HOT physical custody remain that actor location plus its persisted
+ambient lease. Cocoon/lifecycle, wounds, structural/reserve biomass and
+controller ownership are a later owning-process cut, rather than duplicated
+prematurely in this profile.
+
+Graybox colour/geometry must expose chassis, important mutation and current
+assignment without creating a cohort or hidden population multiplier.
 
 ### Runt
 

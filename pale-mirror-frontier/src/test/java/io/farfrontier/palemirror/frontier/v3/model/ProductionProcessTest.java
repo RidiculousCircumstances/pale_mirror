@@ -213,7 +213,7 @@ class ProductionProcessTest {
     void settlementDefenceInterruptsOnlyColdWorkAndReleasesItsExactCivilianCommitment() {
         ColdMarketJob prepared = coldMarketJob(); FrontierWorldState state = prepared.state();
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), prepared.settlementId());
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         SubjectId hive = state.bootstrap().hive().id();
@@ -248,7 +248,7 @@ class ProductionProcessTest {
         PreparedProduction prepared = activePhysicalProduction();
         ProductionInterrupted interruption = new ProductionInterrupted(prepared.job().id(), prepared.job().workerId(),
                 new SubjectId("task:foreign-assault"), new HiveSettlementKnowledge.Sighting(prepared.settlementId(),
-                prepared.state().bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow().id(),
+                prepared.state().bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow().id(),
                 FrontierWorldStateSupport.settlement(prepared.state().bootstrap(), prepared.settlementId()).anchor(), 1L));
 
         assertTrue(ProductionProcess.interruptibleForSettlementDefence(prepared.state(), prepared.job().workerId()).isEmpty());

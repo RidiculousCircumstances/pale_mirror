@@ -57,7 +57,7 @@ public final class HiveSettlementKnowledge {
             boolean knownSettlement = bootstrap.settlements().stream().anyMatch(value -> value.id().equals(sighting.settlementId())
                     && value.anchor().equals(sighting.settlementAnchor()));
             Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, sighting.scoutId());
-            if (!knownSettlement || scout.role() != BioformRole.SCOUT || actors.get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) {
+            if (!knownSettlement || !scout.isScout() || actors.get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) {
                 throw new IllegalArgumentException("hive settlement sighting must retain one living scout and a known settlement anchor");
             }
         }

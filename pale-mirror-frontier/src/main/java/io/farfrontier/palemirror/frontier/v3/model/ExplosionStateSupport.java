@@ -25,7 +25,7 @@ public final class ExplosionStateSupport {
         }
         Bioform bomber = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(intent.causeSubjectId())).findFirst().orElseThrow(() -> new IllegalArgumentException("explosion cause is not one hive bioform"));
-        if (bomber.role() != BioformRole.BOMBER || state.actorLocations().get(bomber.id()).condition().status() != ActorLifeStatus.ALIVE) {
+        if (!bomber.isExplosiveAssaulter() || state.actorLocations().get(bomber.id()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("explosion cause must be one living bomber bioform");
         }
         SceneLease lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> value.status() == SceneLeaseStatus.HOT)

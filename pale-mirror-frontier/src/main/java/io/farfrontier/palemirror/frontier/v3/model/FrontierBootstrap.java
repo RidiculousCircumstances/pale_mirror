@@ -76,7 +76,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
             text.append(':').append(organ.nestId().value()).append(':').append(organ.kind());
             organ.containerId().ifPresent(container -> text.append(':').append(container.value()));
         });
-        hive.bioforms().forEach(bioform -> { append(text, bioform.id(), bioform.position()); text.append(':').append(bioform.nestId().value()).append(':').append(bioform.role()); });
+        hive.bioforms().forEach(bioform -> { append(text, bioform.id(), bioform.position()); text.append(':').append(bioform.nestId().value())
+                .append(':').append(bioform.chassis()).append(':').append(bioform.mutations()).append(':').append(bioform.assignment()); });
         return text.toString();
     }
 

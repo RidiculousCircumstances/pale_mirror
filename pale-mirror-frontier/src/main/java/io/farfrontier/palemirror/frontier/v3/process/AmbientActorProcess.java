@@ -178,9 +178,9 @@ public final class AmbientActorProcess {
         Bioform bioform = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actorId)).findFirst().orElseThrow(() -> new IllegalArgumentException("ambient actor has no canonical role"));
         BlockPosition nest = state.bootstrap().hive().seedNests().stream().filter(value -> value.id().equals(bioform.nestId())).findFirst().orElseThrow().anchor();
-        if (bioform.role() == BioformRole.SCOUT) return new AmbientGoal(AmbientGoalKind.SCOUT_PATROL,
+        if (bioform.isScout()) return new AmbientGoal(AmbientGoalKind.SCOUT_PATROL,
                 HiveScoutPatrolProcess.nextPosition(state, bioform));
-        return new AmbientGoal(bioform.role() == BioformRole.GUARD ? AmbientGoalKind.GUARD : AmbientGoalKind.PATROL, nest);
+        return new AmbientGoal(bioform.isDefender() ? AmbientGoalKind.GUARD : AmbientGoalKind.PATROL, nest);
     }
 
     private static CommandPlan.Rejected rejected(IllegalArgumentException invalid) {

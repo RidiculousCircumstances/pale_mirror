@@ -23,7 +23,8 @@ public final class FrontierSceneLabels {
         }
         return Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actorId)).findFirst()
-                .map(value -> "HIVE " + words(value.role().name()))
+                .map(value -> "HIVE " + words(value.chassis().name()) + " · " + words(value.assignment().name())
+                        + (value.mutations().isEmpty() ? "" : " · " + words(value.mutations().stream().sorted(java.util.Comparator.comparing(Enum::name)).findFirst().orElseThrow().name())))
                 // Presentation must never turn an internal identity into a player-visible name.
                 // Authoritative scene admission/ownership still validates the canonical actor separately.
                 .orElse(bioform ? "HIVE BIOFORM" : "FRONTIER RESIDENT");

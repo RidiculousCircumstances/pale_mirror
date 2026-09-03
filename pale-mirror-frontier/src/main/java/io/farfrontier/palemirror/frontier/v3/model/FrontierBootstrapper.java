@@ -68,12 +68,32 @@ public final class FrontierBootstrapper {
             HiveNest nest = nests.get(nestIndex);
             List<BlockPosition> placements = FrontierHiveActorSlots.slots(BOUNDS, nest, organs, 24);
             for (int ordinal = 0; ordinal < 24; ordinal++) {
-                BioformRole role = BioformRole.values()[ordinal % BioformRole.values().length];
                 bioforms.add(new Bioform(new SubjectId("bioform:" + (nestIndex == 0 ? "west-" : "east-") + ordinal), hiveId,
-                        nest.id(), role, placements.get(ordinal)));
+                        nest.id(), chassis(ordinal), mutations(ordinal), assignment(ordinal), placements.get(ordinal)));
             }
         }
         return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms), ruleset, terrain);
+    }
+
+    private static BioformChassis chassis(int ordinal) {
+        return Math.floorMod(ordinal, 4) == 1 ? BioformChassis.SENTINEL : BioformChassis.RUNT;
+    }
+
+    private static java.util.Set<BioformMutation> mutations(int ordinal) {
+        return switch (Math.floorMod(ordinal, 4)) {
+            case 2 -> java.util.Set.of(BioformMutation.ARMORED);
+            case 3 -> java.util.Set.of(BioformMutation.EXPLOSIVE);
+            default -> java.util.Set.of();
+        };
+    }
+
+    private static BioformAssignment assignment(int ordinal) {
+        return switch (Math.floorMod(ordinal, 4)) {
+            case 0 -> BioformAssignment.HARVEST;
+            case 1 -> BioformAssignment.SCOUT;
+            case 2 -> BioformAssignment.DEFEND;
+            default -> BioformAssignment.ASSAULT;
+        };
     }
 
     private static Settlement settlement(long seed, int index, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {

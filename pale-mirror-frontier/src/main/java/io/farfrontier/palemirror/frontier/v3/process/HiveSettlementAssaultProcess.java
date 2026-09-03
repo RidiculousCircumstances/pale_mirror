@@ -189,9 +189,9 @@ public final class HiveSettlementAssaultProcess {
                 .sorted(Comparator.comparingLong((Bioform value) -> distanceSquared(state.actorLocations().get(value.id()).supportingSurface().support(), sighting.settlementAnchor()))
                         .thenComparing(Bioform::id)).toList();
         List<Bioform> selected = new ArrayList<>();
-        eligible.stream().filter(value -> value.role() == BioformRole.BOMBER).limit(1).forEach(selected::add);
-        eligible.stream().filter(value -> value.role() == BioformRole.GUARD).limit(2).forEach(selected::add);
-        if (selected.stream().noneMatch(value -> value.role() == BioformRole.BOMBER) || selected.stream().noneMatch(value -> value.role() == BioformRole.GUARD)) return null;
+        eligible.stream().filter(Bioform::isExplosiveAssaulter).limit(1).forEach(selected::add);
+        eligible.stream().filter(Bioform::isDefender).limit(2).forEach(selected::add);
+        if (selected.stream().noneMatch(Bioform::isExplosiveAssaulter) || selected.stream().noneMatch(Bioform::isDefender)) return null;
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
                 .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())

@@ -13,11 +13,11 @@ public final class RouteEngagementCombatRules {
     public static FixedScalar damage(FrontierWorldState state, SubjectId actor) {
         FrontierRuleset.Combat combat = state.bootstrap().ruleset().combat();
         Bioform bioform = bioform(state, actor);
-        if (bioform != null) return switch (bioform.role()) {
-            case GUARD -> combat.hiveGuardDamage();
-            case WORKER, SCOUT -> combat.hiveWorkerScoutDamage();
-            case BOMBER -> combat.hiveBomberDamage();
-        };
+        if (bioform != null) {
+            if (bioform.isExplosiveAssaulter()) return combat.hiveBomberDamage();
+            if (bioform.isDefender()) return combat.hiveGuardDamage();
+            return combat.hiveWorkerScoutDamage();
+        }
         ResidentProfile resident = resident(state, actor);
         if (resident == null) throw new IllegalArgumentException("COLD combat actor is neither resident nor bioform");
         var defenderAssault = SettlementDefenderReadinessProjection.owningActiveAssault(state, resident.id());

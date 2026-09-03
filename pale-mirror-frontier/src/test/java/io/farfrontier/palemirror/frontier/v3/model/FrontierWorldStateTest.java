@@ -31,9 +31,9 @@ class FrontierWorldStateTest {
     private static final FixedRatio HALF = new FixedRatio(new FixedScalar(500_000L));
 
     @Test
-    void retiredHeartSnapshotSchemaFailsBeforeStateHydration() {
+    void preBioformProfileSnapshotSchemaFailsBeforeStateHydration() {
         byte[] encoded = new FrontierWorldStateCodec().encode(initial());
-        encoded[4] = 102;
+        encoded[4] = 103;
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldStateCodec().decode(encoded));
     }
@@ -289,7 +289,8 @@ class FrontierWorldStateTest {
         SubjectId eastNest = new SubjectId("nest:seed-east");
         HiveOrgan organ = new HiveOrgan(new SubjectId("organ:east-grown-relay-1"), hive, eastNest, HiveOrganKind.RELAY,
                 new BlockPosition(420, 64, 432), java.util.Optional.empty());
-        Bioform bioform = new Bioform(new SubjectId("bioform:east-grown-1"), hive, eastNest, BioformRole.GUARD, new BlockPosition(424, 64, 428));
+        Bioform bioform = new Bioform(new SubjectId("bioform:east-grown-1"), hive, eastNest, BioformChassis.RUNT,
+                java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(424, 64, 428));
 
         FrontierWorldState grown = baseline.addHiveOrgan(organ).spawnBioform(bioform)
                 .withInfection(InfectionCell.at(new BlockPosition(420, 64, 428)), HALF);
@@ -308,7 +309,8 @@ class FrontierWorldStateTest {
         HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-1"), hive, east, HiveOrganKind.RELAY, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:east-grown-1"), hive, east, BioformRole.GUARD, new BlockPosition(436, 64, 432)));
+                new Bioform(new SubjectId("bioform:east-grown-1"), hive, east, BioformChassis.RUNT,
+                        java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(436, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
         FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);
@@ -329,7 +331,8 @@ class FrontierWorldStateTest {
                 new SubjectId("nest:seed-west"), job.consumedItemId(), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-remote"),
                 new HiveOrgan(new SubjectId("organ:west-grown-relay-remote"), hive, new SubjectId("nest:seed-west"), HiveOrganKind.RELAY,
                         new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:west-grown-remote"), hive, new SubjectId("nest:seed-west"), BioformRole.GUARD, new BlockPosition(-404, 64, 432)))));
+                new Bioform(new SubjectId("bioform:west-grown-remote"), hive, new SubjectId("nest:seed-west"), BioformChassis.RUNT,
+                        java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(-404, 64, 432)))));
         assertEquals(baseline, HiveGrowthProcess.reduceBlocked(baseline, hive,
                 new HiveGrowthBlocked(hive, east, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
         FrontierWorldState completed = consumed.completeHiveGrowth(job.id());
@@ -345,7 +348,8 @@ class FrontierWorldStateTest {
         HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-unknown"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-unknown"), hive, east, HiveOrganKind.RELAY, new BlockPosition(440, 64, 432), java.util.Optional.empty()),
-                new Bioform(new SubjectId("bioform:east-grown-unknown"), hive, east, BioformRole.GUARD, new BlockPosition(444, 64, 432)));
+                new Bioform(new SubjectId("bioform:east-grown-unknown"), hive, east, BioformChassis.RUNT,
+                        java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(444, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
         FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);

@@ -95,7 +95,7 @@ class HiveInfectionProcessTest {
     void freshScoutSettlementSightingTurnsLocalExpansionIntoTerritorialPressure() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-infection-pressure"), 110L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        List<Bioform> scouts = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).toList();
+        List<Bioform> scouts = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).toList();
         Bioform observer = scouts.getFirst(), territorySensor = scouts.get(1);
         state = state.withActorBody(observer.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementObserved observation = new HiveSettlementObserved(new HiveSettlementKnowledge.Sighting(settlement.id(), observer.id(), settlement.anchor(), 0L));
@@ -181,7 +181,7 @@ class HiveInfectionProcessTest {
     private static StrategicTask onlyTask(FrontierWorldState state) { return state.strategicPlans().tasks().values().stream().findFirst().orElseThrow(); }
 
     private static FrontierWorldState withTerritoryKnowledge(FrontierWorldState state, Map<InfectionCell, FixedRatio> cells, BlockPosition scoutPosition, long observedAt) {
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         Map<InfectionCell, HiveTerritoryKnowledge.Belief> beliefs = new LinkedHashMap<>();
         cells.forEach((cell, intensity) -> beliefs.put(cell, new HiveTerritoryKnowledge.Belief(cell, intensity, scout.id(), scoutPosition, observedAt)));
         return state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(scoutPosition)).withStrategicPlans(state.strategicPlans()

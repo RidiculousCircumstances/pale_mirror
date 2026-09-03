@@ -22,6 +22,11 @@ class FrontierWireTagsTest {
         assertEquals(13, PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED.wireTag());
         assertEquals(10, HiveOrganKind.GANGLION.wireTag());
         assertEquals(11, HiveOrganKind.RELAY.wireTag());
+        assertEquals(10, BioformChassis.RUNT.wireTag());
+        assertEquals(12, BioformChassis.SENTINEL.wireTag());
+        assertEquals(10, BioformMutation.EXPLOSIVE.wireTag());
+        assertEquals(15, BioformAssignment.DEFEND.wireTag());
+        assertEquals(16, BioformAssignment.ASSAULT.wireTag());
         assertThrows(IllegalArgumentException.class,
                 () -> FrontierWireTags.require(HiveOrganKind.class, 0),
                 "the retired HEART byte must never become GANGLION");

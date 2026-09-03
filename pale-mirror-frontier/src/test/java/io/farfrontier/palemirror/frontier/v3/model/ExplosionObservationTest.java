@@ -38,7 +38,7 @@ class ExplosionObservationTest {
         assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldRuntimeDefinition.planCommand(state, new FrontierCommand(1, id,
                 state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(0), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(0),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalIntentPrepared(intent))));
-        Bioform guard = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD).findFirst().orElseThrow();
+        Bioform guard = state.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender).findFirst().orElseThrow();
         PhysicalIntent invalid = new PhysicalIntent(new PhysicalIntentId("intent:explosion-non-bomber"), PhysicalIntentKind.EXPLOSION,
                 PhysicalIntentStatus.PREPARED, guard.id(), List.of(guard.id(), engagement), position(state, guard.id()), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
         assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldRuntimeDefinition.planCommand(state, new FrontierCommand(1,
@@ -101,6 +101,6 @@ class ExplosionObservationTest {
 
     private static Bioform bomber(FrontierWorldState state, SubjectId engagementId) {
         java.util.Set<SubjectId> attackers = new java.util.HashSet<>(state.strategicPlans().routeEngagements().get(engagementId).attackerIds());
-        return state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER && attackers.contains(value.id())).findFirst().orElseThrow();
+        return state.bootstrap().hive().bioforms().stream().filter(value -> value.isExplosiveAssaulter() && attackers.contains(value.id())).findFirst().orElseThrow();
     }
 }

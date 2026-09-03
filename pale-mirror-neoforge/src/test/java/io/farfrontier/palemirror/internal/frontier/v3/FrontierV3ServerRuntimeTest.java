@@ -44,7 +44,6 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -361,7 +360,7 @@ class FrontierV3ServerRuntimeTest {
         SceneLease lease = FrontierV3TestSceneLeases.exact(initial, checkpoint, leaseId, candidate.operationId(), candidate.cargoId(),
                 candidate.handoffPosition(), java.util.Optional.of(candidate.engagementId()), candidate.actorIds());
         submitWorld(runtime, "prepare-explosion-lease", new SceneLeasePrepared(lease)); submitWorld(runtime, "hot-explosion-lease", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.BOMBER)
+        FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(io.farfrontier.palemirror.frontier.v3.model.Bioform::isExplosiveAssaulter)
                 .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
         var point = hot.actorLocations().get(bomber).body(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
         PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, candidate.engagementId()),

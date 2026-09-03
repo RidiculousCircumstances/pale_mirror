@@ -179,7 +179,7 @@ class HumanTacticalFunctionProjectionTest {
     private static Fixture fixture() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:tactical-function"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());

@@ -22,7 +22,6 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
-import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -374,13 +373,13 @@ final class FrontierV3SceneExecutor {
                 if (!(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
                 if (owned(existing, state, lease, member)) {
                     if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                            FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
+                            FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
                     continue;
                 }
                 if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
                 body.getNavigation().stop(); body.setNoAi(true); body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform(state, member.actorId()))); body.setCustomNameVisible(true);
                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                        FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
+                        FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
                 mark(body, lease, member);
                 continue;
             }
@@ -403,7 +402,7 @@ final class FrontierV3SceneExecutor {
             body.setPersistenceRequired();
             body.setNoAi(true);
             if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
-                    FrontierV3AmbientActorExecutor.bioformRole(state, member.actorId()));
+                    FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
             body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
             body.setCustomNameVisible(true);
             mark(body, lease, member);
@@ -889,7 +888,7 @@ final class FrontierV3SceneExecutor {
 
     private static boolean bomber(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.id().equals(actorId)).map(Bioform::role).anyMatch(BioformRole.BOMBER::equals);
+                .filter(bioform -> bioform.id().equals(actorId)).anyMatch(Bioform::isExplosiveAssaulter);
     }
     private static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved() && member.entityId().equals(entity.getUUID())

@@ -73,7 +73,7 @@ public final class HiveTerritoryKnowledge {
         }
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, observer);
         ActorLocation location = actors.get(scout.id());
-        if (scout.role() != BioformRole.SCOUT || location == null) throw new IllegalArgumentException("hive territory observer is not a live scout");
+        if (!scout.isScout() || location == null) throw new IllegalArgumentException("hive territory observer is not a live scout");
         return location.supportingSurface().support();
     }
 

@@ -33,7 +33,7 @@ public final class HivePerceptionProcess {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive sighting has a foreign owner");
         HiveOperationKnowledge.Sighting sighting = observed.sighting(); RouteOperation operation = state.operations().get(sighting.operationId());
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), sighting.scoutId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || scout.role() != BioformRole.SCOUT
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || !scout.isScout()
                 || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
                 || !carrierPosition(operation).equals(sighting.position()) || !nearby(state, state.actorLocations().get(scout.id()).supportingSurface().support(), sighting.position())) {
             throw new IllegalArgumentException("hive sighting lacks a nearby living scout and current caravan");
@@ -53,7 +53,7 @@ public final class HivePerceptionProcess {
         AmbientActorLease scoutLease = state.ambientLeases().get(observed.scoutId());
         SceneLease scene = state.sceneLeases().get(observed.sceneLeaseId());
         if (operation == null || operation.stage() != OperationStage.EN_ROUTE || operation.activeTravel().isEmpty()
-                || scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
+                || !scout.isScout() || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE
                 || scoutLease == null || scoutLease.status() != AmbientLeaseStatus.HOT || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL
                 || scene == null || !FrontierSceneBehaviors.isLogistics(scene) || scene.status() != SceneLeaseStatus.HOT || FrontierSceneBehaviors.logistics(scene).engagementId().isPresent()
                 || !FrontierSceneBehaviors.logistics(scene).operationId().equals(operation.id()) || !FrontierSceneBehaviors.logistics(scene).cargoId().equals(operation.cargoId())
@@ -101,7 +101,7 @@ public final class HivePerceptionProcess {
         public InterceptEngagement { Objects.requireNonNull(status, "intercept engagement status"); }
     }
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-            .filter(value -> value.role() == BioformRole.SCOUT).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
+            .filter(Bioform::isScout).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
             .filter(value -> { AmbientActorLease lease = state.ambientLeases().get(value.id()); return lease == null || lease.status() == AmbientLeaseStatus.CLOSED; }).toList(); }
     private static boolean nearby(FrontierWorldState state, BlockPosition left, BlockPosition right) {
         long x = (long) left.x() - right.x(), z = (long) left.z() - right.z();

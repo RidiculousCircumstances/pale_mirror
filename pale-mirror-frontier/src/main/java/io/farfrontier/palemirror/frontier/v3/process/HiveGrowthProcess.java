@@ -197,6 +197,7 @@ public final class HiveGrowthProcess {
         String nestSuffix = nest.id().value().substring("nest:seed-".length());
         return new HiveGrowthJob(jobId, hive, nest.id(), input.id(), new PhysicalIntentId("intent:hive-growth-biomass-" + ordinal),
                 new HiveOrgan(new SubjectId("organ:" + nestSuffix + "-grown-relay-" + ordinal), hive, nest.id(), HiveOrganKind.RELAY, new BlockPosition(x, nest.anchor().y(), z), Optional.empty()),
-                new Bioform(new SubjectId("bioform:" + nestSuffix + "-grown-" + ordinal), hive, nest.id(), BioformRole.GUARD, new BlockPosition(x + 4, nest.anchor().y(), z)));
+                new Bioform(new SubjectId("bioform:" + nestSuffix + "-grown-" + ordinal), hive, nest.id(), BioformChassis.RUNT,
+                        java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(x + 4, nest.anchor().y(), z)));
     }
 }

@@ -59,7 +59,7 @@ public final class HiveTerritoryPerceptionProcess {
                 .filter(organ -> organ.kind() == HiveOrganKind.GANGLION && state.isHiveOrganOperational(organ.id()))
                 .map(HiveOrgan::id).forEach(sensors::add);
         java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.role() == BioformRole.SCOUT)
+                .filter(Bioform::isScout)
                 .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .map(Bioform::id).forEach(sensors::add);
         return sensors.stream().sorted().toList();
@@ -79,7 +79,7 @@ public final class HiveTerritoryPerceptionProcess {
         }
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, observer);
         ActorLocation location = actors.get(scout.id());
-        if (scout.role() != BioformRole.SCOUT) {
+        if (!scout.isScout()) {
             throw new IllegalArgumentException("hive territory observer is not a scout");
         }
         return location.supportingSurface().support();
@@ -103,7 +103,7 @@ public final class HiveTerritoryPerceptionProcess {
         HiveOrgan organ = organs(state.bootstrap(), state.hiveColony()).stream().filter(value -> value.id().equals(observer)).findFirst().orElse(null);
         if (organ != null) return organ.kind() == HiveOrganKind.GANGLION && state.isHiveOrganOperational(organ.id()) && organ.anchor().equals(belief.sensorPosition());
         Bioform scout = FrontierWorldStateSupport.bioform(state.bootstrap(), state.hiveColony(), observer);
-        if (scout.role() != BioformRole.SCOUT || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) return false;
+        if (!scout.isScout() || state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) return false;
         BlockPosition current = state.actorLocations().get(scout.id()).supportingSurface().support();
         return current.equals(belief.sensorPosition()) || HiveScoutPatrolProcess.nextPosition(state, scout, belief.sensorPosition()).equals(current);
     }

@@ -50,7 +50,7 @@ class FrontierRulesetTest {
                 production.rates(), new FrontierRuleset.FacilityCapacity(51, 17, 5, 9, 5, 3, 4, 2),
                 new FrontierRuleset.Combat(FixedScalar.whole(9), FixedScalar.whole(7), FixedScalar.whole(11), FixedScalar.whole(8), FixedScalar.whole(6)));
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ruleset-projection"), 644L, selected));
-        SubjectId guard = state.bootstrap().hive().bioforms().stream().filter(bioform -> bioform.role() == BioformRole.GUARD).findFirst().orElseThrow().id();
+        SubjectId guard = state.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender).findFirst().orElseThrow().id();
         Settlement settlement = state.bootstrap().settlements().getFirst();
 
         assertEquals(FixedScalar.whole(9), RouteEngagementCombatRules.damage(state, guard));

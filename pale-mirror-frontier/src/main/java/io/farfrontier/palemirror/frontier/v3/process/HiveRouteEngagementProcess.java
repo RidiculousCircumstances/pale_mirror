@@ -190,8 +190,8 @@ public final class HiveRouteEngagementProcess {
                 .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(bioform -> state.ambientLeases().get(bioform.id()) == null || state.ambientLeases().get(bioform.id()).status() == AmbientLeaseStatus.CLOSED)
                 .sorted(nearest).toList();
-        return java.util.stream.Stream.concat(eligible.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).limit(1),
-                        eligible.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2))
+        return java.util.stream.Stream.concat(eligible.stream().filter(Bioform::isExplosiveAssaulter).limit(1),
+                        eligible.stream().filter(Bioform::isDefender).limit(2))
                 .map(bioform -> new EngagementAttacker(bioform.id(), approach(state, state.actorLocations().get(bioform.id()).supportingSurface().support(), intercept), 0)).toList();
     }
     private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {

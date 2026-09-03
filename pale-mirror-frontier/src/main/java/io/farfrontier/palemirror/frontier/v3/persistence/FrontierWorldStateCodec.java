@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 103; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 104; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -223,13 +223,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, colony.spawnedBioforms().size());
         for (Bioform bioform : colony.spawnedBioforms().values().stream().sorted(Comparator.comparing(Bioform::id)).toList()) {
             writeString(output, bioform.id().value()); writeString(output, bioform.hiveId().value()); writeString(output, bioform.nestId().value());
-            output.writeByte(bioform.role().wireTag()); writePosition(output, bioform.position());
+            BioformProfileStateCodec.write(output, bioform);
         }
         writeCount(output, colony.growthJobs().size());
         for (HiveGrowthJob job : colony.growthJobs().values().stream().sorted(Comparator.comparing(HiveGrowthJob::id)).toList()) {
             writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value()); writeString(output, job.consumedItemId().value()); writeString(output, job.consumptionIntentId().value());
             HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor());
-            Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); output.writeByte(bioform.role().wireTag()); writePosition(output, bioform.position());
+            Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); BioformProfileStateCodec.write(output, bioform);
         }
         writeCount(output, colony.nutrientTransfers().size());
         for (HiveNutrientTransfer transfer : colony.nutrientTransfers().values().stream().sorted(Comparator.comparing(HiveNutrientTransfer::id)).toList()) {
@@ -261,8 +261,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, Bioform> bioforms = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input));
-            int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
-            if (bioforms.put(id, new Bioform(id, hive, nest, FrontierWireTags.require(BioformRole.class, role), position)) != null) {
+            if (bioforms.put(id, BioformProfileStateCodec.read(input, id, hive, nest)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate spawned bioform");
             }
         }
@@ -271,10 +270,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
-            SubjectId bioformId = new SubjectId(readString(input)); int role = input.readUnsignedByte(); BlockPosition position = readPosition(input);
+            SubjectId bioformId = new SubjectId(readString(input)); Bioform bioform = BioformProfileStateCodec.read(input, bioformId, hive, nest);
             if (jobs.put(id, new HiveGrowthJob(id, hive, nest, item, consumption,
                     new HiveOrgan(organId, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
-                    new Bioform(bioformId, hive, nest, FrontierWireTags.require(BioformRole.class, role), position))) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
+                    bioform)) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }
         if (!hasNutrientTransfers) return new HiveColony(organs, bioforms, jobs);
         Map<SubjectId, HiveNutrientTransfer> transfers = new LinkedHashMap<>();

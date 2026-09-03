@@ -40,7 +40,7 @@ final class FrontierDevelopmentScenarios {
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.role() == BioformRole.GUARD || bioform.role() == BioformRole.BOMBER) state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            if (bioform.isDefender() || bioform.isExplosiveAssaulter()) state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,
@@ -49,7 +49,7 @@ final class FrontierDevelopmentScenarios {
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -213,7 +213,7 @@ final class FrontierDevelopmentScenarios {
     private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst()
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture needs one Scout"));
         state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
@@ -368,7 +368,7 @@ final class FrontierDevelopmentScenarios {
         RouteSceneReturnFixture base = routeSceneReturnFixture(worldId, seed);
         RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
         Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
-                .filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+                .filter(Bioform::isScout).findFirst().orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
         FrontierWorldState state = base.state().withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(operation.activeTravel().orElseThrow().cargoAnchor().surface().support())));
         // This isolated proof must demonstrate physical HOT perception only.  Retain every
@@ -393,11 +393,11 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = base.state();
         List<Bioform> attackers = java.util.stream.Stream.concat(
                         state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.role() == BioformRole.BOMBER || bioform.role() == BioformRole.GUARD)
-                .sorted(java.util.Comparator.comparing(Bioform::role).thenComparing(Bioform::id)).toList();
-        Bioform bomber = attackers.stream().filter(bioform -> bioform.role() == BioformRole.BOMBER).findFirst()
+                .filter(bioform -> bioform.isExplosiveAssaulter() || bioform.isDefender())
+                .sorted(java.util.Comparator.comparing(Bioform::assignment).thenComparing(Bioform::id)).toList();
+        Bioform bomber = attackers.stream().filter(Bioform::isExplosiveAssaulter).findFirst()
                 .orElseThrow(() -> new IllegalStateException("hot scout intercept fixture has no bomber"));
-        List<Bioform> guards = attackers.stream().filter(bioform -> bioform.role() == BioformRole.GUARD).limit(2).toList();
+        List<Bioform> guards = attackers.stream().filter(Bioform::isDefender).limit(2).toList();
         if (guards.size() != 2) throw new IllegalStateException("hot scout intercept fixture has fewer than two guards");
         // These three exact bodies get distinct nearby starts.  Co-locating every eligible hive
         // attacker would invoke vanilla entity cramming and turn a causal fixture into deaths.

@@ -16,7 +16,6 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
-import io.farfrontier.palemirror.frontier.v3.model.BioformRole;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -218,7 +217,7 @@ final class FrontierV3AmbientActorExecutor {
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
-            if (existing instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
+            if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
             // A recovered PREPARED body has not yet crossed the canonical HOT boundary.
             // Keep it inert until that durable transition is accepted.
             if (existing instanceof Mob body) {
@@ -236,7 +235,7 @@ final class FrontierV3AmbientActorExecutor {
         // The body exists before the durable PREPARED -> HOT acknowledgement. Do not let
         // vanilla AI move it across that crash window.
         body.setNoAi(true);
-        if (body instanceof Zombie zombie) configureBioform(zombie, bioformRole(state, actorId));
+        if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
@@ -469,9 +468,9 @@ final class FrontierV3AmbientActorExecutor {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .map(Bioform::id).anyMatch(actorId::equals);
     }
-    static BioformRole bioformRole(FrontierWorldState state, SubjectId actorId) {
+    static Bioform bioformProfile(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(bioform -> bioform.id().equals(actorId)).map(Bioform::role).findFirst()
+                .filter(bioform -> bioform.id().equals(actorId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("not a canonical Frontier v3 bioform: " + actorId));
     }
     static boolean owned(Entity entity, SubjectId actorId, boolean bioform) {
@@ -480,7 +479,7 @@ final class FrontierV3AmbientActorExecutor {
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
     }
     /** The graybox Zombie is a hive creature, not a vanilla undead exposed to daylight. */
-    static void configureBioform(Zombie body, BioformRole role) {
+    static void configureBioform(Zombie body, Bioform bioform) {
         if (!body.hasEffect(MobEffects.FIRE_RESISTANCE)) {
             body.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS, 0, true, false));
         }
@@ -489,12 +488,8 @@ final class FrontierV3AmbientActorExecutor {
         // explosion effects remain visible and flow through their normal physical observation path.
         body.setCanPickUpLoot(false);
         if (body.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
-            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(switch (role) {
-                case WORKER -> Items.LIME_WOOL;
-                case SCOUT -> Items.CYAN_WOOL;
-                case GUARD -> Items.PURPLE_WOOL;
-                case BOMBER -> Items.RED_WOOL;
-            }));
+            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(bioform.isExplosiveAssaulter() ? Items.RED_WOOL
+                    : bioform.isScout() ? Items.CYAN_WOOL : bioform.isDefender() ? Items.PURPLE_WOOL : Items.LIME_WOOL));
             body.setDropChance(EquipmentSlot.HEAD, 0.0F);
         }
     }
@@ -627,13 +622,11 @@ final class FrontierV3AmbientActorExecutor {
                 case HAULER -> new LocalBrain(1.50D, 320L, identityPhase);
             };
         }
-        BioformRole role = bioformRole(state, actorId);
-        return switch (role) {
-            case WORKER -> new LocalBrain(1.00D, 320L, identityPhase);
-            case SCOUT -> new LocalBrain(1.50D, 240L, identityPhase);
-            case GUARD -> new LocalBrain(1.25D, 480L, identityPhase);
-            case BOMBER -> new LocalBrain(1.50D, 300L, identityPhase);
-        };
+        Bioform bioform = bioformProfile(state, actorId);
+        if (bioform.isScout()) return new LocalBrain(1.50D, 240L, identityPhase);
+        if (bioform.isExplosiveAssaulter()) return new LocalBrain(1.50D, 300L, identityPhase);
+        if (bioform.isDefender()) return new LocalBrain(1.25D, 480L, identityPhase);
+        return new LocalBrain(1.00D, 320L, identityPhase);
     }
     /** Durably captures then removes a loaded HOT body; the return value proves no serialized duplicate remains. */
     static boolean drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
@@ -813,7 +806,7 @@ final class FrontierV3AmbientActorExecutor {
      */
     static boolean observeHotScoutSighting(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                            FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease scoutLease) {
-        if (!bioform(state, actorId) || bioformRole(state, actorId) != BioformRole.SCOUT
+        if (!bioform(state, actorId) || !bioformProfile(state, actorId).isScout()
                 || scoutLease.goal() != AmbientGoalKind.SCOUT_PATROL) return false;
         long now = runtime.canonicalState().orElseThrow().instant().ticks();
         SightedCarrier candidate = level.getEntitiesOfClass(MinecartChest.class, body.getBoundingBox().inflate(96.0D), entity -> !entity.isRemoved())

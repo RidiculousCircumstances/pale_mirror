@@ -55,7 +55,7 @@ class HiveScoutPatrolProcessTest {
 
     @Test void freshWorldSchedulesEveryBootstrapScoutBeforeTheFirstHiveReview() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scout-patrol-schedule"), 91L);
-        List<SubjectId> scouts = configuration.initialState().bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT)
+        List<SubjectId> scouts = configuration.initialState().bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
                 .map(Bioform::id).sorted().toList();
         List<ScheduledAction> patrols = configuration.initialSchedules().stream().filter(action -> action.kind().equals("frontier.hive.scout.patrol")).toList();
         assertEquals(scouts, patrols.stream().map(ScheduledAction::subject).sorted().toList());
@@ -154,7 +154,7 @@ class HiveScoutPatrolProcessTest {
     }
 
     private static Bioform scout(FrontierWorldState state) {
-        return state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        return state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
     }
     private static long distanceSquared(BlockPosition left, BlockPosition right) {
         long x = (long) left.x() - right.x(), z = (long) left.z() - right.z(); return x * x + z * z;

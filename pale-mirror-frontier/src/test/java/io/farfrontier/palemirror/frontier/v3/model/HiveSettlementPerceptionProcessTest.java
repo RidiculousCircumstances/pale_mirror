@@ -15,7 +15,7 @@ class HiveSettlementPerceptionProcessTest {
     void scoutRetainsOnlyASettlementItHasActuallyReachedAndTheFactSurvivesItsLaterPatrol() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-settlement-local"), 451L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         state = state.withActorBody(scout.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
 
         HiveSettlementPerceptionProcess.Refresh refresh = HiveSettlementPerceptionProcess.refresh(state, 100L);
@@ -36,7 +36,7 @@ class HiveSettlementPerceptionProcessTest {
     void remoteOrForeignSettlementObservationIsRejected() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-settlement-forged"), 452L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         HiveSettlementObserved remote = new HiveSettlementObserved(new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L));
 
         assertThrows(IllegalArgumentException.class, () -> HiveSettlementPerceptionProcess.reduce(state, state.bootstrap().hive().id(), remote));

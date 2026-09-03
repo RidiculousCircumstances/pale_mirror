@@ -73,7 +73,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
             state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-16, 0, 0))));
         }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept"), state.bootstrap().hive().id(),
@@ -118,7 +118,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
-                .filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
             state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -193,7 +193,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
             state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -318,7 +318,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
             state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -351,7 +351,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.GUARD || value.role() == BioformRole.BOMBER).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
             state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -430,7 +430,7 @@ class HiveRouteEngagementProcessTest {
     }
 
     private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
-        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(value -> value.role() == BioformRole.SCOUT).findFirst().orElseThrow();
+        Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         BlockPosition carrierPosition = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(operation.currentPosition());
         state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(carrierPosition)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);

@@ -52,7 +52,7 @@ public final class HiveSettlementPerceptionProcess {
                 .orElseThrow(() -> new IllegalArgumentException("hive settlement sighting names an unknown settlement"));
         Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, sighting.scoutId());
         ActorLocation location = actors.get(scout.id());
-        if (scout.role() != BioformRole.SCOUT || location.condition().status() != ActorLifeStatus.ALIVE
+        if (!scout.isScout() || location.condition().status() != ActorLifeStatus.ALIVE
                 || !settlement.anchor().equals(sighting.settlementAnchor()) || !nearby(ruleset, location.supportingSurface().support(), settlement.anchor())) {
             throw new IllegalArgumentException("hive settlement sighting lacks one nearby living scout");
         }
@@ -60,7 +60,7 @@ public final class HiveSettlementPerceptionProcess {
 
     private static List<Bioform> scouts(FrontierWorldState state) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
-                .filter(value -> value.role() == BioformRole.SCOUT)
+                .filter(Bioform::isScout)
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(value -> { AmbientActorLease lease = state.ambientLeases().get(value.id()); return lease == null || lease.status() == AmbientLeaseStatus.CLOSED; })
                 .toList();

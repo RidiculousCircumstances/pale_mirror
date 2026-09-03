@@ -214,7 +214,7 @@ class FrontierWorldRuntimeDefinitionTest {
                 new HiveOrgan(new SubjectId("organ:east-grown-heart-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
                         HiveOrganKind.RELAY, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
                 new Bioform(new SubjectId("bioform:east-grown-1"), completed.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
-                        BioformRole.GUARD, new BlockPosition(436, 64, 432)));
+                        BioformChassis.RUNT, java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(436, 64, 432)));
         HiveGrowthStarted started = new HiveGrowthStarted(job);
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         HiveGrowthBiomassConsumed consumed = new HiveGrowthBiomassConsumed(job.id(), biomass);

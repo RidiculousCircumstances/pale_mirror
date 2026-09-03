@@ -36,7 +36,8 @@ class FrontierV3ScenePresentationTest {
         String cargoName = FrontierSceneLabels.cargo(state, cargo);
 
         assertEquals(settlement.displayName() + " " + profile.profession().name().replace('_', ' '), residentName);
-        assertEquals("HIVE " + state.bootstrap().hive().bioforms().getFirst().role().name(), bioformName);
+        var firstBioform = state.bootstrap().hive().bioforms().getFirst();
+        assertEquals("HIVE " + firstBioform.chassis().name().replace('_', ' ') + " · " + firstBioform.assignment().name().replace('_', ' '), bioformName);
         assertEquals(settlement.displayName().toUpperCase(java.util.Locale.ROOT) + " CARAVAN\n"
                 + stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(java.util.Locale.ROOT)
                 + " ×" + stack.count(), cargoName);

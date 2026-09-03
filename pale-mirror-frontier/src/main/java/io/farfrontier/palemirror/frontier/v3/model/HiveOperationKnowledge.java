@@ -37,7 +37,7 @@ public final class HiveOperationKnowledge {
     void validate(FrontierBootstrap bootstrap, HiveColony colony, Map<SubjectId, ActorLocation> actors) {
         for (Sighting sighting : sightings.values()) {
             Bioform scout = FrontierWorldStateSupport.bioform(bootstrap, colony, sighting.scoutId());
-            if (scout.role() != BioformRole.SCOUT || actors.get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) {
+            if (!scout.isScout() || actors.get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) {
                 throw new IllegalArgumentException("hive sighting must retain one living scout");
             }
         }

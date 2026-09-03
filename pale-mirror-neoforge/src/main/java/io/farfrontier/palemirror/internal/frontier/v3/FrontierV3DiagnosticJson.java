@@ -252,7 +252,7 @@ final class FrontierV3DiagnosticJson {
         if (location == null) return unavailable("actor", id, checkpoint, "not_found");
         ResidentProfile resident = state.humanPopulation().resident(subject);
         Bioform bioform = bioform(state, subject).orElse(null);
-        String role = resident != null ? resident.role().name() : bioform != null ? bioform.role().name() : "UNKNOWN";
+        String role = resident != null ? resident.role().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         var lease = state.ambientLeases().get(subject);
