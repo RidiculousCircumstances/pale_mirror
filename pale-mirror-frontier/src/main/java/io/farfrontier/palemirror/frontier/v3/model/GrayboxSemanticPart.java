@@ -19,7 +19,11 @@ public enum GrayboxSemanticPart {
     WORKSITE_STAGING
     ,
     /** One exact occupied cocoon, owned by its bioform rather than the enclosing organ. */
-    COCOON
+    COCOON,
+    /** A workshop's exact material hand-off surface; it remains traversable floor, not a container. */
+    WORKSHOP_INPUT_STATION,
+    /** A workshop's exact active processing surface; it remains traversable floor, not a hidden machine. */
+    WORKSHOP_PROCESS_STATION
 ;
 
     public int wireTag() { return FrontierWireTags.tag(this); }

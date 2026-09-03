@@ -230,6 +230,8 @@ final class FrontierV3GrayboxExecutor {
             case HOUSING -> Blocks.ORANGE_CONCRETE.defaultBlockState();
             case FARM -> Blocks.LIME_CONCRETE.defaultBlockState();
             case WORKSHOP -> Blocks.BLUE_CONCRETE.defaultBlockState();
+            case WORKSHOP_INPUT -> Blocks.CYAN_CONCRETE.defaultBlockState();
+            case WORKSHOP_PROCESS -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
             case DEPOT -> Blocks.YELLOW_CONCRETE.defaultBlockState();
             case INFIRMARY -> Blocks.PINK_CONCRETE.defaultBlockState();
             case HIVE_GANGLION -> Blocks.RED_CONCRETE.defaultBlockState();

@@ -248,9 +248,12 @@ final class FrontierV3TestPilotScenario {
 
     /**
      * Dynamic coordinates are intentionally limited to exact immutable plan
-     * anchors published by their named diagnostics. Opening that exact named
-     * container remains an ordinary player interaction; all mutation still
-     * occurs through normal inventory packets after the client has opened it.
+     * anchors published by their named diagnostics. The one scene anchor is a
+     * camera-only current cursor, equivalent to the existing operation camera
+     * target; it cannot select a server entity or move the player. Opening an
+     * exact named container remains an ordinary player interaction; all
+     * mutation still occurs through normal inventory packets after the client
+     * has opened it.
      */
     private static boolean resolvablePosition(JsonObject action, String field) {
         JsonObject value = action.getAsJsonObject(field);
@@ -261,7 +264,8 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("view").isJsonPrimitive() || !reference.get("id").isJsonPrimitive() || !reference.get("field").isJsonPrimitive()) return false;
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
         return (view.equals("site") && requiredId(reference, "id", "site:") && diagnosticField.equals("firstCrop"))
-                || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"));
+                || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
+                || (view.equals("scene") && requiredId(reference, "id", "job:") && diagnosticField.equals("productionCurrent"));
     }
 
     private static boolean offset(JsonObject action) {

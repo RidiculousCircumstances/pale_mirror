@@ -294,8 +294,9 @@ function validPosition(value) {
 /**
  * A materialization scenario may follow one immutable plan anchor published
  * by its exact named diagnostic. The container form only authorizes ordinary
- * client opening of that one canonical socket; inventory mutation remains a
- * normal player packet after the menu is open.
+ * client opening of that one canonical socket; the production scene form is a
+ * camera-only current cursor. Inventory mutation remains a normal player
+ * packet after the menu is open.
  */
 function validResolvablePosition(value) {
   if (validPosition(value)) return true;
@@ -303,7 +304,8 @@ function validResolvablePosition(value) {
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
-      || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position'));
+      || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
+      || (reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionCurrent'));
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }

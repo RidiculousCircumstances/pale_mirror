@@ -71,6 +71,30 @@ public final class FrontierV3GrayboxCursorGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void workshopStationsMaterializeAsDistinctOwnedTraversableFloorTiles(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos input = helper.absolutePos(new BlockPos(22, 8, 0)), processing = input.east();
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        GrayboxCell inputStation = new GrayboxCell(new BlockPosition(input.getX(), input.getY(), input.getZ()),
+                new SubjectId("structure:workshop-stations"), GrayboxMaterial.WORKSHOP_INPUT, GrayboxSemanticPart.WORKSHOP_INPUT_STATION);
+        GrayboxCell processingStation = new GrayboxCell(new BlockPosition(processing.getX(), processing.getY(), processing.getZ()),
+                new SubjectId("structure:workshop-stations"), GrayboxMaterial.WORKSHOP_PROCESS, GrayboxSemanticPart.WORKSHOP_PROCESS_STATION);
+        level.setBlock(input.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(processing.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, inputStation), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "a declared workshop input surface must be normally materialized, not inferred from the worker pose");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, processingStation), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
+                "a declared workshop processing surface must be normally materialized, not an executor-only offset");
+        helper.assertTrue(level.getBlockState(input).is(Blocks.CYAN_CONCRETE) && level.getBlockState(processing).is(Blocks.MAGENTA_CONCRETE)
+                        && ledger.claim(input) != null && ledger.claim(processing) != null
+                        && ledger.claim(input).semanticPart().equals(GrayboxSemanticPart.WORKSHOP_INPUT_STATION.name())
+                        && ledger.claim(processing).semanticPart().equals(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION.name())
+                        && level.getBlockState(input.above()).isAir() && level.getBlockState(processing.above()).isAir(),
+                "the two semantic stations retain their exact workshop provenance, visible color and body-clear worker cells");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-graybox", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void worksiteRetirementIndexSurvivesLedgerReloadWithoutScanningStructuralClaims(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

@@ -6,6 +6,10 @@ public enum GrayboxMaterial {
     HOUSING,
     FARM,
     WORKSHOP,
+    /** Distinct floor tile for the exact immutable workshop input station. */
+    WORKSHOP_INPUT,
+    /** Distinct floor tile for the exact immutable workshop processing station. */
+    WORKSHOP_PROCESS,
     DEPOT,
     INFIRMARY,
     HIVE_GANGLION,
@@ -31,6 +35,8 @@ public enum GrayboxMaterial {
             case HOUSING -> "minecraft:orange_concrete";
             case FARM -> "minecraft:lime_concrete";
             case WORKSHOP -> "minecraft:blue_concrete";
+            case WORKSHOP_INPUT -> "minecraft:cyan_concrete";
+            case WORKSHOP_PROCESS -> "minecraft:magenta_concrete";
             case DEPOT -> "minecraft:yellow_concrete";
             case INFIRMARY -> "minecraft:pink_concrete";
             case HIVE_GANGLION -> "minecraft:red_concrete";

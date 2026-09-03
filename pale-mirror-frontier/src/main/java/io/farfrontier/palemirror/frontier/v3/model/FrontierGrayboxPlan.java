@@ -360,34 +360,44 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
-        GrayboxMaterial material = switch (structure.kind()) {
+        visitStructureCells(terrain, structure, condition, (position, part) -> {
+            add(cells, position, structure.id(), structureMaterial(structure.kind(), part), part);
+            return false;
+        });
+    }
+
+    /**
+     * Graybox stations stay simple colour-coded floor cubes. They are not an item container or
+     * a second production authority: the retained service port and ProductionJob own both facts.
+     */
+    private static GrayboxMaterial structureMaterial(StructureKind kind, GrayboxSemanticPart part) {
+        if (part == GrayboxSemanticPart.WORKSHOP_INPUT_STATION) return GrayboxMaterial.WORKSHOP_INPUT;
+        if (part == GrayboxSemanticPart.WORKSHOP_PROCESS_STATION) return GrayboxMaterial.WORKSHOP_PROCESS;
+        return switch (kind) {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
             case WORKSHOP -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
-        visitStructureCells(terrain, structure, condition, (position, part) -> {
-            add(cells, position, structure.id(), material, part);
-            return false;
-        });
     }
 
     /** Iterates precisely the semantic cells used by materialization, stopping on visitor demand. */
     private static boolean visitStructureCells(TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition, StructureCellVisitor visitor) {
         if (condition == StructureCondition.DESTROYED) return false;
+        SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
+        SettlementDepotServicePort depotService = structure.kind() == StructureKind.DEPOT ? SettlementDepotServicePort.forDepot(structure) : null;
+        SettlementWorkshopServicePort workshopService = structure.kind() == StructureKind.WORKSHOP ? SettlementWorkshopServicePort.forWorkshop(structure) : null;
+        SettlementInfirmaryTreatmentPort treatment = structure.kind() == StructureKind.INFIRMARY ? SettlementInfirmaryTreatmentPort.forInfirmary(structure) : null;
         GrayboxSemanticPart foundation = GrayboxSemanticPart.FOUNDATION;
         for (BlockPosition footing : SettlementStructureFootprint.foundationFill(terrain, structure)) {
-            if (visitor.visit(footing, foundation)) return true;
+            if (visitor.visit(footing, workshopFloorPart(workshopService, footing, foundation))) return true;
         }
         int width = SettlementStructureFootprint.width(structure.kind());
         int depth = SettlementStructureFootprint.depth(structure.kind());
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5; case DEPOT, WORKSHOP -> 4; default -> 3;
         };
-        SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
-        SettlementDepotServicePort depotService = structure.kind() == StructureKind.DEPOT ? SettlementDepotServicePort.forDepot(structure) : null;
-        SettlementWorkshopServicePort workshopService = structure.kind() == StructureKind.WORKSHOP ? SettlementWorkshopServicePort.forWorkshop(structure) : null;
-        SettlementInfirmaryTreatmentPort treatment = structure.kind() == StructureKind.INFIRMARY ? SettlementInfirmaryTreatmentPort.forInfirmary(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
-            if (visitor.visit(structure.anchor().offset(x, 0, z), GrayboxSemanticPart.FOUNDATION)) return true;
+            BlockPosition floor = structure.anchor().offset(x, 0, z);
+            if (visitor.visit(floor, workshopFloorPart(workshopService, floor, foundation))) return true;
             for (int y = 1; y < height; y++) if (x == -width / 2 || x == (width - 1) / 2 || z == -depth / 2 || z == (depth - 1) / 2) {
                 BlockPosition wall = structure.anchor().offset(x, y, z);
                 if ((access == null || !access.throatAirCells().contains(wall))
@@ -416,6 +426,14 @@ public final class FrontierGrayboxPlan {
             if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         return false;
+    }
+
+    private static GrayboxSemanticPart workshopFloorPart(SettlementWorkshopServicePort workshop, BlockPosition floor,
+                                                         GrayboxSemanticPart fallback) {
+        if (workshop == null) return fallback;
+        if (workshop.inputStation().support().equals(floor)) return GrayboxSemanticPart.WORKSHOP_INPUT_STATION;
+        if (workshop.workStation().support().equals(floor)) return GrayboxSemanticPart.WORKSHOP_PROCESS_STATION;
+        return fallback;
     }
 
     private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, HiveOrgan organ) {

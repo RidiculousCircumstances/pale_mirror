@@ -143,7 +143,8 @@ test('materialization may follow only named immutable diagnostic anchors', () =>
     { type: 'wait_until_block', position: crop, block: 'minecraft:wheat', timeoutMs: 30_000 },
     { type: 'look', at: crop },
     { type: 'assert_visible_block', position: crop, timeoutMs: 10_000 },
-    { type: 'open_container', position: depot, timeoutMs: 10_000 }
+    { type: 'open_container', position: depot, timeoutMs: 10_000 },
+    { type: 'look', at: { diagnostic: { view: 'scene', id: 'job:example', field: 'productionCurrent' } } }
   ], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(anchored));
   assert.throws(() => validateScenario({ ...anchored, actions: [{ ...anchored.actions[0], position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'cropSlots' } } }] }), /position/);

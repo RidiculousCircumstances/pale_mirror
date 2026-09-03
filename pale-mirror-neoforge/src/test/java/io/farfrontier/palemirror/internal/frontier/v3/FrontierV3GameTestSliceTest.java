@@ -13,6 +13,7 @@ class FrontierV3GameTestSliceTest {
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-restart-reclaim"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-assembly-grade"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-route-maintenance"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-graybox"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-resource-harvest"));
         assertFalse(FrontierV3GameTestSlice.includes("scene", "core-integration"));
     }

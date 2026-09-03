@@ -40,7 +40,18 @@ public record SettlementWorkshopServicePort(SubjectId settlementId, SubjectId wo
     }
 
     public List<SurfaceAnchor> ownedAccessSurfaces() { return List.of(approachSurface); }
-    public List<BlockPosition> throatAirCells() { return List.of(throatSurface.support().offset(0, 1, 0), throatSurface.support().offset(0, 2, 0)); }
+    /**
+     * The workshop entrance is deliberately a three-wide, two-high loading portal.
+     *
+     * <p>Only its centre column is the retained traversal throat. The flanking apertures are
+     * structural presentation, not alternate pathfinding edges: they make the worker, input
+     * station and active work station readable from the public approach without giving a HOT
+     * body permission to cut through a different wall cell.</p>
+     */
+    public List<BlockPosition> throatAirCells() {
+        List<SurfaceAnchor> columns = List.of(facing.stepLeft(throatSurface, 1), throatSurface, facing.stepRight(throatSurface, 1));
+        return columns.stream().flatMap(surface -> java.util.stream.Stream.of(surface.support().offset(0, 1, 0), surface.support().offset(0, 2, 0))).toList();
+    }
     public FacilityTraversalPort topologyPort() {
         return new FacilityTraversalPort(workshopId, facing, List.of(exteriorApproach, approachSurface), throatSurface, interiorSurface,
                 List.of(inputStation, workStation), Set.of(TraversalCapability.PEDESTRIAN));
