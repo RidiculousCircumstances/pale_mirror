@@ -76,6 +76,11 @@ final class PhysicalEffectObservationPayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, loading.sourceItemId());
             FrontierWorldPayloadCodecs.writeSubject(output, loading.cargoItemId()); output.writeByte(loading.sourceRemainingCount());
         }
+        else if (observation instanceof SettlementServiceInputIssueObservation issue) {
+            output.writeByte(19); ids(output, issue); FrontierWorldPayloadCodecs.writeSubject(output, issue.workId());
+            FrontierWorldPayloadCodecs.writeSubject(output, issue.workerId()); FrontierWorldPayloadCodecs.writeSubject(output, issue.itemId());
+            FrontierWorldPayloadCodecs.writeSubject(output, issue.sourceSlot().containerId()); output.writeByte(issue.sourceSlot().slot());
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -113,6 +118,9 @@ final class PhysicalEffectObservationPayloadCodec {
             case 18 -> new RouteMaintenanceMaterialLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            case 19 -> new SettlementServiceInputIssueObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

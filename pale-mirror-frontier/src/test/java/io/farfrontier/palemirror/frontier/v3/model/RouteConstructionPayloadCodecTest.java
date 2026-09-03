@@ -63,5 +63,18 @@ class RouteConstructionPayloadCodecTest {
                 new PhysicalObservationId("observation:route-maintenance-load-codec"), maintenanceLoadIntent.id(), maintenance, maintenanceCargo, item, maintenanceItem, 63);
         PhysicalIntentTransition maintenanceLoadTransition = new PhysicalIntentTransition(maintenanceLoadIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(maintenanceLoad));
         assertEquals(maintenanceLoadTransition, codecs.decode(maintenanceLoadTransition.type(), codecs.encode(maintenanceLoadTransition)));
+
+        SubjectId service = new SubjectId("service:decontamination-codec"), worker = new SubjectId("resident:1-medic"),
+                reagent = new SubjectId("item:service-reagent"), depot = new SubjectId("container:1-depot");
+        PhysicalIntent serviceInputIntent = new PhysicalIntent(new PhysicalIntentId("intent:service-input-codec"),
+                PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED, service,
+                List.of(service, worker, reagent), new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
+                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);
+        SettlementServiceInputIssueObservation serviceInput = new SettlementServiceInputIssueObservation(
+                new PhysicalObservationId("observation:service-input-codec"), serviceInputIntent.id(), service, worker, reagent,
+                new InventoryCustody.ContainerSlot(depot, 3));
+        PhysicalIntentTransition serviceInputTransition = new PhysicalIntentTransition(serviceInputIntent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(serviceInput));
+        assertEquals(serviceInputTransition, codecs.decode(serviceInputTransition.type(), codecs.encode(serviceInputTransition)));
     }
 }
