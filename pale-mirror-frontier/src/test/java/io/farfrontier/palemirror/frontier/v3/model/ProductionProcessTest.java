@@ -474,6 +474,65 @@ class ProductionProcessTest {
     }
 
     @Test
+    void physicalWorkshopLossBlocksTheSameHotJobBeforeItsWorkerRelease() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-workshop-loss-hot");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
+                new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        BlockPosition lostStation = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
+        FrontierWorldState damaged = hot.recordPhysicalDelta(new PhysicalDelta(lostStation, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(workshop.id()), Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-workshop-loss"));
+
+        List<ProposedEvent> planned = ProductionProcess.planFacilityUnavailable(damaged, workshop.id());
+
+        assertEquals(3, planned.size(), "physical facility loss must block, mark the task and drain the retained worker scene immediately");
+        assertEquals(ProductionBlockReason.FACILITY_UNAVAILABLE,
+                assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload()).reason());
+        assertEquals(StrategicTaskStatus.BLOCKED, assertInstanceOf(StrategicTaskTransition.class, planned.get(1).payload()).status());
+        SceneLeaseTransition draining = assertInstanceOf(SceneLeaseTransition.class, planned.get(2).payload());
+        assertEquals(leaseId, draining.leaseId());
+        assertEquals(SceneLeaseStatus.DRAINING, draining.status());
+    }
+
+    @Test
+    void observedWorkshopLossRoutesThroughThePhysicalPlannerAndDrainsTheHotWorker() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-workshop-loss-hot");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
+                new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        WorldId world = new WorldId("frontier:production-observed-workshop-loss");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        BlockPosition station = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
+        PhysicalDelta loss = new PhysicalDelta(station, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(workshop.id()),
+                Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-observed-workshop-loss");
+        var checkpoint = engine.checkpoint(); CommandId command = new CommandId("command:production-observed-workshop-loss");
+
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalDeltaObserved(loss))));
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(StructureCondition.DAMAGED, after.structureConditions().get(workshop.id()));
+        assertEquals(StrategicTaskStatus.BLOCKED, after.strategicPlans().tasks().get(prepared.taskId()).status());
+        assertTrue(after.productionJobs().containsKey(job.id()), "the job remains only until its exact body release is durable");
+        assertEquals(SceneLeaseStatus.DRAINING, after.sceneLeases().get(leaseId).status());
+    }
+
+    @Test
     void playerTakingMaterializedInputAbortsPreparedWorkerSceneWithoutInventingABodyRelease() {
         MaterializedProduction prepared = activeMaterializedProduction();
         ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());

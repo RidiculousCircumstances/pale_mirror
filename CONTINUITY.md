@@ -261,17 +261,21 @@
   its observed cursor/stage, and defer the depot transform until
   `OUTPUT_READY`. A blocked job retains its lease through durable release and
   only then receives `ProductionWorkSceneFinalized`, which releases its exact
-  market reservation without a zombie scene or duplicate output. Focused
-  early-intent/finalization tests pass, Scene 44/44 and Economy 17/17 pass;
-  commit `e7719053` also passes the complete critical gate (`guardrails`,
-  `check`, package verification and 282/282 GameTests).
+  market reservation without a zombie scene or duplicate output. The fresh
+  native input-theft scenario now proves player custody of the exact wheat
+  drains that same HOT worker and terminally blocks/cancels its job/order.
+  A known physical loss of an owned workshop station is routed by the physical
+  observation planner immediately to `FACILITY_UNAVAILABLE`, task `BLOCKED`
+  and the same worker's `DRAINING` lease; it cannot leave the job active until
+  a later strategic timer. Focused planner/reducer coverage passes; Scene
+  54/54 and Economy 17/17 pass.
   Native `disposable_materialized_production_work_restart` run
   `75f45107-732a-43dc-996b-1f47a9e0244b` observed the exact `INDUSTRIAL
   WORKER`, reached terminal market order `FULFILLED`, and after a graceful
   restart retained its exact 64-bread container receipt. This is M2 partial,
-  not closure: a dedicated GameTest must cover approach/input/processing and
-  death/theft/broken/blocked/restart, while the captured narrow-corridor frame
-  leaves the worker insufficiently legible for M3. The next type-safe reducer boundary is also present: an executor must submit
+  not closure: dedicated blocked-route and filesystem-runtime-restart evidence
+  remain, while the captured narrow-corridor frame leaves the worker
+  insufficiently legible for M3. The next type-safe reducer boundary is also present: an executor must submit
   one observed `ProductionWorkTraversalAdvanced` or `ProductionWorkProgressed`
   fact; it cannot directly alter a job or skip a retained station/stage.
 - MAT-002 readability follow-up: the semantic workshop port now

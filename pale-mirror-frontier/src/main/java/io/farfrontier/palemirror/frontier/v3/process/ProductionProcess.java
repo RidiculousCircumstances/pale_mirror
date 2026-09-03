@@ -427,6 +427,49 @@ public final class ProductionProcess {
                 new ProposedEvent(settlement.id(), new MarketWorkOrderCancelled(order.id(), job.id(), ProductionBlockReason.INPUT_UNAVAILABLE)));
     }
 
+    /**
+     * Turns an already accepted physical loss of a workshop into the same durable cancellation
+     * protocol as any other pre-effect production failure.  In particular, a HOT worker is not
+     * silently left working until a later strategic timer notices the damage: the job is blocked
+     * first and its exact scene then drains and releases normally.
+     *
+     * <p>Post-effect intents deliberately remain their own recovery question.  A destroyed
+     * workshop cannot retrospectively decide whether an already durable-before-effect output
+     * replacement happened.</p>
+     */
+    public static List<ProposedEvent> planFacilityUnavailable(FrontierWorldState state, SubjectId facilityId) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(facilityId, "facility id");
+        List<ProposedEvent> events = new java.util.ArrayList<>();
+        for (ProductionJob job : state.productionJobs().values().stream().filter(candidate -> candidate.facilityId().equals(facilityId))
+                .sorted(Comparator.comparing(ProductionJob::id)).toList()) {
+            if (state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))) continue;
+            Settlement settlement = settlement(state, job.settlementId());
+            StrategicTask task = state.strategicPlans().tasks().values().stream().filter(candidate -> candidate.ownerId().equals(settlement.id())
+                    && candidate.kind() == StrategicTaskKind.PRODUCE_BREAD && candidate.status() == StrategicTaskStatus.ACTIVE)
+                    .reduce((left, right) -> { throw new IllegalArgumentException("production facility loss has ambiguous active task"); }).orElse(null);
+            if (task == null) continue;
+            events.add(new ProposedEvent(settlement.id(), new ProductionBlocked(settlement.id(), job.facilityId(), job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE)));
+            events.add(transition(task, StrategicTaskStatus.BLOCKED));
+            SceneLease scene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
+                    .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()))
+                    .reduce((left, right) -> { throw new IllegalArgumentException("production facility loss has multiple live worker scenes"); }).orElse(null);
+            if (scene != null) {
+                if (scene.status() == SceneLeaseStatus.PREPARED) {
+                    events.add(new ProposedEvent(settlement.id(), new ProductionWorkScenePreparationAborted(scene.id(), job.id())));
+                    events.add(new ProposedEvent(settlement.id(), new ProductionWorkSceneFinalized(scene.id(), job.id())));
+                } else if (scene.status() == SceneLeaseStatus.HOT) {
+                    events.add(new ProposedEvent(settlement.id(), new SceneLeaseTransition(scene.id(), SceneLeaseStatus.DRAINING)));
+                } else if (scene.status() != SceneLeaseStatus.DRAINING) {
+                    throw new IllegalArgumentException("production facility loss has an unresolved worker scene");
+                }
+                continue;
+            }
+            state.companies().market().acceptedForJob(job.id()).ifPresent(order -> events.add(new ProposedEvent(settlement.id(),
+                    new MarketWorkOrderCancelled(order.id(), job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE))));
+        }
+        return List.copyOf(events);
+    }
+
     public static FrontierWorldState reduceWorkScenePreparationAborted(FrontierWorldState state, SubjectId subject,
                                                                         ProductionWorkScenePreparationAborted aborted) {
         SceneLease lease = state.sceneLeases().get(aborted.leaseId()); ProductionJob job = state.productionJobs().get(aborted.jobId());

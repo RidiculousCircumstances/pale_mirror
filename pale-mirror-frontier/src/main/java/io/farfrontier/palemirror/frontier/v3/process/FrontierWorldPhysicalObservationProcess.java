@@ -22,6 +22,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
+        appendProductionFacilityFailures(after, List.of(observed.delta()), events);
         if (isKnownRouteLoss(observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
@@ -47,6 +48,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
+        appendProductionFacilityFailures(after, observed.deltas(), events);
         if (observed.deltas().stream().anyMatch(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
@@ -68,6 +70,14 @@ public final class FrontierWorldPhysicalObservationProcess {
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
+    }
+
+    /** One physical observation may damage several graybox cells, but each named workshop job is blocked once. */
+    private static void appendProductionFacilityFailures(FrontierWorldState after, List<PhysicalDelta> deltas, List<ProposedEvent> events) {
+        deltas.stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
+                .map(delta -> delta.ownerId().orElse(null)).filter(owner -> owner != null && owner.value().startsWith("structure:"))
+                .distinct().sorted().filter(structure -> after.structureConditions().get(structure) != StructureCondition.INTACT)
+                .forEach(structure -> events.addAll(ProductionProcess.planFacilityUnavailable(after, structure)));
     }
 
     static CommandPlan planResourceDeposit(FrontierWorldState state, ResourceDeposited deposited) {
