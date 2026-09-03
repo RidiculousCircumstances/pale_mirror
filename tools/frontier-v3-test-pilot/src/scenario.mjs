@@ -110,7 +110,8 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (['walk', 'break', 'place', 'open_container'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (['walk', 'break', 'place'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'open_container' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
       if (action.type === 'wait_until_block' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'place' && (!validItemKind(action.item) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
@@ -291,17 +292,18 @@ function validPosition(value) {
 }
 
 /**
- * A materialization scenario may follow the current first crop of one named
- * site through the existing read-only diagnostic. The narrow form keeps
- * movement/mutation actions literal and prevents stale generated coordinates
- * from becoming a hidden part of the test contract.
+ * A materialization scenario may follow one immutable plan anchor published
+ * by its exact named diagnostic. The container form only authorizes ordinary
+ * client opening of that one canonical socket; inventory mutation remains a
+ * normal player packet after the menu is open.
  */
 function validResolvablePosition(value) {
   if (validPosition(value)) return true;
   const reference = value?.diagnostic;
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
-    && reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop';
+    && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
+      || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position'));
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }

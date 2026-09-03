@@ -203,7 +203,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                             && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION
                             && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED);
                     boolean exactInputMissingOrAltered = input == null || input.count() != job.outputCount();
-                    if ((exactInputMissingOrAltered || !inOwnedDepot) && !awaitingPhysicalReconciliation) {
+                    if ((exactInputMissingOrAltered || !inOwnedDepot) && !awaitingPhysicalReconciliation
+                            && !FrontierProductionWorkSceneSupport.awaitingBlockedRelease(sceneLeases, strategicPlans, job)) {
                         throw new IllegalArgumentException("materialized production job input must remain in its exact settlement depot slot");
                     }
                 }
@@ -330,7 +331,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
         FrontierSceneLeaseValidationSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, operations, routeConstructions,
-                routeMaintenances, strategicPlans, resourceSites, sceneLeases, activelyAmbientLeased);
+                routeMaintenances, strategicPlans, resourceSites, productionJobs, sceneLeases, activelyAmbientLeased);
         }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }

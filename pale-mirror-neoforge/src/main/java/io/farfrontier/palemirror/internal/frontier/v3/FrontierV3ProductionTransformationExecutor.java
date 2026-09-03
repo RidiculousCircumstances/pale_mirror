@@ -101,6 +101,14 @@ final class FrontierV3ProductionTransformationExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalIntentTransition(id, status, observation)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
+        if (result instanceof CommandResult.Accepted) return true;
+        CommandResult.Rejected rejected = (CommandResult.Rejected) result;
+        if (status == PhysicalIntentStatus.CONFIRMED) {
+            // The Minecraft write is already observed at this point.  Do not reduce the
+            // consequence to an opaque boolean: quarantine must retain the canonical reason
+            // which made its exact durable receipt unacceptable.
+            throw new IllegalStateException("production transformation confirmation rejected: " + rejected.rejection().detail());
+        }
+        return false;
     }
 }

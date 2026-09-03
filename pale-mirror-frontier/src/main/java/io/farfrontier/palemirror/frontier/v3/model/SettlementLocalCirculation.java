@@ -11,7 +11,7 @@ import java.util.Set;
 /**
  * Small immutable public pedestrian network compiled from semantic facility ports.
  *
- * <p>The current graybox has infirmary and depot service ports per settlement. Its sidewalks are deliberately
+ * <p>The current graybox has infirmary, depot and workshop service ports per settlement. Its sidewalks are deliberately
  * compiled here, rather than being inferred by a navigator from a hall centre or terrain query.
  * Later facilities add their own port-to-network connector to this same plan.</p>
  */
@@ -78,10 +78,14 @@ public final class SettlementLocalCirculation {
         structures = List.copyOf(Objects.requireNonNull(structures, "settlement structures"));
         SettlementStructure depot = structures.stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no depot"));
+        SettlementStructure workshop = structures.stream().filter(value -> value.kind() == StructureKind.WORKSHOP)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no workshop"));
         SurfaceAnchor publicRoute = SettlementAccessPort.forHall(structures.stream().filter(value -> value.kind() == StructureKind.HALL)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no Hall"))).routeSurface();
         SurfaceAnchor depotExterior = SettlementDepotServicePort.forDepot(depot).exteriorApproach();
-        return List.of(infirmarySidewalk(structures), manhattanWithFinalGrade(publicRoute, depotExterior));
+        SurfaceAnchor workshopExterior = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
+        return List.of(infirmarySidewalk(structures), manhattanWithFinalGrade(publicRoute, depotExterior),
+                manhattanWithFinalGrade(publicRoute, workshopExterior));
     }
 
     private static TraversalNodeId node(SurfaceAnchor surface) {

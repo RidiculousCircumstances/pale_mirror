@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.*; import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 114; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 117; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -506,16 +506,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (ProductionJob job : jobs.values().stream().sorted(java.util.Comparator.comparing(ProductionJob::id)).toList()) {
             writeString(output, job.id().value()); writeString(output, job.settlementId().value()); writeString(output, job.facilityId().value());
             writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeProductionInputHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
-            writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
-        }
-    }
-    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input, boolean hasInputHold) throws IOException {
-        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
+            writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
+            TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
+        } }
+    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input, boolean hasInputHold) throws IOException { Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input));
             SubjectId settlement = new SubjectId(readString(input)), facility = new SubjectId(readString(input)), worker = new SubjectId(readString(input));
             SubjectId consumed = new SubjectId(readString(input)); ProductionInputHold hold = hasInputHold ? readProductionInputHold(input, consumed) : new ProductionInputHold.Materialized(consumed);
-            ProductionJob job = new ProductionJob(id, settlement, facility, worker, consumed, hold, new SubjectId(readString(input)), readString(input), input.readUnsignedByte());
+            SubjectId output = new SubjectId(readString(input)); String outputKind = readString(input); int outputCount = input.readUnsignedByte();
+            ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
+            ProductionJob job = new ProductionJob(id, settlement, facility, worker, consumed, hold, output, outputKind, outputCount, progress, traversal, input.readUnsignedShort());
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
@@ -729,6 +730,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         if (cause instanceof MedicalTreatmentSceneCause medical) { output.writeByte(3); writeString(output, medical.operationId().value()); return; }
         if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4); writeString(output, harvest.jobId().value()); return; }
+        if (cause instanceof ProductionWorkSceneCause production) { output.writeByte(5); writeString(output, production.jobId().value()); return; }
         throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
     }
     private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
@@ -738,27 +740,22 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             case 2 -> new SceneCauseKind.Engineering(new SubjectId(readString(input)), input.readInt());
             case 3 -> new SceneCauseKind.Medical(new SubjectId(readString(input)));
             case 4 -> new SceneCauseKind.ResourceSiteHarvest(new SubjectId(readString(input)));
+            case 5 -> new SceneCauseKind.ProductionWork(new SubjectId(readString(input)));
             default -> throw new IllegalArgumentException("unknown scene cause kind");
         };
     }
     private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering, SceneCauseKind.Medical,
-            SceneCauseKind.ResourceSiteHarvest {
+            SceneCauseKind.ResourceSiteHarvest, SceneCauseKind.ProductionWork {
         SceneCauseKind LOGISTICS = new Logistics();
         SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
         final class Logistics implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
-                return new LogisticsSceneCause(operation, cargo, engagement, cargoPosition);
-            }
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new LogisticsSceneCause(operation, cargo, engagement, cargoPosition); }
         }
         record Assault(SubjectId assaultId, SubjectId settlementId) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
-                return new SettlementAssaultSceneCause(assaultId, settlementId);
-            }
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new SettlementAssaultSceneCause(assaultId, settlementId); }
         }
         record Engineering(SubjectId projectId, int workCellIndex) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
-                return new EngineeringWorkSceneCause(projectId, workCellIndex);
-            }
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new EngineeringWorkSceneCause(projectId, workCellIndex); }
         }
         record Medical(SubjectId operationId) implements SceneCauseKind {
             @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
@@ -769,6 +766,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
                 return new ResourceSiteHarvestSceneCause(jobId);
             }
+        }
+        record ProductionWork(SubjectId jobId) implements SceneCauseKind {
+            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new ProductionWorkSceneCause(jobId); }
         }
     }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {

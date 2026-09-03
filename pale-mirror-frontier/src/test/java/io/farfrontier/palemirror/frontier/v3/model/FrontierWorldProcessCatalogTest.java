@@ -59,6 +59,40 @@ class FrontierWorldProcessCatalogTest {
     }
 
     @Test
+    void productionWorkPayloadsHaveTheCompleteEconomyContractBeforeAnExecutorCanSubmitThem() {
+        DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        var economy = FrontierWorldProcessCatalog.descriptors().stream()
+                .filter(descriptor -> descriptor.id().equals("economy"))
+                .findFirst().orElseThrow();
+        for (String type : List.of(
+                "frontier.production_work_progressed",
+                "frontier.production_work_traversal_advanced",
+                "frontier.production_work_scene_lease_prepared",
+                "frontier.production_work_scene_lease_handoff",
+                "frontier.production_work_scene_preparation_aborted",
+                "frontier.production_work_scene_finalized")) {
+            // Finalization and a pre-HOT abort are canonical consequences of an already
+            // observed worker/input transition. They are not executor commands: registering
+            // either as one would create a second mutable authority for the same scene.
+            if (!type.equals("frontier.production_work_scene_finalized")
+                    && !type.equals("frontier.production_work_scene_preparation_aborted")) {
+                assertEquals("economy", registry.requireCommandOwner(type), type + " command owner");
+            }
+            assertEquals("economy", registry.requireReducedEventOwner(type), type + " reducer owner");
+            assertTrue(economy.codecTypes().contains(type), type + " codec");
+            assertTrue(economy.emittedPayloadTypes().contains(type), type + " emitted payload");
+        }
+    }
+
+    @Test
+    void sharedSceneReleaseMayEmitTheTypedProductionFinalizationItPhysicallyConfirms() {
+        var releaseExecutor = FrontierWorldProcessCatalog.descriptors().stream()
+                .filter(descriptor -> descriptor.id().equals("logistics-scenes"))
+                .findFirst().orElseThrow();
+        assertTrue(releaseExecutor.emittedPayloadTypes().contains("frontier.production_work_scene_finalized"));
+    }
+
+    @Test
     void noDomainDescriptorMayFallBackToTheGlobalWorldPayloadSet() {
         java.util.Set<String> worldPayloads = FrontierWorldProcessCatalog.allWorldPayloadTypes();
         for (var descriptor : FrontierWorldProcessCatalog.descriptors()) {

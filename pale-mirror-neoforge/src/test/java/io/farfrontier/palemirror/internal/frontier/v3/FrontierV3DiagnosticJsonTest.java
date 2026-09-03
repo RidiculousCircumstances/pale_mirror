@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -15,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStateSupport;
@@ -23,6 +25,9 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
@@ -37,8 +42,28 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void derivesTypedProductionWorkTraceInsteadOfFallingBackToLogistics() {
+        SubjectId worker = new SubjectId("resident:1-15");
+        SubjectId job = new SubjectId("job:production-development-input-theft");
+        WorldId world = new WorldId("frontier:production-trace-test");
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:production-work-development-input-theft-r1"), world,
+                new ProductionWorkSceneCause(job), new BlockPosition(-340, 64, -329), new SimInstant(1L), 1L,
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))),
+                java.util.Map.of(worker, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(-340, 65, -329)), java.util.Set.of(), Optional.empty());
+
+        FrontierV3DiagnosticTrace.SceneTrace trace = FrontierV3DiagnosticTrace.sceneTrace(lease);
+
+        assertEquals("production-work:" + job.value(), trace.correlation());
+        assertEquals(job, trace.subject());
+        assertEquals(lease.id().value(), trace.context().leaseId());
+        assertTrue(trace.context().operationId().isEmpty() && trace.context().cargoId().isEmpty());
+        assertEquals(List.of(worker.value()), trace.context().actorIds());
+    }
+
     @Test
     void rendersBoundedReadOnlyPerformanceAttribution() {
         FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
@@ -104,7 +129,7 @@ class FrontierV3DiagnosticJsonTest {
                 "one named settlement view exposes bounded individual nutrition totals without a separate aggregate owner");
         assertTrue(hiveJson.contains("\"infectionCells\":18") && hiveJson.contains("\"addedOrgans\":0"),
                 "one named hive diagnostic exposes bounded canonical expansion state without materializing it");
-        assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),
+        assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"position\":{") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),
                 "one diagnostic must expose only the exact occupied slot projection of one named container");
         assertTrue(missing.contains("\"status\":\"not_found\""));
         assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192);
@@ -156,7 +181,7 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
-        var evidence = new FrontierV3AmbientActorExecutor.AdmissionDiagnostic("BLOCKED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee1"), false,
+        var evidence = new FrontierV3AmbientAdmissionDiagnostic("BLOCKED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee1"), false,
                 new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8), null, null);
 
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
@@ -164,6 +189,43 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"BLOCKED\""));
         assertTrue(actorJson.contains("\"placement\":{\"x\":4,\"y\":65,\"z\":8}"));
         assertTrue(actorJson.contains("\"observedExact\":null"));
+    }
+
+    @Test
+    void rendersSceneOwnedBodyEvidenceAsASeparateAdmissionState(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-scene-owner-test"), 93L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
+        var evidence = new FrontierV3AmbientAdmissionDiagnostic("SCENE_OWNED", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee2"), false,
+                null, new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(4, 65, 8),
+                new FrontierV3AmbientActorExecutor.ObservedPosition(4.5D, 65.0D, 8.5D));
+
+        String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
+
+        assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"SCENE_OWNED\""));
+        assertTrue(actorJson.contains("\"observedPosition\":{\"x\":4,\"y\":65,\"z\":8}"));
+        runtime.shutdown();
+    }
+
+    @Test
+    void rendersTerminalActorEvidenceWithoutCallingItsResidualDeathBodyAUuidConflict(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-terminal-owner-test"), 93L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId actor = state.actorLocations().keySet().stream().sorted().findFirst().orElseThrow();
+        var evidence = new FrontierV3AmbientAdmissionDiagnostic("TERMINAL", UUID.fromString("6e6a062d-a182-469c-9de8-2de3f3703ee3"), false,
+                null, null, null);
+
+        String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty(), Optional.of(evidence));
+
+        assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"TERMINAL\""));
+        assertFalse(actorJson.contains("UUID_CONFLICT"));
+        runtime.shutdown();
     }
 
     @Test
@@ -430,6 +492,32 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"ENGINEERING_WORKSITE\""));
         assertTrue(scene.contains("\"project\":\"" + project.id().value() + "\"")
                 && scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"\""));
+        runtime.shutdown();
+    }
+
+    @Test
+    void exposesOneTypedProductionWorkSceneWithoutCallingItMedical(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.productionInputTheftConfiguration(new WorldId("frontier:diagnostic-production-scene-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.nextCandidate(state).orElseThrow();
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-production-r0");
+        var members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(actor,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), leaseId, actor))).toList();
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(leaseId, checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(candidate.jobId()), candidate.handoffPosition(), checkpoint.instant(),
+                checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED, members,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+
+        String scene = FrontierV3DiagnosticJson.render("scene", candidate.jobId().value(), checkpoint, hot, Optional.empty());
+
+        assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"PRODUCTION_WORK\""));
+        assertTrue(scene.contains("\"productionJob\":\"" + candidate.jobId().value() + "\"")
+                        && scene.contains("\"medical\":\"\""),
+                "a named workshop job must retain its own public scene identity rather than inherit an unrelated scene family");
         runtime.shutdown();
     }
 

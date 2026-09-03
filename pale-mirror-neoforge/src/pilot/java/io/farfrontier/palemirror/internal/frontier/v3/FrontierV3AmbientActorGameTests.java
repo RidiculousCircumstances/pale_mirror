@@ -143,7 +143,7 @@ public final class FrontierV3AmbientActorGameTests {
         joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, joining), FrontierV3AmbientActorExecutor.JoinDisposition.RETAINED,
                 "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
-        FrontierV3AmbientActorExecutor.AdmissionDiagnostic diagnostic = FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident);
+        FrontierV3AmbientAdmissionDiagnostic diagnostic = FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident);
         helper.assertValueEqual(diagnostic.status(), "PENDING_UNINDEXED",
                 "the diagnostic must expose the pre-index bridge instead of claiming the actor is ready");
         helper.assertTrue(diagnostic.pending(), "the exact body must retain the bounded pending identity bridge");

@@ -40,6 +40,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessTest {
     @Test
+    void workProgressSurvivesSnapshotAndStartedPayloadWithoutUsingEnumOrder() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ProductionJob working = prepared.job().withWorkProgress(ProductionWorkProgress.processing(37));
+        FrontierWorldState workingState = prepared.state().withChanges(FrontierWorldStateUpdate.begin()
+                .productionJobs(java.util.Map.of(working.id(), working)));
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(workingState));
+        assertEquals(ProductionWorkProgress.processing(37), restored.productionJobs().get(working.id()).workProgress());
+        assertEquals(working.workTraversal(), restored.productionJobs().get(working.id()).workTraversal());
+        assertEquals(working.traversalCursor(), restored.productionJobs().get(working.id()).traversalCursor());
+
+        ProductionStarted started = new ProductionStarted(working, working.consumedItemId());
+        ProductionStarted decoded = (ProductionStarted) FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(started));
+        assertEquals(ProductionWorkProgress.processing(37), decoded.job().workProgress());
+    }
+
+    @Test
     void coldProductionStillAdvancesWithoutMaterializingAnUnloadedContainer() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
@@ -60,6 +77,96 @@ class ProductionProcessTest {
     }
 
     @Test
+    void materializedTransformationCannotBePreparedBeforeTheExactWorkerFinishesItsRetainedCycle() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        PhysicalIntent early = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-too-early"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, prepared.job().id(), List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+        assertThrows(IllegalArgumentException.class, () -> prepared.state().preparePhysicalIntent(early));
+    }
+
+    @Test
+    void blockedWorkshopWorkRetiresOnlyAfterTheExactWorkerSceneCloses() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SubjectId settlementId = prepared.settlementId(), workshopId = prepared.job().facilityId();
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(settlementId))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(workshopId)).findFirst().orElseThrow();
+        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        prepared = new MaterializedProduction(prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob))),
+                workJob, prepared.order(), prepared.settlementId(), prepared.taskId());
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-finalize-test");
+        SceneLease lease = SceneLease.forCause(leaseId, prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(prepared.job().id()),
+                worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(prepared.job().workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), prepared.job().workerId()))),
+                java.util.Map.of(prepared.job().workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = prepared.state().prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        int nextCursor = 1;
+        BodyPosition nextStation = workJob.workTraversal().linearCorridorSurfaces().get(nextCursor).standingBody();
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(hot, settlementId,
+                new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, worker.body(), nextCursor)));
+        FrontierWorldState advanced = ProductionProcess.reduceWorkTraversalAdvanced(hot, prepared.settlementId(),
+                new ProductionWorkTraversalAdvanced(workJob.id(), leaseId, nextStation, nextCursor));
+        assertEquals(nextCursor, advanced.productionJobs().get(workJob.id()).traversalCursor());
+        FrontierWorldState blocked = hot.withStrategicPlans(hot.strategicPlans().transitionTask(prepared.taskId(), StrategicTaskStatus.BLOCKED))
+                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        FrontierWorldState closed = blocked.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(prepared.job().workerId(), worker.body(), worker.condition().health())));
+        assertTrue(closed.productionJobs().containsKey(prepared.job().id()), "closed lease remains the durable hand-off before job retirement");
+        FrontierWorldState finalized = ProductionProcess.reduceWorkSceneFinalized(closed, prepared.settlementId(), new ProductionWorkSceneFinalized(leaseId, prepared.job().id()));
+        assertFalse(finalized.productionJobs().containsKey(prepared.job().id()));
+        assertEquals(MarketWorkOrderStatus.CANCELLED, finalized.companies().market().workOrders().get(prepared.order().id()).status());
+        assertFalse(finalized.inventory().economics().reservations().containsKey(prepared.order().reservationId()));
+    }
+
+    @Test
+    void conflictedProductionWorkLeaseKeepsItsExactWorkerReservedUntilExplicitRecovery() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
+                .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob workJob = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-conflict-reservation");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
+                worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), workJob.workerId()))),
+                java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState conflicted = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+
+        assertTrue(FrontierProductionWorkSceneSupport.nextCandidate(conflicted).isEmpty(),
+                "a visible conflict retains the same exact worker instead of admitting a second scene lease");
+    }
+
+    @Test
+    void ambientHandoffRebasesOnlyAnUnstartedWorkshopTraversalToTheObservedWorkerBody() {
+        FrontierWorldState state = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(
+                new WorldId("frontier:production-observed-handoff"), 41L).state();
+        ProductionJob job = state.productionJobs().get(new SubjectId("job:production-development-input-theft"));
+        SurfaceAnchor observedSurface = job.workTraversal().linearCorridorSurfaces().get(1);
+        BodyPosition observedBody = observedSurface.standingBody();
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-handoff");
+        SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
+                observedSurface.support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))),
+                java.util.Map.of(job.workerId(), observedBody), java.util.Set.of(job.workerId()), Optional.empty());
+        ProductionWorkSceneLeaseHandoff handoff = new ProductionWorkSceneLeaseHandoff(lease,
+                List.of(new SceneMemberPosition(job.workerId(), observedBody, state.actorLocations().get(job.workerId()).condition().health())));
+
+        FrontierWorldState rebased = ProductionProcess.rebaseForAmbientHandoff(state, job.settlementId(), handoff);
+        ProductionJob accepted = rebased.productionJobs().get(job.id());
+        assertEquals(observedSurface, accepted.workTraversal().linearCorridorSurfaces().getFirst());
+        assertEquals(0, accepted.traversalCursor());
+        assertEquals(accepted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(rebased)).productionJobs().get(job.id()),
+                "restart retains the observed worker as the origin of its unstarted HOT route");
+
+        ProductionJob advanced = accepted.withWorkTraversal(accepted.workTraversal(), 1);
+        FrontierWorldState afterProgress = rebased.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(advanced.id(), advanced)));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.rebaseForAmbientHandoff(afterProgress, job.settlementId(), handoff),
+                "a later hand-off may not erase retained workshop progress");
+    }
+
+    @Test
     void activeMaterializedProductionRetainsInputUntilOneDurablePhysicalTransformationConfirmsOutput() {
         PreparedProduction prepared = activePhysicalProduction();
         ExactItemStack input = prepared.state().inventory().items().get(prepared.job().consumedItemId());
@@ -76,6 +183,23 @@ class ProductionProcessTest {
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(CompanyFoundationProcess.companyId(prepared.job().settlementId())).balance());
         assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().values().stream()
                 .filter(order -> order.jobId().equals(prepared.job().id())).findFirst().orElseThrow().status());
+    }
+
+    @Test
+    void productionStartRetainsTheExactCrafterToWorkshopPortTopology() {
+        FrontierWorldState state = productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-route"), 91L)),
+                StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionJob job = ProductionProcess.planStart(state, ProductionProcess.start(task, 100L)).stream().map(ProposedEvent::payload)
+                .filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow().job();
+        SettlementStructure workshop = state.bootstrap().settlements().stream().filter(settlement -> settlement.id().equals(job.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(structure -> structure.id().equals(job.facilityId())).findFirst().orElseThrow();
+        SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(workshop);
+        java.util.List<SurfaceAnchor> corridor = job.workTraversal().linearCorridorSurfaces();
+        assertEquals(state.actorLocations().get(job.workerId()).supportingSurface(), corridor.getFirst());
+        assertEquals(port.inputStation(), corridor.get(corridor.size() - 2));
+        assertEquals(port.workStation(), corridor.getLast());
+        assertEquals(0, job.traversalCursor());
     }
 
     @Test
@@ -172,14 +296,17 @@ class ProductionProcessTest {
     void workerDeathDisposableFixtureKeepsTheExactCrafterAsTheOnlyNearbyAmbientActor() {
         FrontierWorldState state = FrontierV3FixtureCatalog.productionWorkerDeathConfiguration(
                 new WorldId("frontier:production-worker-death-fixture"), 41L).initialState();
-        SubjectId worker = state.productionJobs().get(new SubjectId("job:development-production-input-theft")).workerId();
-        BlockPosition target = new BlockPosition(-480, 64, -480);
+        ProductionJob job = state.productionJobs().get(new SubjectId("job:production-development-input-theft"));
+        SubjectId worker = job.workerId();
+        SettlementStructure workshop = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId()).structures().stream()
+                .filter(structure -> structure.id().equals(job.facilityId())).findFirst().orElseThrow();
+        BlockPosition target = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach().support();
 
         assertEquals(new SubjectId("resident:1-15"), worker);
         assertEquals(target, FrontierTestPositions.supportOf(state.actorLocations().get(worker)));
         assertTrue(state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(worker))
                 .noneMatch(entry -> Math.max(Math.abs(FrontierTestPositions.supportOf(entry.getValue()).x() - target.x()),
-                        Math.abs(FrontierTestPositions.supportOf(entry.getValue()).z() - target.z())) <= 96));
+                        Math.abs(FrontierTestPositions.supportOf(entry.getValue()).z() - target.z())) <= 8));
     }
 
     @Test
@@ -288,6 +415,78 @@ class ProductionProcessTest {
         assertTrue(cancelled.inventory().economics().reservations().isEmpty());
         assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
         assertEquals(StrategicTaskStatus.BLOCKED, cancelled.strategicPlans().tasks().get(prepared.taskId()).status());
+    }
+
+    @Test
+    void playerTakingMaterializedInputDrainsTheExactHotWorkerBeforeRetiringTheMarketWork() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-player-input-hot");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
+                new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        WorldId world = new WorldId("frontier:production-hot-player-input");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        ExactItemStack input = hot.inventory().items().get(job.consumedItemId());
+        InventoryCustody.Player player = new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000066"));
+        var checkpoint = engine.checkpoint();
+        CommandResult result = engine.submit(new FrontierCommand(1, new CommandId("command:production-player-takes-hot-input"), world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(new CommandId("command:production-player-takes-hot-input")),
+                new ExactItemCustodyChanged(input.id(), input.custody(), player)));
+
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        FrontierWorldState draining = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(draining.productionJobs().containsKey(job.id()), "the exact worker job remains until its body has released");
+        assertEquals(player, draining.inventory().items().get(input.id()).custody());
+        assertEquals(SceneLeaseStatus.DRAINING, draining.sceneLeases().get(leaseId).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, draining.strategicPlans().tasks().get(prepared.taskId()).status());
+        assertEquals(MarketWorkOrderStatus.ACCEPTED, draining.companies().market().workOrders().get(prepared.order().id()).status());
+
+        FrontierWorldState closed = draining.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), worker.body(), worker.condition().health())));
+        FrontierWorldState cancelled = ProductionProcess.reduceWorkSceneFinalized(closed, prepared.settlementId(), new ProductionWorkSceneFinalized(leaseId, job.id()));
+        assertFalse(cancelled.productionJobs().containsKey(job.id()));
+        assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
+        assertTrue(cancelled.inventory().economics().reservations().isEmpty());
+    }
+
+    @Test
+    void playerTakingMaterializedInputAbortsPreparedWorkerSceneWithoutInventingABodyRelease() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-player-input-prepared");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
+                new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState scenePrepared = withWork.prepareSceneLease(lease);
+        WorldId world = new WorldId("frontier:production-prepared-player-input");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, scenePrepared, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        ExactItemStack input = scenePrepared.inventory().items().get(job.consumedItemId());
+        InventoryCustody.Player player = new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000067"));
+        var checkpoint = engine.checkpoint();
+        CommandResult result = engine.submit(new FrontierCommand(1, new CommandId("command:production-player-takes-prepared-input"), world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(new CommandId("command:production-player-takes-prepared-input")),
+                new ExactItemCustodyChanged(input.id(), input.custody(), player)));
+
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        FrontierWorldState cancelled = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertFalse(cancelled.productionJobs().containsKey(job.id()));
+        assertEquals(SceneLeaseStatus.CLOSED, cancelled.sceneLeases().get(leaseId).status());
+        assertEquals(player, cancelled.inventory().items().get(input.id()).custody());
+        assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
+        assertTrue(cancelled.inventory().economics().reservations().isEmpty());
     }
 
     @Test
@@ -497,6 +696,9 @@ class ProductionProcessTest {
 
     private static PreparedProduction activePhysicalProduction() {
         MaterializedProduction materialized = activeMaterializedProduction();
+        ProductionJob ready = materialized.job().withWorkProgress(ProductionWorkProgress.outputReady());
+        materialized = new MaterializedProduction(materialized.state().withChanges(FrontierWorldStateUpdate.begin()
+                .productionJobs(java.util.Map.of(ready.id(), ready))), ready, materialized.order(), materialized.settlementId(), materialized.taskId());
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-1-physical"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, materialized.job().id(), List.of(materialized.job().id(), materialized.job().consumedItemId(), materialized.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);

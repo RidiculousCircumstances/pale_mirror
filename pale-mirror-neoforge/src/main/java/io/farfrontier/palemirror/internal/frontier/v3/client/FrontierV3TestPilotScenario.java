@@ -75,7 +75,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
-                    (type.equals("open_container") && (!position(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("place") && (!position(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
@@ -247,19 +247,21 @@ final class FrontierV3TestPilotScenario {
     }
 
     /**
-     * Dynamic coordinates are intentionally limited to the explicit first-crop
-     * anchor published by one named site diagnostic. They are usable only by
-     * read-only visual/wait actions, never by pilot mutation actions.
+     * Dynamic coordinates are intentionally limited to exact immutable plan
+     * anchors published by their named diagnostics. Opening that exact named
+     * container remains an ordinary player interaction; all mutation still
+     * occurs through normal inventory packets after the client has opened it.
      */
     private static boolean resolvablePosition(JsonObject action, String field) {
         JsonObject value = action.getAsJsonObject(field);
         if (value == null) return false;
         if (whole(value, "x") && whole(value, "y") && whole(value, "z")) return true;
         JsonObject reference = value.getAsJsonObject("diagnostic");
-        return reference != null && reference.entrySet().size() == 3
-                && reference.has("view") && reference.get("view").isJsonPrimitive() && reference.get("view").getAsString().equals("site")
-                && reference.has("id") && reference.get("id").isJsonPrimitive() && requiredId(reference, "id", "site:")
-                && reference.has("field") && reference.get("field").isJsonPrimitive() && reference.get("field").getAsString().equals("firstCrop");
+        if (reference == null || reference.entrySet().size() != 3 || !reference.has("view") || !reference.has("id") || !reference.has("field")
+                || !reference.get("view").isJsonPrimitive() || !reference.get("id").isJsonPrimitive() || !reference.get("field").isJsonPrimitive()) return false;
+        String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
+        return (view.equals("site") && requiredId(reference, "id", "site:") && diagnosticField.equals("firstCrop"))
+                || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"));
     }
 
     private static boolean offset(JsonObject action) {

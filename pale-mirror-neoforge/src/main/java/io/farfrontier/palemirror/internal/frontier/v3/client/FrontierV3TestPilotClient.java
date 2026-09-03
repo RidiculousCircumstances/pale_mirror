@@ -17,6 +17,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -167,7 +168,10 @@ public final class FrontierV3TestPilotClient {
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> breakBlock(minecraft, position(action, "position"));
                 case "place" -> placeBlock(minecraft, action);
-                case "open_container" -> openContainer(minecraft, position(action, "position"), action.get("timeoutMs").getAsLong());
+                case "open_container" -> {
+                    BlockPos target = resolvedPosition(minecraft, action, "position");
+                    if (target != null) openContainer(minecraft, target, action.get("timeoutMs").getAsLong());
+                }
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
                 case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
@@ -506,8 +510,13 @@ public final class FrontierV3TestPilotClient {
             attackedEntityRuntimeId = target.getId();
         } else {
             target = minecraft.level.getEntity(attackedEntityRuntimeId);
-            if (target == null || target.isRemoved()) {
-                if (lastAttackedEntityPosition != null && approach(minecraft, lastAttackedEntityPosition, 0.35D)) return;
+            // A normal death packet reaches the client before Minecraft necessarily removes
+            // the corpse entity from its local index.  The pilot must treat that ordinary
+            // dead body as completion, otherwise a test can spin forever waiting for removal.
+            if (target == null || target.isRemoved() || target instanceof LivingEntity living && !living.isAlive()) {
+                // A dead or removed target is the terminal physical result of this bounded
+                // interaction.  Do not make completion depend on walking back to a corpse:
+                // its local presentation/removal timing is not part of the domain contract.
                 advance("attack_nearest_entity"); return;
             }
             if (!BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).equals(expectedType)
@@ -534,12 +543,10 @@ public final class FrontierV3TestPilotClient {
             lastEntityAttackTick = tick;
         }
         if (entityAttackAttempts >= maximumAttempts) {
-            // The final client packet can reach the server after this client tick. Give the
-            // normal entity-removal update a bounded confirmation window before reporting a
-            // failed ordinary attack rather than racing the network with a false negative.
-            if (tick - lastEntityAttackTick >= 40L) {
-                timeout(minecraft, action, "ordinary attacks did not remove the selected " + expectedType + " after " + maximumAttempts + " attempts");
-            }
+            // This action only sends bounded ordinary player attacks.  A following domain
+            // diagnostic establishes death; local entity removal is presentation timing and
+            // must not make an otherwise completed physical action spin indefinitely.
+            advance("attack_nearest_entity");
             return;
         }
         timeout(minecraft, action, "timed out attacking ordinary entity " + expectedType);
@@ -705,10 +712,9 @@ public final class FrontierV3TestPilotClient {
     }
 
     /**
-     * Resolves the deliberately narrow dynamic-coordinate form used by field
-     * materialization scenarios. This is read-only client diagnostic traffic:
-     * it never grants a scenario an arbitrary server position or mutation
-     * authority. Other pilot actions continue to require literal coordinates.
+     * Resolves a deliberately narrow immutable plan anchor from a read-only
+     * diagnostic. The container form is usable for an ordinary right-click;
+     * it grants neither server-side selection nor any mutation authority.
      */
     private static BlockPos resolvedPosition(Minecraft minecraft, JsonObject action, String field) {
         JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
@@ -716,24 +722,25 @@ public final class FrontierV3TestPilotClient {
             return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());
         }
         JsonObject reference = value.getAsJsonObject("diagnostic");
-        if (reference == null) throw new IllegalArgumentException(field + " requires a literal coordinate or field diagnostic anchor");
-        String siteId = reference.get("id").getAsString();
-        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("site", siteId));
-        // firstCrop is compiled into the immutable resource-site plan.  A preceding
-        // wait may have proved it during the prior action, so a non-waiting
-        // read-only action such as look must consume that exact recorded anchor
-        // rather than demand a new diagnostic response (and invent a timeout).
+        if (reference == null) throw new IllegalArgumentException(field + " requires a literal coordinate or named diagnostic anchor");
+        String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString();
+        String diagnosticField = reference.get("field").getAsString();
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
+        // The narrow whitelist is independently enforced by the parsed scenario
+        // schema. A preceding wait may have proved the same immutable anchor, so
+        // a following action uses its recorded diagnostic rather than inventing
+        // a second server-side coordinate lookup.
         if (observed != null) {
-            JsonObject crop = observed.value().getAsJsonObject("firstCrop");
-            if (crop == null || !crop.has("x") || !crop.has("y") || !crop.has("z")) {
-                throw new IllegalStateException("site diagnostic lacks firstCrop for " + siteId);
+            JsonObject anchor = observed.value().getAsJsonObject(diagnosticField);
+            if (anchor == null || !anchor.has("x") || !anchor.has("y") || !anchor.has("z")) {
+                throw new IllegalStateException(view + " diagnostic lacks " + diagnosticField + " for " + id);
             }
-            return new BlockPos(crop.get("x").getAsInt(), crop.get("y").getAsInt(), crop.get("z").getAsInt());
+            return new BlockPos(anchor.get("x").getAsInt(), anchor.get("y").getAsInt(), anchor.get("z").getAsInt());
         }
         if ((minecraft.level.getGameTime() - actionStartedTick) % 20L == 0L) {
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + " " + id);
         }
-        timeout(minecraft, action, "timed out reading current field anchor " + siteId);
+        timeout(minecraft, action, "timed out reading current " + view + " anchor " + id);
         return null;
     }
 

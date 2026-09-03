@@ -144,13 +144,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
-    void permitsOnlyTheReadOnlyFirstCropAnchorForFieldPresentationEvidence() {
+    void permitsOnlyNamedImmutableDiagnosticAnchorsForPresentationAndContainerOpening() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[
                 {"type":"wait_until_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"block":"minecraft:wheat","timeoutMs":10000},
                 {"type":"look","at":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}},
-                {"type":"assert_visible_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"timeoutMs":10000}]}""");
-        assertEquals(3, parsed.actionCount());
+                {"type":"assert_visible_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"timeoutMs":10000},
+                {"type":"open_container","position":{"diagnostic":{"view":"container","id":"container:1-depot","field":"position"}},"timeoutMs":10000}]}""");
+        assertEquals(4, parsed.actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}"""));
     }
@@ -216,6 +217,8 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[{"type":"quick_move_from_inventory","item":"minecraft:glowstone_dust","count":65,"timeoutMs":10000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"quick_move_from_container","item":"minecraft:wheat","count":0,"timeoutMs":10000}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"open_container","position":{"diagnostic":{"view":"container","id":"container:1-depot","field":"slots"}},"timeoutMs":10000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_container_item","containerId":"depot:4","item":"minecraft:glowstone_dust","count":1,"timeoutMs":30000}]}"""));
     }

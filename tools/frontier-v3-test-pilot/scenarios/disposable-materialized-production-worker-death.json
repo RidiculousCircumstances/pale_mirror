@@ -7,14 +7,14 @@
   "setup": [
     { "type": "command", "command": "/clear PMTestPilot" },
     { "type": "command", "command": "/item replace entity PMTestPilot weapon.mainhand with minecraft:diamond_sword" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -480, "y": 65, "z": -480 }, "settleMs": 1000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 },
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "CRAFTER" } },
       { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
     ] }
   ],
   "actions": [
-    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 60000 },
     { "type": "attack_nearest_entity", "entityType": "minecraft:villager", "maxDistance": 8, "maxAttacks": 20, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "DEAD" }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 },
@@ -24,7 +24,7 @@
     "mode": "graceful",
     "afterAction": 4,
     "resumeSetup": [
-      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -480, "y": 65, "z": -480 }, "settleMs": 1000 }
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 }
     ]
   },
   "assertions": [

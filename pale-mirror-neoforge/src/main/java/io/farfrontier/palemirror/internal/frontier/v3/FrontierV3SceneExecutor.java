@@ -377,7 +377,14 @@ final class FrontierV3SceneExecutor {
                     continue;
                 }
                 if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
-                body.getNavigation().stop(); body.setNoAi(true); body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform(state, member.actorId()))); body.setCustomNameVisible(true);
+                // An ambient body can have one already-due controlled-motion intent when the
+                // durable hand-off closes its ambient lease.  Navigation.stop()/NoAI alone do
+                // not clear that executor-local intent; leaving it would move the exact body
+                // along its former ambient goal after the scene adopts it and violate the
+                // retained scene cursor.  The scene owns the same body now, so cancel only
+                // that uncommitted actuator intent, never rewrite its canonical position.
+                FrontierV3ControlledMobMotion.stop(body);
+                body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform(state, member.actorId()))); body.setCustomNameVisible(true);
                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                         FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
                 mark(body, lease, member);

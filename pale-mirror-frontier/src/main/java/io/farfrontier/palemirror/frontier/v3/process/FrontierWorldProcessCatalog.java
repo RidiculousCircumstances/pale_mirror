@@ -62,7 +62,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
             "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
-            "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.production_interrupted");
+            "frontier.production_started", "frontier.production_completed", "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+            "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
+            "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
             "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started",
             "frontier.resource_site_prepared", "frontier.resource_site_harvest_started",
@@ -180,7 +182,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
                 descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emissions("logistics-scenes"), LOGISTICS),
                 descriptor("population", populationCommands(), populationSchedules(), POPULATION, emissions("population"), POPULATION),
-                descriptor("economy", Set.of(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
+                descriptor("economy", economyCommands(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
                 descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),
                 descriptor("infrastructure", infrastructureCommands(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
@@ -267,6 +269,9 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> populationCommands() { return types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
+    private static Set<String> economyCommands() { return types(
+            "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+            "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return types(
             "frontier.resource_site_conflict_observed",
             "frontier.resource_site_harvest_crop_prepared",
@@ -339,7 +344,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.employment_contract_terminated", "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
                     "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started",
                     "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
-                    "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+                    "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.scene_lease_transition",
+                    "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized");
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
@@ -354,6 +360,10 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
                     "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
                     "frontier.settlement_assault_scene_lease_handoff", "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff",
+                    // The shared release executor owns the physical confirmation of every typed
+                    // scene.  A blocked production scene therefore finalizes through this
+                    // logistics-owned release command, while Economy remains the only reducer.
+                    "frontier.production_work_scene_finalized",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
                     "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed", "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed",
@@ -384,7 +394,10 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
-                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked", "frontier.production_interrupted",
+                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed",
+                    "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+                    "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
+                    "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",

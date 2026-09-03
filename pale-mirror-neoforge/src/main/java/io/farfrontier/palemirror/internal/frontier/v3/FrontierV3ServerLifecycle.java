@@ -113,7 +113,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3PhysicalWorld.require(server), id);
         if ("hive_mobilization".equals(view)) return FrontierV3HiveMobilizationDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);
-        java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
+        java.util.Optional<FrontierV3AmbientAdmissionDiagnostic> admission = java.util.Optional.empty();
         if ("actor".equals(view)) {
             try {
                 admission = java.util.Optional.of(FrontierV3AmbientActorExecutor.admissionDiagnostic(

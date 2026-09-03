@@ -17,6 +17,7 @@ class SettlementLocalCirculationTest {
             SettlementStructure hall = settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst().orElseThrow();
             SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
             SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+            SettlementStructure workshop = settlement.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
             List<SurfaceAnchor> sidewalk = SettlementLocalCirculation.infirmarySidewalk(settlement);
             TraversalTopology topology = SettlementLocalCirculation.topology(settlement);
 
@@ -24,6 +25,8 @@ class SettlementLocalCirculationTest {
             assertEquals(SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).exteriorApproachSurface(), sidewalk.getLast());
             assertTrue(topology.nodes().containsValue(SettlementDepotServicePort.forDepot(depot).exteriorApproach()),
                     "the depot service approach must join the declared public circulation");
+            assertTrue(topology.nodes().containsValue(SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach()),
+                    "the workshop work approach must join the declared public circulation");
             assertTrue(topology.edges().stream().allMatch(edge -> edge.grade() <= 1 && edge.clearance() >= 2
                     && edge.traversableBy(TraversalCapability.PEDESTRIAN)));
             assertTrue(topology.edges().stream().allMatch(edge -> edge.grade() == 0),

@@ -147,13 +147,17 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }
         if (job.hasNextTraversalStep()) {
-            if (!atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-                // A body outside its retained cursor has no authority to "catch up" through
-                // an inferred direct line.  The visible conflict is the correct response to a
-                // player obstruction, displacement or a broken semantic edge.
-                conflict(level, runtime, lease, "field-work-cursor-body-mismatch"); return;
-            }
             var target = job.nextTraversalSurface();
+            if (!atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
+                // The physical edge can arrive one entity tick before the canonical command
+                // records its cursor.  Accept only that exact next node; a different body
+                // position remains a player/world conflict and is never direct-line repaired.
+                if (atTraversalSurface(worker, target)) {
+                    submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
+                            new ResourceSiteHarvestTraversalAdvanced(job.id(), job.traversalCursor() + 1));
+                } else conflict(level, runtime, lease, "field-work-cursor-body-mismatch");
+                return;
+            }
             if (atTraversalSurface(worker, target)) {
                 submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
                         new ResourceSiteHarvestTraversalAdvanced(job.id(), job.traversalCursor() + 1));

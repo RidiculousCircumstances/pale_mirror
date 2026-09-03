@@ -132,7 +132,7 @@ class FrontierReadabilityPlanTest {
                 new WorldId("frontier:board-market-work"), 94L);
         FrontierWorldState state = fixture.state();
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        SubjectId workshop = state.productionJobs().get(new SubjectId("job:development-production-input-theft")).facilityId();
+        SubjectId workshop = state.productionJobs().get(new SubjectId("job:production-development-input-theft")).facilityId();
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(workshop);
 
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, board.tone());

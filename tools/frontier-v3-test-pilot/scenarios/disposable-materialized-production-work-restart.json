@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "disposable_materialized_production_work_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-work" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "actor", "id": "resident:1-15", "expect": { "status": "ok", "life": "ALIVE", "role": "CRAFTER" } },
+      { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 60000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "INDUSTRIAL WORKER", "maxDistance": 32, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "INDUSTRIAL WORKER", "maxDistance": 32, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "FULFILLED", "jobActive": false, "reservationActive": false, "taskStatus": "COMPLETED" }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } }, "timeoutMs": 30000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 65, "z": -326 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 1, "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" } },
+    { "after": 4, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "FULFILLED", "jobActive": false, "reservationActive": false, "taskStatus": "COMPLETED" } },
+    { "after": 5, "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } } }
+  ],
+  "frames": [
+    { "after": 3, "name": "industrial-worker-visible" }
+  ]
+}

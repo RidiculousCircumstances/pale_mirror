@@ -158,7 +158,10 @@ final class FrontierV3AmbientActorExecutor {
             }
             var lease = state.ambientLeases().get(actorId);
             boolean successorSceneOwnsActor = state.sceneLeases().values().stream()
-                    .filter(scene -> scene.status() != SceneLeaseStatus.CLOSED && scene.status() != SceneLeaseStatus.CONFLICT)
+                    // A conflicted scene remains the exact physical claimant until its owner
+                    // records recovery.  Releasing its former ambient body here would permit a
+                    // second lease/body to appear after a visible conflict.
+                    .filter(scene -> scene.status() != SceneLeaseStatus.CLOSED)
                     .anyMatch(scene -> scene.members().stream().anyMatch(member -> member.actorId().equals(actorId)));
             if (lease != null && lease.status() == AmbientLeaseStatus.CLOSED && !successorSceneOwnsActor) {
                 Entity stale = level.getEntity(entityId(state, actorId));
@@ -385,29 +388,40 @@ final class FrontierV3AmbientActorExecutor {
      * unloaded/blocked deferral from a UUID ownership conflict while investigating a visible
      * PREPARED lease.
      */
-    static AdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                    FrontierWorldState state, SubjectId actorId) {
+    static FrontierV3AmbientAdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                     FrontierWorldState state, SubjectId actorId) {
         var location = state.actorLocations().get(actorId);
-        if (location == null) return AdmissionDiagnostic.notCanonical();
+        if (location == null) return FrontierV3AmbientAdmissionDiagnostic.notCanonical();
         UUID expectedId = entityId(state, actorId);
+        // A dead canonical actor can still have a short-lived Minecraft death animation or
+        // removal callback carrying its historical UUID. That is terminal physical evidence,
+        // not an attempted ambient admission and never a foreign-body conflict.
+        if (location.condition().status() != ActorLifeStatus.ALIVE) return FrontierV3AmbientAdmissionDiagnostic.terminal(expectedId);
         Entity existing = level.getEntity(expectedId);
         if (existing != null) {
-            return owned(existing, actorId, bioform(state, actorId))
-                    ? AdmissionDiagnostic.indexed(expectedId, pending(runtime, expectedId) != null,
-                    new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ()),
-                    new ObservedPosition(existing.getX(), existing.getY(), existing.getZ()))
-                    : AdmissionDiagnostic.conflict(expectedId);
+            BlockPosition observedPosition = new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ());
+            ObservedPosition observedExact = new ObservedPosition(existing.getX(), existing.getY(), existing.getZ());
+            if (owned(existing, actorId, bioform(state, actorId))) {
+                return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, pending(runtime, expectedId) != null, observedPosition, observedExact);
+            }
+            // A physical UUID belongs to the canonical actor rather than to a lease. During a
+            // legal ambient-to-scene hand-off the same body has already exchanged its ambient
+            // tags for an active scene lease, so this is not a duplicate or foreign body.
+            if (FrontierV3SceneExecutor.recognizes(runtime, existing)) {
+                return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact);
+            }
+            return FrontierV3AmbientAdmissionDiagnostic.conflict(expectedId);
         }
         PendingAdmission pending = pending(runtime, expectedId);
-        if (pending != null) return AdmissionDiagnostic.pendingUnindexed(expectedId,
+        if (pending != null) return FrontierV3AmbientAdmissionDiagnostic.pendingUnindexed(expectedId,
                 new BlockPosition(pending.entity().getBlockX(), pending.entity().getBlockY(), pending.entity().getBlockZ()),
                 new ObservedPosition(pending.entity().getX(), pending.entity().getY(), pending.entity().getZ()));
         BlockPos anchor = minecraftBody(location.body());
-        if (!level.hasChunkAt(anchor)) return AdmissionDiagnostic.unloaded(expectedId);
-        if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return AdmissionDiagnostic.entityStoragePending(expectedId,
+        if (!level.hasChunkAt(anchor)) return FrontierV3AmbientAdmissionDiagnostic.unloaded(expectedId);
+        if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
-        if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return AdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
-        return AdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
+        if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
+        return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
 
     /** Retains only an exact expected body during the short join-to-index hand-off. */
@@ -971,29 +985,6 @@ final class FrontierV3AmbientActorExecutor {
     private record PendingAdmission(Entity entity) { }
     private record AmbientObserved(BodyPosition body, FixedScalar health) { }
     private record ReservationCache(FrontierWorldState state, java.util.Set<SubjectId> actors) { }
-    /**
-     * Bounded observed-world evidence only.  {@code observedExact} deliberately supplements,
-     * rather than replaces, the block position: the latter explains admission topology while
-     * the former lets an operator distinguish a continuous physical actor from a visible
-     * stop-and-go cadence without turning Minecraft coordinates into canonical state.
-     */
-    record AdmissionDiagnostic(String status, UUID entityId, boolean pending, BlockPosition placement,
-                               BlockPosition observedPosition, ObservedPosition observedExact) {
-        private static AdmissionDiagnostic notCanonical() { return new AdmissionDiagnostic("NOT_CANONICAL", null, false, null, null, null); }
-        private static AdmissionDiagnostic indexed(UUID entityId, boolean pending, BlockPosition observedPosition, ObservedPosition observedExact) {
-            return new AdmissionDiagnostic("INDEXED", entityId, pending, null, observedPosition, observedExact);
-        }
-        private static AdmissionDiagnostic conflict(UUID entityId) { return new AdmissionDiagnostic("UUID_CONFLICT", entityId, false, null, null, null); }
-        private static AdmissionDiagnostic pendingUnindexed(UUID entityId, BlockPosition observedPosition, ObservedPosition observedExact) {
-            return new AdmissionDiagnostic("PENDING_UNINDEXED", entityId, true, null, observedPosition, observedExact);
-        }
-        private static AdmissionDiagnostic unloaded(UUID entityId) { return new AdmissionDiagnostic("UNLOADED", entityId, false, null, null, null); }
-        private static AdmissionDiagnostic entityStoragePending(UUID entityId, BlockPosition placement) {
-            return new AdmissionDiagnostic("ENTITY_STORAGE_PENDING", entityId, false, placement, null, null);
-        }
-        private static AdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("BLOCKED", entityId, false, placement, null, null); }
-        private static AdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new AdmissionDiagnostic("READY", entityId, false, placement, null, null); }
-    }
     record ObservedPosition(double x, double y, double z) { }
     enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
     enum JoinDisposition { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }

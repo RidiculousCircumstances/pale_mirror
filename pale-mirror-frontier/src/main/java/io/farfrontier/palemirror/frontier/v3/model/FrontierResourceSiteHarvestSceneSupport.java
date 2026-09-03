@@ -71,7 +71,9 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     }
 
     private static boolean hasScene(FrontierWorldState state, SubjectId jobId) {
-        return state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
+        // A retained conflict still owns this farmer until its explicit recovery path closes
+        // it; do not create a second exact-worker lease while the first one remains visible.
+        return state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
                 .anyMatch(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(jobId));
     }

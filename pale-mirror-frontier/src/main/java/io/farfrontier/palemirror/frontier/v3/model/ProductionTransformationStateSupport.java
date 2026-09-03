@@ -23,6 +23,9 @@ public final class ProductionTransformationStateSupport {
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
             throw new IllegalArgumentException("only a materialized production input may receive a physical transformation");
         }
+        if (!job.workProgress().terminalEffectEligible()) {
+            throw new IllegalArgumentException("production transformation requires observed output readiness");
+        }
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !input.economicOwnerId().equals(job.settlementId()) || !"minecraft:wheat".equals(input.itemKind())
                 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)

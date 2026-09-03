@@ -22,7 +22,7 @@ import java.util.Set;
 public final class FrontierSceneBehaviors {
     private static final FrontierSceneBehaviors CURRENT = new FrontierSceneBehaviors(List.of(
             new LogisticsBehavior(), new SettlementAssaultBehavior(), new EngineeringWorksiteBehavior(), new MedicalTreatmentBehavior(),
-            new ResourceSiteHarvestBehavior()));
+            new ResourceSiteHarvestBehavior(), new ProductionWorkBehavior()));
 
     private final Map<SceneCauseKind, SceneBehavior<?>> behaviors;
 
@@ -85,21 +85,23 @@ public final class FrontierSceneBehaviors {
     }
     public static MedicalTreatmentSceneCause medicalTreatment(SceneLease lease) { return behavior(lease).medicalTreatment(lease); }
     public static ResourceSiteHarvestSceneCause resourceSiteHarvest(SceneLease lease) { return behavior(lease).resourceSiteHarvest(lease); }
+    public static ProductionWorkSceneCause productionWork(SceneLease lease) { return behavior(lease).productionWork(lease); }
 
     public static boolean isLogistics(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.LOGISTICS; }
     public static boolean isSettlementAssault(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.SETTLEMENT_ASSAULT; }
     public static boolean isEngineeringWorksite(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.ENGINEERING_WORKSITE; }
     public static boolean isMedicalTreatment(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.MEDICAL_TREATMENT; }
     public static boolean isResourceSiteHarvest(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.RESOURCE_SITE_HARVEST; }
+    public static boolean isProductionWork(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.PRODUCTION_WORK; }
     public static boolean owns(SceneLease lease, SubjectId subjectId) { return behavior(lease).owns(lease, subjectId); }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) { behavior(lease).validatePrepared(state, lease); }
     static Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                           Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                           Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                                          StrategicPlanState plans, ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                          StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
         return behavior(lease).expectedMembers(bootstrap, population, actors, structures, operations, constructions, maintenances, plans, resourceSites,
-                lease, leasedOperations);
+                productionJobs, lease, leasedOperations);
     }
     static StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
         return behavior(lease).transitionPlans(state, lease, nextStatus);
@@ -166,13 +168,16 @@ public final class FrontierSceneBehaviors {
         default ResourceSiteHarvestSceneCause resourceSiteHarvest(SceneLease lease) {
             throw new IllegalStateException("scene behavior has no resource-site-harvest binding: " + kind());
         }
+        default ProductionWorkSceneCause productionWork(SceneLease lease) {
+            throw new IllegalStateException("scene behavior has no production-work binding: " + kind());
+        }
         boolean owns(SceneLease lease, SubjectId subjectId);
         SubjectId owner(FrontierWorldState state, SceneLease lease);
         void validatePrepared(FrontierWorldState state, SceneLease lease);
         Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                        Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                        Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                                       StrategicPlanState plans, ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations);
+                                       StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations);
         StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus);
         StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease);
         BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed);
@@ -213,7 +218,7 @@ public final class FrontierSceneBehaviors {
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                                                         StrategicPlanState plans, ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                                         StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
             LogisticsSceneCause cause = cause(lease);
             RouteOperation operation = operations.get(cause.operationId());
             if (operation == null || !operation.cargoId().equals(cause.cargoId())) throw new IllegalArgumentException("scene lease must bind its current en-route operation state");
@@ -311,7 +316,7 @@ public final class FrontierSceneBehaviors {
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                                                         StrategicPlanState plans, ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                                         StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(plans, cause(lease));
             if (!FrontierSettlementAssaultSceneSupport.targetIntact(bootstrap, structures, assault) && lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("active assault scene target geometry is destroyed");
             boolean valid = switch (lease.status()) {
@@ -360,7 +365,7 @@ public final class FrontierSceneBehaviors {
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances, StrategicPlanState plans,
-                                                         ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                                         ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
             EngineeringWorkSceneCause cause = cause(lease);
             EngineeringWorkOrder project = constructions.get(cause.projectId());
             RouteMaintenance maintenance = maintenances.get(cause.projectId());
@@ -411,7 +416,7 @@ public final class FrontierSceneBehaviors {
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances, StrategicPlanState plans,
-                                                         ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                                         ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
             MedicalEvacuationOperation operation = population.medicalOperations().get(cause(lease).operationId());
             if (operation == null) throw new IllegalArgumentException("medical scene has no exact operation");
             boolean valid = switch (lease.status()) {
@@ -466,7 +471,7 @@ public final class FrontierSceneBehaviors {
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                                                         StrategicPlanState plans, ResourceSiteState resourceSites, SceneLease lease, Set<SubjectId> leasedOperations) {
+                                                         StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
             ResourceSiteHarvestJob job = resourceSites.sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
                     .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                     .filter(value -> value.id().equals(cause(lease).jobId())).findFirst().orElse(null);
@@ -503,6 +508,42 @@ public final class FrontierSceneBehaviors {
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
             intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
             return new SceneDeathOutcome(state.humanPopulation(), sites, plans, Map.copyOf(intents));
+        }
+    }
+
+    /** One named industrial worker, never an ambient Villager substituted at the workshop. */
+    private static final class ProductionWorkBehavior implements SceneBehavior<ProductionWorkSceneCause> {
+        @Override public SceneCauseKind kind() { return SceneCauseKind.PRODUCTION_WORK; }
+        @Override public Class<ProductionWorkSceneCause> causeType() { return ProductionWorkSceneCause.class; }
+        @Override public ProductionWorkSceneCause sampleCause() { return new ProductionWorkSceneCause(new SubjectId("job:production-registry")); }
+        @Override public ProductionWorkSceneCause productionWork(SceneLease lease) { return cause(lease); }
+        @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).jobId().equals(subjectId); }
+        @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) { return FrontierProductionWorkSceneSupport.owner(state, cause(lease)); }
+        @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) { FrontierProductionWorkSceneSupport.validatePrepared(state, lease); }
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
+                                                         Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
+                                                         Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
+                                                         StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, SceneLease lease, Set<SubjectId> leasedOperations) {
+            ProductionJob job = productionJobs.get(cause(lease).jobId());
+            if (job == null && lease.status() == SceneLeaseStatus.CLOSED) return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
+            return Set.of(Objects.requireNonNull(job, "production-work scene job").workerId());
+        }
+        @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
+        @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
+            if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("production scene release has a foreign worker");
+            return job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+        }
+        @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
+            ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
+            boolean blocked = state.strategicPlans().tasks().values().stream().anyMatch(task -> task.ownerId().equals(job.settlementId())
+                    && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.BLOCKED);
+            SceneContinuation continuation = blocked ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id()) : new SceneContinuation.None();
+            return new SceneReleasePlan(owner(state, lease), released, continuation);
+        }
+        @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
+            return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
     }
 }

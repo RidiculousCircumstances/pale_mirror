@@ -33,9 +33,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
             MedicalTreatmentPayloadCodecs.started(), MedicalTreatmentPayloadCodecs.transition())),
             MedicalTreatmentScenePayloadCodecs.codecs()); }
-    static PayloadCodecs economyCodecs() { return new PayloadCodecs(List.of(new ProductionStartedCodec(), new ProductionCompletedCodec(),
-            new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(), new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(),
-            MarketPayloadCodecs.opened(), MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(), MarketPayloadCodecs.cancelled())); }
+    static PayloadCodecs economyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
+            new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
+            new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(), MarketPayloadCodecs.opened(),
+            MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
+            MarketPayloadCodecs.cancelled())), ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(), ResourceSitePayloadCodecs.harvestTraversalAdvanced(),
@@ -526,10 +528,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static void writeJob(DataOutputStream output, ProductionJob job) throws IOException {
         writeSubject(output, job.id()); writeSubject(output, job.settlementId()); writeSubject(output, job.facilityId()); writeSubject(output, job.workerId());
         writeSubject(output, job.consumedItemId()); writeSubject(output, job.outputItemId()); writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
+        ProductionWorkProgressStateCodec.write(output, job.workProgress()); TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
     }
     private static ProductionJob readJob(DataInputStream input) throws IOException {
-        return new ProductionJob(readSubject(input).value(), readSubject(input).value(), readSubject(input).value(), readSubject(input).value(),
-                readSubject(input).value(), readSubject(input).value(), readString(input), input.readUnsignedByte());
+        SubjectId id = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId facility = readSubject(input).value();
+        SubjectId worker = readSubject(input).value(); SubjectId consumed = readSubject(input).value(); SubjectId output = readSubject(input).value();
+        String outputKind = readString(input); int outputCount = input.readUnsignedByte();
+        ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
+        return new ProductionJob(id, settlement, facility, worker, consumed, new ProductionInputHold.Materialized(consumed), output, outputKind, outputCount,
+                progress, traversal, input.readUnsignedShort());
     }
     private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
@@ -594,6 +601,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z());
     }
     static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
+    static void writeBody(DataOutputStream output, BodyPosition body) throws IOException { output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
+    static BodyPosition readBody(DataInputStream input) throws IOException { return new BodyPosition(input.readInt(), input.readInt(), input.readInt()); }
     private static void writeContract(DataOutputStream output, SupplyContract contract) throws IOException {
         writeSubject(output, contract.id()); writeSubject(output, contract.settlementId()); writeSubject(output, contract.recipientId());
         writeSubject(output, contract.cargoId()); writeString(output, contract.itemKind()); output.writeByte(contract.itemCount()); output.writeByte(contract.status().wireTag());

@@ -13,17 +13,18 @@
     ] }
   ],
   "actions": [
-    { "type": "wait_until_block", "position": { "x": -340, "y": 65, "z": -326 }, "block": "minecraft:chest", "timeoutMs": 30000 },
-    { "type": "open_container", "position": { "x": -340, "y": 65, "z": -326 }, "timeoutMs": 10000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "block": "minecraft:chest", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 30000 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 10000 },
     { "type": "quick_move_from_container", "item": "minecraft:wheat", "count": 64, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "item", "id": "item:bootstrap-1-wheat", "expect": { "status": "ok", "itemKind": "minecraft:wheat", "count": 64, "custody": { "kind": "PLAYER" } }, "timeoutMs": 30000 }
   ],
   "assertions": [
-    { "after": 4, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } },
-    { "after": 5, "view": "item", "id": "item:bootstrap-1-wheat", "expect": { "status": "ok", "custody": { "kind": "PLAYER" } } }
+    { "after": 5, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } },
+    { "after": 6, "view": "item", "id": "item:bootstrap-1-wheat", "expect": { "status": "ok", "custody": { "kind": "PLAYER" } } }
   ],
   "frames": [
-    { "after": 3, "name": "withdrawal-cancelled-production", "presentation": "player" }
+    { "after": 4, "name": "withdrawal-cancelled-production", "presentation": "player" }
   ]
 }

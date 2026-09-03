@@ -68,37 +68,48 @@ final class FrontierV3DiagnosticTrace {
 
     /** Records the bounded operation → lease → cargo/actor chain for one scene transition. */
     static void recordScene(MinecraftServer server, String kind, SceneLease lease, CommandResult result) {
+        SceneTrace scene = sceneTrace(lease);
+        record(server, scene.correlation(), kind, scene.subject(), result, scene.context());
+    }
+
+    /**
+     * Resolves the one bounded diagnostic identity owned by a registered scene family.
+     * This is deliberately typed rather than treating an unknown cause as logistics.
+     */
+    static SceneTrace sceneTrace(SceneLease lease) {
         Objects.requireNonNull(lease, "scene lease");
         if (FrontierSceneBehaviors.isSettlementAssault(lease)) {
             SettlementAssaultSceneCause assault = FrontierSceneBehaviors.settlementAssault(lease);
-            record(server, "assault:" + assault.assaultId().value(), kind, assault.assaultId(), result,
+            return new SceneTrace("assault:" + assault.assaultId().value(), assault.assaultId(),
                     new Context(assault.assaultId().value(), lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
-            return;
         }
         if (FrontierSceneBehaviors.isEngineeringWorksite(lease)) {
             var engineering = FrontierSceneBehaviors.engineeringWorksite(lease);
-            record(server, "engineering:" + engineering.projectId().value(), kind, engineering.projectId(), result,
+            return new SceneTrace("engineering:" + engineering.projectId().value(), engineering.projectId(),
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
-            return;
         }
         if (FrontierSceneBehaviors.isMedicalTreatment(lease)) {
             MedicalTreatmentSceneCause medical = FrontierSceneBehaviors.medicalTreatment(lease);
-            record(server, "medical:" + medical.operationId().value(), kind, medical.operationId(), result,
+            return new SceneTrace("medical:" + medical.operationId().value(), medical.operationId(),
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
-            return;
         }
         if (FrontierSceneBehaviors.isResourceSiteHarvest(lease)) {
             var harvest = FrontierSceneBehaviors.resourceSiteHarvest(lease);
-            record(server, "resource-site-harvest:" + harvest.jobId().value(), kind, harvest.jobId(), result,
+            return new SceneTrace("resource-site-harvest:" + harvest.jobId().value(), harvest.jobId(),
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
-            return;
+        }
+        if (FrontierSceneBehaviors.isProductionWork(lease)) {
+            var production = FrontierSceneBehaviors.productionWork(lease);
+            return new SceneTrace("production-work:" + production.jobId().value(), production.jobId(),
+                    new Context("", lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
         }
         var logistics = FrontierSceneBehaviors.logistics(lease);
-        record(server, "operation:" + logistics.operationId().value(), kind, logistics.operationId(), result,
+        return new SceneTrace("operation:" + logistics.operationId().value(), logistics.operationId(),
                 new Context(logistics.operationId().value(), lease.id().value(), logistics.cargoId().value(),
                         lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
     }
@@ -142,6 +153,15 @@ final class FrontierV3DiagnosticTrace {
     }
 
     static void forget(MinecraftServer server) { ENTRIES.remove(Objects.requireNonNull(server, "server")); }
+
+    record SceneTrace(String correlation, SubjectId subject, Context context) {
+        SceneTrace {
+            correlation = Objects.requireNonNull(correlation, "scene trace correlation");
+            subject = Objects.requireNonNull(subject, "scene trace subject");
+            context = Objects.requireNonNull(context, "scene trace context");
+            if (correlation.isBlank()) throw new IllegalArgumentException("scene trace correlation must not be blank");
+        }
+    }
 
     record Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision, Context context) {
         Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision) {

@@ -27,6 +27,7 @@ public final class SettlementStructureFootprint {
         switch (structure.kind()) {
             case HALL -> surfaces.addAll(SettlementAccessPort.forHall(structure).ownedSurfaces());
             case DEPOT -> surfaces.addAll(SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces());
+            case WORKSHOP -> surfaces.addAll(SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces());
             case INFIRMARY -> surfaces.addAll(SettlementInfirmaryTreatmentPort.forInfirmary(structure).ownedAccessSurfaces());
             default -> { }
         }

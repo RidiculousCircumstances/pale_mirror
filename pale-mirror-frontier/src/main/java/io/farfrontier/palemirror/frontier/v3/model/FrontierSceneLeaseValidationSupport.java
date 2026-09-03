@@ -13,7 +13,7 @@ final class FrontierSceneLeaseValidationSupport {
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures,
                          Map<SubjectId, RouteOperation> operations, Map<SubjectId, RouteConstruction> constructions,
-                         Map<SubjectId, RouteMaintenance> maintenances, StrategicPlanState plans, ResourceSiteState resourceSites, Map<SceneLeaseId, SceneLease> leases,
+                         Map<SubjectId, RouteMaintenance> maintenances, StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs, Map<SceneLeaseId, SceneLease> leases,
                          Set<SubjectId> activeAmbientActors) {
         Set<SubjectId> leasedActors = new HashSet<>(), leasedOperations = new HashSet<>();
         for (Map.Entry<SceneLeaseId, SceneLease> entry : leases.entrySet()) {
@@ -22,7 +22,7 @@ final class FrontierSceneLeaseValidationSupport {
                 throw new IllegalArgumentException("scene lease identity or world is invalid");
             }
             Set<SubjectId> expected = FrontierSceneBehaviors.expectedMembers(bootstrap, population, actors, structures, operations, constructions, maintenances,
-                    plans, resourceSites, lease, leasedOperations);
+                    plans, resourceSites, productionJobs, lease, leasedOperations);
             Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
             if (!members.equals(expected)) throw new IllegalArgumentException("scene lease members must exactly match its canonical scene actors");
             for (SubjectId actor : members) {

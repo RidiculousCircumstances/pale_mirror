@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneFinalized;
 import io.farfrontier.palemirror.frontier.v3.model.RouteEngagement;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneContinuation;
@@ -66,6 +68,7 @@ public final class FrontierSceneContinuationPlanner {
         register(handlers, new FailOperationHandler());
         register(handlers, new ResumeEngagementHandler());
         register(handlers, new ResumeSettlementAssaultHandler());
+        register(handlers, new FinalizeProductionWorkHandler());
         if (handlers.size() != SceneContinuation.Kind.values().length) {
             throw new IllegalStateException("missing scene continuation handler");
         }
@@ -128,6 +131,16 @@ public final class FrontierSceneContinuationPlanner {
             if (assault == null) throw new IllegalArgumentException("scene continuation has no settlement assault");
             return List.of(new ProposedEvent(assault.hiveId(), new ScheduleEffect.Created(
                     HiveSettlementAssaultProcess.combat(assault, resume.dueAt()))));
+        }
+    }
+
+    private static final class FinalizeProductionWorkHandler implements ContinuationHandler {
+        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.FINALIZE_PRODUCTION_WORK; }
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation) {
+            if (!(continuation instanceof SceneContinuation.FinalizeProductionWork finalize)) throw invalid(continuation, kind());
+            ProductionJob job = state.productionJobs().get(finalize.jobId());
+            if (job == null) throw new IllegalArgumentException("production scene finalization has no active job");
+            return List.of(new ProposedEvent(job.settlementId(), new ProductionWorkSceneFinalized(finalize.leaseId(), job.id())));
         }
     }
 

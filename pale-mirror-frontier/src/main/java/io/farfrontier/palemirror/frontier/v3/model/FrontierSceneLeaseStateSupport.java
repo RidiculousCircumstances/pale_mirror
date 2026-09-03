@@ -124,6 +124,17 @@ public final class FrontierSceneLeaseStateSupport {
         return copy(state, actors, leases, state.ambientLeases(), plans);
     }
 
+    /** A PREPARED lease has not transferred authority to its provisional Minecraft bodies. */
+    public static FrontierWorldState abortPrepared(FrontierWorldState state, SceneLeaseId leaseId) {
+        SceneLease current = state.sceneLeases().get(leaseId);
+        if (current == null || current.status() != SceneLeaseStatus.PREPARED) {
+            throw new IllegalArgumentException("only a prepared scene lease can be aborted before materialization");
+        }
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
+        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans());
+    }
+
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors,
                                            Map<SceneLeaseId, SceneLease> leases, Map<SubjectId, AmbientActorLease> ambient,
                                            StrategicPlanState plans) {

@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 114 and persistence-envelope v26 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 117 and persistence-envelope v31 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -231,8 +231,47 @@
   only an observed next node before it may prepare the next crop; a body/cursor
   mismatch is visible conflict rather than an inferred catch-up. Focused pure
   normal, pre-arrival-negative and snapshot recovery tests pass. The native
-  causal/restart scenario subsequently passed; no deployment follows from this
-  source-only materialization slice.
+  causal/restart scenario subsequently passed. Detached `a436a315` (the MAT-001
+  commit) then passed `guardrails`, `check`, package verification and 282/282
+  GameTests; it is deployed as fresh disposable `frontier-v3-live-r68` on
+  `25565`. The installed `pale_mirror-hosted.jar` SHA-512 is
+  `b042eb141701e74754a353c1b07b27839256a5bc91c1181a8949e9722a4cd499156103be0d428206909428336d98667ae2a49a9a273905a7d7bfa20e3501569e`.
+  Read-only preflight and post-start verification prove the detached source,
+  selected fresh world, listening service and no startup quarantine; r67 remains
+  untouched as an older disposable world.
+- MAT-002 is the active critical-code slice. Its accepted shape is one class-C
+  `PRODUCTION_WORK` scene: the existing `ProductionJob` remains the sole owner
+  of exact crafter/input/output/finance, while a persisted immutable
+  worker-to-workshop topology, semantic workshop port and staged progress make
+  approach, input readiness, processing and output readiness observable. The
+  existing depot replacement executor remains only the terminal
+  durable-before-effect receipt after observed output readiness. Death, stolen
+  input, a broken station or a blocked route must visibly block/conflict that
+  same job; recovery inspects the retained stage and exact chest postcondition.
+  This has been recorded in the normative MAT-002 gate. Schema 117/envelope 31 now retain the explicit
+  wire-tagged `ProductionWorkProgress` (`APPROACH`, `INPUT_READY`,
+  `PROCESSING`, `OUTPUT_READY`) and one bounded immutable pedestrian topology
+  plus cursor from the exact crafter's canonical surface through the named
+  workshop port's input and work stations. Snapshot and `ProductionStarted`
+  WAL payloads preserve both; production start rejects a route which does not
+  match the current worker/facility facts. The workshop port is compiled into
+  the same public circulation and graybox geometry (real throat/headroom and
+  station clearance), not a private executor offset. The closed behavior and
+  NeoForge executor now materialize only that retained worker, advance only
+  its observed cursor/stage, and defer the depot transform until
+  `OUTPUT_READY`. A blocked job retains its lease through durable release and
+  only then receives `ProductionWorkSceneFinalized`, which releases its exact
+  market reservation without a zombie scene or duplicate output. Focused
+  early-intent/finalization tests pass, Scene 44/44 and Economy 17/17 pass.
+  Native `disposable_materialized_production_work_restart` run
+  `75f45107-732a-43dc-996b-1f47a9e0244b` observed the exact `INDUSTRIAL
+  WORKER`, reached terminal market order `FULFILLED`, and after a graceful
+  restart retained its exact 64-bread container receipt. This is M2 partial,
+  not closure: a dedicated GameTest must cover approach/input/processing and
+  death/theft/broken/blocked/restart, while the captured narrow-corridor frame
+  leaves the worker insufficiently legible for M3. The next type-safe reducer boundary is also present: an executor must submit
+  one observed `ProductionWorkTraversalAdvanced` or `ProductionWorkProgressed`
+  fact; it cannot directly alter a job or skip a retained station/stage.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

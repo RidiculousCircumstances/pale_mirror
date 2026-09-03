@@ -219,6 +219,7 @@ public final class FrontierGrayboxPlan {
         return switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).ownedSurfaces();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces();
+            case WORKSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).ownedAccessSurfaces();
             default -> List.of();
         };
@@ -383,6 +384,7 @@ public final class FrontierGrayboxPlan {
         };
         SettlementAccessPort access = structure.kind() == StructureKind.HALL ? SettlementAccessPort.forHall(structure) : null;
         SettlementDepotServicePort depotService = structure.kind() == StructureKind.DEPOT ? SettlementDepotServicePort.forDepot(structure) : null;
+        SettlementWorkshopServicePort workshopService = structure.kind() == StructureKind.WORKSHOP ? SettlementWorkshopServicePort.forWorkshop(structure) : null;
         SettlementInfirmaryTreatmentPort treatment = structure.kind() == StructureKind.INFIRMARY ? SettlementInfirmaryTreatmentPort.forInfirmary(structure) : null;
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             if (visitor.visit(structure.anchor().offset(x, 0, z), GrayboxSemanticPart.FOUNDATION)) return true;
@@ -390,12 +392,14 @@ public final class FrontierGrayboxPlan {
                 BlockPosition wall = structure.anchor().offset(x, y, z);
                 if ((access == null || !access.throatAirCells().contains(wall))
                         && (depotService == null || !depotService.throatAirCells().contains(wall))
+                        && (workshopService == null || !workshopService.throatAirCells().contains(wall))
                         && (treatment == null || !treatment.throatAirCells().contains(wall))
                         && visitor.visit(wall, GrayboxSemanticPart.WALL)) return true;
             }
             BlockPosition roof = structure.anchor().offset(x, height, z);
             if ((access == null || !access.throatAirCells().contains(roof))
                     && (depotService == null || !depotService.throatAirCells().contains(roof))
+                    && (workshopService == null || !workshopService.throatAirCells().contains(roof))
                     && (treatment == null || !treatment.throatAirCells().contains(roof))
                     && visitor.visit(roof, GrayboxSemanticPart.ROOF)) return true;
         }
@@ -403,6 +407,9 @@ public final class FrontierGrayboxPlan {
             if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         if (depotService != null) for (SurfaceAnchor surface : depotService.ownedAccessSurfaces()) {
+            if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
+        }
+        if (workshopService != null) for (SurfaceAnchor surface : workshopService.ownedAccessSurfaces()) {
             if (visitor.visit(surface.support(), GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)) return true;
         }
         if (treatment != null) for (SurfaceAnchor surface : treatment.ownedAccessSurfaces()) {

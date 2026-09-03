@@ -601,9 +601,11 @@ final class FrontierDevelopmentScenarios {
         SubjectId company = CompanyFoundationProcess.companyId(settlementId);
         SubjectId worker = state.companies().companies().get(company).founderId();
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
-        ProductionJob job = new ProductionJob(new SubjectId("job:development-production-input-theft"), settlementId,
-                settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), worker,
-                input.id(), new ProductionInputHold.Materialized(input.id()), new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count());
+        SubjectId jobId = new SubjectId("job:production-development-input-theft");
+        SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        ProductionJob job = new ProductionJob(jobId, settlementId, workshop.id(), worker, input.id(), new ProductionInputHold.Materialized(input.id()),
+                new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count(), ProductionWorkProgress.notStarted(),
+                ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker), jobId), 0);
         state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
         EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
         FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
@@ -619,15 +621,32 @@ final class FrontierDevelopmentScenarios {
 
     /**
      * Disposable player-combat fixture for the irreversible-worker boundary.  The exact worker
-     * is deliberately the sole ambient actor inside the ordinary scene-demand radius; this is
-     * test isolation only, not a second movement or materialization authority.
+     * starts at the real workshop exterior port.  The pilot attacks only within its ordinary
+     * melee range, so the fixture needs no fabricated distant worker position or second
+     * movement/materialization authority.
      */
-    static MaterializedProductionFixture materializedProductionWorkerDeathFixture(WorldId worldId, long seed) {
+    static MaterializedProductionFixture materializedProductionWorkFixture(WorldId worldId, long seed) {
         MaterializedProductionFixture base = materializedProductionInputTheftFixture(worldId, seed);
-        SubjectId jobId = new SubjectId("job:development-production-input-theft");
-        SubjectId worker = base.state().productionJobs().get(jobId).workerId();
-        FrontierWorldState isolated = base.state().withActorBody(worker, BodyPosition.above(new SurfaceAnchor(new BlockPosition(-480, 64, -480))));
-        return new MaterializedProductionFixture(isolated, base.instant(), base.schedules(), base.orderId());
+        SubjectId jobId = new SubjectId("job:production-development-input-theft");
+        ProductionJob job = base.state().productionJobs().get(jobId);
+        SubjectId worker = job.workerId();
+        SettlementStructure workshop = FrontierWorldStateSupport.settlement(base.state().bootstrap(), job.settlementId()).structures().stream()
+                .filter(structure -> structure.id().equals(job.facilityId())).findFirst().orElseThrow();
+        SurfaceAnchor exterior = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
+        FrontierWorldState isolated = base.state().withActorBody(worker, BodyPosition.above(exterior));
+        var jobs = new java.util.LinkedHashMap<>(isolated.productionJobs());
+        jobs.put(jobId, job.withWorkTraversal(ProductionWorkTraversal.compile(isolated.bootstrap(), workshop, isolated.actorLocations().get(worker), jobId), 0));
+        isolated = isolated.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
+        // This is the normal scheduled completion boundary.  The materialized executor may
+        // defer it while the exact worker is still approaching/processing, but it must not rely
+        // on a test-only direct transformation once OUTPUT_READY is observed.
+        return new MaterializedProductionFixture(isolated, base.instant(),
+                List.of(ProductionProcess.complete(jobs.get(jobId), 100L)), base.orderId());
+    }
+
+    /** Worker-death uses the normal production-work fixture; only the pilot action is fatal. */
+    static MaterializedProductionFixture materializedProductionWorkerDeathFixture(WorldId worldId, long seed) {
+        return materializedProductionWorkFixture(worldId, seed);
     }
 
     /**

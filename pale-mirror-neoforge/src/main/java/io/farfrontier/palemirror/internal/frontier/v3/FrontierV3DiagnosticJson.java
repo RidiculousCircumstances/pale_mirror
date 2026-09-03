@@ -23,6 +23,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
@@ -55,20 +56,20 @@ final class FrontierV3DiagnosticJson {
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission) {
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission) {
         return render(kind, id, checkpoint, state, trace, admission, Optional.empty());
     }
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness) {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, Optional.empty());
     }
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness) {
         return render(kind, id, checkpoint, state, trace, admission, harvestReadiness, sceneReadiness, Optional.empty());
@@ -76,7 +77,7 @@ final class FrontierV3DiagnosticJson {
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
                          Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness) {
@@ -85,7 +86,7 @@ final class FrontierV3DiagnosticJson {
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
                          Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
@@ -96,7 +97,7 @@ final class FrontierV3DiagnosticJson {
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
                          Optional<FrontierV3DiagnosticTrace.Entry> trace,
-                         Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission,
+                         Optional<FrontierV3AmbientAdmissionDiagnostic> admission,
                          Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                          Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness,
                          Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness,
@@ -250,7 +251,7 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String actor(String id, CheckpointImage checkpoint, FrontierWorldState state,
-                                Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission) {
+                                Optional<FrontierV3AmbientAdmissionDiagnostic> admission) {
         SubjectId subject = subject(id).orElse(null); ActorLocation location = subject == null ? null : state.actorLocations().get(subject);
         if (location == null) return unavailable("actor", id, checkpoint, "not_found");
         ResidentProfile resident = state.humanPopulation().resident(subject);
@@ -299,7 +300,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"ambientGoal\":\"" + quote(goal) + "\",\"goalPosition\":" + goalPosition + "}";
     }
 
-    private static String admission(FrontierV3AmbientActorExecutor.AdmissionDiagnostic value) {
+    private static String admission(FrontierV3AmbientAdmissionDiagnostic value) {
         String placement = value.placement() == null ? "null" : position(value.placement());
         String observedPosition = value.observedPosition() == null ? "null" : position(value.observedPosition());
         String observedExact = nullablePosition(value.observedExact());
@@ -333,7 +334,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
                 + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch()) + "\"}").orElse("");
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
-                + "\",\"surface\":\"" + surface.status() + "\",\"slotCount\":" + container.slotCount()
+                + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
                 + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + physical + "}";
     }
 
@@ -606,6 +607,11 @@ final class FrontierV3DiagnosticJson {
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.engineeringWorksite(lease) : null;
         MedicalTreatmentSceneCause medical = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isMedicalTreatment(lease)
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.medicalTreatment(lease) : null;
+        var harvest = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.resourceSiteHarvest(lease) : null;
+        var production = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isProductionWork(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.productionWork(lease) : null;
+        ProductionJob productionJob = production == null ? null : state.productionJobs().get(production.jobId());
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
@@ -618,15 +624,28 @@ final class FrontierV3DiagnosticJson {
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
-                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT" : engineering != null ? "ENGINEERING_WORKSITE" : "MEDICAL_TREATMENT")
+                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT"
+                : engineering != null ? "ENGINEERING_WORKSITE" : medical != null ? "MEDICAL_TREATMENT" : harvest != null ? "RESOURCE_SITE_HARVEST" : "PRODUCTION_WORK")
                 + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
                 + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
                 + "\",\"project\":\"" + quote(engineering == null ? "" : engineering.projectId().value())
                 + "\",\"medical\":\"" + quote(medical == null ? "" : medical.operationId().value())
-                + "\",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
+                + "\",\"harvestJob\":\"" + quote(harvest == null ? "" : harvest.jobId().value())
+                + "\",\"productionJob\":\"" + quote(production == null ? "" : production.jobId().value())
+                + "\"" + productionTraversal(productionJob)
+                + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
                 + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
+    }
+
+    /** The exact retained production edge makes a body/cursor conflict inspectable without logs. */
+    private static String productionTraversal(ProductionJob job) {
+        if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null";
+        var corridor = job.workTraversal().linearCorridorSurfaces();
+        String next = job.traversalCursor() + 1 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 1).support());
+        return ",\"productionStage\":\"" + job.workProgress().stage() + "\",\"productionCursor\":" + job.traversalCursor()
+                + ",\"productionCurrent\":" + position(corridor.get(job.traversalCursor()).support()) + ",\"productionNext\":" + next;
     }
 
     /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */
