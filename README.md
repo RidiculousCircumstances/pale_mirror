@@ -25,9 +25,10 @@ LOD distances by default.
 
 ## Profiles and known risks
 
-`Alex's Caves — Unofficial Port` and its unofficial Citadel port are enabled by
-default but are a feature flag, not a proven release dependency. Turn off both
-packwiz options together for the fallback profile. Create: Caliber is excluded from
+`Alex's Caves — Unofficial Port` and its unofficial Citadel port are disabled by
+default. They remain an experimental paired feature flag, not a proven release
+dependency. Enable both Packwiz options together only outside the supported
+Frontier v3 profile. Create: Caliber is excluded from
 the default manifest and remains an evaluation-only candidate. Spore is a core but deliberately constrained local-contamination
 layer; it is not an additional global progression system.
 

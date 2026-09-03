@@ -123,6 +123,12 @@ install_hosted_railway_untold \
 # dependencies. Packwiz preserves no-longer-managed files, so retire them
 # explicitly and recoverably when updating an existing instance.
 obsolete_client_mods=(
+  # Alex's Caves and Citadel are paired experimental both-side ports.  The
+  # supported Frontier v3 profile disables them by default; Packwiz retains
+  # no-longer-selected JARs, so retire old copies explicitly to prevent a
+  # stale client from loading them after the server/profile changed.
+  'alexscaves-2.0.10.jar'
+  'citadel-1.21.1-2.7.6.jar'
   'journeymap-neoforge-1.21.1-6.0.4.jar'
   'ezactions-neoforge-1.21.1-2.0.3.5.jar'
   'SimplyTooltips-neoforge-0.1.3.jar'

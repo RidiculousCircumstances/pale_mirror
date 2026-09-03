@@ -26,9 +26,10 @@ whole pack has completed a runtime smoke test.
    `0.3.0-alpha.0.93` is disabled by default, uses eight workers when selected, and requires Java 22 plus the full
    worldgen/Create/Sable/restart gate.
 4. **Alex's Caves and its Citadel are community ports.** They are feature-flagged
-   (`alex-caves` packwiz option, enabled by default) and can be removed together
-   without changing the rest of the pack. They must pass the dedicated terrain,
-   save/reload and performance suite before being called release-ready.
+   and disabled by default in the supported Frontier v3 profile. They can be
+   enabled or removed together without changing the rest of the pack. They must
+   pass the dedicated terrain, save/reload and performance suite before being
+   called release-ready.
 5. **Create: Caliber is an evaluated candidate and is not distributed by the default pack.** Its only 1.21.1 build is
    a two-day-old beta. It is not part of the core progression or combat balance.
 6. **Crimson Curse is bounded by Pale Mirror.** Crimson Curse `1.4.3.1` is a native

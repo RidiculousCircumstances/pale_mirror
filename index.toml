@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "685fe4e2251afb6bb201d9a359968aa033076ee1f50652685b9e0ba26e821e8b"
+hash = "c80b50b09e937be20d2b6b292bbd5c316543dae5bd90165d86a1e345fb437e5b"
 
 [[files]]
 file = "config/README.md"
@@ -418,7 +418,7 @@ hash = "6ebb4b2c0aa1c13d41b7e01d8b564ccbee1612bde2d08ca7b83fa5cdc4bfd135"
 
 [[files]]
 file = "docs/mod-compatibility.md"
-hash = "0bc7aa8a015d89599ab27221860d5aaf077118d12b496c058a220fa06329fe36"
+hash = "8504ae5a4adbe44a9e24cec2ea2b8abd3086954dbb0d2a43b5a06b7f37853ef5"
 
 [[files]]
 file = "docs/performance.md"
@@ -446,7 +446,7 @@ hash = "6cc8f1502fdcea714f01daee3e14c04da5189f3d25b0fb77bb75a09e8ba99935"
 
 [[files]]
 file = "mods/alexs-caves-(unofficial-port).pw.toml"
-hash = "84446ad1b2cfbd2c538266472ad61a2b3f29ec8229de4850f4a673dea32af415"
+hash = "b556ea3baae220610a47160cd821512a01a1b1ab1183f7ef6339909b489215fc"
 metafile = true
 
 [[files]]
@@ -476,7 +476,7 @@ metafile = true
 
 [[files]]
 file = "mods/citadel-(1.21.1-port).pw.toml"
-hash = "1e2d3f4c3e5a6274e13848cc68e676f0cb71ee52a527d9ed84b145ebfc81b5dd"
+hash = "97faaef7f8cb849a6758becfd3d968f840a65ce7ad851acaf4a4616eb53b4884"
 metafile = true
 
 [[files]]
@@ -734,7 +734,7 @@ hash = "85f896c733f16324f8b2f642581c150f5838c43e93da85e146499771773ed622"
 
 [[files]]
 file = "scripts/install-client.sh"
-hash = "29567f42a80179485e22f7beaa2479c0932107578239c2dac51fe1f658b600a4"
+hash = "b498873b0b1ea444d5d496e5213fa71a73aa95e9d5c3430d3e340adbdcb0f030"
 
 [[files]]
 file = "scripts/install-server-java22.sh"
