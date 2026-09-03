@@ -46,3 +46,18 @@ systemd-run --user --unit=far-frontier-v3-live --collect \
 Use `restart` only while that transient unit is already active. Always finish
 with `scripts/frontier-v3-deploy-verify.sh`; an active unit or an open port by
 itself is not deployment evidence.
+
+## Detached release build
+
+`pale-mirror-neoforge` reads the graybox disabled-mod catalogue from the
+companion pack. A detached release worktree outside that sibling layout must
+build with the verified pack input explicitly supplied; otherwise Gradle fails
+before compilation. Use:
+
+```bash
+./gradlew -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt \
+  :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar
+```
+
+The resulting JAR remains valid for preflight only when it is inside the clean,
+detached source worktree at the exact release commit.
