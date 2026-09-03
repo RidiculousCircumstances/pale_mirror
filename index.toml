@@ -734,7 +734,7 @@ hash = "85f896c733f16324f8b2f642581c150f5838c43e93da85e146499771773ed622"
 
 [[files]]
 file = "scripts/install-client.sh"
-hash = "b498873b0b1ea444d5d496e5213fa71a73aa95e9d5c3430d3e340adbdcb0f030"
+hash = "d96700bc70abad656fe63033a46d22310eadcd672b3ee11e243666b5af71e8f1"
 
 [[files]]
 file = "scripts/install-server-java22.sh"
