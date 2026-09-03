@@ -42,7 +42,7 @@ class FrontierReadabilityPlanTest {
     @Test
     void boardInputIgnoresActorMotion() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-motion"), 91L));
-        SubjectId actor = state.actorLocations().keySet().iterator().next();
+        SubjectId actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         FrontierWorldState moved = state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0));
 
         assertEquals(FrontierReadabilityPlan.input(state), FrontierReadabilityPlan.input(moved),

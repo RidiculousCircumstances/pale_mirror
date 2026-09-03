@@ -54,42 +54,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
-        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans);
+        RouteConstructionStateSupport.validate(bootstrap, routeTopology, routeConstructions, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans, ambientLeases);
         RouteMaintenanceStateSupport.validate(bootstrap, hiveColony, routeTopology, routeConstructions, routeMaintenances, physicalDeltas, actorLocations, humanPopulation, productionJobs, resourceSites, operations, contracts, strategicPlans);
-        for (RouteConstruction project : routeConstructions.values()) {
-            if (project.assembly().isEmpty()) continue;
-            for (Map.Entry<SubjectId, EngineeringWorkAssembly.Member> member : project.assembly().orElseThrow().members().entrySet()) {
-                AmbientActorLease lease = ambientLeases.get(member.getKey());
-                if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) continue;
-                EngineeringWorkAssembly.Member cursor = member.getValue();
-                BlockPosition expected = cursor.arrived() ? cursor.currentPosition() : cursor.corridor().get(cursor.cursor() + 1);
-                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY || !lease.goalBody().supportingSurface().support().equals(expected)) {
-                    throw new IllegalArgumentException("active engineering assembly lease must retain its one exact next cursor");
-                }
-            }
-        }
         RouteMaintenanceStateSupport.validateAmbientAssemblyLeases(routeMaintenances, ambientLeases);
         MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents); Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);
-        for (Map.Entry<SubjectId, BioformLifecycle> entry : hiveColony.bioformLifecycles().entrySet()) {
-            BioformLifecycle lifecycle = entry.getValue();
-            if (!lifecycle.phase().occupiesCocoon()) continue;
-            HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
-            HiveOrgan organ = java.util.stream.Stream.concat(bootstrap.hive().organs().stream(), hiveColony.addedOrgans().values().stream())
-                    .filter(candidate -> candidate.id().equals(slot.hibernaculumId())).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("cocoon lifecycle references an absent HIBERNACULUM"));
-            BodyPosition expectedBody = BodyPosition.above(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ, slot)));
-            if (!actorLocations.get(entry.getKey()).body().equals(expectedBody)) {
-                throw new IllegalArgumentException("cocoon-retained bioform must remain at its exact cocoon body position");
-            }
-            AmbientActorLease lease = ambientLeases.get(entry.getKey());
-            if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
-                throw new IllegalArgumentException("cocoon-retained bioform may not retain an ambient lease");
-            }
-        }
+        HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases);
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
         for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
@@ -167,9 +140,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             if (actorLocations.get(lease.actorId()).condition().status() != ActorLifeStatus.ALIVE && lease.status() != AmbientLeaseStatus.CLOSED) {
                 throw new IllegalArgumentException("dead actor cannot retain an active ambient lease");
-            }
-            if (lease.status() != AmbientLeaseStatus.CLOSED && !HivePhysiologySupport.permitsAmbientLease(hiveColony, lease.actorId())) {
-                throw new IllegalArgumentException("cocoon-retained bioform may not retain an active ambient lease");
             }
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffBody().supportingSurface().support()); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalBody().supportingSurface().support());
             if (lease.status() != AmbientLeaseStatus.CLOSED && !activelyAmbientLeased.add(lease.actorId())) {

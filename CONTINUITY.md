@@ -50,8 +50,13 @@
   mob. Diagnostics expose lifecycle/cocoon custody; the declared native
   `disposable_hive_cocoon_wake_restart` scenario is the required normal-break
   and graceful-restart evidence, and the graybox uses an open contrasting tray
-  rather than a hidden sealed organ. V3-AUD-033 remains in verification until
-  the focused lifecycle/selection tests, native scenario and full gate pass.
+  rather than a hidden sealed organ. The custody invariant is isolated in
+  `HiveLifecycleStateSupport`, while `BioformLifecycleStateCodec` keeps the
+  aggregate persistence boundary narrow without changing schema-105 bytes.
+  Focused lifecycle/state/selection tests, Scene 41/41 and the normal-player
+  break → durable delta → graceful restart → same exact `ACTIVE`/`HOT` Zombie
+  pilot pass. V3-AUD-033 is closed: the complete critical gate passes with
+  `guardrails`, `check`, build/package verification and 278/278 GameTests.
 - V3-AUD-017 is closed at schema 83: each route owner embeds its sole immutable
   exact `RouteUnitManifest`, without a global roster or a second assignment
   authority. New patrols retain one leader plus one to three scouts; cargo
@@ -454,12 +459,10 @@
 - Frontier v3 now has one V3-owned `FrontierV3PhysicalWorld`: lifecycle execution, restart inspection and all public physical-event bridges use only Graybox; other dimensions are explicit no-ops. Its canonical `WorldId` is `frontier:graybox`, invalidating the faulty r5 state; Graybox's known light-gray-concrete baseline is accepted exactly for field preparation. SourceGraybox delegates to the same physical dimension identity without a V3→legacy dependency. Fresh r6 materialized the Northwatch field and exposed one HOT/COLD route-lease race; `4b68424` made the lease exclusive, deferred COLD start/progress/readiness/combat and excluded a generic route scene during unresolved interception. The critical gate passed with 222 required GameTests.
 - Fresh r7 exposed COLD combat changing an actor under unresolved ambient recovery; `1d2de76` makes ambient authority exclusive. r8 then exposed PREPARED restart turning permanent UNKNOWN; `0e7896d` retains PREPARED, but r9 found bootstrap resident anchors inside Hall. `FrontierSettlementActorSlots` now compiles bounded, unique clear street/perimeter anchors for bootstrap and births; r10 then found legacy admission cancelling V3 bodies. Strict canonical UUID/type/lease proof permits only exact V3 bodies. `0e1a8a4` freezes HOT leases at server stop; an initial fresh-r11 graceful recovery retained resident `1-1`'s UUID, but a later ordinary client reconnect exposed a separate duplicate-UUID race: late `EntityLeave` had closed a lease after the old body entered chunk NBT. The r11 world is tainted as recovery evidence. `e0cd261` replaces that late close with fail-closed HOT recovery and the only COLD hand-off with 200-tick absent-demand/64-block-safe durable capture followed by explicit body discard; the contract/map and GameTest negative path match it. Fresh r12 proved normal player leave/rejoin and stop/restart with 20 recovered HOT leases and no duplicate UUID/quarantine, but its field exposed a separate V2/V3 single-writer violation: frozen SourceGraybox could republish into V3 Graybox. The r12 field is tainted. The successor makes launch-mode V3 exclusively own Graybox, pauses/rejects V2 writers even after V3 quarantine, and has focused launch-ownership coverage; without competing client/server load its full critical gate passed 223/223 GameTests plus build/package verification.
 ### Next
-- Finish and commit the exact bioform-profile cut only after focused profile,
-  recovery and scene checks plus the critical gate prove schema-104/envelope-13
-  persistence and readable axis-derived graybox presentation. Then introduce
-  the dedicated cocoon/lifecycle owner (wounds, structural/reserve biomass,
-  controller and exact physical custody) before any decorative biology or
-  additional bioform family.
+- The next hive slice is an explicit task/threat-driven lifecycle owner for
+  waking, assembling, controller assignment, return and recovery. It must use
+  the same body/lease/cocoon authorities, never wake a form solely because a
+  chunk loaded and never add a second actor location or vitality owner.
 - Close T0.1–T0.5 before adding another movement-bearing scene or transport family: typed spatial values and fresh-world persistence, semantic facility ports, bounded 3D capability topology, one observed HOT/COLD cursor, then non-flat/blocked/restart and Foundry evidence. Complete the already active medical correction only through this reusable port/topology boundary; do not add another coordinate-specific approach.
 - Close V3-AUD-022 before another route or transport scene: prove the registered maintenance chain in a materialized normal path, unavailable/foreign source or target, and restart between pickup and target postcondition; then run one native ordinary player break → exact repair → same-edge recovery scenario. The current physical body/scene limits remain fixed; any future increase requires the documented same-seed JFR and terminal causal scenario, not TPS alone.
 - The active V3-AUD-022 contract remains `docs/frontier-v3-route-maintenance-contract.md`: `RouteMaintenance` owns one PM route loss, exact team, source pickup/cargo and target receipt. It cannot become generic repair, a bypass substitute, force-loading or player-road adoption. The immediate next implementation slice is physical GameTest and pilot evidence, not new strategic behavior.

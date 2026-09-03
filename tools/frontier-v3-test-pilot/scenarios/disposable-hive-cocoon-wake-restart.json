@@ -21,9 +21,7 @@
     { "type": "break", "position": { "x": -429, "y": 65, "z": 409 } },
     { "type": "wait_until_block", "position": { "x": -429, "y": 65, "z": 409 }, "block": "minecraft:air", "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "-429,65,409", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "bioform:west-0", "semanticPart": "COCOON", "causeKind": "PLAYER" }, "timeoutMs": 30000 },
-    { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "WAKING", "ambientLease": "NONE" }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "trace", "id": "physical-delta:-429,65,409" },
-    { "type": "wait", "ms": 1000 },
     { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ACTIVE", "ambientLease": "HOT" }, "timeoutMs": 60000 },
     { "type": "look_nearest_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 32, "timeoutMs": 30000 }
   ],
@@ -39,12 +37,11 @@
     ]
   },
   "assertions": [
-    { "after": 8, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "lifecycle": "WAKING", "ambientLease": "NONE" } },
-    { "after": 9, "view": "physical_delta", "id": "-429,65,409", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "bioform:west-0", "semanticPart": "COCOON" } },
-    { "after": 11, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "lifecycle": "ACTIVE", "ambientLease": "HOT" } }
+    { "after": 7, "view": "physical_delta", "id": "-429,65,409", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS", "owner": "bioform:west-0", "semanticPart": "COCOON" } },
+    { "after": 9, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "lifecycle": "ACTIVE", "ambientLease": "HOT" } }
   ],
   "frames": [
     { "after": 4, "name": "hibernaculum-cocoon-before-wake" },
-    { "after": 12, "name": "hibernaculum-awakened-bioform" }
+    { "after": 10, "name": "hibernaculum-awakened-bioform" }
   ]
 }

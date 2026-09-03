@@ -97,7 +97,7 @@ class HiveInfectionProcessTest {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         List<Bioform> scouts = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).toList();
         Bioform observer = scouts.getFirst(), territorySensor = scouts.get(1);
-        state = state.withActorBody(observer.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
+        state = FrontierTestPositions.deployBioform(state, observer.id(), FrontierTestPositions.bodyAboveSupport(settlement.anchor()));
         HiveSettlementObserved observation = new HiveSettlementObserved(new HiveSettlementKnowledge.Sighting(settlement.id(), observer.id(), settlement.anchor(), 0L));
         state = HiveSettlementPerceptionProcess.reduce(state, state.bootstrap().hive().id(), observation)
                 .withActorBody(observer.id(), FrontierTestPositions.bodyAboveSupport(state.bootstrap().hive().seedNests().getFirst().anchor()));
@@ -106,7 +106,7 @@ class HiveInfectionProcessTest {
         Map<InfectionCell, HiveTerritoryKnowledge.Belief> beliefs = new LinkedHashMap<>();
         BlockPosition sensorPosition = new BlockPosition(-44, 64, -32);
         local.forEach((cell, intensity) -> beliefs.put(cell, new HiveTerritoryKnowledge.Belief(cell, intensity, territorySensor.id(), sensorPosition, 0L)));
-        state = state.withActorBody(territorySensor.id(), FrontierTestPositions.bodyAboveSupport(sensorPosition)).withStrategicPlans(state.strategicPlans()
+        state = FrontierTestPositions.deployBioform(state, territorySensor.id(), FrontierTestPositions.bodyAboveSupport(sensorPosition)).withStrategicPlans(state.strategicPlans()
                 .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(beliefs)));
 
         assertEquals(new InfectionCell(-13, -8), HiveInfectionProcess.expansionTarget(state, 0L).orElseThrow(),

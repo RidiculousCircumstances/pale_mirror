@@ -19,7 +19,7 @@ public final class RouteConstructionStateSupport {
                          Map<SubjectId, ActorLocation> actors,
                          HumanPopulation population, Map<SubjectId, ProductionJob> jobs, ResourceSiteState sites,
                          Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts,
-                         StrategicPlanState plans) {
+                         StrategicPlanState plans, Map<SubjectId, AmbientActorLease> ambientLeases) {
         if (constructions.size() > MAX_CONSTRUCTIONS) throw new IllegalArgumentException("route construction retention limit exceeded");
         HashSet<SubjectId> settlements = new HashSet<>();
         for (Map.Entry<SubjectId, RouteConstruction> entry : constructions.entrySet()) {
@@ -38,6 +38,15 @@ public final class RouteConstructionStateSupport {
                 ActorLocation actor = actors.get(member);
                 if (actor == null || !actor.supportingSurface().support().equals(position)) {
                     throw new IllegalArgumentException("engineering assembly must retain each member's exact canonical position");
+                }
+            }));
+            project.assembly().ifPresent(assembly -> assembly.members().forEach((memberId, cursor) -> {
+                AmbientActorLease lease = ambientLeases.get(memberId);
+                if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) return;
+                BlockPosition expected = cursor.arrived() ? cursor.currentPosition() : cursor.corridor().get(cursor.cursor() + 1);
+                if (lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY
+                        || !lease.goalBody().supportingSurface().support().equals(expected)) {
+                    throw new IllegalArgumentException("active engineering assembly lease must retain its one exact next cursor");
                 }
             }));
         }

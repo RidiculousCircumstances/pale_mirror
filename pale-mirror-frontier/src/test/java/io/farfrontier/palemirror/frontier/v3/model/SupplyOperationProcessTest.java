@@ -63,9 +63,9 @@ class SupplyOperationProcessTest {
         long due = engine.checkpoint().instant().ticks() + 1L;
         List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unknown, SupplyOperationProcess.operationProgress(operation, due));
 
-        ScheduleEffect.Created deferred = assertInstanceOf(ScheduleEffect.Created.class, planned.getFirst().payload());
+        ScheduleEffect.Rescheduled deferred = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload());
         assertEquals(1, planned.size());
-        assertEquals(SupplyOperationProcess.operationProgress(operation, due + 100L), deferred.action());
+        assertEquals(SupplyOperationProcess.operationProgress(operation, due + 100L), deferred.replacement());
     }
 
     @Test

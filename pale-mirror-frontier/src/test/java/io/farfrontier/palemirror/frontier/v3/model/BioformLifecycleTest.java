@@ -56,6 +56,25 @@ class BioformLifecycleTest {
     }
 
     @Test
+    void cocoonCustodyRejectsAHiddenBodyMoveOrActiveLeaseBeforeMaterialization() {
+        FrontierWorldState state = initial();
+        Bioform dormant = state.bootstrap().hive().bioforms().stream().filter(bioform ->
+                state.hiveColony().bioformLifecycles().get(bioform.id()).phase() == BioformLifecyclePhase.DORMANT).findFirst().orElseThrow();
+        HiveCocoonSlot slot = state.hiveColony().bioformLifecycles().get(dormant.id()).homeSlot().orElseThrow();
+        HiveOrgan hibernaculum = state.bootstrap().hive().organs().stream()
+                .filter(organ -> organ.id().equals(slot.hibernaculumId())).findFirst().orElseThrow();
+
+        assertThrows(IllegalArgumentException.class, () -> state.withActorBody(dormant.id(),
+                BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, slot))));
+
+        AmbientActorLease forbidden = new AmbientActorLease(dormant.id(), state.actorLocations().get(dormant.id()).body(),
+                new SimInstant(1L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL,
+                state.actorLocations().get(dormant.id()).body());
+        assertThrows(IllegalArgumentException.class, () -> HiveLifecycleStateSupport.validateCocoonCustody(state.bootstrap(),
+                state.hiveColony(), state.actorLocations(), java.util.Map.of(dormant.id(), forbidden)));
+    }
+
+    @Test
     void lifecycleAndCocoonCustodySurviveTheCurrentFreshSchemaRoundTrip() {
         FrontierWorldState source = initial();
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(source));
