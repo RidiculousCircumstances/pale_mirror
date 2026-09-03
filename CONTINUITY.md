@@ -262,7 +262,9 @@
   `OUTPUT_READY`. A blocked job retains its lease through durable release and
   only then receives `ProductionWorkSceneFinalized`, which releases its exact
   market reservation without a zombie scene or duplicate output. Focused
-  early-intent/finalization tests pass, Scene 44/44 and Economy 17/17 pass.
+  early-intent/finalization tests pass, Scene 44/44 and Economy 17/17 pass;
+  commit `e7719053` also passes the complete critical gate (`guardrails`,
+  `check`, package verification and 282/282 GameTests).
   Native `disposable_materialized_production_work_restart` run
   `75f45107-732a-43dc-996b-1f47a9e0244b` observed the exact `INDUSTRIAL
   WORKER`, reached terminal market order `FULFILLED`, and after a graceful
