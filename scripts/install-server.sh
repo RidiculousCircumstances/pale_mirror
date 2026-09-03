@@ -208,6 +208,21 @@ for jar in "$target"/mods/createcaliber*.jar; do
   mv "$jar" "$disabled"
 done
 
+# These paired community ports are opt-in in Packwiz, but the installer retains a
+# previously selected optional JAR.  The supported Frontier v3 profile excludes
+# them on both sides of the connection, so retire every conventional filename
+# spelling recoverably instead of leaving the server to advertise stale network
+# mods after the client updater has removed them.
+retired_unsupported_mods="$cache_dir/retired-unsupported-mods"
+for source in "$target"/mods/alexscaves*.jar "$target"/mods/AlexsCaves*.jar \
+  "$target"/mods/citadel*.jar "$target"/mods/Citadel*.jar; do
+  [[ -f "$source" ]] || continue
+  mkdir -p "$retired_unsupported_mods"
+  destination="$retired_unsupported_mods/$(basename "$source").$(date -u +%Y%m%dT%H%M%SZ)"
+  mv -- "$source" "$destination"
+  echo "Retired unsupported Alex's Caves/Citadel server JAR: $destination"
+done
+
 c2me_jar="$target/mods/c2me-neoforge-mc1.21.1-0.3.0+alpha.0.93.jar"
 c2me_disabled="$c2me_jar.disabled"
 if [[ "$enable_c2me" == true ]]; then
