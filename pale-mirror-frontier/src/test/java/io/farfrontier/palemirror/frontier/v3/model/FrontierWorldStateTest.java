@@ -182,6 +182,19 @@ class FrontierWorldStateTest {
     }
 
     @Test
+    void genericCodecCachesOnlyTheExactImmutableBootstrapHeader() {
+        FrontierWorldState own = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:generic-codec-cache"), 1234L));
+        byte[] ownBytes = new FrontierWorldStateCodec().encode(own);
+        FrontierWorldState first = new FrontierWorldStateCodec().decode(ownBytes);
+        FrontierWorldState second = new FrontierWorldStateCodec().decode(ownBytes);
+        assertSame(first.bootstrap(), second.bootstrap(), "repeated generic checkpoint reads reuse only immutable genesis");
+
+        FrontierWorldState foreign = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:generic-codec-cache-foreign"), 1234L));
+        FrontierWorldState restoredForeign = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(foreign));
+        assertTrue(!first.bootstrap().equals(restoredForeign.bootstrap()), "a different world header cannot reuse another world's genesis");
+    }
+
+    @Test
     void physicalDeltasRetainExactKnownLossesAndUnknownScarsWithoutTemplateRepair() {
         FrontierWorldState baseline = initial();
         HiveOrgan organ = baseline.bootstrap().hive().organs().getFirst();

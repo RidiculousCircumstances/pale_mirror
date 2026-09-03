@@ -93,7 +93,7 @@ only its currently implemented `GANGLION`/`BROOD`/`STORE`/`HIBERNACULUM` organs;
 the first growth output, and the remaining organ types must not be fabricated
 until their own owning process exists. That organ-vocabulary cut was schema 103
 and persistence envelope 12; the current physiology cut supersedes it with schema
-106/envelope 15, still fresh-world-only. The retired `HEART` byte `0` is intentionally
+107/envelope 16, still fresh-world-only. The retired `HEART` byte `0` is intentionally
 unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
@@ -116,7 +116,7 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Schema 106/envelope 15 adds cocoon/lifecycle and exact task mobilisation only as
+ambient lease. Schema 107/envelope 16 adds cocoon/lifecycle and exact task mobilisation only as
 an exact phase
 plus an optional hibernaculum slot; wounds, structural/reserve biomass and
 controller ownership remain later owning-process cuts rather than duplicated
@@ -165,7 +165,9 @@ floor and changes only that bioform to `WAKING`. A naturally loaded successful
 ambient lease materializes that same identity and changes it to `ACTIVE`.
 
 The first task/threat-driven mobilization boundary is now also implemented.
-One current assault task may select one bounded nest-local exact group, turn
+Every settlement-assault group includes one exact dormant `OVERSEER` as its
+durably retained controller plus its exact breach members; selection fails
+closed when the named nest cannot provide that controller. One current assault task may select one bounded nest-local exact group, turn
 only those dormant identities to `WAKING`, then open their still player-breakable
 cocoons one at a time through a naturally demanded durable release effect. A
 confirmed early member remains `ASSEMBLING` with no ambient body until every
@@ -174,7 +176,7 @@ materialize and visibly assemble. An external player break always wins as an
 ordinary physical delta: it wakes only that occupant and visibly conflicts the
 interrupted operation instead of being misrepresented as the executor's receipt.
 Patrol, route-engagement and settlement-assault selection reject cocoon-retained
-or task-committed bioforms. Departure, Overseer admission and return/recovery
+or task-committed bioforms. Departure, weighted Overseer command-capacity admission and return/recovery
 remain later operation boundaries; chunk loading and direct body moves are never
 wake authority.
 

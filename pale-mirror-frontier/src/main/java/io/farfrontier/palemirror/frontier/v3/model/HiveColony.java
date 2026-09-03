@@ -241,6 +241,9 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
                 if (expected != null && lifecycle.phase() != expected) {
                     throw new IllegalArgumentException("hive mobilization lifecycle does not match its physical release phase");
                 }
+                if (member.equals(mobilization.overseerId()) && !bioform.isOverseer()) {
+                    throw new IllegalArgumentException("hive mobilization controller must retain one exact Overseer profile");
+                }
             }
         }
         java.util.Set<HiveCocoonSlot> reservedSlots = new java.util.HashSet<>();

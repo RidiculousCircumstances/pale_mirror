@@ -14,19 +14,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BioformProfileTest {
     @Test
-    void bootstrapSeparatesSentinelScoutDefenderAndExplosiveAssaulterWithoutCohorts() {
+    void bootstrapSeparatesSentinelScoutDefenderExplosiveAssaulterAndExactOverseerWithoutCohorts() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:bioform-profile"), 91L));
 
         assertEquals(48, state.bootstrap().hive().bioforms().size());
         assertEquals(12L, state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).count());
         assertEquals(12L, state.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender).count());
-        assertEquals(12L, state.bootstrap().hive().bioforms().stream().filter(Bioform::isExplosiveAssaulter).count());
+        assertEquals(10L, state.bootstrap().hive().bioforms().stream().filter(Bioform::isExplosiveAssaulter).count());
+        assertEquals(2L, state.bootstrap().hive().bioforms().stream().filter(Bioform::isOverseer).count());
         assertTrue(state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
                 .allMatch(value -> value.chassis() == BioformChassis.SENTINEL && value.mutations().isEmpty()));
         assertTrue(state.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender)
                 .allMatch(value -> value.chassis() == BioformChassis.RUNT && value.mutations().contains(BioformMutation.ARMORED)));
         assertTrue(state.bootstrap().hive().bioforms().stream().filter(Bioform::isExplosiveAssaulter)
                 .allMatch(value -> value.chassis() == BioformChassis.RUNT && value.mutations().equals(Set.of(BioformMutation.EXPLOSIVE))));
+        assertTrue(state.bootstrap().hive().bioforms().stream().filter(Bioform::isOverseer)
+                .allMatch(value -> value.chassis() == BioformChassis.OVERSEER
+                        && value.mutations().isEmpty() && value.assignment() == BioformAssignment.WATCH));
     }
 
     @Test

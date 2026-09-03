@@ -46,6 +46,26 @@ class HiveMobilizationProcessTest {
         assertInstanceOf(CommandPlan.Accepted.class, plan);
     }
 
+    @Test void remoteAssaultRequiresOneExactDormantOverseerAndRejectsAnImpostorController() {
+        Fixture fixture = fixture();
+        List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        HiveMobilization valid = assertInstanceOf(HiveMobilizationStarted.class, planned.get(1).payload()).mobilization();
+
+        assertEquals(new SubjectId("bioform:east-23"), valid.overseerId());
+        Bioform controller = fixture.state().bootstrap().hive().bioforms().stream()
+                .filter(value -> value.id().equals(valid.overseerId())).findFirst().orElseThrow();
+        assertTrue(controller.isOverseer());
+        assertTrue(valid.memberIds().contains(valid.overseerId()));
+
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+        HiveMobilization impostor = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.settlementId(),
+                valid.memberIds().getFirst(), valid.memberIds(), valid.releasedMemberIds(), valid.releasingMemberId(), valid.status(), valid.conflictReason(), valid.startedAt());
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceStarted(active, fixture.hive(), new HiveMobilizationStarted(impostor)),
+                "canonical validation must reject a breach member masquerading as a remote controller");
+    }
+
     @Test void assaultTaskWakesOnlyExactDormantMembersThenAdmitsTheWholeObservedGroupWithoutASyntheticBody() {
         Fixture fixture = fixture();
         List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),

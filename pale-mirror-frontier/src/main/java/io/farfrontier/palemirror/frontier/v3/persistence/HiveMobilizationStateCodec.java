@@ -26,6 +26,7 @@ final class HiveMobilizationStateCodec {
             FrontierWorldStateCodec.writeString(output, mobilization.nestId().value());
             FrontierWorldStateCodec.writeString(output, mobilization.taskId().value());
             FrontierWorldStateCodec.writeString(output, mobilization.settlementId().value());
+            FrontierWorldStateCodec.writeString(output, mobilization.overseerId().value());
             FrontierWorldStateCodec.writeCount(output, mobilization.memberIds().size());
             for (SubjectId member : mobilization.memberIds()) FrontierWorldStateCodec.writeString(output, member.value());
             FrontierWorldStateCodec.writeCount(output, mobilization.releasedMemberIds().size());
@@ -47,6 +48,7 @@ final class HiveMobilizationStateCodec {
             SubjectId nest = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId task = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+            SubjectId overseer = new SubjectId(FrontierWorldStateCodec.readString(input));
             List<SubjectId> members = new ArrayList<>();
             for (int member = 0, memberCount = FrontierWorldStateCodec.readCount(input); member < memberCount; member++) {
                 members.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
@@ -61,7 +63,7 @@ final class HiveMobilizationStateCodec {
             Optional<io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason> reason = input.readBoolean()
                     ? Optional.of(FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason.class, input.readUnsignedByte()))
                     : Optional.empty();
-            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, members, released, releasing, status, reason, input.readLong());
+            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, status, reason, input.readLong());
             if (mobilizations.put(id, mobilization) != null) throw new IllegalArgumentException("duplicate hive mobilization");
         }
         return Map.copyOf(mobilizations);

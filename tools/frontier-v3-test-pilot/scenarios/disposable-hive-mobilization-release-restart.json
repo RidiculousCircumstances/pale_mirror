@@ -18,7 +18,7 @@
     { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" }, "timeoutMs": 60000 },
     { "type": "look", "at": { "x": 412, "y": 66, "z": 407 } },
-    { "type": "assert_visible_board", "text": "ASSEMBLY · 3 FORMED", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "assert_visible_board", "text": "ASSEMBLY · 4 FORMED", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "look_nearest_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 48, "timeoutMs": 30000 }
   ],
   "restart": {

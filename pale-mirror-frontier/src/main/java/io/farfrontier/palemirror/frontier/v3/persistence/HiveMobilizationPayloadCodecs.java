@@ -56,20 +56,20 @@ final class HiveMobilizationPayloadCodecs {
 
     private static void write(DataOutputStream output, HiveMobilization value) throws IOException {
         writeSubject(output, value.id()); writeSubject(output, value.hiveId()); writeSubject(output, value.nestId()); writeSubject(output, value.taskId());
-        writeSubject(output, value.settlementId()); writeSubjects(output, value.memberIds()); writeSubjects(output, value.releasedMemberIds());
+        writeSubject(output, value.settlementId()); writeSubject(output, value.overseerId()); writeSubjects(output, value.memberIds()); writeSubjects(output, value.releasedMemberIds());
         output.writeBoolean(value.releasingMemberId().isPresent()); if (value.releasingMemberId().isPresent()) writeSubject(output, value.releasingMemberId().orElseThrow());
         output.writeByte(value.status().wireTag()); output.writeBoolean(value.conflictReason().isPresent());
         if (value.conflictReason().isPresent()) output.writeByte(value.conflictReason().orElseThrow().wireTag()); output.writeLong(value.startedAt());
     }
 
     private static HiveMobilization read(DataInputStream input) throws IOException {
-        SubjectId id = readSubject(input), hive = readSubject(input), nest = readSubject(input), task = readSubject(input), settlement = readSubject(input);
+        SubjectId id = readSubject(input), hive = readSubject(input), nest = readSubject(input), task = readSubject(input), settlement = readSubject(input), overseer = readSubject(input);
         List<SubjectId> members = readSubjects(input), released = readSubjects(input);
         Optional<SubjectId> releasing = input.readBoolean() ? Optional.of(readSubject(input)) : Optional.empty();
         HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
         Optional<HiveMobilizationConflictReason> conflict = input.readBoolean()
                 ? Optional.of(FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte())) : Optional.empty();
-        return new HiveMobilization(id, hive, nest, task, settlement, members, released, releasing, status, conflict, input.readLong());
+        return new HiveMobilization(id, hive, nest, task, settlement, overseer, members, released, releasing, status, conflict, input.readLong());
     }
 
     private static void writeSubjects(DataOutputStream output, List<SubjectId> values) throws IOException {

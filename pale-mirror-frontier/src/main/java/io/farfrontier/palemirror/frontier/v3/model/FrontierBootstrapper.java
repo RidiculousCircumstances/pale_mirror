@@ -84,10 +84,14 @@ public final class FrontierBootstrapper {
     }
 
     private static BioformChassis chassis(int ordinal) {
+        if (ordinal == 23) return BioformChassis.OVERSEER;
         return Math.floorMod(ordinal, 4) == 1 ? BioformChassis.SENTINEL : BioformChassis.RUNT;
     }
 
     private static java.util.Set<BioformMutation> mutations(int ordinal) {
+        // The dormant command body is a distinct exact controller, not a recycled bomber
+        // profile with a conflicting payload mutation.
+        if (ordinal == 23) return java.util.Set.of();
         return switch (Math.floorMod(ordinal, 4)) {
             case 2 -> java.util.Set.of(BioformMutation.ARMORED);
             case 3 -> java.util.Set.of(BioformMutation.EXPLOSIVE);
@@ -96,6 +100,7 @@ public final class FrontierBootstrapper {
     }
 
     private static BioformAssignment assignment(int ordinal) {
+        if (ordinal == 23) return BioformAssignment.WATCH;
         return switch (Math.floorMod(ordinal, 4)) {
             case 0 -> BioformAssignment.HARVEST;
             case 1 -> BioformAssignment.SCOUT;

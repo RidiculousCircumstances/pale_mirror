@@ -24,12 +24,14 @@ final class FrontierDevelopmentScenarios {
     private FrontierDevelopmentScenarios() { }
 
     static FrontierWorldState hotSceneStrikeState(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
+        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
+        var engine = FrontierEngines.create(configuration);
+        var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             if (tick % 20L != 0L) continue;
-            state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            state = codec.decode(engine.checkpoint().canonicalState());
             RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
             if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.activeTravel().isPresent()
                     && candidate.activeTravel().orElseThrow().cursor() == 0) {
@@ -261,13 +263,15 @@ final class FrontierDevelopmentScenarios {
      * route rule.
      */
     static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
+        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
+        var engine = FrontierEngines.create(configuration);
+        var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             if (tick % 20L != 0L) continue;
-            checkpoint = engine.checkpoint(); state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            checkpoint = engine.checkpoint(); state = codec.decode(checkpoint.canonicalState());
             RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
             if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.routeIndex() == 0
                     && candidate.activeTravel().isPresent() && candidate.activeTravel().orElseThrow().cursor() == 0) {
@@ -441,11 +445,13 @@ final class FrontierDevelopmentScenarios {
      * HOT movement; it cannot use the fixture to start travel or move a resident.
      */
     static OperationAssemblyFixture operationAssemblyFixture(WorldId worldId, long seed) {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed));
+        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
+        var engine = FrontierEngines.create(configuration);
+        var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             var checkpoint = engine.checkpoint();
-            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            FrontierWorldState state = codec.decode(checkpoint.canonicalState());
             RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
             if (operation == null || operation.stage() != OperationStage.ASSEMBLING || operation.activeAssembly().isEmpty()) continue;
             var schedules = checkpoint.schedules().stream().filter(action -> !action.subject().equals(operation.id())
@@ -472,11 +478,12 @@ final class FrontierDevelopmentScenarios {
         var engine = FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter()));
+        var codec = new FrontierWorldStateCodec(base.initialState().bootstrap());
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(32, 256));
             if (tick % 20L != 0L) continue;
             var checkpoint = engine.checkpoint();
-            FrontierWorldState state = new FrontierWorldStateCodec().decode(checkpoint.canonicalState());
+            FrontierWorldState state = codec.decode(checkpoint.canonicalState());
             HiveGrowthJob job = state.hiveColony().growthJobs().get(new SubjectId("job:hive-growth-1"));
             if (job != null && state.physicalIntents().get(job.consumptionIntentId()) != null) {
                 return new HiveGrowthFixture(state, checkpoint.instant(), checkpoint.schedules());

@@ -26,8 +26,9 @@ advance. `scene-return` exposes one real COLD route continuation, while
 ordinary first strategic review to create the exact exposure and quarantine
 facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 `hive-mobilization` begins with exactly one already selected waking group but
-no released cocoon or HOT body; an ordinary visit must open the three owned
-cocoons, admit the same three IDs together and keep them through a restart.
+no released cocoon or HOT body; an ordinary visit must open the four owned
+cocoons, including its exact Overseer controller, admit the same four IDs
+together and keep them through a restart.
 `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 exact stack must leave one loaded chest, cross the retained COLD corridor, then
 enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded

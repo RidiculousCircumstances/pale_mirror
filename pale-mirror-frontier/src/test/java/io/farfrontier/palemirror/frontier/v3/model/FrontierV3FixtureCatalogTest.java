@@ -90,7 +90,9 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
                 "the exact waking group must survive the checkpoint boundary that precedes physical release");
         assertEquals(HiveMobilizationStatus.WAKING, mobilization.status());
-        assertEquals(List.of(new SubjectId("bioform:east-11"), new SubjectId("bioform:east-14"), new SubjectId("bioform:east-2")), mobilization.memberIds());
+        assertEquals(List.of(new SubjectId("bioform:east-11"), new SubjectId("bioform:east-14"), new SubjectId("bioform:east-2"),
+                new SubjectId("bioform:east-23")), mobilization.memberIds());
+        assertEquals(new SubjectId("bioform:east-23"), mobilization.overseerId());
         assertTrue(mobilization.memberIds().stream().allMatch(id ->
                 state.hiveColony().bioformLifecycles().get(id).phase() == BioformLifecyclePhase.WAKING));
         assertTrue(mobilization.memberIds().stream().allMatch(id ->
@@ -102,7 +104,7 @@ class FrontierV3FixtureCatalogTest {
                 state.hiveColony().bioformLifecycles().get(first).homeSlot().orElseThrow());
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(hibernaculum);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
-        assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/3"), "the physical tray must explain its own waking state without a HUD");
+        assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/4"), "the physical tray must explain its own waking state without a HUD");
     }
 
     @Test

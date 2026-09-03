@@ -119,12 +119,16 @@ public final class HiveMobilizationProcess {
                         sighting.settlementAnchor())).thenComparing(Bioform::id)).toList();
         Bioform bomber = dormant.stream().filter(Bioform::isExplosiveAssaulter).findFirst().orElse(null);
         if (bomber == null) return Optional.empty();
+        Bioform overseer = dormant.stream().filter(Bioform::isOverseer).findFirst().orElse(null);
+        if (overseer == null) return Optional.empty();
         List<Bioform> defenders = dormant.stream().filter(Bioform::isDefender).filter(value -> !value.id().equals(bomber.id())).limit(2).toList();
         if (defenders.size() != 2) return Optional.empty();
-        List<SubjectId> members = new ArrayList<>(); members.add(bomber.id()); defenders.forEach(value -> members.add(value.id()));
+        // Preserve the established visible breach order. Controller ownership is explicit,
+        // not an implication of list position; its cocoon still opens before the group is HOT.
+        List<SubjectId> members = new ArrayList<>(); members.add(bomber.id()); defenders.forEach(value -> members.add(value.id())); members.add(overseer.id());
         String suffix = task.id().value().substring("task:".length());
         return Optional.of(new HiveMobilization(new SubjectId("mobilization:" + suffix), state.bootstrap().hive().id(), nest.id(), task.id(),
-                sighting.settlementId(), members, HiveMobilizationStatus.WAKING, now));
+                sighting.settlementId(), overseer.id(), members, HiveMobilizationStatus.WAKING, now));
     }
 
     private static Stream<Bioform> allBioforms(FrontierWorldState state) {

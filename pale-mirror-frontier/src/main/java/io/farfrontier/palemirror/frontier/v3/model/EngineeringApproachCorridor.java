@@ -3,7 +3,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -122,22 +121,28 @@ final class EngineeringApproachCorridor {
     }
 
     /**
-     * One approach compilation resolves the immutable route projection once, then does bounded
-     * O(1) column lookups. Re-scanning every route segment for every candidate cell made an
-     * ordinary repair admission proportional to candidate length times the whole world graph.
+     * One local approach retains only its own bounded column observations.  It must not compile
+     * the full materialized three-wide route footprint merely to decide whether its candidate
+     * crosses a route deck: that footprint is a projection product, not navigation authority.
+     * The declared analytic graph resolves each encountered column once, including absence.
      */
-    private record SurfaceIndex(Map<Long, BlockPosition> columns) {
+    private static final class SurfaceIndex {
+        private final FrontierBootstrap bootstrap;
+        private final RouteTopology topology;
+        private final Map<Long, java.util.Optional<BlockPosition>> columns;
+
+        private SurfaceIndex(FrontierBootstrap bootstrap, RouteTopology topology) {
+            this.bootstrap = Objects.requireNonNull(bootstrap, "approach bootstrap");
+            this.topology = Objects.requireNonNull(topology, "approach route topology");
+            this.columns = new java.util.HashMap<>();
+        }
+
         static SurfaceIndex compile(FrontierWorldState state) {
-            Map<Long, BlockPosition> columns = new HashMap<>();
-            for (BlockPosition surface : FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology())) {
-                columns.merge(key(surface.x(), surface.z()), surface,
-                        (first, second) -> first.y() >= second.y() ? first : second);
-            }
-            return new SurfaceIndex(Map.copyOf(columns));
+            return new SurfaceIndex(state.bootstrap(), state.routeTopology());
         }
 
         java.util.Optional<BlockPosition> at(int x, int z) {
-            return java.util.Optional.ofNullable(columns.get(key(x, z)));
+            return columns.computeIfAbsent(key(x, z), ignored -> FrontierRouteNetwork.surfaceAt(bootstrap, topology, x, z));
         }
 
         private static long key(int x, int z) { return ((long) x << 32) ^ (z & 0xffff_ffffL); }

@@ -30,6 +30,9 @@ public record Bioform(SubjectId id, SubjectId hiveId, SubjectId nestId, BioformC
 
     public boolean isScout() { return chassis == BioformChassis.SENTINEL && assignment == BioformAssignment.SCOUT; }
 
+    /** A mobile synaptic controller; task groups retain its exact identity durably. */
+    public boolean isOverseer() { return chassis == BioformChassis.OVERSEER && assignment == BioformAssignment.WATCH; }
+
     public boolean isDefender() { return assignment == BioformAssignment.DEFEND; }
 
     public boolean isExplosiveAssaulter() {
