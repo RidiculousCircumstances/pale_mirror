@@ -80,27 +80,18 @@ install_hosted_pale_mirror() {
   local managed_jar="$mods_dir/pale_mirror-hosted.jar"
   mkdir -p "$mods_dir" "$cache_dir"
 
-  local nullglob_state
+  # Do not collect globs in an array here. macOS ships Bash 3.2, where an
+  # empty array expanded under `set -u` aborts the updater before it can retire
+  # stale JARs. A nullglob-backed loop has the same semantics without that
+  # platform-dependent failure mode.
+  local nullglob_state candidate verified_existing=""
   nullglob_state=$(shopt -p nullglob || true)
   shopt -s nullglob
-  local discovered=("$mods_dir"/pale_mirror*.jar "$mods_dir"/pale-mirror*.jar)
-  eval "$nullglob_state"
-  local candidates=() candidate
-  # macOS still ships Bash 3.2: with `set -u`, expanding an empty array as
-  # "${array[@]}" is an error there. Keep the no-existing-JAR path explicit.
-  for candidate in "${discovered[@]:-}"; do
+  for candidate in "$mods_dir"/pale_mirror*.jar "$mods_dir"/pale-mirror*.jar; do
     [[ -f "$candidate" ]] || continue
-    [[ "${candidate##*/}" == pale_mirror_visuals* ]] || candidates+=("$candidate")
-  done
-
-  # A previous updater used build-versioned names and would refuse to replace
-  # them. That leaves an old client speaking obsolete channels such as
-  # `pale_mirror:atlas` after the server has moved on. Keep every obsolete JAR
-  # recoverably under the installer cache, then make the checksum-pinned JAR
-  # the sole active Pale Mirror artifact.
-  local verified_existing=""
-  for candidate in "${candidates[@]:-}"; do
-    [[ -n "$candidate" ]] || continue
+    case "${candidate##*/}" in
+      pale_mirror_visuals*|pale-mirror-visuals*) continue ;;
+    esac
     if pale_mirror_sha512_matches "$expected" "$candidate"; then
       if [[ "$candidate" == "$managed_jar" ]]; then
         verified_existing="$candidate"
@@ -109,18 +100,35 @@ install_hosted_pale_mirror() {
       [[ -n "$verified_existing" ]] || verified_existing="$candidate"
     fi
   done
+  eval "$nullglob_state"
+
+  # A previous updater used build-versioned names and would refuse to replace
+  # them. That leaves an old client speaking obsolete channels such as
+  # `pale_mirror:atlas` after the server has moved on. Keep every obsolete JAR
+  # recoverably under the installer cache, then make the checksum-pinned JAR
+  # the sole active Pale Mirror artifact.
   if [[ -n "$verified_existing" ]]; then
-    for candidate in "${candidates[@]:-}"; do
-      [[ -n "$candidate" ]] || continue
+    nullglob_state=$(shopt -p nullglob || true)
+    shopt -s nullglob
+    for candidate in "$mods_dir"/pale_mirror*.jar "$mods_dir"/pale-mirror*.jar; do
+      case "${candidate##*/}" in
+        pale_mirror_visuals*|pale-mirror-visuals*) continue ;;
+      esac
       [[ "$candidate" == "$verified_existing" ]] || archive_retired_pale_mirror "$candidate" "$cache_dir"
     done
+    eval "$nullglob_state"
     echo "Pale Mirror already installed and SHA-512 verified: $verified_existing"
     return 0
   fi
-  for candidate in "${candidates[@]:-}"; do
-    [[ -n "$candidate" ]] || continue
+  nullglob_state=$(shopt -p nullglob || true)
+  shopt -s nullglob
+  for candidate in "$mods_dir"/pale_mirror*.jar "$mods_dir"/pale-mirror*.jar; do
+    case "${candidate##*/}" in
+      pale_mirror_visuals*|pale-mirror-visuals*) continue ;;
+    esac
     archive_retired_pale_mirror "$candidate" "$cache_dir"
   done
+  eval "$nullglob_state"
 
   local cache_jar="$cache_dir/pale-mirror-${expected:0:16}.jar"
   if ! pale_mirror_sha512_matches "$expected" "$cache_jar"; then
@@ -164,19 +172,29 @@ install_hosted_pale_mirror_visuals() {
   local managed_jar="$mods_dir/pale_mirror_visuals-hosted.jar"
   mkdir -p "$mods_dir" "$cache_dir"
 
-  local nullglob_state
+  # See install_hosted_pale_mirror: avoid empty-array expansion under macOS
+  # Bash 3.2 with nounset enabled.
+  local nullglob_state candidate existing="" candidate_count=0
   nullglob_state=$(shopt -p nullglob || true)
   shopt -s nullglob
-  local candidates=("$mods_dir"/pale_mirror_visuals*.jar "$mods_dir"/pale-mirror-visuals*.jar)
+  for candidate in "$mods_dir"/pale_mirror_visuals*.jar "$mods_dir"/pale-mirror-visuals*.jar; do
+    [[ -f "$candidate" ]] || continue
+    existing="$candidate"
+    candidate_count=$((candidate_count + 1))
+  done
   eval "$nullglob_state"
 
-  if ((${#candidates[@]} > 1)); then
+  if ((candidate_count > 1)); then
     echo "Multiple Pale Mirror Visuals JARs are present; refusing to choose between them:" >&2
-    printf '  %s\n' "${candidates[@]}" >&2
+    nullglob_state=$(shopt -p nullglob || true)
+    shopt -s nullglob
+    for candidate in "$mods_dir"/pale_mirror_visuals*.jar "$mods_dir"/pale-mirror-visuals*.jar; do
+      [[ -f "$candidate" ]] && printf '  %s\n' "$candidate" >&2
+    done
+    eval "$nullglob_state"
     return 1
   fi
-  if ((${#candidates[@]} == 1)); then
-    local existing=${candidates[0]}
+  if ((candidate_count == 1)); then
     if pale_mirror_sha512_matches "$expected" "$existing"; then
       echo "Pale Mirror Visuals already installed and SHA-512 verified: $existing"
       return 0
