@@ -260,7 +260,8 @@ scripts/frontier-v3-deploy-verify.sh \
   --level-name frontier-v3-live-rNN \
   --sha512 '<same pinned SHA-512>' \
   --service far-frontier-v3-live.service \
-  --not-before "$started_at"
+  --not-before "$started_at" \
+  --wait-seconds 30
 ```
 
 `far-frontier-client-host.service` serves the repository and ignored `hosted/`

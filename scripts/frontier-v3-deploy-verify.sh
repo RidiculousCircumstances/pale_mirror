@@ -10,7 +10,8 @@ Usage:
     --level-name <selected V3 world directory> \
     --sha512 <installed Pale Mirror JAR SHA-512> \
     --service <user systemd unit> \
-    --not-before <Unix epoch at restart>
+    --not-before <Unix epoch at restart> \
+    [--wait-seconds <0-60>]
 
 This command is read-only.  It proves the currently installed JAR, real user
 service PID, selected listening port and fresh post-restart Frontier v3 startup
@@ -23,6 +24,7 @@ level_name=""
 expected_sha512=""
 service=""
 not_before=""
+wait_seconds=0
 while (($#)); do
   case "$1" in
     --target) target=${2:?--target requires a runtime directory}; shift 2 ;;
@@ -30,6 +32,7 @@ while (($#)); do
     --sha512) expected_sha512=${2:?--sha512 requires a SHA-512}; shift 2 ;;
     --service) service=${2:?--service requires a user unit}; shift 2 ;;
     --not-before) not_before=${2:?--not-before requires a Unix epoch}; shift 2 ;;
+    --wait-seconds) wait_seconds=${2:?--wait-seconds requires an integer}; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'Unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -42,6 +45,10 @@ done
 [[ "$expected_sha512" =~ ^[[:xdigit:]]{128}$ ]] || { printf 'Expected SHA-512 must be 128 hexadecimal characters.\n' >&2; exit 2; }
 [[ "$level_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { printf 'level-name must be a simple relative directory name: %s\n' "$level_name" >&2; exit 2; }
 [[ "$not_before" =~ ^[0-9]+$ ]] || { printf 'not-before must be a Unix epoch.\n' >&2; exit 2; }
+[[ "$wait_seconds" =~ ^[0-9]+$ && "$wait_seconds" -le 60 ]] || {
+  printf 'wait-seconds must be an integer from 0 to 60.\n' >&2
+  exit 2
+}
 [[ -d "$target" ]] || { printf 'Missing dedicated-server runtime: %s\n' "$target" >&2; exit 2; }
 target=$(cd "$target" && pwd -P)
 [[ "$target" != / ]] || { printf 'Refusing filesystem root as runtime target.\n' >&2; exit 2; }
@@ -93,7 +100,17 @@ ss -ltnH | awk '{print $4}' | grep -Eq "(:|\\.)${port}$" || {
 }
 
 command -v journalctl >/dev/null || { printf 'journalctl is required for fresh startup evidence.\n' >&2; exit 2; }
-fresh_log=$(journalctl --user -u "$service" --since "@$not_before" --no-pager -o cat)
+deadline=$((SECONDS + wait_seconds))
+while :; do
+  fresh_log=$(journalctl --user -u "$service" --since "@$not_before" --no-pager -o cat)
+  if [[ -n "$fresh_log" ]] \
+    && printf '%s\n' "$fresh_log" | grep -Fq 'Frontier v3 runtime started' \
+    && printf '%s\n' "$fresh_log" | grep -Eq 'Done \('; then
+    break
+  fi
+  (( SECONDS >= deadline )) && break
+  sleep 1
+done
 [[ -n "$fresh_log" ]] || { printf 'No service journal records after restart marker %s.\n' "$not_before" >&2; exit 1; }
 printf '%s\n' "$fresh_log" | grep -Fq 'Frontier v3 runtime started' || {
   printf 'Fresh journal lacks Frontier v3 runtime startup evidence.\n' >&2

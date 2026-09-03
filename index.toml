@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "afd654d60df2e7bfd1eb0830588b5d0beb2d34d51a93bc3e752d6312c74dbb82"
+hash = "685fe4e2251afb6bb201d9a359968aa033076ee1f50652685b9e0ba26e821e8b"
 
 [[files]]
 file = "config/README.md"
@@ -726,7 +726,7 @@ hash = "6309e12d3e99cd15a417bb4728b46adef7688e1d13078bbfe33e416b29ff4722"
 
 [[files]]
 file = "scripts/frontier-v3-deploy-verify.sh"
-hash = "be6e35f47dd239ac815f83584bb21e2030e6f8564725739218f218526b768896"
+hash = "bb695a36fcf631156392e8be715ea764b3db74c297b04ff6befc659165a60cb5"
 
 [[files]]
 file = "scripts/install-client.ps1"
