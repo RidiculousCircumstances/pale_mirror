@@ -14,6 +14,8 @@ public enum GrayboxMaterial {
     HIVE_STORE,
     HIVE_DIGESTER,
     HIVE_HIBERNACULUM,
+    /** A living occupied cocoon, intentionally distinct from the hibernaculum that houses it. */
+    HIVE_COCOON,
     HIVE_MORPHER,
     HIVE_SPORULATOR,
     HIVE_SENSOR,
@@ -37,6 +39,8 @@ public enum GrayboxMaterial {
             case HIVE_STORE -> "minecraft:magenta_concrete";
             case HIVE_DIGESTER -> "minecraft:brown_concrete";
             case HIVE_HIBERNACULUM -> "minecraft:cyan_concrete";
+            // Cocoon loss wakes its exact occupant; it is not a generic construction repair.
+            case HIVE_COCOON -> throw new IllegalArgumentException("a cocoon is a living hive occupant, not a structural repair material");
             case HIVE_MORPHER -> "minecraft:lime_concrete";
             case HIVE_SPORULATOR -> "minecraft:orange_concrete";
             case HIVE_SENSOR -> "minecraft:light_blue_concrete";

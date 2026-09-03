@@ -40,7 +40,7 @@ final class FrontierDevelopmentScenarios {
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.isDefender() || bioform.isExplosiveAssaulter()) state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            if (bioform.isDefender() || bioform.isExplosiveAssaulter()) state = deployFixtureBioform(state, bioform.id(), intercept);
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,
@@ -50,7 +50,7 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
-        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+        state = deployFixtureBioform(state, scout.id(), intercept);
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
         ScheduledAction action = HiveRouteEngagementProcess.start(task, 2_600L);
@@ -215,7 +215,15 @@ final class FrontierDevelopmentScenarios {
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture needs one Scout"));
-        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
+        state = deployFixtureBioform(state, scout.id(), settlement.anchor());
+        // Establish an externally mobilised assault party. The production selector correctly
+        // excludes cocoon-retained identities; this fixture explicitly owns only its test
+        // precondition, rather than relying on an impossible direct COLD movement later.
+        for (Bioform bioform : state.bootstrap().hive().bioforms()) {
+            if (bioform.isExplosiveAssaulter() || bioform.isDefender()) {
+                state = deployFixtureBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).supportingSurface().support());
+            }
+        }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());
         FixedRatio intensity = new FixedRatio(FixedScalar.ONE);
@@ -370,7 +378,7 @@ final class FrontierDevelopmentScenarios {
         Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
                 .filter(Bioform::isScout).findFirst().orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
-        FrontierWorldState state = base.state().withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(operation.activeTravel().orElseThrow().cargoAnchor().surface().support())));
+        FrontierWorldState state = deployFixtureBioform(base.state(), scout.id(), operation.activeTravel().orElseThrow().cargoAnchor().surface().support());
         // This isolated proof must demonstrate physical HOT perception only.  Retain every
         // ordinary route/actor schedule, but remove the one pre-existing COLD hive-review that
         // could derive knowledge before a player loads the scene.
@@ -401,9 +409,9 @@ final class FrontierDevelopmentScenarios {
         if (guards.size() != 2) throw new IllegalStateException("hot scout intercept fixture has fewer than two guards");
         // These three exact bodies get distinct nearby starts.  Co-locating every eligible hive
         // attacker would invoke vanilla entity cramming and turn a causal fixture into deaths.
-        state = state.withActorBody(bomber.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-1, 0, 0))));
-        state = state.withActorBody(guards.getFirst().id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(1, 0, 0))));
-        state = state.withActorBody(guards.getLast().id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(0, 0, -1))));
+        state = deployFixtureBioform(state, bomber.id(), intercept.offset(-1, 0, 0));
+        state = deployFixtureBioform(state, guards.getFirst().id(), intercept.offset(1, 0, 0));
+        state = deployFixtureBioform(state, guards.getLast().id(), intercept.offset(0, 0, -1));
         return new RouteSceneReturnFixture(state, base.instant(), base.schedules());
     }
 
@@ -607,6 +615,22 @@ final class FrontierDevelopmentScenarios {
         SubjectId worker = base.state().productionJobs().get(jobId).workerId();
         FrontierWorldState isolated = base.state().withActorBody(worker, BodyPosition.above(new SurfaceAnchor(new BlockPosition(-480, 64, -480))));
         return new MaterializedProductionFixture(isolated, base.instant(), base.schedules(), base.orderId());
+    }
+
+    /**
+     * Test fixtures may establish a real external-operation precondition, but they must make
+     * the lifecycle transition explicit.  Directly moving a cocoon-retained identity would
+     * create an impossible canonical state and conceal the production wake boundary.
+     */
+    private static FrontierWorldState deployFixtureBioform(FrontierWorldState state, SubjectId bioformId, BlockPosition surface) {
+        BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioformId);
+        if (lifecycle == null) throw new IllegalArgumentException("fixture deployment requires a canonical bioform: " + bioformId.value());
+        if (lifecycle.phase().occupiesCocoon()) {
+            Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(state.hiveColony().bioformLifecycles());
+            lifecycles.put(bioformId, lifecycle.waking().active());
+            state = state.withChanges(FrontierWorldStateUpdate.begin().hiveColony(state.hiveColony().withBioformLifecycles(lifecycles)));
+        }
+        return state.withActorBody(bioformId, BodyPosition.above(new SurfaceAnchor(surface)));
     }
 
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {

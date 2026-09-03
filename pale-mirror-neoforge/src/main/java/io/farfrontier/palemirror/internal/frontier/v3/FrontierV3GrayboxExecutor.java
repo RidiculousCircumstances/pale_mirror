@@ -238,6 +238,8 @@ final class FrontierV3GrayboxExecutor {
             case HIVE_STORE -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
             case HIVE_DIGESTER -> Blocks.BROWN_CONCRETE.defaultBlockState();
             case HIVE_HIBERNACULUM -> Blocks.CYAN_CONCRETE.defaultBlockState();
+            // Contrast with the cyan tray makes a dormant bioform immediately legible at range.
+            case HIVE_COCOON -> Blocks.WHITE_CONCRETE.defaultBlockState();
             case HIVE_MORPHER -> Blocks.LIME_CONCRETE.defaultBlockState();
             case HIVE_SPORULATOR -> Blocks.ORANGE_CONCRETE.defaultBlockState();
             case HIVE_SENSOR -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();

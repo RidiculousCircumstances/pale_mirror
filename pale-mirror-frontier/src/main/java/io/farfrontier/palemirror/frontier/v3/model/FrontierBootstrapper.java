@@ -53,6 +53,14 @@ public final class FrontierBootstrapper {
                     nest.anchor().offset(8, 0, 0), java.util.Optional.empty()));
             provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-store"), hiveId, nest.id(), HiveOrganKind.STORE,
                     nest.anchor().offset(-8, 0, 0), java.util.Optional.of(new SubjectId("container:hive-" + suffix + "-store"))));
+            for (int index = 0; index < 3; index++) {
+                provisionalOrgans.add(new HiveOrgan(new SubjectId("organ:" + suffix + "-hibernaculum-" + (index + 1)), hiveId, nest.id(),
+                        // Seed organs expand toward the declared positive-X/positive-Z growth
+                        // catalogue. Cocoon banks occupy the opposite, reserved side of the
+                        // nest so the first (and every later checked) organ footprint has no
+                        // hidden physical overlap.
+                        HiveOrganKind.HIBERNACULUM, nest.anchor().offset(-8 + index * 8, 0, -10), java.util.Optional.empty()));
+            }
         }
         List<HiveNest> nests = new ArrayList<>(provisionalNests.size());
         List<HiveOrgan> organs = new ArrayList<>(provisionalOrgans.size());

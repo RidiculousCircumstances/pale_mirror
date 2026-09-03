@@ -53,9 +53,10 @@ class HiveScoutPatrolProcessTest {
         assertTrue(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScheduleEffect.Created.class::isInstance));
     }
 
-    @Test void freshWorldSchedulesEveryBootstrapScoutBeforeTheFirstHiveReview() {
+    @Test void freshWorldSchedulesOnlyThePurposefullyDeployedScoutsBeforeTheFirstHiveReview() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scout-patrol-schedule"), 91L);
         List<SubjectId> scouts = configuration.initialState().bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
+                .filter(value -> HivePhysiologySupport.permitsAmbientLease(configuration.initialState().hiveColony(), value.id()))
                 .map(Bioform::id).sorted().toList();
         List<ScheduledAction> patrols = configuration.initialSchedules().stream().filter(action -> action.kind().equals("frontier.hive.scout.patrol")).toList();
         assertEquals(scouts, patrols.stream().map(ScheduledAction::subject).sorted().toList());

@@ -50,6 +50,7 @@ public final class FrontierGrayboxPlan {
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
         addRoutes(cells, state.bootstrap(), state.routeTopology());
         addActiveWorksiteStaging(cells, state);
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
@@ -124,6 +125,7 @@ public final class FrontierGrayboxPlan {
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
         state.physicalDeltas().keySet().forEach(cells::remove);
         return cells.values().stream()
                 .filter(cell -> cell.semanticPart() != GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE)
@@ -272,6 +274,14 @@ public final class FrontierGrayboxPlan {
         Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(colony, "hive colony");
         Objects.requireNonNull(topology, "route topology"); Objects.requireNonNull(constructions, "route constructions");
         Objects.requireNonNull(owner, "owner"); Objects.requireNonNull(position, "position");
+        BioformLifecycle lifecycle = colony.bioformLifecycles().get(owner);
+        if (lifecycle != null && lifecycle.homeSlot().isPresent()) {
+            HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+            HiveOrgan hibernaculum = findHiveOrgan(bootstrap, colony, slot.hibernaculumId());
+            if (position.equals(HiveCocoonPlan.cocoonCell(hibernaculum, slot))) {
+                return new GrayboxCell(position, owner, GrayboxMaterial.HIVE_HIBERNACULUM, GrayboxSemanticPart.COCOON);
+            }
+        }
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
             if (structure.id().equals(owner)) return intactStructureCell(bootstrap.terrain(), structure, position);
         }
@@ -312,6 +322,11 @@ public final class FrontierGrayboxPlan {
 
     public static int intactOrganCellCount(HiveOrgan organ) {
         Objects.requireNonNull(organ, "organ");
+        if (organ.kind() == HiveOrganKind.HIBERNACULUM) {
+            // An open 5×5 tray.  Cocoon blocks belong to individual bioforms and therefore are
+            // projected separately by lifecycle state, not counted as organ tissue.
+            return 25;
+        }
         // addOrgan creates a 5x5 top (25 cells) plus the three lower perimeter rings
         // (3 * 16). A STORE adds its otherwise hollow central socket at y=0. Keep this
         // exact geometry formula beside the compiler instead of allocating a temporary
@@ -410,12 +425,34 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addOrgan(Map<BlockPosition, GrayboxCell> cells, HiveOrgan organ, GrayboxMaterial material) {
+        if (organ.kind() == HiveOrganKind.HIBERNACULUM) {
+            // Unlike sealed hive organs, a hibernaculum is deliberately a shallow open tray.
+            // Its living cocoons are visible, reachable and individually causal to the player.
+            for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
+                add(cells, organ.anchor().offset(x, 0, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+            }
+            return;
+        }
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) for (int y = 0; y <= 3; y++) {
             if (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2) add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
         }
         // A STORE is hollow like the other organs, but its exact chest must stand on a planned
         // tissue socket rather than on an arbitrary world block.
         if (organ.containerId().isPresent()) add(cells, organ.anchor(), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+    }
+
+    private static void addOccupiedCocoons(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, HiveColony colony) {
+        colony.bioformLifecycles().entrySet().stream().filter(entry -> entry.getValue().phase().occupiesCocoon())
+                .sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+                    HiveCocoonSlot slot = entry.getValue().homeSlot().orElseThrow();
+                    BlockPosition position = HiveCocoonPlan.cocoonCell(findHiveOrgan(bootstrap, colony, slot.hibernaculumId()), slot);
+                    add(cells, position, entry.getKey(), GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
+                });
+    }
+
+    private static HiveOrgan findHiveOrgan(FrontierBootstrap bootstrap, HiveColony colony, SubjectId id) {
+        return java.util.stream.Stream.concat(bootstrap.hive().organs().stream(), colony.addedOrgans().values().stream())
+                .filter(organ -> organ.id().equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown hive organ: " + id.value()));
     }
 
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {

@@ -74,7 +74,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-16, 0, 0))));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-16, 0, 0))));
         }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept"), state.bootstrap().hive().id(),
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
@@ -119,7 +119,7 @@ class HiveRouteEngagementProcessTest {
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-scene-conflict"), hive,
@@ -194,7 +194,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-combat"), hive,
@@ -319,7 +319,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-cold-exclusive"), hive,
@@ -352,7 +352,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-ambient-recovery-exclusive"), hive,
@@ -394,7 +394,7 @@ class HiveRouteEngagementProcessTest {
         assertEquals(3_060L, ((ScheduleEffect.Created) hotDeferred.getFirst().payload()).action().dueAt().ticks());
     }
 
-    @Test void autonomousSupplyProfileInterceptsOnlyAfterAnExactScoutSighting() {
+    @Test void autonomousSupplyProfileCreatesOnlyAnExactScoutBoundInterceptionBeforeTheMobilizationOwnerExists() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.autonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
         FrontierWorldState latest = null;
         boolean sighted = false;
@@ -412,8 +412,9 @@ class HiveRouteEngagementProcessTest {
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
         assertTrue(sighted, "an interception must first retain a Scout-owned sighting");
         assertTrue(interceptedFromBoundPosition, "the durable intercept task must retain the exact Scout-observed position");
-        assertTrue(finalState.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.outcome().isPresent()),
-                () -> "scouted route never reached a terminal engagement: " + finalState.strategicPlans().routeEngagements());
+        assertTrue(finalState.strategicPlans().routeEngagements().values().stream().allMatch(engagement -> engagement.attackerIds().stream()
+                        .allMatch(actor -> HivePhysiologySupport.permitsAmbientLease(finalState.hiveColony(), actor))),
+                () -> "cocoon-retained bioform became an autonomous intercept attacker: " + finalState.strategicPlans().routeEngagements());
     }
 
     private static FrontierWorldState enRouteState() {
@@ -432,7 +433,7 @@ class HiveRouteEngagementProcessTest {
     private static FrontierWorldState withSighting(FrontierWorldState state, RouteOperation operation, long observedAt) {
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         BlockPosition carrierPosition = operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support()).orElse(operation.currentPosition());
-        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(carrierPosition)));
+        state = FrontierTestPositions.deployBioform(state, scout.id(), BodyPosition.above(new SurfaceAnchor(carrierPosition)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
     }

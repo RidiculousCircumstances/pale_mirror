@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrganSupportPlan;
@@ -73,6 +74,7 @@ final class FrontierV3HiveFoundryAudit {
         int missingTissue = 0;
         for (GrayboxCell cell : expected.values()) {
             if (cell.semanticPart() == GrayboxSemanticPart.FOUNDATION || cell.semanticPart() == GrayboxSemanticPart.HIVE_TISSUE) continue;
+            if (cell.semanticPart() == GrayboxSemanticPart.COCOON && cell.material() == GrayboxMaterial.HIVE_COCOON) continue;
             missingTissue++;
             add(findings, "frontier.hive.organ.compiled", FoundrySeverity.BLOCKER, phase, organId, level, cell.position(),
                     "Organ projection contains a non-hive semantic part.",

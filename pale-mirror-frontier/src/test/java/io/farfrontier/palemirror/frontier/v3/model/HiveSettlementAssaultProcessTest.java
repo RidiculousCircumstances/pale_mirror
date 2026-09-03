@@ -111,7 +111,7 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState state = fixture.state();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
                 .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
-            state = state.withActorBody(bioform.id(), BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
         }
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
@@ -251,7 +251,12 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assault-process-" + territory), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
-        state = state.withActorBody(scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
+        state = FrontierTestPositions.deployBioform(state, scout.id(), BodyPosition.above(new SurfaceAnchor(settlement.anchor())));
+        for (Bioform bioform : state.bootstrap().hive().bioforms()) {
+            if (bioform.isExplosiveAssaulter() || bioform.isDefender()) {
+                state = FrontierTestPositions.deployBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).body());
+            }
+        }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         StrategicPlanState plans = StrategicPlanState.empty().withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
                 .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L));

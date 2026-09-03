@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 104; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 105; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -247,6 +247,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, receipt.sourceSlot().containerId().value()); output.writeByte(receipt.sourceSlot().slot()); writeString(output, receipt.targetSlot().containerId().value()); output.writeByte(receipt.targetSlot().slot());
             output.writeByte(receipt.status().wireTag()); output.writeBoolean(receipt.consumedByJobId().isPresent()); if (receipt.consumedByJobId().isPresent()) writeString(output, receipt.consumedByJobId().orElseThrow().value());
         }
+        writeCount(output, colony.bioformLifecycles().size());
+        for (Map.Entry<SubjectId, BioformLifecycle> entry : colony.bioformLifecycles().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().value()); BioformLifecycle lifecycle = entry.getValue();
+            output.writeByte(lifecycle.phase().wireTag()); output.writeBoolean(lifecycle.homeSlot().isPresent());
+            if (lifecycle.homeSlot().isPresent()) {
+                HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow(); writeString(output, slot.hibernaculumId().value()); output.writeByte(slot.index());
+            }
+        }
     }
     private static HiveColony readHiveColony(DataInputStream input, boolean hasNutrientTransfers, boolean hasReceiptConsumption, boolean hasEndpointIntent) throws IOException {
         Map<SubjectId, HiveOrgan> organs = new LinkedHashMap<>();
@@ -303,7 +311,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("duplicate hive nutrient receipt");
             }
         }
-        return new HiveColony(organs, bioforms, jobs, transfers, receipts);
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId bioform = new SubjectId(readString(input)); int phase = input.readUnsignedByte(); boolean hasHome = input.readBoolean();
+            java.util.Optional<HiveCocoonSlot> home = hasHome ? java.util.Optional.of(new HiveCocoonSlot(new SubjectId(readString(input)), input.readUnsignedByte())) : java.util.Optional.empty();
+            if (lifecycles.put(bioform, new BioformLifecycle(FrontierWireTags.require(BioformLifecyclePhase.class, phase), home)) != null) {
+                throw new IllegalArgumentException("duplicate bioform lifecycle");
+            }
+        }
+        return new HiveColony(organs, bioforms, jobs, transfers, receipts, lifecycles);
     }
     private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
         writeCount(output, ledger.accounts().size());

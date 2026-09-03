@@ -65,6 +65,8 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId site = state.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId dormantBioform = state.hiveColony().bioformLifecycles().entrySet().stream()
+                .filter(entry -> entry.getValue().phase().occupiesCocoon()).map(java.util.Map.Entry::getKey).sorted().findFirst().orElseThrow();
         SubjectId item = state.inventory().items().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
         SubjectId hive = state.bootstrap().hive().id();
@@ -73,6 +75,7 @@ class FrontierV3DiagnosticJsonTest {
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
         String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
+        String dormantBioformJson = FrontierV3DiagnosticJson.render("actor", dormantBioform.value(), checkpoint, state, Optional.empty());
         String itemJson = FrontierV3DiagnosticJson.render("item", item.value(), checkpoint, state, Optional.empty());
         String settlementJson = FrontierV3DiagnosticJson.render("settlement", settlement.value(), checkpoint, state, Optional.empty());
         String hiveJson = FrontierV3DiagnosticJson.render("hive", hive.value(), checkpoint, state, Optional.empty());
@@ -85,6 +88,10 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(siteJson.contains("\"firstCrop\":{"));
         assertTrue(actorJson.contains("\"position\":{"));
         assertTrue(actorJson.contains("\"nutrition\":\"NOURISHED\""));
+        assertTrue(dormantBioformJson.contains("\"actorKind\":\"BIOFORM\"") && dormantBioformJson.contains("\"lifecycle\":\"DORMANT\""),
+                "an operator and test-pilot must be able to distinguish an occupied cocoon from an ambient bioform");
+        assertTrue(dormantBioformJson.contains("\"cocoonHome\":{\"hibernaculum\":\"organ:"),
+                "the exact durable cocoon custody must be inspectable without mutating canonical state");
         assertTrue(itemJson.contains("\"custody\":{"));
         assertTrue(settlementJson.contains("\"harvestAdmission\":\"NO_READY_SITE\""));
         assertTrue(settlementJson.contains("\"strategic\":{"));

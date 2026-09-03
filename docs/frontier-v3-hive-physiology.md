@@ -89,11 +89,11 @@ another surviving owner.
 
 The Java organ vocabulary now uses the complete accepted set with explicit
 non-reused tags (`GANGLION=10` through `SENSOR=18`). The seed profile creates
-only its currently implemented `GANGLION`/`BROOD`/`STORE` organs; `RELAY` is
+only its currently implemented `GANGLION`/`BROOD`/`STORE`/`HIBERNACULUM` organs; `RELAY` is
 the first growth output, and the remaining organ types must not be fabricated
 until their own owning process exists. That organ-vocabulary cut was schema 103
-and persistence envelope 12; the current profile cut supersedes it with schema
-104/envelope 13, still fresh-world-only. The retired `HEART` byte `0` is intentionally
+and persistence envelope 12; the current physiology cut supersedes it with schema
+105/envelope 14, still fresh-world-only. The retired `HEART` byte `0` is intentionally
 unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
@@ -116,8 +116,9 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Cocoon/lifecycle, wounds, structural/reserve biomass and
-controller ownership are a later owning-process cut, rather than duplicated
+ambient lease. Schema 105/envelope 14 adds cocoon/lifecycle only as exact phase
+plus an optional hibernaculum slot; wounds, structural/reserve biomass and
+controller ownership remain later owning-process cuts rather than duplicated
 prematurely in this profile.
 
 Graybox colour/geometry must expose chassis, important mutation and current
@@ -151,6 +152,21 @@ guards, harvesters, carriers and repair forms outside; it has no ambient random
 swarm. Mobilization has a visible warning, wake-up interval, assembly and
 physical departure. Survivors physically return before a cocoon can reclaim
 them.
+
+### Current implemented boundary
+
+Each seed nest has three 3×3-slot `HIBERNACULUM` trays. The fresh profile has
+48 exact bioforms: one Scout and one Defender per nest begin deployed; the
+other 44 occupy individually owned visible white cocoon blocks in cyan trays.
+A dormant cocoon has no ambient Zombie. Breaking its owned cocoon records the
+ordinary `KNOWN_SEMANTIC_LOSS`, moves that same `ActorLocation` to the tray
+floor and changes only that bioform to `WAKING`. A naturally loaded successful
+ambient lease materializes that same identity and changes it to `ACTIVE`.
+
+This is deliberately the first wake boundary only. Patrol, route-engagement
+and settlement-assault selection rejects cocoon-retained bioforms. The future
+task/threat-driven mobilization owner must visibly wake, assemble and depart
+them; it may not treat chunk loading or a direct body move as wake authority.
 
 ### Biomass, wounds and consumption
 

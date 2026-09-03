@@ -16,6 +16,9 @@ public final class AmbientLeaseStateProcess {
         Objects.requireNonNull(lease, "ambient lease"); ActorLocation actor = state.actorLocations().get(lease.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || lease.status() != AmbientLeaseStatus.PREPARED
                 || !actor.body().equals(lease.handoffBody())) throw new IllegalArgumentException("ambient lease must prepare one living actor at its canonical handoff body");
+        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), lease.actorId())) {
+            throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
+        }
         if (state.sceneLeases().values().stream().anyMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
                 && scene.members().stream().anyMatch(member -> member.actorId().equals(lease.actorId())))) throw new IllegalArgumentException("scene-leased actor cannot receive an ambient lease");
         AmbientActorLease previous = state.ambientLeases().get(lease.actorId());
@@ -35,7 +38,13 @@ public final class AmbientLeaseStateProcess {
                 || current.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART && (nextStatus == AmbientLeaseStatus.HOT || nextStatus == AmbientLeaseStatus.DRAINING);
         if (!allowed) throw new IllegalArgumentException("ambient lease transition is not allowed");
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(actorId, current.withStatus(nextStatus));
-        return copy(state, state.actorLocations(), next);
+        FrontierWorldState changed = copy(state, state.actorLocations(), next);
+        if (nextStatus != AmbientLeaseStatus.HOT) return changed;
+        BioformLifecycle lifecycle = changed.hiveColony().bioformLifecycles().get(actorId);
+        if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.WAKING) return changed;
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(changed.hiveColony().bioformLifecycles());
+        lifecycles.put(actorId, lifecycle.active());
+        return changed.withChanges(FrontierWorldStateUpdate.begin().hiveColony(changed.hiveColony().withBioformLifecycles(lifecycles)));
     }
 
     public static FrontierWorldState release(FrontierWorldState state, AmbientLeaseReleased release) {

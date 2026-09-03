@@ -17,6 +17,9 @@ public enum GrayboxSemanticPart {
      * materializer to recreate it or treating it as completed infrastructure.
      */
     WORKSITE_STAGING
+    ,
+    /** One exact occupied cocoon, owned by its bioform rather than the enclosing organ. */
+    COCOON
 ;
 
     public int wireTag() { return FrontierWireTags.tag(this); }

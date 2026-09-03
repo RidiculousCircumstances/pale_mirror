@@ -87,6 +87,9 @@ public final class FrontierWorldPhysicalDeltaSupport {
                 changed = changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
             }
         }
+        for (PhysicalDelta delta : deltas) {
+            if (isCocoonLoss(delta)) changed = releaseCocoonOccupant(changed, delta);
+        }
         return changed;
     }
 
@@ -101,12 +104,57 @@ public final class FrontierWorldPhysicalDeltaSupport {
                 && delta.semanticPart().filter(GrayboxSemanticPart.WORKSITE_STAGING::equals).isPresent();
     }
 
+    private static boolean isCocoonLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent();
+    }
+
+    /**
+     * A cocoon loss is an immediately accounted physical threat: the same exact occupant is
+     * released to the organ floor and may then receive an ordinary ambient lease. No mob is
+     * created by this reducer; loaded-world materialization remains the executor's boundary.
+     */
+    private static FrontierWorldState releaseCocoonOccupant(FrontierWorldState state, PhysicalDelta loss) {
+        SubjectId bioformId = loss.ownerId().orElseThrow();
+        BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioformId);
+        if (lifecycle == null || !lifecycle.phase().occupiesCocoon()) {
+            throw new IllegalArgumentException("cocoon loss does not retain a dormant exact bioform");
+        }
+        HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+        HiveOrgan hibernaculum = hiveOrgan(state, slot.hibernaculumId());
+        if (!loss.position().equals(HiveCocoonPlan.cocoonCell(hibernaculum, slot))) {
+            throw new IllegalArgumentException("cocoon loss is not the bioform's exact occupied slot");
+        }
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(state.hiveColony().bioformLifecycles());
+        lifecycles.put(bioformId, lifecycle.waking());
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        ActorLocation actor = actors.get(bioformId);
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("cocoon loss has no living exact occupant");
+        }
+        actors.put(bioformId, actor.withBody(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, slot))));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .hiveColony(state.hiveColony().withBioformLifecycles(lifecycles)));
+    }
+
+    private static HiveOrgan hiveOrgan(FrontierWorldState state, SubjectId organId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(organ -> organ.id().equals(organId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("cocoon references an absent HIBERNACULUM"));
+    }
+
     private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) return;
         GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(),
                 state.routeConstructions(), delta.ownerId().orElseThrow(), delta.position());
         if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
             throw new IllegalArgumentException("known physical delta is not an exact current semantic cell");
+        }
+        if (expected.semanticPart() == GrayboxSemanticPart.COCOON) {
+            BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(expected.ownerId());
+            if (lifecycle == null || !lifecycle.phase().occupiesCocoon()) {
+                throw new IllegalArgumentException("only an occupied exact cocoon may become a new physical loss");
+            }
         }
     }
 

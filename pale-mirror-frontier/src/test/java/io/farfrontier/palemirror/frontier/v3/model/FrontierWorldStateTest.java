@@ -105,7 +105,7 @@ class FrontierWorldStateTest {
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), wheat, new ProductionInputHold.Cold(heldWheat),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
-        FrontierWorldState source = baseline.withInventory(inventory).withActorBody(new SubjectId("bioform:west-0"), FrontierTestPositions.bodyAboveSupport(new BlockPosition(-400, 64, 400)))
+        FrontierWorldState source = baseline.withInventory(inventory).withActorBody(new SubjectId("bioform:west-1"), FrontierTestPositions.bodyAboveSupport(new BlockPosition(-400, 64, 400)))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
                 .withInfection(new InfectionCell(-100, 100), HALF).startProductionJob(activeJob, wheat);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();

@@ -13,8 +13,9 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
      * remaining accepted physiology is a legal extension vocabulary, not fictional bootstrap
      * infrastructure: it appears only when its owning process is introduced.
      */
-    private static final Set<HiveOrganKind> REQUIRED_SEED_ORGANS = Set.of(
+    private static final Set<HiveOrganKind> REQUIRED_SINGLETON_SEED_ORGANS = Set.of(
             HiveOrganKind.GANGLION, HiveOrganKind.BROOD, HiveOrganKind.STORE);
+    private static final int REQUIRED_HIBERNACULA_PER_NEST = 3;
 
     public Hive {
         Objects.requireNonNull(id, "hive id");
@@ -23,7 +24,7 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
         bioforms = List.copyOf(bioforms);
         List<HiveNest> declaredNests = seedNests;
         if (seedNests.size() != 2) throw new IllegalArgumentException("bootstrap hive requires exactly two seed nests");
-        if (organs.size() != seedNests.size() * REQUIRED_SEED_ORGANS.size()) {
+        if (organs.size() != seedNests.size() * (REQUIRED_SINGLETON_SEED_ORGANS.size() + REQUIRED_HIBERNACULA_PER_NEST)) {
             throw new IllegalArgumentException("bootstrap hive requires exactly its implemented seed organs at every nest");
         }
         if (declaredNests.stream().anyMatch(nest -> !id.equals(nest.hiveId()))
@@ -36,11 +37,16 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
                 != organs.stream().map(HiveOrgan::containerId).filter(java.util.Optional::isPresent).count()) {
             throw new IllegalArgumentException("hive organ identities and storage surfaces must be unique");
         }
+        requireNonOverlappingOrganFootprints(organs);
         for (HiveNest nest : declaredNests) {
-            for (HiveOrganKind kind : REQUIRED_SEED_ORGANS) {
+            for (HiveOrganKind kind : REQUIRED_SINGLETON_SEED_ORGANS) {
                 if (organs.stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == kind).count() != 1) {
                     throw new IllegalArgumentException("each seed nest must own one of every required seed organ");
                 }
+            }
+            if (organs.stream().filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.HIBERNACULUM).count()
+                    != REQUIRED_HIBERNACULA_PER_NEST) {
+                throw new IllegalArgumentException("each seed nest must own its exact HIBERNACULUM capacity");
             }
         }
     }
@@ -49,5 +55,11 @@ public record Hive(SubjectId id, List<HiveNest> seedNests, List<HiveOrgan> organ
         return organs.stream().filter(organ -> organ.kind() == HiveOrganKind.STORE)
                 .min(java.util.Comparator.comparing(HiveOrgan::id))
                 .orElseThrow(() -> new IllegalStateException("hive has no store organ"));
+    }
+
+    static void requireNonOverlappingOrganFootprints(List<HiveOrgan> organs) {
+        int expected = organs.stream().mapToInt(FrontierGrayboxPlan::intactOrganCellCount).sum();
+        int actual = FrontierGrayboxPlan.intactOrganOccupancy(organs).size();
+        if (actual != expected) throw new IllegalArgumentException("hive organ footprints overlap");
     }
 }

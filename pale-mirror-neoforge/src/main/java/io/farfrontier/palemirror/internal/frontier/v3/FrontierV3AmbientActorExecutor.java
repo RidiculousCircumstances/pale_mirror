@@ -30,6 +30,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolLeaseRecovered;
 import io.farfrontier.palemirror.frontier.v3.model.HotScoutOperationObserved;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
+import io.farfrontier.palemirror.frontier.v3.model.HivePhysiologySupport;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess;
@@ -131,6 +132,14 @@ final class FrontierV3AmbientActorExecutor {
             if (state == null) return;
             var location = state.actorLocations().get(actorId);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
+                forgetColdDemand(runtime, actorId);
+                forgetObserved(runtime, actorId);
+                continue;
+            }
+            if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), actorId)) {
+                // Cocoon custody is materially represented by the owned block, never by a
+                // second dormant Zombie. A lifecycle transition must durably release the
+                // cocoon before this executor may admit a body again.
                 forgetColdDemand(runtime, actorId);
                 forgetObserved(runtime, actorId);
                 continue;

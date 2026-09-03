@@ -67,6 +67,7 @@ public final class AmbientActorProcess {
     public static AmbientActorLease nextLease(FrontierWorldState state, SubjectId actorId, SimInstant instant) {
         ActorLocation actor = state.actorLocations().get(actorId);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) throw new IllegalArgumentException("ambient lease requires a living canonical actor");
+        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), actorId)) throw new IllegalArgumentException("cocoon-retained bioform may not receive an ambient lease");
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         AmbientGoal goal = goalFor(state, actorId);

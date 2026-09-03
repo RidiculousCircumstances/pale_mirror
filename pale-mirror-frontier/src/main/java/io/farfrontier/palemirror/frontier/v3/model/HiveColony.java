@@ -11,7 +11,8 @@ import java.util.Objects;
 public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, Bioform> spawnedBioforms,
                          Map<SubjectId, HiveGrowthJob> growthJobs,
                          Map<SubjectId, HiveNutrientTransfer> nutrientTransfers,
-                         Map<SubjectId, HiveNutrientReceipt> nutrientReceipts) {
+                         Map<SubjectId, HiveNutrientReceipt> nutrientReceipts,
+                         Map<SubjectId, BioformLifecycle> bioformLifecycles) {
     public static final int MAX_ADDED_ORGANS = 128;
     public static final int MAX_SPAWNED_BIOFORMS = 2_048;
     public static final int MAX_GROWTH_JOBS = 128;
@@ -24,6 +25,7 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         growthJobs = immutable(growthJobs, "hive growth jobs");
         nutrientTransfers = immutable(nutrientTransfers, "hive nutrient transfers");
         nutrientReceipts = immutable(nutrientReceipts, "hive nutrient receipts");
+        bioformLifecycles = immutable(bioformLifecycles, "bioform lifecycles");
         if (addedOrgans.size() > MAX_ADDED_ORGANS) throw new IllegalArgumentException("hive organ retention limit exceeded");
         if (spawnedBioforms.size() > MAX_SPAWNED_BIOFORMS) throw new IllegalArgumentException("hive bioform retention limit exceeded");
         if (growthJobs.size() > MAX_GROWTH_JOBS) throw new IllegalArgumentException("hive growth job retention limit exceeded");
@@ -38,30 +40,36 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
 
     public HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, Bioform> spawnedBioforms,
                       Map<SubjectId, HiveGrowthJob> growthJobs) {
-        this(addedOrgans, spawnedBioforms, growthJobs, Map.of(), Map.of());
+        this(addedOrgans, spawnedBioforms, growthJobs, Map.of(), Map.of(), Map.of());
     }
 
-    public static HiveColony empty() { return new HiveColony(Map.of(), Map.of(), Map.of(), Map.of(), Map.of()); }
+    public static HiveColony empty() { return new HiveColony(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()); }
+
+    public HiveColony withBioformLifecycles(Map<SubjectId, BioformLifecycle> lifecycles) {
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles);
+    }
 
     public HiveColony addOrgan(HiveOrgan organ) {
         Objects.requireNonNull(organ, "hive organ");
         if (addedOrgans.containsKey(organ.id())) throw new IllegalArgumentException("added organ identity already exists: " + organ.id().value());
         Map<SubjectId, HiveOrgan> next = new LinkedHashMap<>(addedOrgans); next.put(organ.id(), organ);
-        return new HiveColony(next, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts);
+        return new HiveColony(next, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony spawn(Bioform bioform) {
         Objects.requireNonNull(bioform, "bioform");
         if (spawnedBioforms.containsKey(bioform.id())) throw new IllegalArgumentException("spawned bioform identity already exists: " + bioform.id().value());
         Map<SubjectId, Bioform> next = new LinkedHashMap<>(spawnedBioforms); next.put(bioform.id(), bioform);
-        return new HiveColony(addedOrgans, next, growthJobs, nutrientTransfers, nutrientReceipts);
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(bioformLifecycles);
+        lifecycles.put(bioform.id(), BioformLifecycle.activeWithoutHome());
+        return new HiveColony(addedOrgans, next, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles);
     }
 
     public HiveColony startGrowth(HiveGrowthJob job) {
         Objects.requireNonNull(job, "hive growth job");
         if (growthJobs.containsKey(job.id())) throw new IllegalArgumentException("hive growth job identity already exists: " + job.id().value());
         Map<SubjectId, HiveGrowthJob> next = new LinkedHashMap<>(growthJobs); next.put(job.id(), job);
-        return new HiveColony(addedOrgans, spawnedBioforms, next, nutrientTransfers, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, next, nutrientTransfers, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony completeGrowth(SubjectId jobId) {
@@ -73,13 +81,15 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         Map<SubjectId, HiveGrowthJob> next = new LinkedHashMap<>(growthJobs); next.remove(jobId);
         Map<SubjectId, HiveOrgan> organs = new LinkedHashMap<>(addedOrgans); organs.put(job.organ().id(), job.organ());
         Map<SubjectId, Bioform> bioforms = new LinkedHashMap<>(spawnedBioforms); bioforms.put(job.bioform().id(), job.bioform());
-        return new HiveColony(organs, bioforms, next, nutrientTransfers, nutrientReceipts);
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(bioformLifecycles);
+        lifecycles.put(job.bioform().id(), BioformLifecycle.activeWithoutHome());
+        return new HiveColony(organs, bioforms, next, nutrientTransfers, nutrientReceipts, lifecycles);
     }
 
     public HiveColony cancelGrowth(SubjectId jobId) {
         if (!growthJobs.containsKey(Objects.requireNonNull(jobId, "hive growth job id"))) throw new IllegalArgumentException("unknown hive growth job: " + jobId.value());
         Map<SubjectId, HiveGrowthJob> next = new LinkedHashMap<>(growthJobs); next.remove(jobId);
-        return new HiveColony(addedOrgans, spawnedBioforms, next, nutrientTransfers, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, next, nutrientTransfers, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony startNutrientTransfer(HiveNutrientTransfer transfer) {
@@ -91,28 +101,28 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
             throw new IllegalArgumentException("strategic task already owns a hive nutrient transfer");
         }
         Map<SubjectId, HiveNutrientTransfer> next = new LinkedHashMap<>(nutrientTransfers); next.put(transfer.id(), transfer);
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony advanceNutrientTransfer(SubjectId transferId, int cursor) {
         HiveNutrientTransfer current = nutrientTransfers.get(Objects.requireNonNull(transferId, "hive nutrient transfer id"));
         if (current == null) throw new IllegalArgumentException("unknown hive nutrient transfer: " + transferId.value());
         Map<SubjectId, HiveNutrientTransfer> next = new LinkedHashMap<>(nutrientTransfers); next.put(transferId, current.advanceTo(cursor));
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony advanceNutrientTransferState(SubjectId transferId, HiveNutrientTransfer replacement) {
         HiveNutrientTransfer current = nutrientTransfers.get(Objects.requireNonNull(transferId, "hive nutrient transfer id"));
         if (current == null || !current.id().equals(replacement.id())) throw new IllegalArgumentException("unknown hive nutrient transfer state");
         Map<SubjectId, HiveNutrientTransfer> next = new LinkedHashMap<>(nutrientTransfers); next.put(transferId, replacement);
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony blockNutrientTransfer(SubjectId transferId, HiveNutrientTransferBlockReason reason) {
         HiveNutrientTransfer current = nutrientTransfers.get(Objects.requireNonNull(transferId, "hive nutrient transfer id"));
         if (current == null) throw new IllegalArgumentException("unknown hive nutrient transfer: " + transferId.value());
         Map<SubjectId, HiveNutrientTransfer> next = new LinkedHashMap<>(nutrientTransfers); next.put(transferId, current.block(reason));
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, next, nutrientReceipts, bioformLifecycles);
     }
 
     public HiveColony completeNutrientTransfer(HiveNutrientReceipt receipt) {
@@ -123,7 +133,7 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         }
         Map<SubjectId, HiveNutrientTransfer> active = new LinkedHashMap<>(nutrientTransfers); active.remove(receipt.transferId());
         Map<SubjectId, HiveNutrientReceipt> completed = new LinkedHashMap<>(nutrientReceipts); completed.put(receipt.transferId(), receipt);
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, active, completed);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, active, completed, bioformLifecycles);
     }
 
     public HiveColony consumeTransferredNutrient(SubjectId jobId, SubjectId itemId) {
@@ -133,7 +143,7 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         if (matches.size() != 1) throw new IllegalArgumentException("exact hive nutrient has ambiguous retained receipts");
         HiveNutrientReceipt receipt = matches.getFirst(); Map<SubjectId, HiveNutrientReceipt> next = new LinkedHashMap<>(nutrientReceipts);
         next.put(receipt.transferId(), receipt.consumeBy(jobId));
-        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, next);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, next, bioformLifecycles);
     }
 
     void validateAgainst(FrontierBootstrap bootstrap) {
@@ -147,11 +157,25 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
             }
             organIds.add(organ.id());
         }
+        Hive.requireNonOverlappingOrganFootprints(java.util.stream.Stream.concat(hive.organs().stream(), addedOrgans.values().stream()).toList());
         for (Bioform bioform : spawnedBioforms.values()) {
             if (bioformIds.contains(bioform.id()) || !hive.id().equals(bioform.hiveId()) || !nestIds.contains(bioform.nestId()) || !bootstrap.bounds().contains(bioform.position())) {
                 throw new IllegalArgumentException("spawned bioform does not belong to this colony");
             }
             bioformIds.add(bioform.id());
+        }
+        if (!bioformLifecycles.keySet().equals(bioformIds)) {
+            throw new IllegalArgumentException("bioform lifecycle index must own every and only mature hive bioform");
+        }
+        java.util.Set<HiveCocoonSlot> reservedSlots = new java.util.HashSet<>();
+        for (BioformLifecycle lifecycle : bioformLifecycles.values()) {
+            if (lifecycle.homeSlot().isEmpty()) continue;
+            HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+            HiveOrgan organ = java.util.stream.Stream.concat(hive.organs().stream(), addedOrgans.values().stream())
+                    .filter(candidate -> candidate.id().equals(slot.hibernaculumId())).findFirst().orElse(null);
+            if (organ == null || organ.kind() != HiveOrganKind.HIBERNACULUM || !reservedSlots.add(slot)) {
+                throw new IllegalArgumentException("cocoon home must be unique and belong to one HIBERNACULUM");
+            }
         }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> consumptionIntents = new java.util.HashSet<>();
         for (HiveGrowthJob job : growthJobs.values()) {

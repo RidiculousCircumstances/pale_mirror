@@ -137,8 +137,11 @@ class FrontierWorldRuntimeDefinitionTest {
         List<ProposedEvent> cold = SupplyOperationProcess.planAssembly(deferred,
                 SupplyOperationProcess.operationAssembly(operation, engine.checkpoint().instant().ticks()));
         assertEquals(1, cold.size());
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class, cold.getFirst().payload(),
+        io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled retry = assertInstanceOf(
+                io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class, cold.getFirst().payload(),
                 "COLD retains a bounded recovery check but cannot advance a loaded-world block on its own");
+        assertEquals(SupplyOperationProcess.operationAssembly(operation, engine.checkpoint().instant().ticks()).id(), retry.scheduleId(),
+                "the retained recovery check must replace its own due action, never create a duplicate schedule identity");
     }
 
     @Test

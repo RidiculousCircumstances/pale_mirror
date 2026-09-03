@@ -255,6 +255,10 @@ final class FrontierV3DiagnosticJson {
         String role = resident != null ? resident.role().name() : bioform != null ? bioform.chassis().name() + "/" + bioform.assignment().name() : "UNKNOWN";
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
+        var lifecycle = bioform == null ? null : state.hiveColony().bioformLifecycles().get(subject);
+        String cocoonHome = lifecycle == null || lifecycle.homeSlot().isEmpty() ? "null" : "{\"hibernaculum\":\""
+                + quote(lifecycle.homeSlot().orElseThrow().hibernaculumId().value()) + "\",\"slot\":"
+                + lifecycle.homeSlot().orElseThrow().index() + "}";
         var lease = state.ambientLeases().get(subject);
         String ambientGoal = lease == null ? "NONE" : lease.goal().name();
         String goalPosition = lease == null ? "null" : position(lease.goalBody().supportingSurface().support());
@@ -264,6 +268,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition
+                + (lifecycle == null ? "" : ",\"lifecycle\":\"" + lifecycle.phase().name() + "\",\"cocoonHome\":" + cocoonHome)
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
 

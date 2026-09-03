@@ -218,7 +218,11 @@ public final class HiveSettlementAssaultProcess {
 
     private static boolean availableBioform(FrontierWorldState state, SubjectId id, SettlementAssault currentAssault) {
         AmbientActorLease ambient = state.ambientLeases().get(id);
-        return (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED)
+        // Strategic COLD movement has no authority to pull an exact identity through an intact
+        // cocoon.  Mobilisation is its own lifecycle boundary; until then only deployed forms
+        // may be selected for an assault.
+        return HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), id)
+                && (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED)
                 && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)
                 && value.status() != SettlementAssaultStatus.RESOLVED && value.attackerIds().contains(id));

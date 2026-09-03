@@ -215,7 +215,8 @@ public final class FrontierWorldProcessCatalog {
         actions.add(TerminalLogisticsProcess.review(1, cadence.terminalLogisticsInitialReviewTick()));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted()
                 .forEach(site -> actions.add(ResourceSiteProcess.preparation(site, cadence.resourceInitialPreparationTick())));
-        bootstrap.hive().bioforms().stream().filter(Bioform::isScout).sorted(java.util.Comparator.comparing(Bioform::id))
+        bootstrap.hive().bioforms().stream().filter(Bioform::isScout).filter(scout -> HivePhysiologySupport.initiallyDeployed(bootstrap.hive(), scout))
+                .sorted(java.util.Comparator.comparing(Bioform::id))
                 .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1,
                         cadence.hiveScoutInitialPatrolTick() + actions.size() * cadence.hiveScoutInitialStagger())));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, cadence.hiveStrategicInitialReviewTick()));

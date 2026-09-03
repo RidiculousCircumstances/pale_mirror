@@ -92,6 +92,8 @@ runtime_transitions:
 invariants:
   # Compatibility wording enforced by the repository architecture gate.
   - statement: "Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions."
+  - id: "frontier-v3-hive-cocoon-custody"
+    statement: "Schema-105/envelope-14 physiology owns only an exact BioformLifecycle phase plus optional HiveCocoonSlot; ActorLocation remains the sole body/vitality authority and ambient lease remains the sole HOT-body authority. Every seed nest has three open 3×3 HIBERNACULUM trays; only one Scout and one Defender per nest begin deployed, while every other mature bioform owns one contrasting, player-breakable cocoon and has no Zombie. Exact cocoon loss is an ordinary durable physical delta that releases only its same occupant to WAKING on the tray floor; only a naturally demanded successful HOT lease makes it ACTIVE. COLD patrol, route-engagement and settlement-assault selection must reject cocoon-retained IDs. A fixture requiring external mobilisation declares an explicit test-only deployed precondition; it must never move a dormant body directly. Chunk load is never wake authority."
   - statement: "Unknown or player-owned block changes are conflicts and must not be overwritten by default."
   - id: "frontier-v3-fresh-world-only"
     statement: "Frontier v3 accepts only its current snapshot schema, WAL envelope and immutable projection layouts. A format change is an explicit reset boundary for disposable, local and deployed v3 worlds: old bytes fail closed before hydration or replay, no compatibility decoder or semantic migration may be added, and deployment recreates the affected world rather than reusing its canonical history."

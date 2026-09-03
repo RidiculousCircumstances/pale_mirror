@@ -74,6 +74,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
         if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);
+        for (Map.Entry<SubjectId, BioformLifecycle> entry : hiveColony.bioformLifecycles().entrySet()) {
+            BioformLifecycle lifecycle = entry.getValue();
+            if (!lifecycle.phase().occupiesCocoon()) continue;
+            HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+            HiveOrgan organ = java.util.stream.Stream.concat(bootstrap.hive().organs().stream(), hiveColony.addedOrgans().values().stream())
+                    .filter(candidate -> candidate.id().equals(slot.hibernaculumId())).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("cocoon lifecycle references an absent HIBERNACULUM"));
+            BodyPosition expectedBody = BodyPosition.above(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ, slot)));
+            if (!actorLocations.get(entry.getKey()).body().equals(expectedBody)) {
+                throw new IllegalArgumentException("cocoon-retained bioform must remain at its exact cocoon body position");
+            }
+            AmbientActorLease lease = ambientLeases.get(entry.getKey());
+            if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED) {
+                throw new IllegalArgumentException("cocoon-retained bioform may not retain an ambient lease");
+            }
+        }
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
         for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
@@ -151,6 +167,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             if (actorLocations.get(lease.actorId()).condition().status() != ActorLifeStatus.ALIVE && lease.status() != AmbientLeaseStatus.CLOSED) {
                 throw new IllegalArgumentException("dead actor cannot retain an active ambient lease");
+            }
+            if (lease.status() != AmbientLeaseStatus.CLOSED && !HivePhysiologySupport.permitsAmbientLease(hiveColony, lease.actorId())) {
+                throw new IllegalArgumentException("cocoon-retained bioform may not retain an active ambient lease");
             }
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.handoffBody().supportingSurface().support()); FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), lease.goalBody().supportingSurface().support());
             if (lease.status() != AmbientLeaseStatus.CLOSED && !activelyAmbientLeased.add(lease.actorId())) {

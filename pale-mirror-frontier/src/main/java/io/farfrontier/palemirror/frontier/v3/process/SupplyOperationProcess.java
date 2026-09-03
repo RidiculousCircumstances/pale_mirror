@@ -114,7 +114,7 @@ public final class SupplyOperationProcess {
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
         // The durable HOT observation owns recovery.  COLD retains only a sparse, bounded
         // recheck so an unloaded world never becomes a busy poll or silently skips the block.
-        if (assembly.deferral().isPresent()) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 100L)));
+        if (assembly.deferral().isPresent()) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 100L)));
         if (assembly.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
@@ -127,14 +127,14 @@ public final class SupplyOperationProcess {
             AmbientActorLease lease = state.ambientLeases().get(actor);
             return lease != null && lease.status() != AmbientLeaseStatus.CLOSED ? null : assembly.advance(actor);
         }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
-        if (next == null) return List.of(schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
+        if (next == null) return List.of(reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
         if (next.complete()) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
                     new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForCompletedAssembly(state, operation, next))),
                     schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         return List.of(new ProposedEvent(operation.settlementId(), new OperationAssemblyAdvanced(operation.id(), next)),
-                schedule(operationAssembly(operation, action.dueAt().ticks() + 20L)));
+                reschedule(action, operationAssembly(operation, action.dueAt().ticks() + 20L)));
     }
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
@@ -142,7 +142,7 @@ public final class SupplyOperationProcess {
         if (operation != null && operation.stage() == OperationStage.ARRIVED
                 && contractForOperation(state, operation).status() == ContractStatus.DELIVERED) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
-                    schedule(operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
+                    reschedule(action, operationProgress(operation, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         if (operation != null && operation.stage() == OperationStage.ARRIVED) {
             List<ProposedEvent> arrival = arrivalEvents(state, operation, action.dueAt().ticks());
@@ -158,13 +158,13 @@ public final class SupplyOperationProcess {
                 .anyMatch(engagement -> engagement.operationId().equals(operation.id()) && engagement.status() != RouteEngagementStatus.RESOLVED
                         && operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(engagement.intercept()))
                         .orElseGet(() -> operation.currentPosition().equals(engagement.intercept())));
-        if (heldAtIntercept) return List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+        if (heldAtIntercept) return List.of(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 100L)));
         Optional<SceneLease> unknownLease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).findFirst();
         if (unknownLease.isPresent()) {
             return unknownLease.orElseThrow().recoveryEvidence().isPresent()
                     ? failed(state, operation, "scene-recovery-unresolved")
-                    : List.of(schedule(operationProgress(operation, action.dueAt().ticks() + 100L)));
+                    : List.of(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 100L)));
         }
         Optional<SceneLease> lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isLogistics).filter(value -> FrontierSceneBehaviors.logistics(value).operationId().equals(operation.id())
                 && value.status() != SceneLeaseStatus.CLOSED).findFirst();
@@ -175,23 +175,23 @@ public final class SupplyOperationProcess {
         if (operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()
                 && operation.activeTravel().orElseThrow().corridor().getLast().equals(operation.route().get(operation.routeIndex()))) {
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelStarted(operation.id(), travelForNextSegment(state, operation))),
-                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+                    reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         OperationTravel travel = operation.activeTravel().orElseThrow();
         if (!travel.arrived()) {
             if (!travel.canAdvanceNextEdge()) return failed(state, operation, "route-obstructed", action.dueAt().ticks());
             OperationTravel advanced = translateTravel(travel, travel.nextColdCursor());
             return List.of(new ProposedEvent(operation.settlementId(), new OperationTravelAdvanced(operation.id(), advanced)),
-                    schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+                    reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         }
         int completedIndex = operation.stage() == OperationStage.RETURNING ? operation.routeIndex() - 1 : operation.routeIndex() + 1;
         List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(operation.settlementId(), new OperationTravelSegmentCompleted(operation.id()))));
         if (operation.stage() == OperationStage.RETURNING) {
-            if (completedIndex > 0) events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+            if (completedIndex > 0) events.add(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         } else if (completedIndex == operation.route().size() - 1) {
             events.addAll(arrivalEvents(state, operation, action.dueAt().ticks()));
         }
-        else events.add(schedule(operationProgress(operation, action.dueAt().ticks() + 20L)));
+        else events.add(reschedule(action, operationProgress(operation, action.dueAt().ticks() + 20L)));
         return List.copyOf(events);
     }
 
@@ -255,6 +255,10 @@ public final class SupplyOperationProcess {
     private static ScheduledAction cargoLoad(SupplyContract contract, long due) { return new ScheduledAction(new ScheduleId("schedule:cargo-load-" + contract.id().value().substring("contract:".length())),
             new SimInstant(due), 0, contract.id(), "frontier.supply.cargo.load", 1); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    private static ProposedEvent reschedule(ScheduledAction current, ScheduledAction replacement) {
+        if (!current.id().equals(replacement.id())) throw new IllegalArgumentException("operation continuation changes its schedule identity");
+        return new ProposedEvent(current.subject(), new ScheduleEffect.Rescheduled(current.id(), replacement));
+    }
 
     private static OperationTravel travelForNextSegment(FrontierWorldState state, RouteOperation operation) {
         TransportAnchor cargoAnchor = operation.activeAssembly().map(OperationAssembly::cargoAnchor)
@@ -384,17 +388,17 @@ public final class SupplyOperationProcess {
         RouteUnitManifest unit = RouteUnitManifest.cargoEscort(operationId, hauler, escorts.getFirst(), escorts);
         SettlementAccessPort access = SettlementAccessPort.forHall(settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("supply settlement lacks a Hall")));
-        java.util.Map<SubjectId, OperationAssembly.Member> members = new java.util.LinkedHashMap<>();
-        members.put(hauler, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, operationId, hauler, access.assemblySurface()), 0));
+        java.util.Map<SubjectId, SurfaceAnchor> destinations = new java.util.LinkedHashMap<>();
+        destinations.put(hauler, access.assemblySurface());
         // The lead escort holds the outward port beside the cargo crew. Further escorts use
         // lateral assembly slots rather than queuing through that same one-cell throat.
         List<SurfaceAnchor> escortSlots = List.of(access.routeSurface(), access.assemblySurface().offset(0, 0, 1), access.assemblySurface().offset(0, 0, -1),
                 access.interiorSurface().offset(0, 0, 1));
         for (int index = 0; index < escorts.size(); index++) {
             SubjectId escort = escorts.get(index);
-            members.put(escort, new OperationAssembly.Member(OperationAssemblyCorridor.compile(state, operationId, escort, escortSlots.get(index)), 0));
+            destinations.put(escort, escortSlots.get(index));
         }
-        OperationAssembly assembly = new OperationAssembly(members, hauler);
+        OperationAssembly assembly = OperationAssemblyCorridor.compileJoint(state, operationId, hauler, destinations);
         return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,
                 state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
     }

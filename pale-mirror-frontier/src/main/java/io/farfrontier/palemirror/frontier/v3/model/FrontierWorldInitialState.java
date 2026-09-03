@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Fresh-world assembly kept outside the mutable-state aggregate. */
@@ -14,7 +15,16 @@ final class FrontierWorldInitialState {
     static FrontierWorldState create(FrontierBootstrap bootstrap) {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(); HumanPopulation population = HumanPopulation.bootstrap(bootstrap);
         bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home())))));
-        bootstrap.hive().bioforms().forEach(bioform -> actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()))));
+        HiveColony colony = HiveColony.empty().withBioformLifecycles(initialBioformLifecycles(bootstrap));
+        bootstrap.hive().bioforms().forEach(bioform -> {
+            BioformLifecycle lifecycle = colony.bioformLifecycles().get(bioform.id());
+            if (lifecycle.phase().occupiesCocoon()) {
+                HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ(bootstrap, slot.hibernaculumId()), slot))));
+            } else {
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position())));
+            }
+        });
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
@@ -38,9 +48,32 @@ final class FrontierWorldInitialState {
         bootstrap.hive().seedNests().forEach(nest -> seedInfection(infection, InfectionCell.at(nest.anchor())));
         return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(),
                 ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap)),
-                Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), HiveColony.empty(),
+                Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), colony,
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population, CompanyRegistry.empty(),
                 ResourceSiteState.initial(bootstrap));
+    }
+
+    private static Map<SubjectId, BioformLifecycle> initialBioformLifecycles(FrontierBootstrap bootstrap) {
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>();
+        for (HiveNest nest : bootstrap.hive().seedNests()) {
+            List<HiveOrgan> hibernacula = bootstrap.hive().organs().stream()
+                    .filter(organ -> organ.nestId().equals(nest.id()) && organ.kind() == HiveOrganKind.HIBERNACULUM)
+                    .sorted(java.util.Comparator.comparing(HiveOrgan::id)).toList();
+            int slotOrdinal = 0;
+            for (Bioform bioform : bootstrap.hive().bioforms().stream().filter(value -> value.nestId().equals(nest.id())).sorted(java.util.Comparator.comparing(Bioform::id)).toList()) {
+                HiveCocoonSlot slot = new HiveCocoonSlot(hibernacula.get(slotOrdinal / HiveCocoonSlot.MAX_SLOTS_PER_HIBERNACULUM).id(),
+                        slotOrdinal % HiveCocoonSlot.MAX_SLOTS_PER_HIBERNACULUM);
+                lifecycles.put(bioform.id(), HivePhysiologySupport.initiallyDeployed(bootstrap.hive(), bioform)
+                        ? BioformLifecycle.active(slot) : BioformLifecycle.dormant(slot));
+                slotOrdinal++;
+            }
+        }
+        return Map.copyOf(lifecycles);
+    }
+
+    private static HiveOrgan organ(FrontierBootstrap bootstrap, SubjectId organId) {
+        return bootstrap.hive().organs().stream().filter(organ -> organ.id().equals(organId)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("bootstrap cocoon references an absent HIBERNACULUM"));
     }
 
     /**

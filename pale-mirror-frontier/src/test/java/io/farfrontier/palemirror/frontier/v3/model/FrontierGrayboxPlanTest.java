@@ -52,7 +52,7 @@ class FrontierGrayboxPlanTest {
     @Test
     void structuralInputIgnoresActorMotionButInvalidatesOnSilhouetteChange() {
         FrontierWorldState state = initial();
-        var actor = state.actorLocations().keySet().iterator().next();
+        var actor = state.humanPopulation().residentIds().stream().sorted().findFirst().orElseThrow();
         FrontierWorldState moved = state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0));
         FrontierWorldState damaged = state.withStructureCondition(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-workshop"),
                 StructureCondition.DAMAGED);
@@ -254,13 +254,25 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().hive().bioforms().forEach(bioform -> {
             BodyPosition body = state.actorLocations().get(bioform.id()).body();
             BlockPosition position = new BlockPosition(body.x(), body.y(), body.z());
+            BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioform.id());
+            if (lifecycle.phase().occupiesCocoon()) {
+                HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+                HiveOrgan hibernaculum = state.bootstrap().hive().organs().stream().filter(organ -> organ.id().equals(slot.hibernaculumId())).findFirst().orElseThrow();
+                BlockPosition cocoon = HiveCocoonPlan.cocoonCell(hibernaculum, slot);
+                assertEquals(new SurfaceAnchor(cocoon), body.supportingSurface(), "dormant bioform remains at its exact owned cocoon");
+                assertEquals(bioform.id(), plan.cells().get(cocoon).ownerId(), "cocoon block is owned by its exact occupant");
+                assertEquals(GrayboxSemanticPart.COCOON, plan.cells().get(cocoon).semanticPart());
+                assertEquals(GrayboxMaterial.HIVE_COCOON, plan.cells().get(cocoon).material(), "living cocoon must contrast with its cyan hibernaculum tray");
+                assertEquals(null, plan.cells().get(cocoon.offset(0, 1, 0)), "an individual cocoon must stay open to normal player interaction");
+                return;
+            }
             GrayboxCell foot = plan.cells().get(position);
             assertTrue(foot == null || foot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE,
                     "bioform foot cell must stay outside hive organ geometry: " + bioform.id());
             assertEquals(null, plan.cells().get(position.offset(0, 1, 0)),
                     "bioform body clearance must stay outside hive organ geometry: " + bioform.id());
             assertEquals(null, plan.cells().get(position.offset(0, 2, 0)),
-                    "bioform head clearance must stay outside hive organ geometry: " + bioform.id());
+                    "active bioform head clearance must stay outside hive organ geometry: " + bioform.id());
         });
     }
 
