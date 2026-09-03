@@ -136,6 +136,44 @@ class ProductionProcessTest {
     }
 
     @Test
+    void blockedRetainedWorkEdgeDrainsOnlyThatExactHotWorkerAndRejectsForgedCursorEvidence() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream().filter(value -> value.id().equals(prepared.settlementId()))
+                .findFirst().orElseThrow().structures().stream().filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        FrontierWorldState withWork = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(job.id(), job)));
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-route-blocked-hot");
+        SceneLease lease = SceneLease.forCause(leaseId, withWork.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(),
+                new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                SceneLease.deterministicEntityId(withWork.bootstrap().worldId(), job.workerId()))), java.util.Map.of(job.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        WorldId world = new WorldId("frontier:production-route-blocked");
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        ProductionWorkTraversalBlocked blocked = new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 1);
+        var checkpoint = engine.checkpoint(); CommandId command = new CommandId("command:production-route-blocked");
+
+        CommandResult result = engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), blocked));
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        FrontierWorldState draining = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(SceneLeaseStatus.DRAINING, draining.sceneLeases().get(leaseId).status());
+        assertEquals(StrategicTaskStatus.BLOCKED, draining.strategicPlans().tasks().get(prepared.taskId()).status());
+        assertTrue(draining.productionJobs().containsKey(job.id()), "the job must wait for the exact physical worker release");
+        assertEquals(blocked, FrontierWorldRuntimeDefinition.payloadCodecs().decode(blocked.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(blocked)));
+
+        FrontierWorldState closed = draining.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), worker.body(), worker.condition().health())));
+        FrontierWorldState cancelled = ProductionProcess.reduceWorkSceneFinalized(closed, prepared.settlementId(), new ProductionWorkSceneFinalized(leaseId, job.id()));
+        assertFalse(cancelled.productionJobs().containsKey(job.id()));
+        assertEquals(MarketWorkOrderStatus.CANCELLED, cancelled.companies().market().workOrders().get(prepared.order().id()).status());
+
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalBlocked(hot, prepared.settlementId(),
+                new ProductionWorkTraversalBlocked(job.id(), leaseId, worker.body(), 2)), "an executor cannot skip an immutable edge when reporting a block");
+    }
+
+    @Test
     void conflictedProductionWorkLeaseKeepsItsExactWorkerReservedUntilExplicitRecovery() {
         MaterializedProduction prepared = activeMaterializedProduction();
         ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());

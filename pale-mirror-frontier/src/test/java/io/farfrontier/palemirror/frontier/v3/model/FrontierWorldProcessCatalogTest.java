@@ -67,6 +67,7 @@ class FrontierWorldProcessCatalogTest {
         for (String type : List.of(
                 "frontier.production_work_progressed",
                 "frontier.production_work_traversal_advanced",
+                "frontier.production_work_traversal_blocked",
                 "frontier.production_work_scene_lease_prepared",
                 "frontier.production_work_scene_lease_handoff",
                 "frontier.production_work_scene_preparation_aborted",

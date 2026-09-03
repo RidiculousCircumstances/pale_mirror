@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 119 and persistence-envelope v33 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 120 and persistence-envelope v34 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -248,7 +248,7 @@
   durable-before-effect receipt after observed output readiness. Death, stolen
   input, a broken station or a blocked route must visibly block/conflict that
   same job; recovery inspects the retained stage and exact chest postcondition.
-  This has been recorded in the normative MAT-002 gate. Schema 119/envelope 33 now retain the explicit
+  This has been recorded in the normative MAT-002 gate. Schema 120/envelope 34 retain the explicit
   wire-tagged `ProductionWorkProgress` (`APPROACH`, `INPUT_READY`,
   `PROCESSING`, `OUTPUT_READY`) and one bounded immutable pedestrian topology
   plus cursor from the exact crafter's canonical surface through the named
@@ -272,10 +272,12 @@
   Native `disposable_materialized_production_work_restart` run
   `75f45107-732a-43dc-996b-1f47a9e0244b` observed the exact `INDUSTRIAL
   WORKER`, reached terminal market order `FULFILLED`, and after a graceful
-  restart retained its exact 64-bread container receipt. This is M2 partial,
-  not closure: dedicated blocked-route and filesystem-runtime-restart evidence
-  remain, while the captured narrow-corridor frame leaves the worker
-  insufficiently legible for M3. The next type-safe reducer boundary is also present: an executor must submit
+  restart retained its exact 64-bread container receipt. MAT-002 is M2-closed:
+  a real-player native route obstruction has terminally cancelled only its
+  exact job/order/reservation, and filesystem restart preserves its exact
+  worker cursor/progress before the lease becomes explicit `UNKNOWN_AFTER_RESTART`.
+  The captured narrow-corridor frame still leaves the worker insufficiently
+  legible for M3. The next type-safe reducer boundary is also present: an executor must submit
   one observed `ProductionWorkTraversalAdvanced` or `ProductionWorkProgressed`
   fact; it cannot directly alter a job or skip a retained station/stage.
 - MAT-002 readability follow-up: the semantic workshop port now
@@ -284,7 +286,7 @@
   cannot create a second pathfinding edge. Its immutable input/work station
   supports are now distinct cyan/magenta, provenance-owned, traversable floor
   cells—not containers, a second inventory, or executor offsets. The exact
-  station grammar forces the schema-119/envelope-33 fresh-world reset. Each
+  station grammar plus the typed route-block fact force the schema-120/envelope-34 fresh-world reset. Each
   accepted observed arrival atomically advances the job cursor and the HOT
   lease's exact worker body position; a mismatched recovered lease fails
   closed rather than resuming from an inferred station. The dedicated Scene
@@ -302,6 +304,18 @@
   is still rejected as M3 evidence because the right wall occludes the worker.
   The next proof must use a reusable semantic presentation pose/grammar, not a
   seed-specific camera coordinate or a GameTest force-load.
+- MAT-002 route-obstruction closure (2026-09-04): `ProductionWorkTraversalBlocked`
+  records only a loaded collision on the one next immutable worker edge; the
+  reducer blocks/drains/finalizes the same job and reservation, without a
+  detour, substitute worker or inferred output. Native
+  `disposable_materialized_production_route_blocked`
+  `b3f63718-0566-48f4-9fbd-98e230396664` used an ordinary player placement at
+  the read-only future-body anchor and reached terminal `CANCELLED`/no active
+  job-or-reservation/`BLOCKED`. The filesystem restart test preserves
+  `PROCESSING(17)` and its cursor before explicit HOT-lease quarantine. Node
+  34/34, Scene 55/55, Economy 17/17 and the complete critical gate
+  (`guardrails`, `check`, build/package, 285/285 GameTests) pass. M2 is closed;
+  presentation grammar remains M3 work.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

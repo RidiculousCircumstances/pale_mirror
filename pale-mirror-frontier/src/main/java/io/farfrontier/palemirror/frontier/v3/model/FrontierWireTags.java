@@ -143,7 +143,7 @@ public final class FrontierWireTags {
                     tag(16, PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED), tag(17, PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED)),
             entry(ProductionBlockReason.class,
                     tag(0, ProductionBlockReason.INPUT_UNAVAILABLE), tag(1, ProductionBlockReason.OUTPUT_STORAGE_UNAVAILABLE), tag(2, ProductionBlockReason.FACILITY_UNAVAILABLE),
-                    tag(3, ProductionBlockReason.WORKER_UNAVAILABLE), tag(4, ProductionBlockReason.FINANCE_UNAVAILABLE)),
+                    tag(3, ProductionBlockReason.WORKER_UNAVAILABLE), tag(4, ProductionBlockReason.FINANCE_UNAVAILABLE), tag(5, ProductionBlockReason.ROUTE_BLOCKED)),
             entry(ResidentHealthStatus.class,
                     tag(0, ResidentHealthStatus.HEALTHY), tag(1, ResidentHealthStatus.EXPOSED), tag(2, ResidentHealthStatus.INFECTED), tag(3, ResidentHealthStatus.RECOVERING)),
             entry(ResidentMigrationBlockReason.class,

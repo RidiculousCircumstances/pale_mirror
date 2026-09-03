@@ -198,7 +198,9 @@ public final class FrontierV3TestPilotClient {
 
     /** Places one declared ordinary block through the normal client use-item-on-block packet. */
     private static void placeBlock(Minecraft minecraft, JsonObject action) {
-        BlockPos target = position(action, "position"); ResourceLocation itemId = ResourceLocation.parse(action.get("item").getAsString());
+        BlockPos target = resolvedPosition(minecraft, action, "position");
+        if (target == null) return;
+        ResourceLocation itemId = ResourceLocation.parse(action.get("item").getAsString());
         var item = BuiltInRegistries.ITEM.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("unknown placement item " + itemId));
         var expected = BuiltInRegistries.BLOCK.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("placement item is not a block " + itemId));
         if (minecraft.level.getBlockState(target).is(expected)) { advance("place"); return; }

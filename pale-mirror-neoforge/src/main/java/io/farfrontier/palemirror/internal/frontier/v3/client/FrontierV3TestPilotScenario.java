@@ -76,7 +76,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
                     (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
                     (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
-                    (type.equals("place") && (!position(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
                     ((type.equals("walk") || type.equals("break")) && !position(action)) ||
@@ -249,11 +249,9 @@ final class FrontierV3TestPilotScenario {
     /**
      * Dynamic coordinates are intentionally limited to exact immutable plan
      * anchors published by their named diagnostics. The one scene anchor is a
-     * camera-only current cursor, equivalent to the existing operation camera
-     * target; it cannot select a server entity or move the player. Opening an
-     * exact named container remains an ordinary player interaction; all
-     * mutation still occurs through normal inventory packets after the client
-     * has opened it.
+     * current/next edge; it cannot select or move a server entity. A normal
+     * player packet may still place or break there, which is the physical
+     * intervention this causal harness must be able to test.
      */
     private static boolean resolvablePosition(JsonObject action, String field) {
         JsonObject value = action.getAsJsonObject(field);
@@ -265,7 +263,20 @@ final class FrontierV3TestPilotScenario {
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
         return (view.equals("site") && requiredId(reference, "id", "site:") && diagnosticField.equals("firstCrop"))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
-                || (view.equals("scene") && requiredId(reference, "id", "job:") && diagnosticField.equals("productionCurrent"));
+                || (view.equals("scene") && requiredId(reference, "id", "job:")
+                && (diagnosticField.equals("productionCurrent") || diagnosticField.equals("productionNext") || diagnosticField.equals("productionNextBody")
+                || diagnosticField.equals("productionFutureBody")));
+    }
+
+    /** A production route's exact unoccupied future body may be used as a dynamic placement target. */
+    private static boolean placePosition(JsonObject action) {
+        if (position(action)) return true;
+        JsonObject value = action.getAsJsonObject("position");
+        JsonObject reference = value == null ? null : value.getAsJsonObject("diagnostic");
+        return reference != null && reference.entrySet().size() == 3 && reference.has("view") && reference.has("id") && reference.has("field")
+                && reference.get("view").isJsonPrimitive() && reference.get("id").isJsonPrimitive() && reference.get("field").isJsonPrimitive()
+                && reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
+                && reference.get("field").getAsString().equals("productionFutureBody");
     }
 
     private static boolean offset(JsonObject action) {

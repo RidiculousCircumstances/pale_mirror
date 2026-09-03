@@ -396,6 +396,65 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void filesystemRestartRetainsExactProductionWorkerProgressUntilLoadedRecovery(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:production-work-restart");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierV3FixtureCatalog.productionWorkConfiguration(world, 41L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierWorldState initial = worldState(runtime);
+        io.farfrontier.palemirror.frontier.v3.model.ProductionJob job = initial.productionJobs().get(
+                new SubjectId("job:production-development-input-theft"));
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.nextCandidate(initial).orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:production-work-restart");
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        SceneLease lease = SceneLease.forCause(leaseId, world, new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(job.id()),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()))),
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), java.util.Optional.empty());
+        submitWorld(runtime, "production-restart-prepare", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeasePrepared(lease));
+        submitWorld(runtime, "production-restart-hot", new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+        int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
+        while (job.traversalCursor() < inputCursor) {
+            int cursor = job.traversalCursor() + 1;
+            var body = job.workTraversal().linearCorridorSurfaces().get(cursor).standingBody();
+            submitWorld(runtime, "production-restart-advance-" + cursor,
+                    new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced(job.id(), leaseId, body, cursor));
+            job = worldState(runtime).productionJobs().get(job.id());
+        }
+        var inputBody = job.workTraversal().linearCorridorSurfaces().get(inputCursor).standingBody();
+        submitWorld(runtime, "production-restart-input", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed(
+                job.id(), leaseId, inputBody, io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.inputReady()));
+        job = worldState(runtime).productionJobs().get(job.id());
+        int workCursor = inputCursor + 1;
+        var workBody = job.workTraversal().linearCorridorSurfaces().get(workCursor).standingBody();
+        submitWorld(runtime, "production-restart-work-arrival", new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced(
+                job.id(), leaseId, workBody, workCursor));
+        job = worldState(runtime).productionJobs().get(job.id());
+        for (int completed = 0; completed <= 17; completed++) {
+            submitWorld(runtime, "production-restart-processing-" + completed,
+                    new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed(job.id(), leaseId, workBody,
+                            io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(completed)));
+        }
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierWorldState persisted = worldState(recovered);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(17), persisted.productionJobs().get(job.id()).workProgress());
+        assertEquals(workCursor, persisted.productionJobs().get(job.id()).traversalCursor());
+        assertEquals(SceneLeaseStatus.HOT, persisted.sceneLeases().get(leaseId).status());
+        assertEquals(1, FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(recovered));
+        assertEquals(0, FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(recovered));
+        FrontierWorldState unknown = worldState(recovered);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(17), unknown.productionJobs().get(job.id()).workProgress());
+        assertEquals(workCursor, unknown.productionJobs().get(job.id()).traversalCursor());
+        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, unknown.sceneLeases().get(leaseId).status());
+        assertTrue(unknown.productionJobs().containsKey(job.id()), "restart must not fabricate a receipt or release the exact worker job");
+        recovered.shutdown();
+    }
+
+    @Test
     void restartRetainsPreparedSceneLeaseAndKeepsItsColdRouteSuspended(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-lease-recovery");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());

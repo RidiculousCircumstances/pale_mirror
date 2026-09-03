@@ -133,6 +133,8 @@ public final class MarketClearingProcess {
                     && !materializedInputMatches(state, job);
             case WORKER_UNAVAILABLE -> state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
                     || CompanyWorkPaymentProcess.contractFor(state, job).isEmpty();
+            case ROUTE_BLOCKED -> state.sceneLeases().values().stream().anyMatch(lease -> FrontierSceneBehaviors.isProductionWork(lease)
+                    && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()) && lease.status() == SceneLeaseStatus.CLOSED);
             default -> false;
         };
         if (!allowed) throw new IllegalArgumentException("market cancellation reason no longer holds");

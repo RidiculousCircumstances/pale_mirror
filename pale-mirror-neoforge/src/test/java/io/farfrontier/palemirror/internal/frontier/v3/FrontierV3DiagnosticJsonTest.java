@@ -518,6 +518,8 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(scene.contains("\"productionJob\":\"" + candidate.jobId().value() + "\"")
                         && scene.contains("\"medical\":\"\""),
                 "a named workshop job must retain its own public scene identity rather than inherit an unrelated scene family");
+        assertTrue(scene.contains("\"productionFutureBody\":"),
+                "a route-obstruction pilot may inspect one immutable future worker body without selecting that worker");
         runtime.shutdown();
     }
 

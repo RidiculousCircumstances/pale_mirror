@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -131,6 +132,27 @@ public final class FrontierV3ProductionWorkGameTests {
         } catch (RuntimeException failure) {
             runtime.shutdown(); throw failure;
         }
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-production-work", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void loadedFullBlockRejectsOnlyTheExactNextWorkerBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos body = helper.absolutePos(new BlockPos(1, 8, 1));
+        level.setBlock(body.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(body, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(body.above(), Blocks.AIR.defaultBlockState(), 3);
+        Villager worker = EntityType.VILLAGER.create(level);
+        helper.assertTrue(worker != null, "a loaded worker body is required for collision evidence");
+        worker.setNoAi(true); worker.setPos(body.getX() + 0.5D, body.getY(), body.getZ() + 0.5D);
+        helper.assertTrue(level.addFreshEntity(worker), "the local worker must enter the loaded GameTest cell");
+        BlockPos nextSupport = body.relative(net.minecraft.core.Direction.EAST).below();
+        level.setBlock(nextSupport, Blocks.STONE.defaultBlockState(), 3); level.setBlock(nextSupport.above(), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(nextSupport.above(2), Blocks.AIR.defaultBlockState(), 3);
+        SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next),
+                "an unobstructed retained next body must remain eligible for normal motion");
+        level.setBlock(nextSupport.above(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertTrue(!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next),
+                "a player/world full block at the retained next body must become a typed route-block observation, never a detour");
+        worker.discard(); helper.succeed();
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

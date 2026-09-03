@@ -62,7 +62,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
             "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
-            "frontier.production_started", "frontier.production_completed", "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+            "frontier.production_started", "frontier.production_completed", "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
             "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
@@ -270,7 +270,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
-            "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+            "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return types(
             "frontier.resource_site_conflict_observed",
@@ -395,9 +395,10 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed",
-                    "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
+                    "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",
+                    "frontier.scene_lease_transition",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",

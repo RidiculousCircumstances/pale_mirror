@@ -110,7 +110,8 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (['walk', 'break', 'place'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (['walk', 'break'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'place' && !validPlacePosition(action.position)) validatePosition(action.position);
       if (action.type === 'open_container' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
       if (action.type === 'wait_until_block' && !validResolvablePosition(action.position)) validatePosition(action.position);
@@ -293,10 +294,9 @@ function validPosition(value) {
 
 /**
  * A materialization scenario may follow one immutable plan anchor published
- * by its exact named diagnostic. The container form only authorizes ordinary
- * client opening of that one canonical socket; the production scene form is a
- * camera-only current cursor. Inventory mutation remains a normal player
- * packet after the menu is open.
+ * by its exact named diagnostic. Scene references disclose only an immutable
+ * retained current/next edge; a normal player packet may still place or break
+ * there, which is evidence rather than test authority.
  */
 function validResolvablePosition(value) {
   if (validPosition(value)) return true;
@@ -305,7 +305,16 @@ function validResolvablePosition(value) {
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
-      || (reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionCurrent'));
+      || (reference.view === 'scene' && requiredId(reference.id, 'job:')
+        && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field)));
+}
+
+function validPlacePosition(value) {
+  if (validPosition(value)) return true;
+  const reference = value?.diagnostic;
+  return value && typeof value === 'object' && Object.keys(value).length === 1
+    && reference && typeof reference === 'object' && Object.keys(reference).length === 3
+    && reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody';
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }

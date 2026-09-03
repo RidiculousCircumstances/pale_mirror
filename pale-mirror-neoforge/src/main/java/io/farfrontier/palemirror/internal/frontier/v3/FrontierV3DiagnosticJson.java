@@ -639,13 +639,16 @@ final class FrontierV3DiagnosticJson {
                 + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 
-    /** The exact retained production edge makes a body/cursor conflict inspectable without logs. */
+    /** The retained production edge and one future body make an obstruction reproducible without selecting an actor. */
     private static String productionTraversal(ProductionJob job) {
-        if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null";
+        if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null,\"productionNextBody\":null,\"productionFutureBody\":null";
         var corridor = job.workTraversal().linearCorridorSurfaces();
         String next = job.traversalCursor() + 1 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 1).support());
+        String nextBody = job.traversalCursor() + 1 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 1).standingBody());
+        String futureBody = job.traversalCursor() + 2 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 2).standingBody());
         return ",\"productionStage\":\"" + job.workProgress().stage() + "\",\"productionCursor\":" + job.traversalCursor()
-                + ",\"productionCurrent\":" + position(corridor.get(job.traversalCursor()).support()) + ",\"productionNext\":" + next;
+                + ",\"productionCurrent\":" + position(corridor.get(job.traversalCursor()).support()) + ",\"productionNext\":" + next
+                + ",\"productionNextBody\":" + nextBody + ",\"productionFutureBody\":" + futureBody;
     }
 
     /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */

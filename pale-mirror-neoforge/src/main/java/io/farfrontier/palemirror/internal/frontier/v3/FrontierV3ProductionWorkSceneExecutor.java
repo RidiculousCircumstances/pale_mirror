@@ -109,6 +109,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (job.traversalCursor() < route.size() - 1) {
             SurfaceAnchor next = route.get(job.traversalCursor() + 1);
             if (at(worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), observed(worker), job.traversalCursor() + 1));
+            else if (!clearNextBody(level, worker, next)) submit(runtime, "production-work-route-blocked", lease.id().value(),
+                    new ProductionWorkTraversalBlocked(job.id(), lease.id(), observed(worker), job.traversalCursor() + 1));
             else FrontierV3ControlledMobMotion.moveToward(level, worker, point(next));
             return;
         }
@@ -128,6 +130,10 @@ final class FrontierV3ProductionWorkSceneExecutor {
     }
     private static BodyPosition observed(Mob worker) { return new BodyPosition(worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()); }
     private static Vec3 point(SurfaceAnchor surface) { return new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D); }
+    /** Tests the exact retained target body against loaded physical collision without choosing an alternate edge. */
+    static boolean clearNextBody(ServerLevel level, Mob worker, SurfaceAnchor surface) {
+        return level.noCollision(worker, worker.getBoundingBox().move(point(surface).subtract(worker.position())));
+    }
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) { submit(runtime, "production-work-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)); }
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "production_work_conflict:" + reason, lease,

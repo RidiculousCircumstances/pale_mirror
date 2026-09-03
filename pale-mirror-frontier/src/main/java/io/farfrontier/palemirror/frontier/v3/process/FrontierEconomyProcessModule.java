@@ -22,6 +22,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         }
         if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, progressed);
         if (command.payload() instanceof ProductionWorkTraversalAdvanced advanced) return planHotTraversal(state, advanced);
+        if (command.payload() instanceof ProductionWorkTraversalBlocked blocked) return planHotTraversalBlocked(state, blocked);
         return FrontierWorldCommandPlanner.rejected("economy process does not admit command: " + command.payload().type());
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
@@ -39,6 +40,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
             case ProductionWorkProgressed progressed -> ProductionProcess.reduceWorkProgressed(state, event.subject(), progressed);
             case ProductionWorkTraversalAdvanced advanced -> ProductionProcess.reduceWorkTraversalAdvanced(state, event.subject(), advanced);
+            case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);
             case ProductionWorkSceneLeasePrepared prepared -> reduceWorkScenePrepared(state, event.subject(), event, prepared);
             case ProductionWorkSceneLeaseHandoff handoff -> reduceWorkSceneHandoff(state, event.subject(), event, handoff);
             case ProductionWorkScenePreparationAborted aborted -> ProductionProcess.reduceWorkScenePreparationAborted(state, event.subject(), aborted);
@@ -63,6 +65,13 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             if (!hot(state, job.id())) return FrontierWorldCommandPlanner.rejected("production work traversal requires its HOT scene");
             ProductionProcess.reduceWorkTraversalAdvanced(state, job.settlementId(), advanced);
             return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.settlementId(), advanced)));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+    private static CommandPlan planHotTraversalBlocked(FrontierWorldState state, ProductionWorkTraversalBlocked blocked) {
+        try {
+            ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(blocked.jobId()));
+            if (!hot(state, job.id())) return FrontierWorldCommandPlanner.rejected("production work traversal block requires its HOT scene");
+            return new CommandPlan.Accepted(ProductionProcess.planWorkTraversalBlocked(state, job.settlementId(), blocked));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
     private static boolean hot(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId) {

@@ -242,6 +242,37 @@ public final class ProductionProcess {
     }
 
     /**
+     * A loaded collision is an observation, not authority to invent a detour.  The immutable
+     * topology supplies the only legal next surface; a valid report blocks this same work and
+     * drains its exact HOT lease through the ordinary release/finalization path.
+     */
+    public static List<ProposedEvent> planWorkTraversalBlocked(FrontierWorldState state, SubjectId subject,
+                                                                 ProductionWorkTraversalBlocked blocked) {
+        reduceWorkTraversalBlocked(state, subject, blocked);
+        ProductionJob job = state.productionJobs().get(blocked.jobId());
+        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id());
+        return List.of(new ProposedEvent(settlement.id(), blocked),
+                new ProposedEvent(settlement.id(), new ProductionBlocked(settlement.id(), job.facilityId(), job.id(), ProductionBlockReason.ROUTE_BLOCKED)),
+                transition(task, StrategicTaskStatus.BLOCKED), new ProposedEvent(settlement.id(), new SceneLeaseTransition(blocked.leaseId(), SceneLeaseStatus.DRAINING)));
+    }
+
+    /** Validates immutable worker/cursor evidence.  State changes are represented by the following durable effects. */
+    public static FrontierWorldState reduceWorkTraversalBlocked(FrontierWorldState state, SubjectId subject, ProductionWorkTraversalBlocked blocked) {
+        ProductionJob job = state.productionJobs().get(blocked.jobId());
+        if (job == null || !subject.equals(job.settlementId()) || job.workProgress().terminalEffectEligible()
+                || blocked.blockedNextCursor() != job.traversalCursor() + 1
+                || blocked.blockedNextCursor() >= job.workTraversal().linearCorridorSurfaces().size()) {
+            throw new IllegalArgumentException("production work traversal block is not one retained next edge");
+        }
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, blocked.leaseId());
+        BodyPosition current = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+        if (!blocked.observedWorker().equals(current) || !lease.memberPosition(job.workerId()).equals(current)) {
+            throw new IllegalArgumentException("production work traversal block must retain its worker at the current cursor");
+        }
+        return state;
+    }
+
+    /**
      * Releases one COLD job only when the current active hive assault names the same observed
      * settlement. This is one atomic canonical transition: the original input is restored,
      * its invoice reservation is released and both market order and production task become
@@ -341,6 +372,13 @@ public final class ProductionProcess {
                 boolean cold = state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE;
                 if (CompanyWorkPaymentProcess.canReserve(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal, cold))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
+                }
+            }
+            case ROUTE_BLOCKED -> {
+                ProductionJob job = state.productionJobs().get(blocked.workId());
+                if (job == null || !job.settlementId().equals(settlement.id()) || job.workProgress().terminalEffectEligible()
+                        || !hasOpenWorkScene(state, job.id())) {
+                    throw new IllegalArgumentException("production route block lacks its retained active worker scene");
                 }
             }
         }

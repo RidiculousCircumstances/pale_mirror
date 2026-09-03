@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "disposable_materialized_production_route_blocked",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-work" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:gray_concrete 1" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -381, "y": 65, "z": -325 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "ACCEPTED", "jobActive": true, "reservationActive": true, "taskStatus": "ACTIVE" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 60000 },
+    { "type": "place", "position": { "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionFutureBody" } }, "item": "minecraft:gray_concrete", "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 }
+  ],
+  "assertions": [
+    { "after": 3, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } }
+  ],
+  "frames": [
+    { "after": 2, "name": "player-blocked-industrial-worker-route" }
+  ]
+}

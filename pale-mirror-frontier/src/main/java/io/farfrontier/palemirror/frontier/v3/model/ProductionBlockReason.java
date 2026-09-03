@@ -6,7 +6,8 @@ public enum ProductionBlockReason {
     OUTPUT_STORAGE_UNAVAILABLE,
     FACILITY_UNAVAILABLE,
     WORKER_UNAVAILABLE,
-    FINANCE_UNAVAILABLE
+    FINANCE_UNAVAILABLE,
+    ROUTE_BLOCKED
 ;
 
     public int wireTag() { return FrontierWireTags.tag(this); }
