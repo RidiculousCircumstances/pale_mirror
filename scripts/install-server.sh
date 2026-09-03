@@ -190,7 +190,7 @@ validate_hosted_railway_args "$railway_untold_url" "$railway_untold_sha512"
   cd "$target"
   "$java_bin" -jar "$bootstrap" -g -s server "$pack_url"
 )
-for managed_script in run-server-java22.sh set-server-performance-profile.sh benchmark-live-worldgen.sh analyze-worldgen-jfr.sh validate-structure-assets.py; do
+for managed_script in run-server-java22.sh set-server-performance-profile.sh benchmark-live-worldgen.sh analyze-worldgen-jfr.sh validate-structure-assets.py frontier-v3-deploy-verify.sh; do
   [[ ! -f "$target/scripts/$managed_script" ]] || chmod +x "$target/scripts/$managed_script"
 done
 

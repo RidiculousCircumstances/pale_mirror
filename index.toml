@@ -742,7 +742,7 @@ hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
 
 [[files]]
 file = "scripts/install-server.sh"
-hash = "57ce05f2345fd3e821017728720b9af20354f2e7683193fc237e00f023d0b76a"
+hash = "756f21c788431d00c7d351a965bb7cc1262e9384176227d48f6658acd975d350"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"
