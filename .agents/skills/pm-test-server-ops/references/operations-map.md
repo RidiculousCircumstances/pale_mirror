@@ -7,7 +7,7 @@ Discover and verify these values before every operation; they may drift.
 - Pale Mirror code: `/home/rd/proj/minecraft/pale-mirror`
 - Far Frontier pack: `/home/rd/proj/minecraft` (`pack.toml` is the identity)
 - Disposable server runtime: `/home/rd/far-frontier-server`
-- Server service: user unit `far-frontier-server.service`
+- Live Frontier v3 service: transient user unit `far-frontier-v3-live.service`
 - Client artifact host: user unit `far-frontier-client-host.service`
 - Current server launch wrapper: `scripts/run-server-java22.sh`
 - Current world property: read `server.properties`; do not assume `world`
@@ -31,3 +31,18 @@ Check the user service, Java process, port from `server.properties`, and fresh
 ready line, not merely an active transient unit. For world reset, stop the unit,
 resolve the exact `level-name` paths under the runtime, remove only those paths,
 then start and verify new seed/catalog evidence.
+
+`far-frontier-v3-live.service` is intentionally created with `systemd-run` and
+`CollectMode=inactive-or-failed`. It disappears after `systemctl --user stop`,
+so a later `systemctl --user restart` cannot recreate it. If it is inactive or
+not found, launch the exact runtime again with:
+
+```bash
+systemd-run --user --unit=far-frontier-v3-live --collect \
+  --working-directory=/home/rd/far-frontier-server \
+  /home/rd/far-frontier-server/scripts/run-server-java22.sh
+```
+
+Use `restart` only while that transient unit is already active. Always finish
+with `scripts/frontier-v3-deploy-verify.sh`; an active unit or an open port by
+itself is not deployment evidence.
