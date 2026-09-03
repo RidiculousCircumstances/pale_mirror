@@ -7,6 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
@@ -51,6 +55,29 @@ class HiveScoutPatrolProcessTest {
                 HiveScoutPatrolProcess.patrol(scout.id(), 1, 2_400L));
         assertFalse(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScoutPatrolAdvanced.class::isInstance));
         assertTrue(events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).anyMatch(ScheduleEffect.Created.class::isInstance));
+    }
+
+    @Test void aDeadScoutRetiresItsDuePatrolInsteadOfQuarantiningTheWorld() {
+        WorldId world = new WorldId("frontier:scout-patrol-death");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
+        FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        Bioform scout = scout(before);
+        CommandId command = new CommandId("command:scout-patrol-death");
+        assertTrue(engine.submit(new FrontierCommand(1, command, world, engine.checkpoint().revision(), engine.checkpoint().instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command),
+                new AmbientActorDied(scout.id(), before.actorLocations().get(scout.id()).body(), "entity:test-player")))
+                instanceof CommandResult.Accepted);
+
+        ScheduledAction duePatrol = engine.checkpoint().schedules().stream()
+                .filter(action -> action.kind().equals("frontier.hive.scout.patrol") && action.subject().equals(scout.id()))
+                .findFirst().orElseThrow();
+        FrontierWorldState dead = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(HiveScoutPatrolProcess.plan(dead, duePatrol).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .anyMatch(effect -> effect instanceof ScheduleEffect.Cancelled cancelled && cancelled.scheduleId().equals(duePatrol.id())));
+        engine.advanceTo(duePatrol.dueAt(), new WorkBudget(64, 512));
+
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
     }
 
     @Test void freshWorldSchedulesOnlyThePurposefullyDeployedScoutsBeforeTheFirstHiveReview() {

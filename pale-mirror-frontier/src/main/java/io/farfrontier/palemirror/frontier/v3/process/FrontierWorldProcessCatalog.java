@@ -77,7 +77,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
             "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved",
             "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
-            "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
+            "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+            "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
+            "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_conflicted");
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
             "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
@@ -259,7 +261,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return Set.of("frontier.resource_site_conflict_observed"); }
-    private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered"); }
+    private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
+            "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_conflicted"); }
     /**
      * These are the two physical-observation payloads that advance an already declared
      * engineering journey.  The infrastructure process verifies the exact HOT lease and
@@ -350,7 +353,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
                     "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced", "frontier.route_engagement_transition", "frontier.route_engagement_strike",
                     "frontier.route_engagement_resolved", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
-                    "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved");
+                    "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+                    "frontier.hive_mobilization_started");
             case "population" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
@@ -388,6 +392,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
                     "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
+                    "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
+                    "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_conflicted",
                     "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

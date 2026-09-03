@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontie
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 105; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 106; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -248,6 +248,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeByte(receipt.status().wireTag()); output.writeBoolean(receipt.consumedByJobId().isPresent()); if (receipt.consumedByJobId().isPresent()) writeString(output, receipt.consumedByJobId().orElseThrow().value());
         }
         BioformLifecycleStateCodec.write(output, colony.bioformLifecycles());
+        HiveMobilizationStateCodec.write(output, colony.mobilizations());
     }
     private static HiveColony readHiveColony(DataInputStream input, boolean hasNutrientTransfers, boolean hasReceiptConsumption, boolean hasEndpointIntent) throws IOException {
         Map<SubjectId, HiveOrgan> organs = new LinkedHashMap<>();
@@ -305,7 +306,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
         }
         Map<SubjectId, BioformLifecycle> lifecycles = BioformLifecycleStateCodec.read(input);
-        return new HiveColony(organs, bioforms, jobs, transfers, receipts, lifecycles);
+        Map<SubjectId, HiveMobilization> mobilizations = HiveMobilizationStateCodec.read(input);
+        return new HiveColony(organs, bioforms, jobs, transfers, receipts, lifecycles, mobilizations);
     }
     private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
         writeCount(output, ledger.accounts().size());

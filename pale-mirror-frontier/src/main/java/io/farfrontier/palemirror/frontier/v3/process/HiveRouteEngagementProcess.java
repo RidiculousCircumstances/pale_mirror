@@ -188,7 +188,7 @@ public final class HiveRouteEngagementProcess {
                 .thenComparing(Bioform::id);
         List<Bioform> eligible = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .filter(bioform -> HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), bioform.id()))
+                .filter(bioform -> HivePhysiologySupport.availableForIndependentOperation(state, bioform.id()))
                 .filter(bioform -> state.ambientLeases().get(bioform.id()) == null || state.ambientLeases().get(bioform.id()).status() == AmbientLeaseStatus.CLOSED)
                 .sorted(nearest).toList();
         return java.util.stream.Stream.concat(eligible.stream().filter(Bioform::isExplosiveAssaulter).limit(1),

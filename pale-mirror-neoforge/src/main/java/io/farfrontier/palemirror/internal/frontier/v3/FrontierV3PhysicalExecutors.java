@@ -17,7 +17,12 @@ final class FrontierV3PhysicalExecutors {
             executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
             executor("object-boards", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("infection-overlay-projection"), "object-board-projection", FrontierV3ObjectBoardExecutor::tick),
 
-            executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("graybox-projection"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
+            // Opening a claimed cocoon is a durable, non-replayable physical effect.  It must
+            // not masquerade as desired-state projection merely because the object began as a
+            // graybox cell.
+            executor("hive-cocoon-mobilization", FrontierV3PhysicalExecutorRegistry.Stage.RELEASE, Set.of("object-boards"), "hive-cocoon-mobilization", FrontierV3HiveMobilizationExecutor::tick),
+
+            executor("ambient-actors", FrontierV3PhysicalExecutorRegistry.Stage.ACTOR, Set.of("hive-cocoon-mobilization"), "ambient-actor-leases", FrontierV3AmbientActorExecutor::tick),
 
             executor("inventory-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("ambient-actors"), "inventory-custody-observation", FrontierV3InventoryObservationExecutor::tick),
             executor("cargo-carrier-observation", FrontierV3PhysicalExecutorRegistry.Stage.CUSTODY, Set.of("inventory-observation"), "cargo-carrier-custody-observation", FrontierV3CargoCarrierObservationExecutor::tick),

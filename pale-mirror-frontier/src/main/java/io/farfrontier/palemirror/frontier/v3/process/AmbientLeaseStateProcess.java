@@ -16,7 +16,7 @@ public final class AmbientLeaseStateProcess {
         Objects.requireNonNull(lease, "ambient lease"); ActorLocation actor = state.actorLocations().get(lease.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || lease.status() != AmbientLeaseStatus.PREPARED
                 || !actor.body().equals(lease.handoffBody())) throw new IllegalArgumentException("ambient lease must prepare one living actor at its canonical handoff body");
-        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), lease.actorId())) {
+        if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
         }
         if (state.sceneLeases().values().stream().anyMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED

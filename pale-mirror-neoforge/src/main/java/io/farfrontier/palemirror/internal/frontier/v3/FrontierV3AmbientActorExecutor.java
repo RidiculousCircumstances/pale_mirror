@@ -136,7 +136,7 @@ final class FrontierV3AmbientActorExecutor {
                 forgetObserved(runtime, actorId);
                 continue;
             }
-            if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), actorId)) {
+            if (!HivePhysiologySupport.permitsAmbientLease(state, actorId)) {
                 // Cocoon custody is materially represented by the owned block, never by a
                 // second dormant Zombie. A lifecycle transition must durably release the
                 // cocoon before this executor may admit a body again.

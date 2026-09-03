@@ -78,22 +78,31 @@ public final class FrontierGrayboxPlan {
     public static StructuralInput structuralInput(FrontierWorldState state) {
         Objects.requireNonNull(state, "structural projection state");
         return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
-                state.routeTopology(), activeWorksiteStaging(state));
+                retainedCocoonLifecycles(state.hiveColony()), state.routeTopology(), activeWorksiteStaging(state));
+    }
+
+    private static Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles(HiveColony colony) {
+        return colony.bioformLifecycles().entrySet().stream()
+                .filter(entry -> entry.getValue().phase().occupiesCocoon() || entry.getValue().phase() == BioformLifecyclePhase.WAKING)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public static final class StructuralInput {
         private final FrontierBootstrap bootstrap;
         private final Map<SubjectId, StructureCondition> structureConditions;
         private final Map<SubjectId, HiveOrgan> addedOrgans;
+        private final Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles;
         private final RouteTopology routeTopology;
         private final Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging;
 
         private StructuralInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
-                                Map<SubjectId, HiveOrgan> addedOrgans, RouteTopology routeTopology,
+                                Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles,
+                                RouteTopology routeTopology,
                                 Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging) {
             this.bootstrap = bootstrap;
             this.structureConditions = structureConditions;
             this.addedOrgans = addedOrgans;
+            this.retainedCocoonLifecycles = retainedCocoonLifecycles;
             this.routeTopology = routeTopology;
             this.activeWorksiteStaging = activeWorksiteStaging;
         }
@@ -102,12 +111,13 @@ public final class FrontierGrayboxPlan {
             if (this == other) return true;
             if (!(other instanceof StructuralInput input)) return false;
             return bootstrap.equals(input.bootstrap) && structureConditions.equals(input.structureConditions)
-                    && addedOrgans.equals(input.addedOrgans) && routeTopology.equals(input.routeTopology)
+                    && addedOrgans.equals(input.addedOrgans) && retainedCocoonLifecycles.equals(input.retainedCocoonLifecycles)
+                    && routeTopology.equals(input.routeTopology)
                     && activeWorksiteStaging.equals(input.activeWorksiteStaging);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(bootstrap, structureConditions, addedOrgans, routeTopology, activeWorksiteStaging);
+            return Objects.hash(bootstrap, structureConditions, addedOrgans, retainedCocoonLifecycles, routeTopology, activeWorksiteStaging);
         }
     }
 
@@ -279,7 +289,9 @@ public final class FrontierGrayboxPlan {
             HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
             HiveOrgan hibernaculum = findHiveOrgan(bootstrap, colony, slot.hibernaculumId());
             if (position.equals(HiveCocoonPlan.cocoonCell(hibernaculum, slot))) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.HIVE_HIBERNACULUM, GrayboxSemanticPart.COCOON);
+                // The tray and its occupant are distinct exact semantic cells. Observation and
+                // projection must agree on the occupant palette too.
+                return new GrayboxCell(position, owner, GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
             }
         }
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
@@ -442,7 +454,12 @@ public final class FrontierGrayboxPlan {
     }
 
     private static void addOccupiedCocoons(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, HiveColony colony) {
-        colony.bioformLifecycles().entrySet().stream().filter(entry -> entry.getValue().phase().occupiesCocoon())
+        // WAKING is task custody, not a physical removal.  Until the registered RELEASE
+        // executor records its exact receipt, this remains the player's real breakable cocoon.
+        // Removing it from desired geometry here would make a task selection silently erase
+        // physical cause before either the executor or an ordinary player had acted.
+        colony.bioformLifecycles().entrySet().stream().filter(entry -> entry.getValue().phase().occupiesCocoon()
+                        || entry.getValue().phase() == BioformLifecyclePhase.WAKING)
                 .sorted(Map.Entry.comparingByKey()).forEach(entry -> {
                     HiveCocoonSlot slot = entry.getValue().homeSlot().orElseThrow();
                     BlockPosition position = HiveCocoonPlan.cocoonCell(findHiveOrgan(bootstrap, colony, slot.hibernaculumId()), slot);

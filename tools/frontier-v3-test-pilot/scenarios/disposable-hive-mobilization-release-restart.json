@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "disposable_hive_mobilization_release_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hive-mobilization", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "bioforms": 48 } },
+      { "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "WAKING", "ambientLease": "NONE", "cocoonHome": { "hibernaculum": "organ:east-hibernaculum-1", "slot": 3 } } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 412, "y": 67, "z": 401 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization" },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": 412, "y": 66, "z": 407 } },
+    { "type": "assert_visible_board", "text": "ASSEMBLY · 3 FORMED", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:zombie", "nameContains": "HIVE", "maxDistance": 48, "timeoutMs": 30000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 412, "y": 67, "z": 401 }, "settleMs": 1500 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "actorKind": "BIOFORM", "lifecycle": "ASSEMBLING" } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 2, "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" } },
+    { "after": 3, "view": "actor", "id": "bioform:east-11", "expect": { "status": "ok", "lifecycle": "ASSEMBLING", "ambientLease": "HOT" } }
+  ],
+  "frames": [
+    { "after": 5, "name": "east-hive-assembly-after-restart" },
+    { "after": 6, "name": "east-hive-assembled-bioforms" }
+  ]
+}

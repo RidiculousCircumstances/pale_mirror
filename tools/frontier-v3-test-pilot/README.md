@@ -14,7 +14,7 @@ offline-mode operator identity for the declared pilot. A run never shares its
 world directory with the deployment server or another scenario.
 
 An isolated scenario may additionally declare a `server.profile` of
-`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-nutrient-transfer`,
+`hot-scene-strike`, `settlement-assault`, `defender-equipment`, `defender-equipment-return`, `engineering-equipment`, `hive-growth`, `hive-mobilization`, `hive-nutrient-transfer`,
 `scene-return`, `hot-scout-sighting`, `hot-scout-intercept`, `hot-scout-patrol-recovery`, `health-quarantine`,
 `resident-transit` or `route-maintenance-cold-source-fairness`. These fail-closed development fixtures are available
 only to the named disposable pilot runner. `hot-scene-strike` selects a
@@ -25,6 +25,10 @@ advance. `scene-return` exposes one real COLD route continuation, while
 `health-quarantine` begins with a contaminated infirmary and requires the
 ordinary first strategic review to create the exact exposure and quarantine
 facts. `hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
+`hive-mobilization` begins with exactly one already selected waking group but
+no released cocoon or HOT body; an ordinary visit must open the three owned
+cocoons, admit the same three IDs together and keep them through a restart.
+`hive-nutrient-transfer` prepares two absent hive STORE endpoints: a real
 exact stack must leave one loaded chest, cross the retained COLD corridor, then
 enter the other loaded chest after recovery. `resident-transit` begins with one genuine displaced resident, a bounded
 reserved-bed corridor and no HOT body; an ordinary visit must materialize and

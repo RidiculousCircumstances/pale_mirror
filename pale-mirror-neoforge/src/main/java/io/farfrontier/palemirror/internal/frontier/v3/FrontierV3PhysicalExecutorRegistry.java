@@ -28,10 +28,12 @@ final class FrontierV3PhysicalExecutorRegistry {
     enum Stage {
         OBSERVATION(0),
         PROJECTION(1),
-        ACTOR(2),
-        CUSTODY(3),
-        EFFECT(4),
-        SCENE(5);
+        /** Durable-before-effect release of a claimed physical custody object. */
+        RELEASE(2),
+        ACTOR(3),
+        CUSTODY(4),
+        EFFECT(5),
+        SCENE(6);
 
         private final int order;
 

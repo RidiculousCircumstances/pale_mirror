@@ -71,7 +71,7 @@ class BioformLifecycleTest {
                 new SimInstant(1L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL,
                 state.actorLocations().get(dormant.id()).body());
         assertThrows(IllegalArgumentException.class, () -> HiveLifecycleStateSupport.validateCocoonCustody(state.bootstrap(),
-                state.hiveColony(), state.actorLocations(), java.util.Map.of(dormant.id(), forbidden)));
+                state.hiveColony(), state.actorLocations(), java.util.Map.of(dormant.id(), forbidden), state.physicalDeltas()));
     }
 
     @Test

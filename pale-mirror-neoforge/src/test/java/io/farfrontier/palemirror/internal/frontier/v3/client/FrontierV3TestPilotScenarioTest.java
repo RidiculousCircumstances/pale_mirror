@@ -71,6 +71,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsOneReadOnlyExactHiveMobilizationDiagnostic() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"inspect","view":"hive_mobilization",
+                "id":"mobilization:development-hive-mobilization"}]}""");
+        assertEquals(1, parsed.actionCount());
+    }
+
+    @Test
     void acceptsOneReadOnlyExactResidentTransitDiagnostic() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"transit","id":"resident:1-1",

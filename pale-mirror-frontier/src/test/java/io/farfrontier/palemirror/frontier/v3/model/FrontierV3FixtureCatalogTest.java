@@ -22,7 +22,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(24, profiles.size());
+        assertEquals(25, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -80,6 +80,29 @@ class FrontierV3FixtureCatalogTest {
         assertTrue(!FrontierRouteNetwork.foundationCells(state.bootstrap(), state.routeTopology()).isEmpty(),
                 "the immutable provider compiles the real ramp footing rather than requiring pilot scaffolding");
         assertTrue(FrontierGrayboxPlan.compile(state).cells().values().stream().anyMatch(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_FOUNDATION));
+    }
+
+    @Test
+    void hiveMobilizationFixtureDeclaresTheExactTaskGroupWithoutPreopeningACocoon() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.hiveMobilizationConfiguration(
+                new WorldId("frontier:hive-mobilization-fixture"), 41L).initialState();
+        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "the exact waking group must survive the checkpoint boundary that precedes physical release");
+        assertEquals(HiveMobilizationStatus.WAKING, mobilization.status());
+        assertEquals(List.of(new SubjectId("bioform:east-11"), new SubjectId("bioform:east-14"), new SubjectId("bioform:east-2")), mobilization.memberIds());
+        assertTrue(mobilization.memberIds().stream().allMatch(id ->
+                state.hiveColony().bioformLifecycles().get(id).phase() == BioformLifecyclePhase.WAKING));
+        assertTrue(mobilization.memberIds().stream().allMatch(id ->
+                !HivePhysiologySupport.permitsAmbientLease(state, id)),
+                "fixture task selection is not permission to create a body before a real cocoon release");
+        SubjectId first = mobilization.memberIds().getFirst();
+        SubjectId hibernaculum = state.hiveColony().bioformLifecycles().get(first).homeSlot().orElseThrow().hibernaculumId();
+        assertEquals(new HiveCocoonSlot(new SubjectId("organ:east-hibernaculum-1"), 3),
+                state.hiveColony().bioformLifecycles().get(first).homeSlot().orElseThrow());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(hibernaculum);
+        assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
+        assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/3"), "the physical tray must explain its own waking state without a HUD");
     }
 
     @Test

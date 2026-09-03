@@ -618,6 +618,40 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Read-only native-pilot precondition for the cocoon-release boundary.  The fixture performs
+     * only canonical task selection; a visiting ordinary player must still demand every real
+     * block removal, exact ambient lease and visible body.
+     */
+    static HiveMobilizationFixture hiveMobilizationFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        FrontierWorldState initial = state;
+        Bioform scout = initial.bootstrap().hive().bioforms().stream().filter(Bioform::isScout)
+                .filter(value -> initial.hiveColony().bioformLifecycles().get(value.id()).phase().permitsAmbientBody())
+                .findFirst().orElseThrow();
+        HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
+        InfectionCell cell = InfectionCell.at(settlement.anchor());
+        state = state.withInfection(cell, new FixedRatio(FixedScalar.ONE));
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hive-mobilization"), hive,
+                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-hive-mobilization"), objective.id(), hive,
+                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
+        StrategicPlanState plans = StrategicPlanState.empty()
+                .withHiveSettlementKnowledge(new HiveSettlementKnowledge(Map.of(settlement.id(), sighting)))
+                .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(Map.of(cell,
+                        new HiveTerritoryKnowledge.Belief(cell, new FixedRatio(FixedScalar.ONE), scout.id(), settlement.anchor(), 100L))))
+                .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L))
+                .addObjective(objective).addTask(task);
+        state = state.withStrategicPlans(plans);
+        HiveMobilization mobilization = HiveMobilizationProcess.forSettlementAssault(state, task, sighting, 200L).orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = HiveMobilizationProcess.reduceStarted(state, hive, new HiveMobilizationStarted(mobilization));
+        return new HiveMobilizationFixture(state, new SimInstant(200L), List.of(), mobilization.id(), mobilization.memberIds());
+    }
+
+    /**
      * Test fixtures may establish a real external-operation precondition, but they must make
      * the lifecycle transition explicit.  Directly moving a cocoon-retained identity would
      * create an impossible canonical state and conceal the production wake boundary.
@@ -706,6 +740,13 @@ final class FrontierDevelopmentScenarios {
     record MaterializedProductionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId orderId) {
         MaterializedProductionFixture {
             schedules = List.copyOf(schedules);
+        }
+    }
+
+    record HiveMobilizationFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                   SubjectId mobilizationId, List<SubjectId> memberIds) {
+        HiveMobilizationFixture {
+            schedules = List.copyOf(schedules); memberIds = List.copyOf(memberIds);
         }
     }
 }

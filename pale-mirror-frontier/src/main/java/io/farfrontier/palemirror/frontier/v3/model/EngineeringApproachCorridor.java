@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -61,22 +62,22 @@ final class EngineeringApproachCorridor {
 
     private static List<List<BlockPosition>> pathCandidates(FrontierWorldState state, BlockPosition start, BlockPosition destination) {
         WorldBounds bounds = state.bootstrap().bounds();
+        SurfaceIndex surfaces = SurfaceIndex.compile(state);
         List<List<BlockPosition>> candidates = new ArrayList<>();
-        add(candidates, route(state, start, terrainSurface(state, start.x(), destination.z()), destination));
-        add(candidates, route(state, start, terrainSurface(state, destination.x(), start.z()), destination));
+        add(candidates, route(state, surfaces, start, terrainSurface(state, surfaces, start.x(), destination.z()), destination));
+        add(candidates, route(state, surfaces, start, terrainSurface(state, surfaces, destination.x(), start.z()), destination));
         for (int lane : lanes(bounds.minX() + 2, bounds.maxXExclusive() - 3, start.x(), destination.x())) {
-            add(candidates, route(state, start, terrainSurface(state, lane, start.z()), terrainSurface(state, lane, destination.z()), destination));
+            add(candidates, route(state, surfaces, start, terrainSurface(state, surfaces, lane, start.z()), terrainSurface(state, surfaces, lane, destination.z()), destination));
         }
         for (int lane : lanes(bounds.minZ() + 2, bounds.maxZExclusive() - 3, start.z(), destination.z())) {
-            add(candidates, route(state, start, terrainSurface(state, start.x(), lane), terrainSurface(state, destination.x(), lane), destination));
+            add(candidates, route(state, surfaces, start, terrainSurface(state, surfaces, start.x(), lane), terrainSurface(state, surfaces, destination.x(), lane), destination));
         }
         return List.copyOf(candidates);
     }
 
-    private static BlockPosition terrainSurface(FrontierWorldState state, int x, int z) {
+    private static BlockPosition terrainSurface(FrontierWorldState state, SurfaceIndex surfaces, int x, int z) {
         BlockPosition terrain = new BlockPosition(x, state.bootstrap().terrain().supportYAt(x, z), z);
-        return FrontierRouteNetwork.surfaceAt(state.bootstrap(), state.routeTopology(), x, z)
-                .filter(surface -> !state.physicalDeltas().containsKey(surface)).orElse(terrain);
+        return surfaces.at(x, z).filter(surface -> !state.physicalDeltas().containsKey(surface)).orElse(terrain);
     }
 
     private static List<Integer> lanes(int minimum, int maximum, int start, int destination) {
@@ -95,24 +96,51 @@ final class EngineeringApproachCorridor {
         if (!route.isEmpty() && !candidates.contains(route)) candidates.add(route);
     }
 
-    private static List<BlockPosition> route(FrontierWorldState state, BlockPosition... points) {
+    private static List<BlockPosition> route(FrontierWorldState state, SurfaceIndex surfaces, BlockPosition... points) {
         List<BlockPosition> result = new ArrayList<>();
         for (int index = 1; index < points.length; index++) {
-            if (!addSegment(state, result, points[index - 1], points[index], index == 1)) return List.of();
+            if (!addSegment(state, surfaces, result, points[index - 1], points[index], index == 1)) return List.of();
         }
         return List.copyOf(result);
     }
 
-    private static boolean addSegment(FrontierWorldState state, List<BlockPosition> cells, BlockPosition from, BlockPosition to, boolean includeStart) {
+    private static boolean addSegment(FrontierWorldState state, SurfaceIndex surfaces, List<BlockPosition> cells, BlockPosition from, BlockPosition to, boolean includeStart) {
         if (from.x() != to.x() && from.z() != to.z()) throw new IllegalArgumentException("engineering approach segment is not axis aligned");
         int stepX = Integer.compare(to.x(), from.x()), stepZ = Integer.compare(to.z(), from.z());
         for (int x = from.x(), z = from.z();; x += stepX, z += stepZ) {
-            BlockPosition cell = x == from.x() && z == from.z() ? from : x == to.x() && z == to.z() ? to : terrainSurface(state, x, z);
+            boolean append = includeStart || x != from.x() || z != from.z();
+            // Reject an overlong candidate before resolving another topology column. The
+            // operation limit is a compiler budget, not a post-hoc validation after a path
+            // finder has walked arbitrarily far through a finite world.
+            if (append && cells.size() >= OperationTravel.MAX_CELLS) return false;
+            BlockPosition cell = x == from.x() && z == from.z() ? from : x == to.x() && z == to.z() ? to : terrainSurface(state, surfaces, x, z);
             BlockPosition previous = cells.isEmpty() ? null : cells.getLast();
             if (previous != null && Math.abs(previous.y() - cell.y()) > 1) return false;
-            if (includeStart || x != from.x() || z != from.z()) cells.add(cell);
+            if (append) cells.add(cell);
             if (x == to.x() && z == to.z()) return true;
         }
+    }
+
+    /**
+     * One approach compilation resolves the immutable route projection once, then does bounded
+     * O(1) column lookups. Re-scanning every route segment for every candidate cell made an
+     * ordinary repair admission proportional to candidate length times the whole world graph.
+     */
+    private record SurfaceIndex(Map<Long, BlockPosition> columns) {
+        static SurfaceIndex compile(FrontierWorldState state) {
+            Map<Long, BlockPosition> columns = new HashMap<>();
+            for (BlockPosition surface : FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology())) {
+                columns.merge(key(surface.x(), surface.z()), surface,
+                        (first, second) -> first.y() >= second.y() ? first : second);
+            }
+            return new SurfaceIndex(Map.copyOf(columns));
+        }
+
+        java.util.Optional<BlockPosition> at(int x, int z) {
+            return java.util.Optional.ofNullable(columns.get(key(x, z)));
+        }
+
+        private static long key(int x, int z) { return ((long) x << 32) ^ (z & 0xffff_ffffL); }
     }
 
     private static boolean traversable(WorldBounds bounds, Set<BlockPosition> bodyGeometry, Set<BlockPosition> occupiedFloors, BlockPosition floor) {

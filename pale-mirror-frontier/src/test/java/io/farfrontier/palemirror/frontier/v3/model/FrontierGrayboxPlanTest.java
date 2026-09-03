@@ -263,6 +263,9 @@ class FrontierGrayboxPlanTest {
                 assertEquals(bioform.id(), plan.cells().get(cocoon).ownerId(), "cocoon block is owned by its exact occupant");
                 assertEquals(GrayboxSemanticPart.COCOON, plan.cells().get(cocoon).semanticPart());
                 assertEquals(GrayboxMaterial.HIVE_COCOON, plan.cells().get(cocoon).material(), "living cocoon must contrast with its cyan hibernaculum tray");
+                assertEquals(GrayboxMaterial.HIVE_COCOON,
+                        FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), bioform.id(), cocoon).material(),
+                        "physical-loss baseline must use the same exact cocoon palette as projection");
                 assertEquals(null, plan.cells().get(cocoon.offset(0, 1, 0)), "an individual cocoon must stay open to normal player interaction");
                 return;
             }

@@ -111,14 +111,17 @@ public final class FrontierWorldPhysicalDeltaSupport {
 
     /**
      * A cocoon loss is an immediately accounted physical threat: the same exact occupant is
-     * released to the organ floor and may then receive an ordinary ambient lease. No mob is
-     * created by this reducer; loaded-world materialization remains the executor's boundary.
+     * released to the organ floor and may then receive an ordinary ambient lease. If the
+     * occupant belongs to an in-flight task mobilisation, the external break is also an
+     * interruption of that exact operation: it cannot silently substitute the player's release
+     * for a durable executor receipt. No mob is created by this reducer; loaded-world
+     * materialization remains the executor's boundary.
      */
     private static FrontierWorldState releaseCocoonOccupant(FrontierWorldState state, PhysicalDelta loss) {
         SubjectId bioformId = loss.ownerId().orElseThrow();
         BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioformId);
-        if (lifecycle == null || !lifecycle.phase().occupiesCocoon()) {
-            throw new IllegalArgumentException("cocoon loss does not retain a dormant exact bioform");
+        if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
+            throw new IllegalArgumentException("cocoon loss does not retain an exact physical occupant");
         }
         HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
         HiveOrgan hibernaculum = hiveOrgan(state, slot.hibernaculumId());
@@ -133,14 +136,31 @@ public final class FrontierWorldPhysicalDeltaSupport {
             throw new IllegalArgumentException("cocoon loss has no living exact occupant");
         }
         actors.put(bioformId, actor.withBody(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, slot))));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .hiveColony(state.hiveColony().withBioformLifecycles(lifecycles)));
+        HiveColony colony = state.hiveColony().withBioformLifecycles(lifecycles);
+        HiveMobilization interrupted = colony.mobilizations().values().stream()
+                .filter(mobilization -> !mobilization.status().terminal() && mobilization.memberIds().contains(bioformId))
+                .findFirst().orElse(null);
+        if (interrupted != null) {
+            colony = colony.conflictMobilization(interrupted.id(), HiveMobilizationConflictReason.COCOON_CHANGED);
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(colony));
     }
 
     private static HiveOrgan hiveOrgan(FrontierWorldState state, SubjectId organId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
                 .filter(organ -> organ.id().equals(organId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("cocoon references an absent HIBERNACULUM"));
+    }
+
+    /**
+     * WAKING means a task has selected the identity, not that its block has disappeared.  Until
+     * the loaded executor records the matching release receipt, the same cocoon remains a real
+     * player-breakable object.  This also lets an external break win the race cleanly and put
+     * the task into its visible conflict path rather than discarding the player action.
+     */
+    private static boolean cocoonCanStillBePhysicallyPresent(BioformLifecycle lifecycle) {
+        return lifecycle.homeSlot().isPresent()
+                && (lifecycle.phase().occupiesCocoon() || lifecycle.phase() == BioformLifecyclePhase.WAKING);
     }
 
     private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
@@ -152,8 +172,8 @@ public final class FrontierWorldPhysicalDeltaSupport {
         }
         if (expected.semanticPart() == GrayboxSemanticPart.COCOON) {
             BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(expected.ownerId());
-            if (lifecycle == null || !lifecycle.phase().occupiesCocoon()) {
-                throw new IllegalArgumentException("only an occupied exact cocoon may become a new physical loss");
+            if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
+                throw new IllegalArgumentException("only an exact physically retained cocoon may become a new physical loss");
             }
         }
     }

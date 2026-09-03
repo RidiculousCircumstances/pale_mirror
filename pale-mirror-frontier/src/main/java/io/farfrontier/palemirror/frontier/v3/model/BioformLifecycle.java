@@ -41,4 +41,11 @@ public record BioformLifecycle(BioformLifecyclePhase phase, Optional<HiveCocoonS
         if (!phase.permitsAmbientBody()) throw new IllegalStateException("only a waking/active bioform may retain an ambient body");
         return new BioformLifecycle(BioformLifecyclePhase.ACTIVE, homeSlot);
     }
+
+    public BioformLifecycle assembling() {
+        if (phase != BioformLifecyclePhase.WAKING) {
+            throw new IllegalStateException("only an observed released bioform may enter assembly");
+        }
+        return new BioformLifecycle(BioformLifecyclePhase.ASSEMBLING, homeSlot);
+    }
 }

@@ -33,6 +33,21 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             StrategicObjectiveProcess.interceptOpportunity(state.bootstrap().hive().id(), sighting,
                                     Math.addExact(command.submittedAt().ticks(), 1L))))));
         }
+        if (command.payload() instanceof HiveMobilizationReleaseStarted started) {
+            try { HiveMobilizationProcess.reduceReleaseStarted(state, state.bootstrap().hive().id(), started); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), started)));
+        }
+        if (command.payload() instanceof HiveMobilizationCocoonReleased released) {
+            try { HiveMobilizationProcess.reduceCocoonReleased(state, state.bootstrap().hive().id(), released); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), released)));
+        }
+        if (command.payload() instanceof HiveMobilizationConflicted conflicted) {
+            try { HiveMobilizationProcess.reduceConflicted(state, state.bootstrap().hive().id(), conflicted); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), conflicted)));
+        }
         return FrontierWorldCommandPlanner.rejected("hive process does not admit command: " + command.payload().type());
     }
 
@@ -48,6 +63,10 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HiveNutrientTransferCompleted completed -> HiveNutrientTransferProcess.reduceCompleted(state, event.subject(), completed);
             case HiveNutrientTransferBlocked blocked -> HiveNutrientTransferProcess.reduceBlocked(state, event.subject(), blocked);
             case HiveNutrientTransferEndpointPrepared prepared -> HiveNutrientTransferProcess.reduceEndpointPrepared(state, event.subject(), prepared);
+            case HiveMobilizationStarted started -> HiveMobilizationProcess.reduceStarted(state, event.subject(), started);
+            case HiveMobilizationReleaseStarted started -> HiveMobilizationProcess.reduceReleaseStarted(state, event.subject(), started);
+            case HiveMobilizationCocoonReleased released -> HiveMobilizationProcess.reduceCocoonReleased(state, event.subject(), released);
+            case HiveMobilizationConflicted conflicted -> HiveMobilizationProcess.reduceConflicted(state, event.subject(), conflicted);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
             case HiveTerritoryObserved observed -> HiveTerritoryPerceptionProcess.reduce(state, event.subject(), observed);
             case HiveSettlementObserved observed -> HiveSettlementPerceptionProcess.reduce(state, event.subject(), observed);

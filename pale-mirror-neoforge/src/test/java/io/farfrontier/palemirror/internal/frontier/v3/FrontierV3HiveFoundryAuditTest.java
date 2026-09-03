@@ -61,6 +61,24 @@ class FrontierV3HiveFoundryAuditTest {
                 FrontierV3HiveFoundryAudit.classify(root, claim, FrontierV3HiveFoundryAudit.ObservedCell.EXPECTED));
     }
 
+    @Test
+    void wakingCocoonWaitsForItsFirstProjectionButNeverAdoptsAnAlteredClaim() {
+        SubjectId bioform = new SubjectId("bioform:test-waking");
+        FrontierV3GrayboxLedger.Claim exact = new FrontierV3GrayboxLedger.Claim(bioform.value(), "HIVE_COCOON", "COCOON", false);
+        FrontierV3GrayboxLedger.Claim changed = new FrontierV3GrayboxLedger.Claim(bioform.value(), "HIVE_COCOON", "COCOON", true);
+
+        assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.PENDING,
+                FrontierV3HiveMobilizationExecutor.cocoonProjection(null, bioform, false),
+                "absence before a bounded first projection is not a physical loss");
+        assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.PRESENT,
+                FrontierV3HiveMobilizationExecutor.cocoonProjection(exact, bioform, true));
+        assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.CONFLICT,
+                FrontierV3HiveMobilizationExecutor.cocoonProjection(exact, bioform, false),
+                "an exact prior claim makes a later changed block a real conflict");
+        assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.CONFLICT,
+                FrontierV3HiveMobilizationExecutor.cocoonProjection(changed, bioform, true));
+    }
+
     private static double metric(io.farfrontier.palemirror.api.FoundryAuditReport report, String id) {
         return report.metrics().stream().filter(metric -> metric.id().equals(id)).findFirst().orElseThrow().value();
     }

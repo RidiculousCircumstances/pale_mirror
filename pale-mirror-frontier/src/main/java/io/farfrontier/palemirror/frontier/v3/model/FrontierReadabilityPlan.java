@@ -56,7 +56,7 @@ public final class FrontierReadabilityPlan {
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
         return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.hiveColony().addedOrgans(), state.physicalDeltas(), state.resourceSites(), state.routeTopology(), state.humanPopulation(),
-                state.companies(), new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
+                state.companies(), state.hiveColony().mobilizations(), new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
     }
 
     /** Immutable equality key for the bounded physical board cursor. */
@@ -65,7 +65,7 @@ public final class FrontierReadabilityPlan {
                                    ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
                                    Map<SubjectId, HiveOrgan> addedOrgans, Map<BlockPosition, PhysicalDelta> physicalDeltas,
                                    ResourceSiteState resourceSites, RouteTopology routeTopology, HumanPopulation humanPopulation,
-                                   CompanyRegistry companies, ActorConditionView actorConditions,
+                                   CompanyRegistry companies, Map<SubjectId, HiveMobilization> mobilizations, ActorConditionView actorConditions,
                                    boolean routeDamaged, boolean sceneConflict, boolean caravan, RouteConstruction construction) {
         public ReadabilityInput {
             Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(structureConditions, "structure conditions");
@@ -73,7 +73,7 @@ public final class FrontierReadabilityPlan {
             Objects.requireNonNull(productionJobs, "production jobs"); Objects.requireNonNull(addedOrgans, "added organs");
             Objects.requireNonNull(physicalDeltas, "physical deltas"); Objects.requireNonNull(resourceSites, "resource sites");
             Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
-            Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(actorConditions, "actor conditions");
+            Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(mobilizations, "hive mobilizations"); Objects.requireNonNull(actorConditions, "actor conditions");
         }
     }
 
@@ -112,10 +112,31 @@ public final class FrontierReadabilityPlan {
 
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
         boolean operational = state.isHiveOrganOperational(organ.id());
-        add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), stage == null && operational ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING,
+        MobilizationReadout mobilization = mobilizationReadout(state, organ);
+        FrontierObjectBoard.Tone tone = stage == null && operational && mobilization.tone() == FrontierObjectBoard.Tone.HIVE
+                ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING;
+        add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), tone,
                 organ.kind() == HiveOrganKind.GANGLION ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
-                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? "ACTIVE" : "DISABLED · REPAIR NEEDED", stage)));
+                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? mobilization.text() : "DISABLED · REPAIR NEEDED", stage)));
     }
+
+    private static MobilizationReadout mobilizationReadout(FrontierWorldState state, HiveOrgan organ) {
+        if (organ.kind() != HiveOrganKind.HIBERNACULUM) return new MobilizationReadout(FrontierObjectBoard.Tone.HIVE, "ACTIVE");
+        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.memberIds().stream().anyMatch(member -> state.hiveColony().bioformLifecycles().get(member).homeSlot()
+                        .map(slot -> slot.hibernaculumId().equals(organ.id())).orElse(false)))
+                .sorted(Comparator.comparing(HiveMobilization::id)).findFirst().orElse(null);
+        if (mobilization == null) return new MobilizationReadout(FrontierObjectBoard.Tone.HIVE, "ACTIVE");
+        return switch (mobilization.status()) {
+            case WAKING, RELEASING -> new MobilizationReadout(FrontierObjectBoard.Tone.WARNING,
+                    "WAKE SEQUENCE · " + mobilization.releasedMemberIds().size() + "/" + mobilization.memberIds().size());
+            case ASSEMBLING -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
+                    "ASSEMBLY · " + mobilization.memberIds().size() + " FORMED");
+            case CONFLICT -> new MobilizationReadout(FrontierObjectBoard.Tone.WARNING, "WAKE INTERRUPTED · INSPECT COCOONS");
+        };
+    }
+
+    private record MobilizationReadout(FrontierObjectBoard.Tone tone, String text) { }
 
     private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());

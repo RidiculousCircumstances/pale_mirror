@@ -14,7 +14,7 @@ final class FrontierV3TestPilotScenario {
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     private static final Set<String> DIAGNOSTIC_VIEWS = Set.of(
-            "summary", "performance", "site", "settlement", "hive", "hive_transfer", "actor", "item", "container", "market_order", "operation",
+            "summary", "performance", "site", "settlement", "hive", "hive_transfer", "hive_mobilization", "actor", "item", "container", "market_order", "operation",
             "route_construction", "route_maintenance", "route_topology", "physical_delta", "scene", "intent", "trace", "transit", "medical", "traversal_foundry", "hive_foundry");
 
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {

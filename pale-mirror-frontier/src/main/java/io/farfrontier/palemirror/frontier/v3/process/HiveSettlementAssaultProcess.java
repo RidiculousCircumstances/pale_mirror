@@ -52,7 +52,16 @@ public final class HiveSettlementAssaultProcess {
             return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         }
         SettlementAssault assault = assault(state, task, sighting.orElseThrow());
-        if (assault == null) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        if (assault == null) {
+            // A visible operation may wake exact cocoon occupants, but it may not pull them
+            // through an intact block or pretend that a chunk visit created an attacker. The
+            // separate mobilization owner retains this active task until its physical release
+            // and later assembly/assault continuation are implemented.
+            return HiveMobilizationProcess.forSettlementAssault(state, task, sighting.orElseThrow(), action.dueAt().ticks())
+                    .<List<ProposedEvent>>map(mobilization -> List.of(transition(task, StrategicTaskStatus.ACTIVE),
+                            new ProposedEvent(mobilization.hiveId(), new HiveMobilizationStarted(mobilization))))
+                    .orElseGet(() -> List.of(transition(task, StrategicTaskStatus.BLOCKED)));
+        }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(transition(task, StrategicTaskStatus.ACTIVE));
         events.addAll(ProductionProcess.planSettlementDefenceInterruptions(state, assault));
@@ -221,7 +230,7 @@ public final class HiveSettlementAssaultProcess {
         // Strategic COLD movement has no authority to pull an exact identity through an intact
         // cocoon.  Mobilisation is its own lifecycle boundary; until then only deployed forms
         // may be selected for an assault.
-        return HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), id)
+        return HivePhysiologySupport.availableForIndependentOperation(state, id)
                 && (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED)
                 && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)

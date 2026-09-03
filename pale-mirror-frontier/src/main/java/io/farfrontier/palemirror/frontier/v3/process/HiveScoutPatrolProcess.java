@@ -29,7 +29,12 @@ public final class HiveScoutPatrolProcess {
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         Bioform scout = scout(state, action.subject());
         if (!action.kind().equals("frontier.hive.scout.patrol")) throw new IllegalArgumentException("scout patrol has an invalid action kind");
-        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), scout.id())) {
+        // This exact scheduled cursor ceases to exist when its owner dies.  It is not a
+        // hive-wide effect that may attempt a post-mortem move and quarantine the world.
+        if (state.actorLocations().get(scout.id()).condition().status() != ActorLifeStatus.ALIVE) {
+            return List.of(new ProposedEvent(scout.id(), new ScheduleEffect.Cancelled(action.id())));
+        }
+        if (!HivePhysiologySupport.permitsAmbientLease(state, scout.id())) {
             return List.of(new ProposedEvent(scout.id(), new ScheduleEffect.Cancelled(action.id())));
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
@@ -48,7 +53,7 @@ public final class HiveScoutPatrolProcess {
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ScoutPatrolAdvanced advanced) {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("scout patrol has a foreign owner");
         Bioform scout = scout(state, advanced.scoutId());
-        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), scout.id())) {
+        if (!HivePhysiologySupport.permitsAmbientLease(state, scout.id())) {
             throw new IllegalArgumentException("cocoon-retained scout may not advance a patrol");
         }
         AmbientActorLease lease = state.ambientLeases().get(scout.id());
@@ -83,7 +88,7 @@ public final class HiveScoutPatrolProcess {
     public static FrontierWorldState reduceLeaseRecovered(FrontierWorldState state, SubjectId subject, ScoutPatrolLeaseRecovered recovered) {
         if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("scout patrol recovery has a foreign owner");
         Bioform scout = scout(state, recovered.scoutId());
-        if (!HivePhysiologySupport.permitsAmbientLease(state.hiveColony(), scout.id())) {
+        if (!HivePhysiologySupport.permitsAmbientLease(state, scout.id())) {
             throw new IllegalArgumentException("cocoon-retained scout may not recover a patrol lease");
         }
         AmbientActorLease lease = state.ambientLeases().get(scout.id());

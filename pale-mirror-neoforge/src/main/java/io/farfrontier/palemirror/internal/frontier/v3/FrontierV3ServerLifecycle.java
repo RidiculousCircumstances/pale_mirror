@@ -111,6 +111,8 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3PhysicalWorld.require(server), id);
         if ("hive_foundry".equals(view)) return FrontierV3HiveFoundryDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);
+        if ("hive_mobilization".equals(view)) return FrontierV3HiveMobilizationDiagnostic.render(checkpoint, state,
+                FrontierV3PhysicalWorld.require(server), id);
         java.util.Optional<FrontierV3AmbientActorExecutor.AdmissionDiagnostic> admission = java.util.Optional.empty();
         if ("actor".equals(view)) {
             try {
@@ -242,6 +244,7 @@ public final class FrontierV3ServerLifecycle {
                 int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, physicalWorld);
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int sceneUnknown = FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime);
+                int mobilizationUnknown = FrontierV3HiveMobilizationRestartSafety.quarantineReleasingMobilizations(runtime);
                 if (uninspectable > 0) {
                     PaleMirrorMod.LOGGER.error("Frontier v3 quarantined {} uninspectable running physical intent(s) after restart", uninspectable);
                 }
@@ -250,6 +253,9 @@ public final class FrontierV3ServerLifecycle {
                 }
                 if (sceneUnknown > 0) {
                     PaleMirrorMod.LOGGER.warn("Frontier v3 retained {} scene lease(s) as UNKNOWN pending loaded-world recovery", sceneUnknown);
+                }
+                if (mobilizationUnknown > 0) {
+                    PaleMirrorMod.LOGGER.warn("Frontier v3 conflicted {} cocoon release(s) with an uninspected restart outcome", mobilizationUnknown);
                 }
             } catch (RuntimeException error) {
                 runtime.quarantine(error);

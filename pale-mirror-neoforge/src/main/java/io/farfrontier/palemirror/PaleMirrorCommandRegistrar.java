@@ -46,6 +46,7 @@ final class PaleMirrorCommandRegistrar {
         inspect.then(diagnosticObject("settlement"));
         inspect.then(diagnosticObject("hive"));
         inspect.then(diagnosticObject("hive_transfer"));
+        inspect.then(diagnosticObject("hive_mobilization"));
         inspect.then(diagnosticObject("actor"));
         inspect.then(diagnosticObject("item"));
         inspect.then(diagnosticObject("container"));
