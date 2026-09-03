@@ -234,6 +234,9 @@ occurs:
 
 ```bash
 git -C pale-mirror worktree add --detach /tmp/pale-mirror-release <commit>
+cd /tmp/pale-mirror-release
+./gradlew -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt \
+  :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar
 scripts/frontier-v3-deploy-preflight.sh \
   --source-repo /tmp/pale-mirror-release \
   --source-ref '<commit>' \
