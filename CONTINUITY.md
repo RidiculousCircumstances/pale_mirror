@@ -316,6 +316,14 @@
   34/34, Scene 55/55, Economy 17/17 and the complete critical gate
   (`guardrails`, `check`, build/package, 285/285 GameTests) pass. M2 is closed;
   presentation grammar remains M3 work.
+- MAT-003 now has an accepted implementation boundary in
+  `docs/frontier-v3-service-work-contract.md`: one exact
+  `SettlementServiceWork` must retain resident, assignment, facility/station,
+  input, target, immutable typed traversal/cursor, progress and endpoint
+  intent. `SERVICE_WORK` is the sole new scene family; the current repair and
+  decontamination executors remain endpoint adapters. Route maintenance and
+  hive organ regeneration remain separate engineering/MAT-007 owners. This
+  contract intentionally has no implementation claim yet.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

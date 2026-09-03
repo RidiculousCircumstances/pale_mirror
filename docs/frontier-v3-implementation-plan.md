@@ -621,7 +621,9 @@ Close the confirmed gaps in dependency order:
    approach, progress, effect hand-off, drain and recovery;
 2. make farm preparation/harvest the first end-to-end work reference, then use
    the same boundary for workshop production, structural repair and
-   decontamination rather than adding executor-specific shortcuts;
+   decontamination rather than adding executor-specific shortcuts. The
+   accepted `MAT-003` service-work ownership, spatial/recovery and evidence
+   contract is [`frontier-v3-service-work-contract.md`](frontier-v3-service-work-contract.md);
 3. bind exact human patrols and hive expeditions to retained operation movement
    and observed HOT arrival; generic ambient movement cannot execute an
    assignment;
