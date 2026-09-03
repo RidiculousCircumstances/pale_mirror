@@ -101,6 +101,15 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, released, Optional.empty(), completedAssembly, next, Optional.empty(), startedAt);
     }
 
+    /** Advances exactly one already retained assembly cursor without changing its port or roster. */
+    public HiveMobilization advanceAssembly(SubjectId memberId) {
+        if (status != HiveMobilizationStatus.ASSEMBLING) {
+            throw new IllegalArgumentException("only an assembling mobilization may advance its retained cursor");
+        }
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, overseerId, memberIds, releasedMemberIds,
+                Optional.empty(), Optional.of(assembly.orElseThrow().advance(memberId)), status, Optional.empty(), startedAt);
+    }
+
     public HiveMobilization conflict(HiveMobilizationConflictReason reason) {
         Objects.requireNonNull(reason, "hive mobilization conflict reason");
         if (status == HiveMobilizationStatus.CONFLICT) {

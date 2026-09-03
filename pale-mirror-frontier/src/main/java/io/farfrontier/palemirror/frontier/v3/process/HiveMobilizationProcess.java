@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
@@ -14,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyCorridor;
 import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyPortPlan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCommandCapacity;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
@@ -27,6 +29,10 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +46,7 @@ import java.util.stream.Collectors;
 
 /** Exact task-to-cocoon release boundary; it never creates or teleports a Minecraft body. */
 public final class HiveMobilizationProcess {
+    private static final SubjectId SYSTEM = new SubjectId("system:hive-mobilization");
     private HiveMobilizationProcess() { }
 
     /**
@@ -109,6 +116,51 @@ public final class HiveMobilizationProcess {
         actors.put(released.bioformId(), actor.withBody(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, lifecycle.homeSlot().orElseThrow()))));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(
                 state.hiveColony().withBioformLifecycles(lifecycles).confirmMobilizationRelease(mobilization.id(), released.bioformId(), completedAssembly)));
+    }
+
+    /** One durable COLD clock for a retained assembly; it is not a new strategic decision. */
+    public static ScheduledAction assemblyProgress(SubjectId mobilizationId, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:hive-mobilization-assembly-" + mobilizationId.value().replace(':', '-')),
+                new SimInstant(dueAt), 0, mobilizationId, "frontier.hive.mobilization.assembly_progress", 1);
+    }
+
+    /** Advances only one stored edge after every exact member has returned from HOT custody. */
+    public static List<ProposedEvent> planAssemblyProgress(FrontierWorldState state, ScheduledAction action) {
+        HiveMobilization mobilization = state.hiveColony().mobilizations().get(action.subject());
+        if (mobilization == null || mobilization.status() != HiveMobilizationStatus.ASSEMBLING
+                || !assemblyProgress(mobilization.id(), action.dueAt().ticks()).id().equals(action.id())) return List.of();
+        HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
+        if (assembly.complete()) return List.of();
+        long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval());
+        ProposedEvent retry = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(mobilization.id(), nextDue)));
+        if (mobilization.memberIds().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED)) return List.of(retry);
+        SubjectId advancing = assembly.safeAdvances().stream().findFirst().orElse(null);
+        if (advancing == null) return List.of(retry);
+        HiveTaskAssembly next = assembly.advance(advancing);
+        ProposedEvent advanced = new ProposedEvent(mobilization.hiveId(), new HiveMobilizationAssemblyAdvanced(mobilization.id(), advancing,
+                assembly.members().get(advancing).cursor()));
+        return next.complete() ? List.of(advanced) : List.of(advanced, retry);
+    }
+
+    /** Reducer validation preserves the same topology, exact body and one-step cursor relation. */
+    public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, HiveMobilizationAssemblyAdvanced advanced) {
+        HiveMobilization mobilization = requireMobilization(state, subject, advanced.mobilizationId());
+        if (mobilization.status() != HiveMobilizationStatus.ASSEMBLING || mobilization.memberIds().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED)) {
+            throw new IllegalArgumentException("hive assembly cursor may not advance while its exact group is HOT or inactive");
+        }
+        HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
+        HiveTaskAssembly.Member member = assembly.members().get(advanced.bioformId());
+        ActorLocation actor = state.actorLocations().get(advanced.bioformId());
+        if (member == null || member.cursor() != advanced.expectedCursor() || actor == null || !actor.supportingSurface().equals(member.currentSurface())) {
+            throw new IllegalArgumentException("hive assembly body no longer matches its retained cursor");
+        }
+        HiveTaskAssembly next = assembly.advance(advanced.bioformId());
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(advanced.bioformId(), actor.withBody(BodyPosition.above(next.members().get(advanced.bioformId()).currentSurface())));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(
+                state.hiveColony().advanceMobilizationAssembly(mobilization.id(), advanced.bioformId())));
     }
 
     public static FrontierWorldState reduceConflicted(FrontierWorldState state, SubjectId subject, HiveMobilizationConflicted conflicted) {

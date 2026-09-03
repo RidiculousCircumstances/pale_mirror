@@ -93,7 +93,7 @@ only its currently implemented `GANGLION`/`BROOD`/`STORE`/`HIBERNACULUM` organs;
 the first growth output, and the remaining organ types must not be fabricated
 until their own owning process exists. That organ-vocabulary cut was schema 103
 and persistence envelope 12; the current physiology cut supersedes it with schema
-109/envelope 18, still fresh-world-only. The retired `HEART` byte `0` is intentionally
+109/envelope 19, still fresh-world-only. The retired `HEART` byte `0` is intentionally
 unmapped and fails closed rather than being reinterpreted as `GANGLION`.
 
 ## Exact bioform model
@@ -116,7 +116,8 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Schema 109/envelope 18 adds cocoon/lifecycle and exact task mobilisation only as
+ambient lease. Schema 109/envelope 19 retains cocoon/lifecycle, exact task mobilisation and
+the one-edge expected-cursor COLD assembly receipt only as
 an exact phase
 plus an optional hibernaculum slot; wounds, structural/reserve biomass and
 controller ownership remain later owning-process cuts rather than duplicated

@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -175,6 +176,51 @@ class HiveMobilizationProcessTest {
                         && edge.kind() == TraversalKind.GROUND_BIOFORM
                         && edge.traversableBy(TraversalCapability.GROUND_BIOFORM)),
                 "the non-flat approach remains a bounded open bioform topology");
+    }
+
+    @Test void coldAssemblyProgressAdvancesOnlyOneRetainedCursorAndNeverReplaysIt() {
+        Mobilized assembled = assemble(fixture());
+        HiveMobilization mobilization = assembled.mobilization();
+        HiveTaskAssembly initial = mobilization.assembly().orElseThrow();
+        SubjectId advancing = initial.safeAdvances().getFirst();
+        ScheduledAction action = HiveMobilizationProcess.assemblyProgress(mobilization.id(), 300L);
+
+        List<ProposedEvent> planned = HiveMobilizationProcess.planAssemblyProgress(assembled.state(), action);
+        HiveMobilizationAssemblyAdvanced advanced = assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, planned.getFirst().payload());
+        assertEquals(advancing, advanced.bioformId());
+        assertEquals(advanced, FrontierWorldRuntimeDefinition.payloadCodecs().decode(advanced.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(advanced)), "the exact expected cursor must survive WAL replay");
+        assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created),
+                "an incomplete task receives only its next retained COLD clock");
+
+        FrontierWorldState progressed = HiveMobilizationProcess.reduceAssemblyAdvanced(assembled.state(), assembled.state().bootstrap().hive().id(), advanced);
+        HiveTaskAssembly next = progressed.hiveColony().mobilizations().get(mobilization.id()).assembly().orElseThrow();
+        assertEquals(initial.members().get(advancing).cursor() + 1, next.members().get(advancing).cursor());
+        assertEquals(next.members().get(advancing).currentSurface(), progressed.actorLocations().get(advancing).supportingSurface());
+        assertEquals(initial.members().size(), next.members().size(), "the COLD clock cannot replace or reselect a group member");
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(progressed,
+                progressed.bootstrap().hive().id(), advanced), "a stale event may not replay the same retained edge");
+        assertEquals(progressed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(progressed)));
+    }
+
+    @Test void coldAssemblyProgressWaitsForTheWholeExactGroupToLeaveAmbientHotCustody() {
+        Mobilized assembled = assemble(fixture());
+        HiveMobilization mobilization = assembled.mobilization();
+        SubjectId hotMember = mobilization.memberIds().getFirst();
+        java.util.Map<SubjectId, AmbientActorLease> leases = new java.util.LinkedHashMap<>();
+        leases.put(hotMember, new AmbientActorLease(hotMember, assembled.state().actorLocations().get(hotMember).body(),
+                new SimInstant(300L), 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.WORK,
+                assembled.state().actorLocations().get(hotMember).body()));
+        FrontierWorldState hot = assembled.state().withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases));
+
+        List<ProposedEvent> deferred = HiveMobilizationProcess.planAssemblyProgress(hot,
+                HiveMobilizationProcess.assemblyProgress(mobilization.id(), 300L));
+
+        assertEquals(1, deferred.size(), "one HOT member defers the whole retained group rather than mixing body authorities");
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class, deferred.getFirst().payload());
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceAssemblyAdvanced(hot,
+                hot.bootstrap().hive().id(), new HiveMobilizationAssemblyAdvanced(mobilization.id(), hotMember,
+                        mobilization.assembly().orElseThrow().members().get(hotMember).cursor())));
     }
 
     @Test void playerBrokenCocoonInterruptsOnlyItsInFlightMobilizationAndReleasesTheExactOccupant() {

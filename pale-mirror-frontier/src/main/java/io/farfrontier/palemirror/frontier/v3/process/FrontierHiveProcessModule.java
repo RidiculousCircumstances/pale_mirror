@@ -41,7 +41,13 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         if (command.payload() instanceof HiveMobilizationCocoonReleased released) {
             try { HiveMobilizationProcess.reduceCocoonReleased(state, state.bootstrap().hive().id(), released); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), released)));
+            HiveMobilization mobilization = state.hiveColony().mobilizations().get(released.mobilizationId());
+            boolean finalRelease = mobilization.releasedMemberIds().size() + 1 == mobilization.memberIds().size();
+            List<ProposedEvent> events = new java.util.ArrayList<>(List.of(new ProposedEvent(state.bootstrap().hive().id(), released)));
+            if (finalRelease) events.add(new ProposedEvent(state.bootstrap().hive().id(), new ScheduleEffect.Created(
+                    HiveMobilizationProcess.assemblyProgress(mobilization.id(), Math.addExact(command.submittedAt().ticks(),
+                            state.bootstrap().ruleset().cadence().migrationStepInterval())))));
+            return new CommandPlan.Accepted(List.copyOf(events));
         }
         if (command.payload() instanceof HiveMobilizationConflicted conflicted) {
             try { HiveMobilizationProcess.reduceConflicted(state, state.bootstrap().hive().id(), conflicted); }
@@ -66,6 +72,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HiveMobilizationStarted started -> HiveMobilizationProcess.reduceStarted(state, event.subject(), started);
             case HiveMobilizationReleaseStarted started -> HiveMobilizationProcess.reduceReleaseStarted(state, event.subject(), started);
             case HiveMobilizationCocoonReleased released -> HiveMobilizationProcess.reduceCocoonReleased(state, event.subject(), released);
+            case HiveMobilizationAssemblyAdvanced advanced -> HiveMobilizationProcess.reduceAssemblyAdvanced(state, event.subject(), advanced);
             case HiveMobilizationConflicted conflicted -> HiveMobilizationProcess.reduceConflicted(state, event.subject(), conflicted);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);
             case HiveTerritoryObserved observed -> HiveTerritoryPerceptionProcess.reduce(state, event.subject(), observed);

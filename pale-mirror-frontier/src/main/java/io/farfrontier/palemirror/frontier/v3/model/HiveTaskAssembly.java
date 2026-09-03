@@ -19,7 +19,6 @@ import java.util.Objects;
  */
 public record HiveTaskAssembly(SubjectId ganglionId, Map<SubjectId, Member> members) {
     public static final int MAX_MEMBERS = HiveMobilization.MAX_MEMBERS;
-    public static final int MAX_COLD_ADVANCE = 32;
 
     public HiveTaskAssembly {
         ganglionId = Objects.requireNonNull(ganglionId, "hive assembly Ganglion");
@@ -88,6 +87,5 @@ public record HiveTaskAssembly(SubjectId ganglionId, Map<SubjectId, Member> memb
         }
         public SurfaceAnchor destinationSurface() { return corridor().getLast(); }
         public boolean arrived() { return cursor == corridor().size() - 1; }
-        public int nextColdCursor() { return Math.min(cursor + MAX_COLD_ADVANCE, corridor().size() - 1); }
     }
 }

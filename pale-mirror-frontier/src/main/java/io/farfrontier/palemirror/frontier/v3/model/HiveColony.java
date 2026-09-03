@@ -200,6 +200,15 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 
+    /** Retains the one canonical assembly cursor transition for its exact task-owned member. */
+    public HiveColony advanceMobilizationAssembly(SubjectId mobilizationId, SubjectId memberId) {
+        HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
+        if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
+        Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, current.advanceAssembly(memberId));
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
