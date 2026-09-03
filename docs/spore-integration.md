@@ -64,6 +64,6 @@ remains a rare exploration layer and Pale Mirror remains the progression authori
   long-range raid or block-spread regression.
 - Player combat and Better Combat/shields; infected, elite and calamity encounters
   must be measured rather than balanced through global HP multipliers.
-- Client boot and rendering with Sodium, Polytone, EMF/ETF, Distant Horizons and
-  Sable.
+- Client boot and rendering with Spore and Crimson Curse's declared client asset
+  dependencies.
 - MSPT/heap measurement at an active Spore structure with Create and Millénaire.

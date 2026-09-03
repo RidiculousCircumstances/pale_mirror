@@ -12,11 +12,10 @@ behaviour changes until the stated adapter tests have passed.
     → player-controlled arena activation → authored boss encounter
     → extraction → permanent chapter unlock
 
-The system is deliberately a destination layer for Create Aeronautics, not a
-quest list or a global difficulty multiplier. Walking is viable for the first
-hard expedition; aircraft makes the next class of distant, oceanic, mountainous
-and time-sensitive operations practical. Create trains serve repeatable known
-routes and bulk logistics rather than first discovery.
+The system is deliberately a destination layer for rail logistics, not a quest
+list or a global difficulty multiplier. Walking is viable for the first hard
+expedition; Create trains serve repeatable known routes and bulk logistics rather
+than first discovery.
 
 ## Authority boundaries
 
@@ -26,7 +25,7 @@ routes and bulk logistics rather than first discovery.
 | FTB Quests (adopted; pin/boot gate pending) | Campaign journal, operation briefings and visible player/team progress. It is never authoritative for a selected target, boss state or chapter artifact. |
 | Ravents | Automatic world encounter/progression director. It may unlock new operation pools after a chapter, but it does not own a contract's coordinates or completion state. |
 | Cataclysm / Mowzie's / Spore / Crimson Curse | Authored boss and encounter content. Their native AI, arenas, drops and mechanics are preserved. |
-| Create + Aeronautics | Preparation, transport, cargo and field infrastructure. |
+| Create rail logistics | Preparation, repeatable transport and cargo infrastructure. |
 
 The proposed implementation is a minimal native NeoForge 1.21.1 integration
 module named far_frontier_core, with content definitions in a versioned datapack.

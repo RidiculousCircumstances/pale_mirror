@@ -98,17 +98,6 @@ for jar in "$target"/mods/createcaliber*.jar; do
   echo "Disabled legacy evaluation mod: $(basename "$jar")"
 done
 
-# Iris is now pinned with the renderer stack. Packwiz deliberately preserves
-# unmanaged local files, so disable older manually installed Iris builds that
-# would otherwise load beside the managed version and crash during mixin setup.
-managed_iris="iris-neoforge-1.8.14-beta.1+mc1.21.1.jar"
-for jar in "$target"/mods/iris*.jar "$target"/mods/Iris*.jar; do
-  [[ -f "$jar" ]] || continue
-  [[ $(basename "$jar") == "$managed_iris" ]] && continue
-  mv -f -- "$jar" "$jar.disabled"
-  echo "Disabled incompatible Iris build: $(basename "$jar")"
-done
-
 install_hosted_pale_mirror \
   "$target" "$pale_mirror_url" "$pale_mirror_sha512" \
   "$target/.far-frontier-installer-cache"
@@ -140,17 +129,20 @@ for filename in "${obsolete_client_mods[@]}"; do
   echo "Retired nonessential client mod: $destination"
 done
 
-# Alex's Caves and Citadel are paired experimental both-side ports. The supported
-# Frontier v3 profile excludes them, but Packwiz preserves an old optional JAR
-# and its filename may differ by release. Retire every conventional JAR spelling
-# rather than relying on a single historical version number.
+# Packwiz intentionally preserves JARs that are no longer listed.  The supported
+# Frontier v3 profile excludes the retired cave and native renderer/flight stacks,
+# so move every historical filename to a recoverable archive after synchronization.
 for source in "$target"/mods/alexscaves*.jar "$target"/mods/AlexsCaves*.jar \
-  "$target"/mods/citadel*.jar "$target"/mods/Citadel*.jar; do
+  "$target"/mods/citadel*.jar "$target"/mods/Citadel*.jar \
+  "$target"/mods/DistantHorizons-*.jar "$target"/mods/distanthorizons*.jar \
+  "$target"/mods/iris*.jar "$target"/mods/Iris*.jar \
+  "$target"/mods/sable*.jar "$target"/mods/Sable*.jar \
+  "$target"/mods/create-aeronautics*.jar "$target"/mods/Create-Aeronautics*.jar; do
   [[ -f "$source" ]] || continue
   mkdir -p "$retired_client_mods"
   destination="$retired_client_mods/$(basename "$source").$(date -u +%Y%m%dT%H%M%SZ)"
   mv -- "$source" "$destination"
-  echo "Retired unsupported Alex's Caves/Citadel JAR: $destination"
+  echo "Retired unsupported client JAR: $destination"
 done
 
 echo "Client pack synchronised in: $target"

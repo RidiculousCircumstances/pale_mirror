@@ -37,7 +37,7 @@ daily tasks, random kill quotas or a checklist for every installed mod.
    requirement, risk and expected extraction, while the core keeps the exact target
    and validation state.
 3. **Field manual** — optional, non-rewarding guidance for Create logistics,
-   Aeronautics, infection containment, civilization layers and encounter safety.
+   rail logistics, infection containment, civilization layers and encounter safety.
 
 ## NPC and settlement contracts
 
@@ -52,9 +52,8 @@ NPCs supply context; they do not require a fragile direct dialogue integration.
 - The FTB Quests page is the journal view. The physical board/table and the planned
   core validate issuance, delivery and failure conditions.
 
-This makes Create trains useful for repeatable bulk routes and Aeronautics useful
-for urgent, high-value or remote operations without turning settlements into MMO
-quest hubs.
+This makes Create trains useful for repeatable bulk routes without turning
+settlements into MMO quest hubs.
 
 ## First vertical slice
 

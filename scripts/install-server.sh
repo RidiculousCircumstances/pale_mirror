@@ -23,7 +23,6 @@ Options:
   --java <path>
   --level-name <directory name>
   --enable-c2me
-  --enable-server-dh-cache
   --accept-eula
   --pale-mirror-url <URL>
   --pale-mirror-sha512 <128 hex characters>
@@ -44,9 +43,6 @@ the same hosted source and SHA-512-pinned automatically. Explicit URL/SHA-512 pa
 still override that default and must be supplied together. The dedicated server
 runtime must be Java 22; Pale Mirror and all client artifacts remain compiled for
 Java 21. C2ME is downloaded but kept disabled unless --enable-c2me is supplied.
-Distant Horizons remains client-side by default; --enable-server-dh-cache enables
-its measured-cost cache/synchronisation service without enabling unknown-world
-generation.
 EOF
 }
 
@@ -55,7 +51,6 @@ pack_url=""
 java_bin="${JAVA_BIN:-java}"
 accept_eula=false
 enable_c2me=false
-enable_server_dh_cache=false
 level_name=""
 pale_mirror_url="${PALE_MIRROR_URL:-}"
 pale_mirror_sha512="${PALE_MIRROR_SHA512:-}"
@@ -71,7 +66,6 @@ while (($#)); do
     --level-name) level_name=${2:?--level-name requires a directory name}; shift 2 ;;
     --accept-eula) accept_eula=true; shift ;;
     --enable-c2me) enable_c2me=true; shift ;;
-    --enable-server-dh-cache) enable_server_dh_cache=true; shift ;;
     --pale-mirror-url) pale_mirror_url=${2:?--pale-mirror-url requires a URL}; shift 2 ;;
     --pale-mirror-sha512) pale_mirror_sha512=${2:?--pale-mirror-sha512 requires a hash}; shift 2 ;;
     --pale-mirror-visuals-url) pale_mirror_visuals_url=${2:?--pale-mirror-visuals-url requires a URL}; shift 2 ;;
@@ -208,19 +202,20 @@ for jar in "$target"/mods/createcaliber*.jar; do
   mv "$jar" "$disabled"
 done
 
-# These paired community ports are opt-in in Packwiz, but the installer retains a
-# previously selected optional JAR.  The supported Frontier v3 profile excludes
-# them on both sides of the connection, so retire every conventional filename
-# spelling recoverably instead of leaving the server to advertise stale network
-# mods after the client updater has removed them.
+# Packwiz preserves retired JARs. Keep unsupported caves and the native
+# renderer/flight stack out of the server's network-mod list after an update.
 retired_unsupported_mods="$cache_dir/retired-unsupported-mods"
 for source in "$target"/mods/alexscaves*.jar "$target"/mods/AlexsCaves*.jar \
-  "$target"/mods/citadel*.jar "$target"/mods/Citadel*.jar; do
+  "$target"/mods/citadel*.jar "$target"/mods/Citadel*.jar \
+  "$target"/mods/DistantHorizons-*.jar "$target"/mods/distanthorizons*.jar \
+  "$target"/mods/iris*.jar "$target"/mods/Iris*.jar \
+  "$target"/mods/sable*.jar "$target"/mods/Sable*.jar \
+  "$target"/mods/create-aeronautics*.jar "$target"/mods/Create-Aeronautics*.jar; do
   [[ -f "$source" ]] || continue
   mkdir -p "$retired_unsupported_mods"
   destination="$retired_unsupported_mods/$(basename "$source").$(date -u +%Y%m%dT%H%M%SZ)"
   mv -- "$source" "$destination"
-  echo "Retired unsupported Alex's Caves/Citadel server JAR: $destination"
+  echo "Retired unsupported server JAR: $destination"
 done
 
 c2me_jar="$target/mods/c2me-neoforge-mc1.21.1-0.3.0+alpha.0.93.jar"
@@ -232,26 +227,6 @@ if [[ "$enable_c2me" == true ]]; then
   [[ -f "$c2me_jar" ]] || mv "$c2me_disabled" "$c2me_jar"
 else
   [[ ! -f "$c2me_jar" ]] || mv "$c2me_jar" "$c2me_disabled"
-fi
-
-# Client DH still builds and renders LODs from ordinary chunks received from the
-# server. The dedicated cache is opt-in because its event-fed builder saturated a
-# 2,000-chunk queue and competed with live unexplored-world generation in JFR.
-if [[ "$enable_server_dh_cache" == true ]]; then
-  for dh_disabled in "$target"/mods/DistantHorizons-*.jar.server-disabled; do
-    dh_jar=${dh_disabled%.server-disabled}
-    [[ -e "$dh_jar" ]] || mv "$dh_disabled" "$dh_jar"
-  done
-else
-  for dh_jar in "$target"/mods/DistantHorizons-*.jar; do
-    dh_disabled="$dh_jar.server-disabled"
-    if [[ -e "$dh_disabled" ]]; then
-      disabled_backup_root="$cache_dir/disabled-mod-backups"
-      mkdir -p "$disabled_backup_root"
-      mv "$dh_disabled" "$disabled_backup_root/${dh_disabled##*/}.$(date -u +%Y%m%dT%H%M%SZ)"
-    fi
-    mv "$dh_jar" "$dh_disabled"
-  done
 fi
 
 python3 "$target/scripts/validate-structure-assets.py" \
@@ -345,18 +320,6 @@ set_server_property view-distance 8
 set_server_property simulation-distance 6
 set_server_property sync-chunk-writes true
 
-# When explicitly enabled, DH remains an event-fed cache/synchronisation layer.
-# PM disables its background importer at runtime and keeps PRE_EXISTING_ONLY only
-# as a fail-safe. These values prevent clients from requesting server generation.
-dh_config="$target/config/DistantHorizons.toml"
-if [[ -f "$dh_config" ]]; then
-  sed -i 's/^[[:space:]]*realTimeUpdateDistanceRadiusInChunks = .*/\trealTimeUpdateDistanceRadiusInChunks = 24/' "$dh_config"
-  sed -i 's/^[[:space:]]*enableServerGeneration = .*/\tenableServerGeneration = false/' "$dh_config"
-  sed -i 's/^[[:space:]]*numberOfThreads = .*/\t\tnumberOfThreads = 1/' "$dh_config"
-  sed -i 's/^[[:space:]]*threadRunTimeRatio = .*/\t\tthreadRunTimeRatio = "0.35"/' "$dh_config"
-  sed -i 's/^[[:space:]]*enableDistantGeneration = .*/\t\tenableDistantGeneration = false/' "$dh_config"
-fi
-
 if [[ "$enable_c2me" == true ]]; then
   "$target/scripts/set-server-performance-profile.sh" --target "$target" --profile c2me \
     --worldgen combined --surface-rules vanilla --java "$java_bin"
@@ -381,7 +344,7 @@ EOF
 mv "$jvm_temporary" "$jvm_args"
 
 echo "Server pack synchronised in: $target"
-echo "Runtime: Java 22; view-distance=8; simulation-distance=6; heap=4-12 GiB; C2ME=$enable_c2me; server-DH-cache=$enable_server_dh_cache"
+echo "Runtime: Java 22; view-distance=8; simulation-distance=6; heap=4-12 GiB; C2ME=$enable_c2me"
 if [[ "$accept_eula" == false ]]; then
   echo "Mojang EULA not accepted by this script. Review it, then set eula=true in $target/eula.txt." >&2
 fi

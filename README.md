@@ -20,8 +20,7 @@ installer URL exposed by the repository. On a dedicated server, run
 it never writes JARs into the repository.
 
 Recommended allocation: 6–8 GB client RAM; 6 GB server RAM for initial testing and
-8–12 GB for a populated long-running server. Do not set Distant Horizons to extreme
-LOD distances by default.
+8–12 GB for a populated long-running server.
 
 ## Profiles and known risks
 
@@ -33,10 +32,7 @@ constrained local-contamination layer; it is not an additional global progressio
 system.
 
 The default dedicated-server profile pins Lithium, ModernFix and Fast Noise.
-ScalableLux is excluded because Sable 2.0.3 declares it incompatible. Distant
-Horizons is client-side by default; its measured-cost server cache is an explicit
-installer opt-in and never generates unknown terrain. C2ME is an explicit
-experimental Java 22 profile, not a default. Millénaire is
+C2ME is an explicit experimental Java 22 profile, not a default. Millénaire is
 disabled in the current profile after repeatable server-thread stalls during village
 chunk loading; Pale Mirror's adapter remains optional.
 
@@ -46,8 +42,7 @@ Pale Mirror is the authoritative world-state and story director. Ravents remains
 installed only as a dormant future materialization adapter: the default profile has
 no Ravents raids or events. Enhanced Celestials and its Blood Moon events are
 excluded, so ambient global waves cannot be mistaken for PM-authored consequences.
-Create and Aeronautics are intended to unlock practical long-range travel, not
-early-game toys.
+Create is intended to unlock practical long-range travel, not early-game toys.
 
 FTB Quests is adopted as the client/server campaign journal: it will display
 chapters, operation briefings and ordinary progress, while the planned Far Frontier
@@ -58,8 +53,8 @@ and full-profile boot test; no quest chain is enabled yet.
 ## Pack layers
 
 - World: Terralith, Tectonic, Structurify
-- Rendering: Distant Horizons
-- Engineering: Create, Sable, Create: Aeronautics
+- Rendering: vanilla Minecraft renderer
+- Engineering: Create
 - Exploration: IDA, IDAS, YUNG's structures, Cataclysm
 - Ecology/threats: Naturalist, vanilla + Hostile Tactics + Born in Chaos + Mowzie's
 - Infection: Crimson Curse (global strategic state) + Spore (rare local contamination sites)

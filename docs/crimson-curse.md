@@ -40,7 +40,7 @@ replaced to conceal that upstream packaging defect.
 
 - Dedicated server boot with the Spore profile; ensure no missing objective,
   function-order, Spore-tag or Spore-effect error.
-- Client boot with Sodium/Polytone/EMF/ETF plus Distant Horizons and Sable.
+- Client boot with Crimson Curse's declared client asset dependencies.
 - Fresh-world and existing-world infection generation, reload and 10 km travel.
 - Confirm automatic Crimson raids remain disabled while PM-controlled threat actors work.
 - Measure MSPT/heap during infection nodes, then with Create machinery and a

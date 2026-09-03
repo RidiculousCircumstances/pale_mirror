@@ -7,14 +7,12 @@ means it has not been run in this environment.
 |---|---|---|
 | BOOT | Packwiz metadata resolves all pinned core artifacts | PASS — 2026-08-12 materialisation; current profile excludes Millénaire. |
 | BOOT | Dedicated server discovers all core mod manifests | PASS — 2026-08-08; Hostile Tactics manifest reports 0.10.1. |
-| BOOT | ScalableLux with Sable 2.0.3 | BLOCKED — 2026-08-13 Java 22 full-profile boot; Sable declares ScalableLux incompatible, so the candidate was removed rather than bypassing the loader gate. |
 | BOOT | Dedicated server reaches `Done` | PASS — 2026-08-13 clean full-pack stable profile on pinned Temurin 22 reached `Done (15.746s)`; spawn preparation took 4.479 s and shutdown was clean. |
-| BOOT | Cache-only server-side Distant Horizons | RETEST — 2026-08-13 profiling showed that `PRE_EXISTING_ONLY` still ran DH's background importer. PM now disables that importer and client generation requests outright while retaining the mode as a dormant fail-safe. Ready client LOD sync and absence of `DH-World Gen Thread` work require a graphical/JFR retest. |
 | BOOT | Experimental C2ME profile compatibility | PASS — 2026-08-13 full-pack Java 22 restart reached `Done (3.331s)`, created exactly eight C2ME workers and DH selected its C2ME pre-existing-chunk accessor. C2ME remains an active playtest candidate pending the repeated flight and correctness gates. |
 | INSTALL | packwiz client bootstrap materialises the client-side profile | PASS — 2026-08-08 isolated bootstrap test; client-only artifacts downloaded and server-only artifacts correctly skipped. The current default manifest excludes Caliber instead of relying on headless optional selection. |
 | INSTALL | Terralith client dependency is present | PASS — 2026-08-08; Terralith's own NeoForge descriptor declares Lithostitched `side = "BOTH"`. Pack metadata was corrected from an erroneous server-only classification to `both`. |
 | INSTALL | Linux client installer materialises a clean instance without Caliber | PASS — historical 2026-08-08 run disabled the downloaded optional JAR; the current default manifest excludes Caliber entirely so every platform receives the same profile. |
-| INSTALL | Linux server installer materialises a clean dedicated server | PASS — 2026-08-13 clean materialisation installed Java-22-compatible stable mods, DH on both sides, 8/6 distances, synchronous writes, managed 4–12 GiB heap and a disabled C2ME artifact. |
+| INSTALL | Linux server installer materialises a clean dedicated server | PASS — 2026-08-13 clean materialisation installed Java-22-compatible stable mods, 8/6 distances, synchronous writes, managed 4–12 GiB heap and a disabled C2ME artifact. |
 | INSTALL | Windows 10 PowerShell client installer end-to-end | PENDING — PowerShell is unavailable in this environment; requires a real Windows 10 NeoForge-client test. |
 | BOOT | Dedicated server accepts connection | PASS — repeated live NeoForge client sessions through 2026-08-13. |
 | CLIENT | Client starts and connects | PASS — 2026-08-13 graphical Windows client joined and performed the profiled creative-flight run. |
@@ -25,7 +23,6 @@ means it has not been run in this environment.
 | WORLDGEN | Tens-of-km pregeneration/restart | N/A — the accepted policy deliberately optimises live generation and does not pregenerate the open world. |
 | STRUCTURES | Dump IDs, apply conservative spacing, inspect overlaps | PENDING |
 | CREATE | Basic machine, train, contraption | PENDING |
-| AERONAUTICS | Assemble, fly, land, restart, chunk-edge test | PENDING |
 | COMBAT | Vanilla groups, shields, all modded encounter tiers | PENDING |
 | EVENTS | Dormant Ravents profile parses on dedicated server | PASS — 2026-08-15 live server reports `Loaded 2 mobs, 0 raids, 0 events`; the former Tier 0 wave raid was removed. |
 | EVENTS | Enhanced Celestials / Blood Moon | DISABLED — 2026-08-15 boot contains neither EC2 module nor its orphan dependencies. |
@@ -33,7 +30,7 @@ means it has not been run in this environment.
 | SPORE | Conservative config and sparse structure-set datapack parse in full server profile | PASS — 2026-08-08; 13 Spore `structure_set` overrides at 4096/3072 chunks load on the dedicated server. |
 | SPORE | Multi-seed density, hivemind lifecycle, local containment and combat | PENDING |
 | CRIMSON CURSE | Client profile materialisation through packwiz | PASS — 2026-08-08; live `:8091` source produced Crimson Curse plus ETF, EMF, Sodium NeoForge and Polytone in a clean client profile; Caliber was renamed `.jar.disabled`. |
-| CRIMSON CURSE | Client boot with Sodium/Polytone/EMF/ETF + Distant Horizons + Sable | PENDING |
+| CRIMSON CURSE | Client boot with its declared client asset dependencies | PENDING |
 | CRIMSON CURSE | Infection generation, phase progression, 10 km travel and performance | PENDING |
 | CIVILIZATION | PM-authored settlements + Villager Overhaul; no random vanilla/Integrated Villages settlements | PENDING |
 | MILLÉNAIRE | Separate compatibility profile | DISABLED — removed from the default client/server pack after a 32-second village-chunk stall caused a client timeout. |
@@ -42,8 +39,8 @@ means it has not been run in this environment.
 
 ## Known boot findings
 
-- The core mod manifests load on NeoForge `21.1.248`; Aeronautics' bundled module is
-  discovered correctly.
+- The core mod manifests load on NeoForge `21.1.248`; the retired renderer/flight
+  stack is excluded from the current profile.
 - `datapacks/idas-optional-integration-quarantine` was boot-tested on 2026-08-08.
   Minecraft automatically enabled `file/idas-optional-integration-quarantine`; the
   prior 10 IDAS Ice and Fire / Ars Nouveau loot errors and two invalid spawner pools

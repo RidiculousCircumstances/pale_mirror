@@ -22,10 +22,8 @@ format allows it. We do not silently overwrite recipes with an unreviewed script
 
 ## Transport
 
-Create infrastructure precedes meaningful air travel. Aeronautics recipes remain
-upstream defaults until a documented progression proposal and dedicated-server flight
-tests exist. Any future gate must use a durable, inspectable milestone—not elapsed
-days.
+Create infrastructure is reserved for rail logistics. Rail recipes and progression
+must be tied to durable, inspectable milestones—not elapsed days.
 
 ## Caliber
 

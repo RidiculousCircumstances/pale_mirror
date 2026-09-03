@@ -6,8 +6,8 @@ unrelated gameplay.
 | Layer | Components | Boundary |
 |---|---|---|
 | WORLD | Terralith + Tectonic + Structurify | Tectonic creates macro relief; Terralith supplies biome variety; Structurify controls non-IDA structure density. |
-| RENDER | Distant Horizons | Client rendering plus server LOD cache/sync from pre-existing chunks; it never generates authoritative terrain. |
-| ENGINEERING | Create + Sable + Aeronautics | Transport and machines; tested on a dedicated server and across saves. |
+| RENDER | Vanilla Minecraft renderer | The supported v3 profile avoids the unstable third-party renderer stack. |
+| ENGINEERING | Create | Transport and machines; tested on a dedicated server and across saves. |
 | QUESTS | FTB Quests (adopted; pin/boot gate pending) | Campaign journal and operation briefings; never authoritative world or boss state. |
 | EXPEDITIONS | Far Frontier expedition core (planned) | Persistent distant contracts, dormant chapter arenas and non-substitutable chapter artifacts. |
 | EXPLORATION | IDA + IDAS + YUNG + Cataclysm | WDA is excluded; IDA uses its own documented structure-set overrides. |
@@ -41,10 +41,8 @@ and docs/quest-system.md.
 
 ## Operational constraints
 
-The identical Distant Horizons build runs on both sides. The dedicated server is
-permanently cache-only: the background importer is disabled, normal chunk events
-populate ready LODs, and `PRE_EXISTING_ONLY` remains only as a dormant fail-safe.
-Alex's Caves and Citadel are excluded from every supported profile. Caliber is
+Alex's Caves and Citadel are excluded from every supported profile, as are the
+optional Distant Horizons/Iris/Sable/Aeronautics renderer and flight stack. Caliber is
 excluded from the default manifest and belongs only in a separate evaluation
 profile. Performance mods are intentionally deferred until functional tests
 establish a baseline.

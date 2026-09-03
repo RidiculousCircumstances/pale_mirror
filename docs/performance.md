@@ -8,12 +8,8 @@ acceptance target is 40–50 blocks/s through generated terrain and at least 20 
 ## Profiles
 
 The stable dedicated-server profile is Java 22 plus Lithium `0.15.4`, ModernFix
-`5.27.2`, Fast Noise `1.0.13` and FerriteCore `7.0.3`. Sodium and Distant Horizons
-remain client-side by default. Synchronous chunk writes remain enabled.
-
-ScalableLux `0.1.0.1` is rejected: Sable `2.0.3` declares it incompatible and
-NeoForge correctly stops before world access. Pale Mirror does not bypass mod
-compatibility declarations.
+`5.27.2`, Fast Noise `1.0.13` and FerriteCore `7.0.3`. The current client profile
+uses the vanilla renderer. Synchronous chunk writes remain enabled.
 
 C2ME `0.3.0-alpha.0.93` is downloaded as a disabled artifact. It may be enabled only
 with the profile script and only after the complete compatibility suite. Its nested
@@ -24,30 +20,8 @@ Start a materialised server with `scripts/run-server-java22.sh`. The wrapper use
 the pinned Temurin 22 runtime (or an explicit `JAVA_BIN`) and prevents an accidental
 fallback to the system Java while leaving client Java 21 untouched.
 
-## Distant Horizons
-
-Clients build their own LOD cache from ordinary chunks received from the server.
-This preserves the long horizon and revisited-terrain cache without adding a second
-server-side consumer to live worldgen.
-
-The exact server DH build is available only through `--enable-server-dh-cache` for
-controlled A/B tests. Pale Mirror then disables its background importer through the
-public exact-version API and pins its dormant fallback to `PRE_EXISTING_ONLY`:
-
-- normal chunk events build the server cache and synchronise ready LODs;
-- DH neither scans/imports chunks in the background nor generates unknown terrain;
-- clients cannot request server-side LOD generation;
-- one DH worker normally runs at a 0.35 ratio; PM lowers it to 0.05 while any
-  player moves at least 12 blocks/s and restores it only after ten seconds below 6;
-- live LOD update broadcasts are bounded to 24 chunks around each player;
-- `SURFACE`, `FEATURES`, `INTERNAL_SERVER` and experimental N-sized generation are not used.
-
-`/pale_mirror performance` reports whether the optional cache-only override is active.
-PM clears every API override on server shutdown. Missing or incompatible server DH
-is an expected presentation state and never blocks canonical simulation.
-
 The C2ME profile pins its global executor to eight workers. This deliberately leaves
-CPU headroom for the main server thread, Create/Sable and DH cache construction.
+CPU headroom for the main server thread and Create construction.
 Its worldgen accelerator can be selected independently for controlled A/B runs:
 
 ```bash
@@ -75,11 +49,11 @@ CPU samples and its temporary maps dominated allocation pressure on the current
 Terralith/Tectonic/Biolith graph. Re-run three alternating fresh-world samples before
 ever promoting `optimized` again.
 
-The first corrected live-flight comparison also removed the server DH cache and
-matched eight C2ME concurrent loads to eight workers. Against the immediately prior
+The first corrected live-flight comparison matched eight C2ME concurrent loads to
+eight workers. Against the immediately prior
 recording, average JVM CPU fell from 18.37% to 11.57%, average machine load from
 26.14% to 16.30%, and total GC pause time from 4.14 seconds to 1.96 seconds. The
-corrected run produced no DH queue overflow, `Can't keep up`, disconnect or PM rail
+corrected run produced no `Can't keep up`, disconnect or PM rail
 exception while traversing substantially more region files. Treat this as strong
 profile evidence, not a normalized chunks-per-second benchmark; the route and newly
 generated terrain were not identical.
@@ -108,10 +82,9 @@ Measure these stages separately:
 2. return flight through generated chunks;
 3. straight flight into new non-PM terrain at 10/20/30/40/50 blocks/s;
 4. first entry into an authored PM region;
-5. Aeronautics contraption crossing chunk boundaries;
-6. active Create train and PM railway;
-7. Overworld, Nether, End and modded structures;
-8. clean save/restart and interrupted recovery.
+5. active Create train and PM railway;
+6. Overworld, Nether, End and modded structures;
+7. clean save/restart and interrupted recovery.
 
 Record p50/p95/p99 MSPT, maximum stall, CPU, RSS, GC, I/O, disconnects and client
 frame times. A profile passes only when generated travel holds 50 blocks/s, unknown
@@ -120,5 +93,5 @@ thread stall exceeds two seconds, and PM structures/jobs remain valid after rest
 Idle MSPT may not regress more than 10%.
 
 C2ME is promoted only if it also improves throughput by at least 25% or p95 MSPT by
-20%. Any crash, corrupted/partial structure, duplicate PM job or dimension/Create/
-Sable incompatibility rejects it regardless of speed.
+20%. Any crash, corrupted/partial structure, duplicate PM job or dimension/Create
+incompatibility rejects it regardless of speed.

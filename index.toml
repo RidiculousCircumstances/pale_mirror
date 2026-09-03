@@ -2,7 +2,7 @@ hash-format = "sha256"
 
 [[files]]
 file = "README.md"
-hash = "c80b50b09e937be20d2b6b292bbd5c316543dae5bd90165d86a1e345fb437e5b"
+hash = "270f7afb051222ad05b261b88d8b74b7de32b13fa665531e536acbab1fbd84ab"
 
 [[files]]
 file = "config/README.md"
@@ -394,23 +394,23 @@ hash = "38382bb65990fd167f36587fdca37bb1ec2a1b38a31845aa947b14368961b77c"
 
 [[files]]
 file = "docs/architecture.md"
-hash = "6b78672416c8e8a8e4746df4f54d0a20eab8420377ebc047b5d1514c28af9766"
+hash = "b09fdafd7881acb6c4b1d0cfbbf7a89f4e1d19051d7c5f205e71541dabd551de"
 
 [[files]]
 file = "docs/balancing.md"
-hash = "18d4ca97e0220f406a87e94f807496859d01f9cb2a491a2da737ebc413837bf3"
+hash = "8b76b8ed1675f5061e4face9496ca03743e184a1be4b66effaa7eb13ac789180"
 
 [[files]]
 file = "docs/create-caliber-evaluation.md"
-hash = "a2bf11f985e0a20acddf8d5cc33bcd6be9c1295712c882df0249926002f0cc60"
+hash = "90685c002516d092df45317b52e8850a18beea2b836d39e9cabdeeaa9143e24b"
 
 [[files]]
 file = "docs/crimson-curse.md"
-hash = "97ec899645a3fc4a9d8013d17d96576044f91a273b6c7abc8f9c2d8c252f165a"
+hash = "0ac9ca8bff2410c3546d6f184156bb91344a516614165efa1efc92623316b6fd"
 
 [[files]]
 file = "docs/expedition-system.md"
-hash = "463a83f786b5f652652b5b0b8503e64d312e3f108828d9527ea897a44a524cb7"
+hash = "e626fe06b08620d17f81d967607b15e835e638f8c64e97acaafd7a0f7683d30d"
 
 [[files]]
 file = "docs/graybox-runtime-profile.md"
@@ -418,15 +418,15 @@ hash = "6ebb4b2c0aa1c13d41b7e01d8b564ccbee1612bde2d08ca7b83fa5cdc4bfd135"
 
 [[files]]
 file = "docs/mod-compatibility.md"
-hash = "8504ae5a4adbe44a9e24cec2ea2b8abd3086954dbb0d2a43b5a06b7f37853ef5"
+hash = "7f97483f1a09a462eb43c81d08448e9da0c5b6083c2851fa515638e526b80ff2"
 
 [[files]]
 file = "docs/performance.md"
-hash = "3c82d374a4f282530558e25a801c51a8a19e36cbf4f6abf96d2e118df092ee9f"
+hash = "77d9cb4afb11a9e3d8bf8370744844403af4713e44f14ed864cb3821ae7bf506"
 
 [[files]]
 file = "docs/quest-system.md"
-hash = "2cc32507206a23adcd581cf03114e13753dfcc130155adaa6aecb184e8232c14"
+hash = "c9eb71b908f0d4d79d94358374d898118388659a03715ff60806c6335be63430"
 
 [[files]]
 file = "docs/ravents-progression.md"
@@ -434,7 +434,7 @@ hash = "6161fb4a85126ce13059a7622a65be25abf9f7cb8d7a94b977fc0de359147005"
 
 [[files]]
 file = "docs/spore-integration.md"
-hash = "a87df11689b28af26c284888772c940c57a83076c3237a5ffe3dee497c018d2d"
+hash = "c35110dc33c40202b068b3937fee8bcbe62ed478a2273b8107551bed8043ed7f"
 
 [[files]]
 file = "docs/structures.md"
@@ -442,7 +442,7 @@ hash = "913f9fa38fcb0e3db9a34e3e6ce3a58ff5e80655edae2c471ff9e35f20728163"
 
 [[files]]
 file = "docs/testing.md"
-hash = "6cc8f1502fdcea714f01daee3e14c04da5189f3d25b0fb77bb75a09e8ba99935"
+hash = "fd38a609f2f9c9cdcb5309e15f3b2d9c74a682d988a6016957192122e4e1a3f8"
 
 [[files]]
 file = "mods/amendments.pw.toml"
@@ -475,11 +475,6 @@ hash = "75181b55e0407d1fca1e2f346c6501f919f5109545990ddfb66db9cd1b771f8a"
 metafile = true
 
 [[files]]
-file = "mods/create-aeronautics.pw.toml"
-hash = "5fab8d2e412683dfd72f08cf6750e51b03cb43192e8eb783e962ba28d20978bc"
-metafile = true
-
-[[files]]
 file = "mods/create.pw.toml"
 hash = "dcaf5f2e28db0b9a127d0167456832341045ddc9aec058c3d9fcf53f618d2404"
 metafile = true
@@ -492,11 +487,6 @@ metafile = true
 [[files]]
 file = "mods/curios.pw.toml"
 hash = "36debf7653e95a855b4fedacc19027cf2e01960fc0b6d55ef2ffbffbcb455690"
-metafile = true
-
-[[files]]
-file = "mods/distanthorizons.pw.toml"
-hash = "d5b9c23df79ef871a70032567db2512904251347bdf13da80fbb8b00a846a79a"
 metafile = true
 
 [[files]]
@@ -557,11 +547,6 @@ metafile = true
 [[files]]
 file = "mods/integrated-villages.pw.toml"
 hash = "2c48072573a48e80a6f052a2bdc8922eaed2edefc59c712b48dfb6ab9e5f94c5"
-metafile = true
-
-[[files]]
-file = "mods/iris.pw.toml"
-hash = "db1c1e6382878b78e994dba1b9026935f8d1c5ca685c89d2437858e0a0dcab58"
 metafile = true
 
 [[files]]
@@ -630,11 +615,6 @@ hash = "bec15b9cb3f0a0b643c8899a6eee074647c25c82a77b6ffabb7fb4cab80ba383"
 metafile = true
 
 [[files]]
-file = "mods/sable.pw.toml"
-hash = "674aaf0dc67f808f0054cfc7bbe041d6725fcbbe97644a85ffbd946a22d35666"
-metafile = true
-
-[[files]]
 file = "mods/simply-swords.pw.toml"
 hash = "1d37ac39109aa15d03a3a7ddf6402d63f72277acafca53f61830046acfe6edb0"
 metafile = true
@@ -696,7 +676,7 @@ metafile = true
 
 [[files]]
 file = "pale_mirror.txt"
-hash = "d9c83279013e26416d8bf724793d716c551c86302bf14be16eeb9cf69d04f1a0"
+hash = "6f0e7754e1baf64ef494453e42984ddcc205001da3adb47ba4730923989906f4"
 
 [[files]]
 file = "scripts/analyze-worldgen-jfr.sh"
@@ -720,11 +700,11 @@ hash = "bb695a36fcf631156392e8be715ea764b3db74c297b04ff6befc659165a60cb5"
 
 [[files]]
 file = "scripts/install-client.ps1"
-hash = "85f896c733f16324f8b2f642581c150f5838c43e93da85e146499771773ed622"
+hash = "75a93b2d1bc52466c0f311f00dcb476905f694c3f9ed204f2943162518a3e438"
 
 [[files]]
 file = "scripts/install-client.sh"
-hash = "d96700bc70abad656fe63033a46d22310eadcd672b3ee11e243666b5af71e8f1"
+hash = "cbb09dd340e2b34706dff7ff34942b1918dc957780189f9e6e4c860d02c06fd7"
 
 [[files]]
 file = "scripts/install-server-java22.sh"
@@ -732,7 +712,7 @@ hash = "ba731c2600b07e23bc22ecf4d54350f4f4ce407add4a0cef94209a7573b29f8c"
 
 [[files]]
 file = "scripts/install-server.sh"
-hash = "756f21c788431d00c7d351a965bb7cc1262e9384176227d48f6658acd975d350"
+hash = "46e65a879d340756034e9ad71bb1246a22a20ef60d3a796371da1d23bc8ebd41"
 
 [[files]]
 file = "scripts/lib/install-hosted-pale-mirror.sh"

@@ -16,7 +16,7 @@ boss time-to-kill.
 
 ## Promotion gates
 
-1. Clean dedicated-server boot with Create `6.0.10`, Sable and Aeronautics.
+1. Clean dedicated-server boot with Create `6.0.10`.
 2. Assemble a complete ammunition chain and document inputs, throughput, storage and
    failure behaviour.
 3. Measure firearm damage and range against Simply Swords, Mowzie and Cataclysm;

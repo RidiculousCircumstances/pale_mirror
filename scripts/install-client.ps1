@@ -406,19 +406,17 @@ if (Test-Path -LiteralPath $ModsDirectory) {
         Write-Host "Disabled legacy evaluation mod: $($_.Name)"
     }
 
-    # Packwiz preserves unmanaged files. Remove older manually installed Iris
-    # builds from the active mod set so only the Sodium-0.8-compatible build
-    # pinned by this pack reaches mixin initialization.
-    $managedIris = "iris-neoforge-1.8.14-beta.1+mc1.21.1.jar"
-    Get-ChildItem -LiteralPath $ModsDirectory -Filter "iris*.jar" -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -cne $managedIris } |
+    # Packwiz preserves unlisted JARs. The supported profile excludes the
+    # retired renderer/flight stack, so keep all historical spellings inactive.
+    Get-ChildItem -LiteralPath $ModsDirectory -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^(?i:(distanthorizons|iris|sable|create-aeronautics)).*\.jar$' } |
     ForEach-Object {
         $disabledPath = $_.FullName + ".disabled"
         if (Test-Path -LiteralPath $disabledPath) {
             Remove-Item -LiteralPath $disabledPath -Force
         }
         Rename-Item -LiteralPath $_.FullName -NewName ($_.Name + ".disabled")
-        Write-Host "Disabled incompatible Iris build: $($_.Name)"
+        Write-Host "Disabled unsupported renderer/flight mod: $($_.Name)"
     }
 }
 
