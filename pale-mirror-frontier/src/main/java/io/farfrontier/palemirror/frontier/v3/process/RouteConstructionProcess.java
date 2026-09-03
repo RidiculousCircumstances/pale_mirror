@@ -60,7 +60,20 @@ public final class RouteConstructionProcess {
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
         StrategicTask task = constructionTaskById(state, action.subject(), StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), task.ownerId());
-        if (RouteMaintenanceProcess.blocksBypassConstruction(state, settlement.id())) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        if (RouteMaintenanceProcess.blocksBypassConstruction(state, settlement.id())) {
+            // Waiting for the first-recovery owner is not a terminal strategic failure.  The
+            // same durable task retries after its bounded cadence and can become actionable
+            // only if the exact maintenance conflict is observed; it never polls Minecraft or
+            // steals a crew before that causal decision exists.
+            return List.of(new ProposedEvent(SYSTEM, new ScheduleEffect.Created(start(task,
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().routeConstructionScanInterval())))));
+        }
+        if (state.routeTopology().supplyPassable(state.bootstrap(), settlement.id())) {
+            // A retry may arrive after its same-cell repair completed.  There is then no
+            // remaining damaged route to replace, so the pending bypass task ends visibly
+            // without inventing a second topology.
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
         boolean confirmed = task.dependencies().stream().map(state.strategicPlans().routePatrols()::get).anyMatch(patrol -> patrol != null
                 && patrol.settlementId().equals(settlement.id()) && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED
                 && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));

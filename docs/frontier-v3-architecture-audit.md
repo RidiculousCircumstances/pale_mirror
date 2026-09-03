@@ -173,6 +173,21 @@ four-member group reaches terminal assembled HOT custody after the retained appr
 post-restart trace has no path-blocked event.  This proves the assembly family, not arbitrary
 terrain replan, bridge/rail grades or a completed assault departure.
 
+The road family exposed a separate decision defect while tracing the promised replan path.  A
+known route loss correctly created a same-cell `RouteMaintenance`, and construction correctly
+refused to bypass a viable repair; however that refusal terminally marked the pre-existing
+patrol-confirmed bypass task `BLOCKED`.  If the exact loaded-world repair later conflicted, the
+retained scar still prohibited a replacement forever.  The corrected route decision keeps the
+same task pending and reschedules it at the retained construction cadence while an exact repair
+is absent, `BUILDING` or `READY`.  A durable `CONFLICT` alone releases that repair's engineering
+assignment and makes the already-confirmed task eligible for one bounded terrain-plan candidate;
+the scar remains and the candidate must avoid it.  An observed successful repair instead makes
+the retry close as no longer needed. Focused normal/deferred/conflict and restart-retry tests
+cover the two exclusive outcomes and prove that waiting is persisted rather than a live-process
+timer. This is deliberately not yet generic replan: the current candidate is a
+road-family bounded catalogue, and transit, hive assembly and rail still need one shared
+topology-disruption aggregate rather than copied policy.
+
 This correction must not be misreported as
 complete merely because the medical scene has typed port data. The flat provider
 does not claim physical excavation or a non-flat entrance: its infirmary

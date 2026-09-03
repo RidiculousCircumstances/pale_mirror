@@ -183,23 +183,35 @@ public final class RouteMaintenanceProcess {
     }
 
     /**
-     * A PM-owned baseline loss has one recovery authority: in-place maintenance.
+     * A PM-owned baseline loss gets first refusal for exact in-place maintenance.
      *
-     * <p>The physical observation and the strategic patrol are deliberately asynchronous.  A
-     * bypass start must therefore reserve neither a crew nor a new topology merely because it
-     * happened to be scheduled before the maintenance scan admitted its aggregate.  An admitted
-     * maintenance is also retained as a guard after the loss has been observed.</p>
+     * <p>The physical observation and strategic patrol are asynchronous, so a replacement may
+     * not reserve people or topology while a loss is unassigned or one of its exact repair
+     * owners is still viable. A terminal {@link RouteMaintenanceStatus#CONFLICT}, however, is
+     * explicit evidence that this particular in-place recovery has failed: it releases its
+     * human assignment and permits the route owner's later bounded replan decision. Keeping the
+     * historical loss is essential; the replacement compiler must still avoid that scar rather
+     * than treating a conflict as a repaired cell.</p>
      */
     static boolean blocksBypassConstruction(FrontierWorldState state, SubjectId settlementId) {
-        boolean retainedBaselineLoss = state.physicalDeltas().values().stream()
+        List<PhysicalDelta> retainedBaselineLosses = state.physicalDeltas().values().stream()
                 .filter(loss -> loss.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
                 .filter(loss -> loss.ownerId().equals(Optional.of(FrontierRouteNetwork.OWNER)))
                 .filter(loss -> loss.semanticPart().filter(RouteMaintenanceProcess::repairable).isPresent())
-                .anyMatch(loss -> FrontierRouteNetwork.containsOperationSurfaceCell(
-                        state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), loss.position()));
-        return retainedBaselineLoss || state.routeMaintenances().values().stream()
-                .anyMatch(maintenance -> maintenance.settlementId().equals(settlementId)
-                        && maintenance.status() != RouteMaintenanceStatus.CONFLICT);
+                .filter(loss -> FrontierRouteNetwork.containsOperationSurfaceCell(
+                        state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), loss.position())).toList();
+        // No loss means the retry arrived after an observed repair; RouteConstructionProcess
+        // closes its no-longer-needed task instead of manufacturing a replacement.
+        if (retainedBaselineLosses.isEmpty()) return false;
+        for (PhysicalDelta loss : retainedBaselineLosses) {
+            RouteMaintenance maintenance = state.routeMaintenances().values().stream()
+                    .filter(candidate -> candidate.settlementId().equals(settlementId))
+                    .filter(candidate -> candidate.repairCell().equals(loss.position())).findFirst().orElse(null);
+            // A missing aggregate is still awaiting the normal maintenance scan. BUILDING and
+            // READY retain the same exact cell; only a durable conflict releases it to replan.
+            if (maintenance == null || maintenance.status() != RouteMaintenanceStatus.CONFLICT) return true;
+        }
+        return false;
     }
 
     private static Optional<RouteMaintenance> admitted(FrontierWorldState state, PhysicalDelta loss, HumanAssignmentProjection assignments) {

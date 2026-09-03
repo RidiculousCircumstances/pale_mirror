@@ -32,15 +32,72 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RouteConstructionTaskProcessTest {
     @Test
-    void confirmedPmBaselineLossBlocksBypassAdmissionBeforeAnyCrewIsReserved() {
+    void confirmedPmBaselineLossWaitsForItsExactMaintenanceBeforeAnyCrewIsReserved() {
         FrontierWorldState state = stateWithConfirmedPatrol();
         StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state, RouteConstructionProcess.start(construction, 100L));
 
-        assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
-                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.BLOCKED));
+        assertTrue(result.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast)
+                .anyMatch(effect -> effect.action().equals(RouteConstructionProcess.start(construction, 200L))),
+                "a viable in-place repair must defer the same construction task rather than terminally blocking it");
         assertFalse(result.stream().anyMatch(event -> event.payload() instanceof RouteConstructionStarted),
                 "a retained PM baseline loss must not create a hidden bypass before maintenance admits its exact crew");
+    }
+
+    @Test
+    void deferredBypassDecisionSurvivesRestartAndRetriesAtItsPersistedCadence() {
+        FrontierWorldState initial = stateWithConfirmedPatrol();
+        StrategicTask construction = constructionTask(initial, StrategicTaskStatus.PENDING);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:route-construction-task"), 91L);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
+                base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(RouteConstructionProcess.start(construction, 100L)),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var original = FrontierEngines.create(configuration);
+
+        original.advanceTo(new SimInstant(100L), new WorkBudget(64, 512));
+        var checkpoint = original.checkpoint();
+        assertTrue(checkpoint.schedules().contains(RouteConstructionProcess.start(construction, 200L)),
+                "the waiting decision must be retained as a durable future action, not a process-local retry");
+
+        var recovered = FrontierEngines.recover(configuration, new RecoveryImage(base.worldId(),
+                Optional.of(new SnapshotRecord(checkpoint, checkpoint.revision().value())), List.of()));
+        assertEquals(checkpoint.schedules(), recovered.checkpoint().schedules(),
+                "recovery must preserve the exact pending replan decision and its due time");
+        recovered.advanceTo(new SimInstant(200L), new WorkBudget(64, 512));
+        assertTrue(recovered.checkpoint().schedules().contains(RouteConstructionProcess.start(construction, 300L)),
+                "a still-viable exact repair must retry rather than silently lose the bypass decision after restart");
+        assertEquals(StrategicTaskStatus.PENDING, constructionTask(state(recovered), StrategicTaskStatus.PENDING).status());
+        assertTrue(state(recovered).routeConstructions().isEmpty(),
+                "recovery must not invent a replacement before the same-cell repair has a durable conflict");
+    }
+
+    @Test
+    void conflictedExactMaintenanceMakesTheConfirmedBypassTaskActionable() {
+        FrontierWorldState damaged = stateWithConfirmedPatrol();
+        RouteMaintenanceStarted admitted = RouteMaintenanceProcess.plan(damaged, RouteMaintenanceProcess.scan(1, 100L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(RouteMaintenanceStarted.class::isInstance)
+                .map(RouteMaintenanceStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState state = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER, admitted);
+        RouteMaintenance failed = state.routeMaintenances().get(admitted.maintenance().id()).conflict();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().routeMaintenances(java.util.Map.of(failed.id(), failed)));
+        StrategicTask construction = constructionTask(state, StrategicTaskStatus.PENDING);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> result = RouteConstructionProcess.planStart(state,
+                RouteConstructionProcess.start(construction, 200L));
+
+        assertTrue(result.stream().anyMatch(event -> event.payload() instanceof StrategicTaskTransition transition
+                && transition.taskId().equals(construction.id()) && transition.status() == StrategicTaskStatus.ACTIVE));
+        RouteConstructionStarted planned = result.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteConstructionStarted.class::isInstance).map(RouteConstructionStarted.class::cast).findFirst().orElseThrow();
+        assertTrue(FrontierRouteNetwork.isPassable(state.bootstrap(), planned.project().waypoints(), state.physicalDeltas()),
+                "the replacement must be compiled around the retained physical scar, not treat conflict as a repaired road");
+        HumanAssignmentProjection beforeReplan = HumanAssignmentProjection.compile(state);
+        assertTrue(planned.project().team().orElseThrow().memberIds().stream().noneMatch(member ->
+                        beforeReplan.assignment(member).active()),
+                "a conflicted repair releases its same people before the replacement project may claim them");
     }
 
     @Test
