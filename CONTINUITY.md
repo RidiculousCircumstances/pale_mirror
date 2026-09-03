@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 122 and persistence-envelope v36 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 123 and persistence-envelope v37 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -324,7 +324,7 @@
   decontamination executors remain endpoint adapters. Route maintenance and
   hive organ regeneration remain separate engineering/MAT-007 owners. This
   contract intentionally has no implementation claim yet.
-- MAT-003 foundation now exists at schema 122/envelope 36: the bounded persisted
+- MAT-003 foundation now exists at schema 123/envelope 37: the bounded persisted
   `SettlementServiceWork` aggregate owns its exact resident, facility/station,
   input, semantic target, endpoint-intent ID, immutable pedestrian topology/cursor
   and phase/progress. It has explicit stable tags, snapshot round-trip, exact
@@ -335,7 +335,13 @@
   also has a finite target-relative field-worksite catalogue and a shared
   bounded pure pedestrian approach compiler: admission persists one selected
   non-origin station/corridor rather than ever asking a loaded navigator for a
-  treatment position. The planner/scene/effect vertical remains unconnected.
+  treatment position. `SERVICE_WORK` is now a closed registered scene family
+  with exact member/owner/cursor validation and its own sealed snapshot codec;
+  the codec boundary was extracted from the world-state codec without raising
+  the architecture-debt ceiling. A death of its exact worker atomically leaves
+  the retained work `BLOCKED` and an in-flight endpoint intent
+  `UNKNOWN_AFTER_RESTART`, without reassigning either. The planner/scene/effect
+  vertical remains unconnected.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

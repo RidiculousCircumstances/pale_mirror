@@ -108,6 +108,12 @@ final class FrontierV3DiagnosticTrace {
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
         }
+        if (FrontierSceneBehaviors.isServiceWork(lease)) {
+            var service = FrontierSceneBehaviors.serviceWork(lease);
+            return new SceneTrace("service-work:" + service.workId().value(), service.workId(),
+                    new Context("", lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+        }
         var logistics = FrontierSceneBehaviors.logistics(lease);
         return new SceneTrace("operation:" + logistics.operationId().value(), logistics.operationId(),
                 new Context(logistics.operationId().value(), lease.id().value(), logistics.cargoId().value(),

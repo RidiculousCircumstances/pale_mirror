@@ -46,7 +46,8 @@ scene_cause_type_branches:
   max_total: 4
   allowed_files:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldPayloadCodecs.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldStateCodec.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldStateCodec.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/SceneCauseStateCodec.java: 2
 
 v3_gametest_forced_chunk_loads:
   max_total: 0

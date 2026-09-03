@@ -1,7 +1,10 @@
 # Frontier v3 service-work contract
 
-Status: accepted implementation contract for `MAT-003`; no service-work
-implementation is claimed by this document.
+Status: accepted implementation contract for `MAT-003`. The persisted aggregate,
+immutable decontamination worksite compiler, closed `SERVICE_WORK` cause and
+snapshot codec exist; exact-worker death blocks the same aggregate and leaves
+its in-flight endpoint intent unknown. Planner, HOT executor and endpoint
+hand-off remain open.
 
 ## Purpose
 

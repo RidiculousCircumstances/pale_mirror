@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -93,6 +96,21 @@ class FrontierWorldStateTest {
         assertEquals(work, state.serviceWorks().get(work.id()));
         assertEquals(HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentProjection.compile(state).assignment(medic.id()).kind());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:service-work-snapshot"), state.bootstrap().worldId(),
+                new SettlementServiceWorkSceneCause(work.id()), medicLocation.supportingSurface().support(), new SimInstant(100L), 1L,
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))),
+                Map.of(medic.id(), medicLocation.body()), Set.of(), Optional.empty());
+        SceneLease forgedLease = SceneLease.forCause(new SceneLeaseId("lease:service-work-forged-station"), state.bootstrap().worldId(),
+                new SettlementServiceWorkSceneCause(work.id()), medicLocation.supportingSurface().support().offset(1, 0, 0), new SimInstant(100L), 1L,
+                SceneLeaseStatus.PREPARED, List.of(new SceneMember(medic.id(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), medic.id()))),
+                Map.of(medic.id(), medicLocation.body()), Set.of(), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> state.prepareSceneLease(forgedLease));
+        FrontierWorldState withScene = state.prepareSceneLease(lease);
+        assertEquals(lease, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(withScene)).sceneLeases().get(lease.id()));
+        FrontierWorldState afterDeath = withScene.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+                .recordActorDeath(new ActorDied(lease.id(), medic.id(), medicLocation.body(), "test:service-worker-death"), 101L);
+        assertEquals(SettlementServiceWorkPhase.BLOCKED, afterDeath.serviceWorks().get(work.id()).phase());
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.intentId()).status());
         SettlementServiceWork forgedStation = new SettlementServiceWork(work.id(), work.kind(), work.settlementId(), work.workerId(), work.facilityId(),
                 medicLocation.supportingSurface(), work.inputItemId(), work.target(), work.intentId(), TraversalTopology.corridor(
                 new TraversalTopologyId("topology:forged-service-station"), 0L, work.id(), TraversalKind.PEDESTRIAN,

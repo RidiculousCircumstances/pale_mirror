@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.*; import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 122; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 123; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -659,12 +659,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeSceneLeases(DataOutputStream output, Map<SceneLeaseId, SceneLease> leases) throws IOException {
         writeCount(output, leases.size());
         for (SceneLease lease : leases.values().stream().sorted(Comparator.comparing(SceneLease::id)).toList()) {
-            writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSceneCauseKind(output, lease.cause());
-            if (lease.cause() instanceof LogisticsSceneCause logistics) {
-                writeString(output, logistics.operationId().value()); writeString(output, logistics.cargoId().value());
-                output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeString(output, logistics.engagementId().orElseThrow().value());
-                writePosition(output, logistics.cargoPosition());
-            }
+            writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); SceneCauseStateCodec.write(output, lease.cause());
             writePosition(output, lease.handoffPosition()); output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag());
             writeCount(output, lease.members().size());
             for (SceneMember member : lease.members()) {
@@ -689,15 +684,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         int count = readCount(input);
         for (int index = 0; index < count; index++) {
             SceneLeaseId id = new SceneLeaseId(readString(input)); WorldId world = new WorldId(readString(input));
-            SceneCauseKind causeKind = readSceneCauseKind(input);
-            SubjectId operation; SubjectId cargo; java.util.Optional<SubjectId> engagement; BlockPosition cargoPosition;
-            if (causeKind instanceof SceneCauseKind.Logistics) {
-                operation = new SubjectId(readString(input)); cargo = new SubjectId(readString(input));
-                engagement = input.readBoolean() ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
-                cargoPosition = readPosition(input);
-            } else {
-                operation = null; cargo = null; engagement = java.util.Optional.empty(); cargoPosition = null;
-            }
+            SceneCause cause = SceneCauseStateCodec.read(input);
             BlockPosition handoff = readPosition(input);
             long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
             if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
@@ -715,63 +702,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 for (int actor = 0, actorCount = readCount(input); actor < actorCount; actor++) missing.add(new SubjectId(readString(input)));
                 recovery = java.util.Optional.of(new SceneRecoveryEvidence(missing, input.readBoolean()));
             }
-            SceneCause cause = causeKind.create(operation, cargo, engagement, cargoPosition);
             SceneLease lease = SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
                     FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors, recovery);
             if (leases.put(id, lease) != null) throw new IllegalArgumentException("duplicate scene lease id");
         }
         return leases;
-    }
-    private static void writeSceneCauseKind(DataOutputStream output, SceneCause cause) throws IOException {
-        if (cause instanceof LogisticsSceneCause) { output.writeByte(0); return; }
-        if (cause instanceof SettlementAssaultSceneCause assault) {
-            output.writeByte(1); writeString(output, assault.assaultId().value()); writeString(output, assault.settlementId().value()); return;
-        }
-        if (cause instanceof EngineeringWorkSceneCause engineering) {
-            output.writeByte(2); writeString(output, engineering.projectId().value()); output.writeInt(engineering.workCellIndex()); return;
-        }
-        if (cause instanceof MedicalTreatmentSceneCause medical) { output.writeByte(3); writeString(output, medical.operationId().value()); return; }
-        if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4); writeString(output, harvest.jobId().value()); return; }
-        if (cause instanceof ProductionWorkSceneCause production) { output.writeByte(5); writeString(output, production.jobId().value()); return; }
-        throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
-    }
-    private static SceneCauseKind readSceneCauseKind(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> SceneCauseKind.LOGISTICS;
-            case 1 -> new SceneCauseKind.Assault(new SubjectId(readString(input)), new SubjectId(readString(input)));
-            case 2 -> new SceneCauseKind.Engineering(new SubjectId(readString(input)), input.readInt());
-            case 3 -> new SceneCauseKind.Medical(new SubjectId(readString(input)));
-            case 4 -> new SceneCauseKind.ResourceSiteHarvest(new SubjectId(readString(input)));
-            case 5 -> new SceneCauseKind.ProductionWork(new SubjectId(readString(input)));
-            default -> throw new IllegalArgumentException("unknown scene cause kind");
-        };
-    }
-    private sealed interface SceneCauseKind permits SceneCauseKind.Logistics, SceneCauseKind.Assault, SceneCauseKind.Engineering, SceneCauseKind.Medical,
-            SceneCauseKind.ResourceSiteHarvest, SceneCauseKind.ProductionWork {
-        SceneCauseKind LOGISTICS = new Logistics();
-        SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition);
-        final class Logistics implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new LogisticsSceneCause(operation, cargo, engagement, cargoPosition); }
-        }
-        record Assault(SubjectId assaultId, SubjectId settlementId) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new SettlementAssaultSceneCause(assaultId, settlementId); }
-        }
-        record Engineering(SubjectId projectId, int workCellIndex) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new EngineeringWorkSceneCause(projectId, workCellIndex); }
-        }
-        record Medical(SubjectId operationId) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
-                return new MedicalTreatmentSceneCause(operationId);
-            }
-        }
-        record ResourceSiteHarvest(SubjectId jobId) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) {
-                return new ResourceSiteHarvestSceneCause(jobId);
-            }
-        }
-        record ProductionWork(SubjectId jobId) implements SceneCauseKind {
-            @Override public SceneCause create(SubjectId operation, SubjectId cargo, java.util.Optional<SubjectId> engagement, BlockPosition cargoPosition) { return new ProductionWorkSceneCause(jobId); }
-        }
     }
     static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeString(output, slot.containerId().value()); output.writeByte(slot.slot()); }

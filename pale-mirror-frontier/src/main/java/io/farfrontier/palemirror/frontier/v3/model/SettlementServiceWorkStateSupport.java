@@ -32,8 +32,8 @@ final class SettlementServiceWorkStateSupport {
             ResidentProfile worker = population.resident(work.workerId());
             ActorLocation location = actorLocations.get(work.workerId());
             if (worker == null || location == null || !worker.settlementId().equals(settlement.id())
-                    || location.condition().status() != ActorLifeStatus.ALIVE) {
-                throw new IllegalArgumentException("service work must retain one living resident of its settlement");
+                    || work.phase().active() && location.condition().status() != ActorLifeStatus.ALIVE) {
+                throw new IllegalArgumentException("active service work must retain one living resident of its settlement");
             }
             if (work.kind() == SettlementServiceWorkKind.DECONTAMINATION
                     && (facility.kind() != StructureKind.INFIRMARY || worker.profession() != ResidentProfession.MEDICAL_WORKER
