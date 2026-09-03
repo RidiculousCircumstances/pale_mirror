@@ -10,7 +10,7 @@ unrelated gameplay.
 | ENGINEERING | Create + Sable + Aeronautics | Transport and machines; tested on a dedicated server and across saves. |
 | QUESTS | FTB Quests (adopted; pin/boot gate pending) | Campaign journal and operation briefings; never authoritative world or boss state. |
 | EXPEDITIONS | Far Frontier expedition core (planned) | Persistent distant contracts, dormant chapter arenas and non-substitutable chapter artifacts. |
-| EXPLORATION | IDA + IDAS + YUNG + Cataclysm + Alex's Caves | WDA is excluded; IDA uses its own documented structure-set overrides. |
+| EXPLORATION | IDA + IDAS + YUNG + Cataclysm | WDA is excluded; IDA uses its own documented structure-set overrides. |
 | ECOLOGY | Naturalist | Ambient fauna, audited against vanilla caps. |
 | THREATS | vanilla + Hostile Tactics + Born in Chaos + Mowzie's | Vanilla stays common; modded threats are increasingly rare and distinct. |
 | INFECTION | Crimson Curse + Spore | Pale Mirror owns strategic threat state and activation; both providers are constrained physical projections. |
@@ -44,6 +44,7 @@ and docs/quest-system.md.
 The identical Distant Horizons build runs on both sides. The dedicated server is
 permanently cache-only: the background importer is disabled, normal chunk events
 populate ready LODs, and `PRE_EXISTING_ONLY` remains only as a dormant fail-safe.
-Alex's Caves port and unofficial Citadel are paired Packwiz options. Caliber
-is excluded from the default manifest and belongs only in a separate evaluation profile. Performance mods are intentionally deferred
-until functional tests establish a baseline.
+Alex's Caves and Citadel are excluded from every supported profile. Caliber is
+excluded from the default manifest and belongs only in a separate evaluation
+profile. Performance mods are intentionally deferred until functional tests
+establish a baseline.

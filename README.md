@@ -25,12 +25,12 @@ LOD distances by default.
 
 ## Profiles and known risks
 
-`Alex's Caves — Unofficial Port` and its unofficial Citadel port are disabled by
-default. They remain an experimental paired feature flag, not a proven release
-dependency. Enable both Packwiz options together only outside the supported
-Frontier v3 profile. Create: Caliber is excluded from
-the default manifest and remains an evaluation-only candidate. Spore is a core but deliberately constrained local-contamination
-layer; it is not an additional global progression system.
+Alex's Caves and Citadel are not part of Far Frontier. Their unofficial ports
+are neither distributed nor supported by the client, server, or Pale Mirror
+development profiles. Create: Caliber is excluded from the default manifest and
+remains an evaluation-only candidate. Spore is a core but deliberately
+constrained local-contamination layer; it is not an additional global progression
+system.
 
 The default dedicated-server profile pins Lithium, ModernFix and Fast Noise.
 ScalableLux is excluded because Sable 2.0.3 declares it incompatible. Distant
@@ -60,7 +60,7 @@ and full-profile boot test; no quest chain is enabled yet.
 - World: Terralith, Tectonic, Structurify
 - Rendering: Distant Horizons
 - Engineering: Create, Sable, Create: Aeronautics
-- Exploration: IDA, IDAS, YUNG's structures, Cataclysm, Alex's Caves
+- Exploration: IDA, IDAS, YUNG's structures, Cataclysm
 - Ecology/threats: Naturalist, vanilla + Hostile Tactics + Born in Chaos + Mowzie's
 - Infection: Crimson Curse (global strategic state) + Spore (rare local contamination sites)
 - Combat: Better Combat, Simply Swords

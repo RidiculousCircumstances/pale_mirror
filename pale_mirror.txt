@@ -13,7 +13,6 @@ World Scenario & Integration Design
 Worldgen	Terralith + Tectonic + Distant Horizons.
 Структуры	Integrated Dungeons Arise + Structurify. Sparse Structures не использовать.
 Прогрессия	Ravents — основной runtime/integration layer для progression events и world-tier effects; канонический world tier, долговременное состояние и причинная progression принадлежат Pale Mirror.
-Пещеры	Alex's Caves через неофициальный порт для 1.21.1 NeoForge.
 Боевая система	Simply Swords + Better Combat.
 Враждебные ванильные мобы	Hostile Tactics как AI-overhaul.
 Фауна	Naturalist.
