@@ -16,7 +16,7 @@ import java.util.Objects;
  * Limits which merely protect memory or bounded algorithms do not belong here.</p>
  */
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
-                              FacilityCapacity facilityCapacity, Combat combat) {
+                              FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
     public FrontierRuleset {
         if (id == null || id.isBlank() || !id.matches("[a-z0-9][a-z0-9._-]*")) {
             throw new IllegalArgumentException("ruleset id must be a stable lowercase identifier");
@@ -27,6 +27,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         rates = Objects.requireNonNull(rates, "rates");
         facilityCapacity = Objects.requireNonNull(facilityCapacity, "facility capacity");
         combat = Objects.requireNonNull(combat, "combat");
+        hiveCommand = Objects.requireNonNull(hiveCommand, "hive command");
     }
 
     /** SHA-256 of the complete stable selector and canonical field values. */
@@ -41,7 +42,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
 
     private String canonicalText() {
         return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
-                + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText();
+                + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText();
     }
 
     /** All elapsed-time choices used by the canonical process layer. */
@@ -200,6 +201,24 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         private String canonicalText() {
             return hiveGuardDamage.raw() + "," + hiveWorkerScoutDamage.raw() + "," + hiveBomberDamage.raw() + ","
                     + residentGuardDamage.raw() + "," + residentWorkerDamage.raw();
+        }
+    }
+
+    /** Exact mobile synaptic command budget; each value is world-balance data. */
+    public record HiveCommand(int overseerSubordinateCapacity, int runtSubordinateWeight,
+                              int sentinelSubordinateWeight, int visibleMutationSurcharge) {
+        public HiveCommand {
+            requirePositive(overseerSubordinateCapacity, "overseer subordinate capacity");
+            requirePositive(runtSubordinateWeight, "runt subordinate weight");
+            requirePositive(sentinelSubordinateWeight, "sentinel subordinate weight");
+            if (visibleMutationSurcharge < 0) {
+                throw new IllegalArgumentException("visible mutation command surcharge must be non-negative");
+            }
+        }
+
+        private String canonicalText() {
+            return overseerSubordinateCapacity + "," + runtSubordinateWeight + "," + sentinelSubordinateWeight
+                    + "," + visibleMutationSurcharge;
         }
     }
 

@@ -220,14 +220,15 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         if (!bioformLifecycles.keySet().equals(bioformIds)) {
             throw new IllegalArgumentException("bioform lifecycle index must own every and only mature hive bioform");
         }
+        Map<SubjectId, Bioform> allBioforms = java.util.stream.Stream.concat(hive.bioforms().stream(), spawnedBioforms.values().stream())
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Bioform::id, value -> value));
         java.util.Set<SubjectId> activeMobilized = new java.util.HashSet<>();
         for (HiveMobilization mobilization : mobilizations.values()) {
             if (!hive.id().equals(mobilization.hiveId()) || !nestIds.contains(mobilization.nestId())) {
                 throw new IllegalArgumentException("hive mobilization does not belong to this colony");
             }
             for (SubjectId member : mobilization.memberIds()) {
-                Bioform bioform = java.util.stream.Stream.concat(hive.bioforms().stream(), spawnedBioforms.values().stream())
-                        .filter(candidate -> candidate.id().equals(member)).findFirst().orElse(null);
+                Bioform bioform = allBioforms.get(member);
                 BioformLifecycle lifecycle = bioformLifecycles.get(member);
                 if (bioform == null || lifecycle == null || !bioform.nestId().equals(mobilization.nestId())) {
                     throw new IllegalArgumentException("hive mobilization member does not belong to its named nest");
@@ -244,6 +245,10 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
                 if (member.equals(mobilization.overseerId()) && !bioform.isOverseer()) {
                     throw new IllegalArgumentException("hive mobilization controller must retain one exact Overseer profile");
                 }
+            }
+            if (!mobilization.status().terminal() && !HiveCommandCapacity.admits(bootstrap.ruleset(), mobilization.overseerId(),
+                    mobilization.memberIds(), allBioforms)) {
+                throw new IllegalArgumentException("hive mobilization exceeds its exact Overseer command capacity");
             }
         }
         java.util.Set<HiveCocoonSlot> reservedSlots = new java.util.HashSet<>();

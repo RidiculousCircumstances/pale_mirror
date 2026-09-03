@@ -33,7 +33,7 @@ public final class FrontierRulesets {
     }
 
     private static FrontierRuleset ruleset(String id) {
-        return new FrontierRuleset(id, 1,
+        return new FrontierRuleset(id, 2,
                 new FrontierRuleset.Cadence(1L, 3_000L, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
                         1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L, 20L, 800L, 100L, 20L, 20L, 20L,
                         100L, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L, 6_000L, 1_000L,
@@ -41,6 +41,7 @@ public final class FrontierRulesets {
                 new FrontierRuleset.Spatial(160, 160, 96, 32, 48, 64, 128, 16, 16, 64, 12),
                 new FrontierRuleset.Rates(new FixedScalar(125_000L), new FixedScalar(250_000L), FixedScalar.whole(100L), FixedScalar.whole(2L)),
                 new FrontierRuleset.FacilityCapacity(48, 16, 4, 8, 4, 2, 3, 1),
-                new FrontierRuleset.Combat(FixedScalar.whole(4), FixedScalar.whole(2), FixedScalar.whole(6), FixedScalar.whole(3), FixedScalar.ONE));
+                new FrontierRuleset.Combat(FixedScalar.whole(4), FixedScalar.whole(2), FixedScalar.whole(6), FixedScalar.whole(3), FixedScalar.ONE),
+                new FrontierRuleset.HiveCommand(6, 1, 2, 1));
     }
 }

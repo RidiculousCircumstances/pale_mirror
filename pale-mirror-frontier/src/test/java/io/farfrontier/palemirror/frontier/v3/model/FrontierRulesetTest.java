@@ -34,7 +34,7 @@ class FrontierRulesetTest {
         FrontierRuleset changed = new FrontierRuleset("frontier-v3-test-ruleset-r1", production.schemaVersion(), production.cadence(), production.spatial(),
                 new FrontierRuleset.Rates(new FixedScalar(production.rates().hiveInfectionPulseGain().raw() + 1L),
                         production.rates().decontaminationReduction(), production.rates().initialSettlementTreasury(), production.rates().worksJobPrice()),
-                production.facilityCapacity(), production.combat());
+                production.facilityCapacity(), production.combat(), production.hiveCommand());
 
         FrontierBootstrap normal = FrontierBootstrapper.create(new WorldId("frontier:ruleset-manifest"), 642L, production);
         FrontierBootstrap alternate = FrontierBootstrapper.create(new WorldId("frontier:ruleset-manifest"), 642L, changed);
@@ -44,11 +44,22 @@ class FrontierRulesetTest {
     }
 
     @Test
+    void changedHiveCommandBalanceChangesTheWorldManifestHash() {
+        FrontierRuleset production = FrontierRulesets.production();
+        FrontierRuleset changed = new FrontierRuleset("frontier-v3-test-ruleset-command", production.schemaVersion(), production.cadence(), production.spatial(),
+                production.rates(), production.facilityCapacity(), production.combat(),
+                new FrontierRuleset.HiveCommand(5, 1, 2, 1));
+
+        assertNotEquals(production.contentSha256(), changed.contentSha256());
+    }
+
+    @Test
     void canonicalFacilityAndColdCombatReadTheSelectedRuleset() {
         FrontierRuleset production = FrontierRulesets.production();
         FrontierRuleset selected = new FrontierRuleset("frontier-v3-test-ruleset-r2", production.schemaVersion(), production.cadence(), production.spatial(),
                 production.rates(), new FrontierRuleset.FacilityCapacity(51, 17, 5, 9, 5, 3, 4, 2),
-                new FrontierRuleset.Combat(FixedScalar.whole(9), FixedScalar.whole(7), FixedScalar.whole(11), FixedScalar.whole(8), FixedScalar.whole(6)));
+                new FrontierRuleset.Combat(FixedScalar.whole(9), FixedScalar.whole(7), FixedScalar.whole(11), FixedScalar.whole(8), FixedScalar.whole(6)),
+                production.hiveCommand());
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ruleset-projection"), 644L, selected));
         SubjectId guard = state.bootstrap().hive().bioforms().stream().filter(Bioform::isDefender).findFirst().orElseThrow().id();
         Settlement settlement = state.bootstrap().settlements().getFirst();

@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCocoonPlan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveCocoonSlot;
+import io.farfrontier.palemirror.frontier.v3.model.HiveCommandCapacity;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 /** Exact task-to-cocoon release boundary; it never creates or teleports a Minecraft body. */
 public final class HiveMobilizationProcess {
@@ -58,6 +60,7 @@ public final class HiveMobilizationProcess {
                 || mobilization.releasingMemberId().isPresent() || mobilization.conflictReason().isPresent()) {
             throw new IllegalArgumentException("hive mobilization must begin before any physical cocoon release");
         }
+        requireCommandCapacity(state, mobilization);
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(state.hiveColony().bioformLifecycles());
         for (SubjectId member : mobilization.memberIds()) {
             BioformLifecycle lifecycle = lifecycles.get(member);
@@ -126,6 +129,8 @@ public final class HiveMobilizationProcess {
         // Preserve the established visible breach order. Controller ownership is explicit,
         // not an implication of list position; its cocoon still opens before the group is HOT.
         List<SubjectId> members = new ArrayList<>(); members.add(bomber.id()); defenders.forEach(value -> members.add(value.id())); members.add(overseer.id());
+        if (!HiveCommandCapacity.admits(state.bootstrap().ruleset(), overseer.id(), members,
+                allBioforms(state).collect(Collectors.toUnmodifiableMap(Bioform::id, value -> value)))) return Optional.empty();
         String suffix = task.id().value().substring("task:".length());
         return Optional.of(new HiveMobilization(new SubjectId("mobilization:" + suffix), state.bootstrap().hive().id(), nest.id(), task.id(),
                 sighting.settlementId(), overseer.id(), members, HiveMobilizationStatus.WAKING, now));
@@ -133,6 +138,13 @@ public final class HiveMobilizationProcess {
 
     private static Stream<Bioform> allBioforms(FrontierWorldState state) {
         return Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream());
+    }
+
+    private static void requireCommandCapacity(FrontierWorldState state, HiveMobilization mobilization) {
+        Map<SubjectId, Bioform> bioforms = allBioforms(state).collect(Collectors.toUnmodifiableMap(Bioform::id, value -> value));
+        if (!HiveCommandCapacity.admits(state.bootstrap().ruleset(), mobilization.overseerId(), mobilization.memberIds(), bioforms)) {
+            throw new IllegalArgumentException("hive mobilization exceeds its exact Overseer command capacity");
+        }
     }
 
     private static void requireTask(FrontierWorldState state, SubjectId subject, HiveMobilization mobilization) {

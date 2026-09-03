@@ -66,6 +66,32 @@ class HiveMobilizationProcessTest {
                 "canonical validation must reject a breach member masquerading as a remote controller");
     }
 
+    @Test void remoteAssaultAdmitsOnlyTheExactSubordinateWeightItsOverseerCanCommand() {
+        Fixture fixture = fixture();
+        List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        HiveMobilization valid = assertInstanceOf(HiveMobilizationStarted.class, planned.get(1).payload()).mobilization();
+        java.util.Map<SubjectId, Bioform> bioforms = fixture.state().bootstrap().hive().bioforms().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Bioform::id, value -> value));
+
+        assertEquals(6, HiveCommandCapacity.usedCapacity(fixture.state().bootstrap().ruleset(), valid.overseerId(), valid.memberIds(), bioforms));
+        assertTrue(HiveCommandCapacity.admits(fixture.state().bootstrap().ruleset(), valid.overseerId(), valid.memberIds(), bioforms));
+
+        SubjectId extra = fixture.state().bootstrap().hive().bioforms().stream().filter(value -> value.nestId().equals(valid.nestId()))
+                .filter(value -> fixture.state().hiveColony().bioformLifecycles().get(value.id()).phase() == BioformLifecyclePhase.DORMANT)
+                .map(Bioform::id).filter(id -> !valid.memberIds().contains(id)).findFirst().orElseThrow();
+        java.util.List<SubjectId> overloadedMembers = new java.util.ArrayList<>(valid.memberIds());
+        overloadedMembers.add(extra);
+        HiveMobilization overloaded = new HiveMobilization(valid.id(), valid.hiveId(), valid.nestId(), valid.taskId(), valid.settlementId(),
+                valid.overseerId(), overloadedMembers, valid.status(), valid.startedAt());
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(fixture.state(), fixture.hive(),
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+
+        assertFalse(HiveCommandCapacity.admits(active.bootstrap().ruleset(), overloaded.overseerId(), overloaded.memberIds(), bioforms));
+        assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceStarted(active, fixture.hive(), new HiveMobilizationStarted(overloaded)),
+                "a forged fifth subordinate must not bypass the exact Overseer capacity");
+    }
+
     @Test void assaultTaskWakesOnlyExactDormantMembersThenAdmitsTheWholeObservedGroupWithoutASyntheticBody() {
         Fixture fixture = fixture();
         List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
