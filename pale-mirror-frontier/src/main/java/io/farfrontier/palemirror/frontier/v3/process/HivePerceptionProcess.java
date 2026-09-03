@@ -95,10 +95,29 @@ public final class HivePerceptionProcess {
                 .filter(engagement -> engagement.operationId().equals(operationId))
                 .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
                 .sorted(java.util.Comparator.comparing(RouteEngagement::id))
-                .map(engagement -> new InterceptEngagement(engagement.status().name())).findFirst();
+                .map(engagement -> {
+                    HiveOperationCommandAuthority authority = engagement.commandAuthority();
+                    Optional<RelayCoverage> coverage = authority.relayCoverage().map(value -> new RelayCoverage(value.ganglionId(), value.radius()));
+                    return new InterceptEngagement(engagement.status().name(), new CommandAuthority(authority.kind().name(),
+                            authority.originalAuthorityId(), authority.currentAuthorityId(), authority.signalPhase().name(),
+                            authority.rosterIds().size(), authority.subordinateWeight(), coverage));
+                }).findFirst();
     }
-    public record InterceptEngagement(String status) {
-        public InterceptEngagement { Objects.requireNonNull(status, "intercept engagement status"); }
+    public record InterceptEngagement(String status, CommandAuthority command) {
+        public InterceptEngagement { Objects.requireNonNull(status, "intercept engagement status"); Objects.requireNonNull(command, "intercept command authority"); }
+    }
+    /** Bounded immutable command facts for one operator diagnostic; never a mutation handle. */
+    public record CommandAuthority(String kind, SubjectId originalAuthorityId, SubjectId currentAuthorityId, String signalPhase,
+                                   int rosterSize, int subordinateWeight, Optional<RelayCoverage> relayCoverage) {
+        public CommandAuthority {
+            Objects.requireNonNull(kind, "command kind"); Objects.requireNonNull(originalAuthorityId, "original command authority");
+            Objects.requireNonNull(currentAuthorityId, "current command authority"); Objects.requireNonNull(signalPhase, "command signal phase");
+            relayCoverage = Objects.requireNonNull(relayCoverage, "command relay coverage");
+            if (rosterSize < 1 || subordinateWeight < 0) throw new IllegalArgumentException("invalid bounded command facts");
+        }
+    }
+    public record RelayCoverage(SubjectId ganglionId, int radius) {
+        public RelayCoverage { Objects.requireNonNull(ganglionId, "diagnostic relay ganglion"); if (radius <= 0) throw new IllegalArgumentException("diagnostic relay radius must be positive"); }
     }
     private static List<Bioform> scouts(FrontierWorldState state) { return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
             .filter(Bioform::isScout).filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE)

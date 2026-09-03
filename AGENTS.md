@@ -146,6 +146,26 @@ never add an ad-hoc HUD toggle to a scenario.
   reproducible same-seed JFR capture and a causal proof of operation → lease →
   actor/cargo ownership. TPS alone is not acceptance evidence.
 
+## Frontier v3 materialization completeness discipline
+
+- Classify every canonical process with
+  `docs/frontier-v3-materialization-completeness.md` before calling it
+  materialized. Report M0 canonical, M1 physical endpoint, M2 continuous HOT and
+  M3 player-comprehensible evidence separately; never promote one level from a
+  lower-level test.
+- A duration-bearing loaded process must retain and visibly use its exact named
+  worker/team, machine or distributed physical frontier. Generic ambient motion,
+  final inventory/block state, diagnostics, a board or before/after frames are
+  not M2 evidence.
+- Permit one-turn physical execution only for a genuinely atomic interaction at
+  one semantic station with every exact participant/input/target present, or an
+  intrinsically instantaneous effect. Bootstrap projection is not permission to
+  compress later construction, work, lifecycle or environmental change.
+- A new process or executor must update the materialization inventory and add
+  ordinary, intervention/negative and restart evidence at its required level.
+  P0 `MAT-*` debt blocks Wave 6 completion; do not close it by weakening the
+  process, hiding its duration or asserting only its endpoint.
+
 ## Frontier v3 terrain and movement discipline
 
 - New canonical movement state must use typed surface/body/port/topology values;

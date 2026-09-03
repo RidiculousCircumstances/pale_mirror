@@ -41,8 +41,15 @@ final class FrontierDevelopmentScenarios {
         }
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms()) {
-            if (bioform.isDefender() || bioform.isExplosiveAssaulter()) state = deployFixtureBioform(state, bioform.id(), intercept);
+        List<Bioform> bioforms = state.bootstrap().hive().bioforms();
+        List<Bioform> exactRoster = java.util.stream.Stream.of(
+                bioforms.stream().filter(Bioform::isOverseer).sorted(Comparator.comparing(Bioform::id)).limit(1),
+                bioforms.stream().filter(Bioform::isExplosiveAssaulter).sorted(Comparator.comparing(Bioform::id)).limit(1),
+                bioforms.stream().filter(Bioform::isDefender).sorted(Comparator.comparing(Bioform::id)).limit(2))
+                .flatMap(java.util.function.Function.identity()).toList();
+        if (exactRoster.size() != 4) throw new IllegalStateException("development scene needs one exact Overseer and three subordinate bodies");
+        for (Bioform bioform : exactRoster) {
+            state = deployFixtureBioform(state, bioform.id(), intercept);
         }
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,
@@ -52,7 +59,6 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
-        state = deployFixtureBioform(state, scout.id(), intercept);
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
         ScheduledAction action = HiveRouteEngagementProcess.start(task, 2_600L);

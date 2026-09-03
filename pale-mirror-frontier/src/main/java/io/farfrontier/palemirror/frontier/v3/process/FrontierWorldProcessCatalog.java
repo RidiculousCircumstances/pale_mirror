@@ -75,7 +75,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed",
             "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
             "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
-            "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved",
+            "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.route_engagement_command_authority_changed",
             "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
             "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
             "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
@@ -146,6 +146,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.hive_route_engagement.progress", (state, action, autonomous) -> HiveRouteEngagementProcess.planProgress(state, action)),
             Map.entry("frontier.hive_route_engagement.readiness", (state, action, autonomous) -> HiveRouteEngagementProcess.planReadiness(state, action)),
             Map.entry("frontier.hive_route_engagement.combat", (state, action, autonomous) -> HiveRouteEngagementProcess.planCombat(state, action)),
+            Map.entry("frontier.hive_route_engagement.control", (state, action, autonomous) -> HiveRouteEngagementProcess.planCommandControl(state, action)),
             Map.entry("frontier.hive.scout.patrol", (state, action, autonomous) -> HiveScoutPatrolProcess.plan(state, action)),
             Map.entry("frontier.decontamination.scan", (state, action, autonomous) -> DecontaminationProcess.plan(state, action)),
             Map.entry("frontier.objective.review", StrategicObjectiveProcess::plan),
@@ -278,7 +279,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.supply.task.start", "frontier.supply.cargo.load", "frontier.operation.assembly",
             "frontier.operation.progress", "frontier.terminal_logistics.retention", "frontier.hive_route_engagement.start",
             "frontier.hive_route_engagement.progress", "frontier.hive_route_engagement.readiness",
-            "frontier.hive_route_engagement.combat", "frontier.settlement_assault.start",
+            "frontier.hive_route_engagement.combat", "frontier.hive_route_engagement.control", "frontier.settlement_assault.start",
             "frontier.settlement_assault.progress", "frontier.settlement_assault.combat"); }
     private static Set<String> populationSchedules() { return types(
             "frontier.population.birth.review", "frontier.population.birth.complete", "frontier.population.migration.review",
@@ -354,7 +355,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_nutrient_transfer_endpoint_prepared", "frontier.hive_operation_observed", "frontier.hive_territory_observed",
                     "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected", "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
                     "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced", "frontier.route_engagement_transition", "frontier.route_engagement_strike",
-                    "frontier.route_engagement_resolved", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
+                    "frontier.route_engagement_resolved", "frontier.route_engagement_command_authority_changed", "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
             case "population" -> types(
@@ -392,7 +393,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
                     "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
                     "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
-                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
+                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.route_engagement_command_authority_changed", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
                     "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",
@@ -429,7 +430,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
                     "frontier.hive_operation_observed", "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
                     "frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.route_engagement_started", "frontier.route_engagement_attacker_advanced",
-                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.settlement_assault_started",
+                    "frontier.route_engagement_transition", "frontier.route_engagement_strike", "frontier.route_engagement_resolved", "frontier.route_engagement_command_authority_changed", "frontier.settlement_assault_started",
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",

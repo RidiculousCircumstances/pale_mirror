@@ -35,7 +35,8 @@ public final class RouteEngagementCombatRules {
     }
 
     public static List<SubjectId> livingAttackers(FrontierWorldState state, RouteEngagement engagement) {
-        return engagement.attackerIds().stream().filter(id -> alive(state, id)).sorted().toList();
+        return engagement.attackerIds().stream().filter(id -> !id.equals(engagement.commandAuthority().originalAuthorityId()))
+                .filter(id -> alive(state, id)).sorted().toList();
     }
 
     public static List<SubjectId> livingDefenders(FrontierWorldState state, RouteEngagement engagement) {

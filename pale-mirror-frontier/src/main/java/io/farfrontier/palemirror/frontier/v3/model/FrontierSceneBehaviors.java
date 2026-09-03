@@ -167,6 +167,12 @@ public final class FrontierSceneBehaviors {
                     && !operation.activeTravel().orElseThrow().cargoAnchor().surface().support().equals(cause(lease).cargoPosition())) {
                 throw new IllegalArgumentException("scene lease must retain the exact canonical cargo position");
             }
+            cause(lease).engagementId().ifPresent(engagementId -> {
+                RouteEngagement engagement = state.strategicPlans().routeEngagements().get(engagementId);
+                if (engagement == null || !engagement.commandAuthority().permitsCoordinatedAdvance()) {
+                    throw new IllegalArgumentException("engagement scene requires retained command authority");
+                }
+            });
         }
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                                          Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
@@ -202,6 +208,9 @@ public final class FrontierSceneBehaviors {
             if (engagement == null) throw new IllegalArgumentException("scene lease has no canonical engagement");
             if (nextStatus == SceneLeaseStatus.HOT) {
                 if (engagement.status() == RouteEngagementStatus.RESOLVED) throw new IllegalArgumentException("an aborted engagement cannot reclaim a HOT scene");
+                if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
+                    throw new IllegalArgumentException("engagement cannot enter HOT without retained command authority");
+                }
                 return state.strategicPlans().transitionEngagement(engagementId, RouteEngagementStatus.HOT);
             }
             if (nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && engagement.status() != RouteEngagementStatus.RESOLVED) return state.strategicPlans().transitionEngagement(engagementId, RouteEngagementStatus.UNKNOWN_AFTER_RESTART);

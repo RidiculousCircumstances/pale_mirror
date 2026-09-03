@@ -73,7 +73,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept.offset(-16, 0, 0))));
         }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept"), state.bootstrap().hive().id(),
@@ -85,7 +85,7 @@ class HiveRouteEngagementProcessTest {
         state = withSighting(state, operation, 2_600L);
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> start = HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 2_600L));
-        assertEquals(3, start.size());
+        assertEquals(4, start.size());
         state = StrategicObjectiveProcess.reduceTaskTransition(state, objective.ownerId(), (StrategicTaskTransition) start.getFirst().payload());
         RouteEngagementStarted started = (RouteEngagementStarted) start.get(1).payload();
         assertEquals(operation.id(), started.engagement().operationId());
@@ -95,7 +95,9 @@ class HiveRouteEngagementProcessTest {
         assertEquals(persistedTask, FrontierWorldRuntimeDefinition.payloadCodecs().decode(persistedTask.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(persistedTask)));
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         state = HiveRouteEngagementProcess.reduceStarted(state, objective.ownerId(), started);
-        ScheduledAction scheduled = ((ScheduleEffect.Created) start.get(2).payload()).action();
+        ScheduledAction scheduled = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
+                .filter(value -> value.kind().equals("frontier.hive_route_engagement.progress")).findFirst().orElseThrow();
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> progress = HiveRouteEngagementProcess.planProgress(state, scheduled);
         for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : progress) {
@@ -118,7 +120,7 @@ class HiveRouteEngagementProcessTest {
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
-                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+                .filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -193,7 +195,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -219,7 +221,7 @@ class HiveRouteEngagementProcessTest {
                 "a carrier sighting must not overwrite the adjacent participant hand-off");
         assertEquals(intercept, candidate.cargoPosition(),
                 "the engagement must retain the exact cargo anchor the Scout observed");
-        assertEquals(6, candidate.actorIds().size());
+        assertEquals(7, candidate.actorIds().size(), "the exact mobile Overseer is present in the same owned scene roster");
         SceneLeaseId leaseId = new SceneLeaseId("lease:hive-cold-combat-r1");
         var world = state.bootstrap().worldId();
         List<SceneMember> sceneMembers = candidate.actorIds().stream().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
@@ -236,6 +238,11 @@ class HiveRouteEngagementProcessTest {
                 candidate.handoffPosition(), new SimInstant(3_001L), 1L, Optional.of(candidate.engagementId()), candidate.actorIds());
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, hot.strategicPlans().routeEngagements().get(engagementId).status());
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> commandedWhileHot = HiveRouteEngagementProcess.planCommandControl(hot,
+                new ScheduledAction(new ScheduleId("schedule:hot-controller-is-live"), new SimInstant(3_020L), 0, engagementId,
+                        "frontier.hive_route_engagement.control", 1));
+        assertFalse(commandedWhileHot.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .anyMatch(RouteEngagementCommandAuthorityChanged.class::isInstance), "the exact controller remains connected while its own scene owns physical bodies");
         SubjectId attacker = hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().getFirst();
         SubjectId target = candidate.actorIds().stream().filter(actor -> !actor.equals(attacker) && !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
         FixedPosition strikeOrigin = new FixedPosition(FixedScalar.whole(candidate.handoffPosition().x()), FixedScalar.whole(candidate.handoffPosition().y()), FixedScalar.whole(candidate.handoffPosition().z()));
@@ -318,7 +325,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -351,7 +358,7 @@ class HiveRouteEngagementProcessTest {
         FrontierWorldState state = enRouteState();
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
-        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
             state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
         }
         SubjectId hive = state.bootstrap().hive().id();
@@ -417,6 +424,203 @@ class HiveRouteEngagementProcessTest {
                 () -> "cocoon-retained bioform became an autonomous intercept attacker: " + finalState.strategicPlans().routeEngagements());
     }
 
+    @Test void remoteInterceptionRejectsDirectBodiesWithoutAnExactRelayOrOverseer() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:no-controller"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:no-controller"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()), Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
+        state = withSighting(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)), operation, 3_000L);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L));
+        assertEquals(1, events.size());
+        assertEquals(StrategicTaskStatus.BLOCKED, ((StrategicTaskTransition) events.getFirst().payload()).status());
+    }
+
+    @Test void relayCoverageAdmitsOnlyTheExactLocalAttackerRoutes() {
+        FrontierWorldState state = enRouteState();
+        SubjectId hive = state.bootstrap().hive().id();
+        SubjectId eastNest = new SubjectId("nest:seed-east");
+        HiveOrgan ganglion = state.bootstrap().hive().organs().stream()
+                .filter(value -> value.nestId().equals(eastNest) && value.kind() == HiveOrganKind.GANGLION).findFirst().orElseThrow();
+        HiveOrgan relay = new HiveOrgan(new SubjectId("organ:east-command-relay"), hive, eastNest, HiveOrganKind.RELAY,
+                ganglion.anchor().offset(32, 0, 0), Optional.empty());
+        state = state.addHiveOrgan(relay);
+        List<Bioform> localBodies = state.bootstrap().hive().bioforms().stream()
+                .filter(value -> value.nestId().equals(eastNest) && (value.isDefender() || value.isExplosiveAssaulter())).limit(2).toList();
+        assertEquals(2, localBodies.size());
+        List<EngagementAttacker> attackers = new java.util.ArrayList<>();
+        for (int index = 0; index < localBodies.size(); index++) {
+            Bioform bioform = localBodies.get(index);
+            BlockPosition origin = relay.anchor().offset(index + 1, 0, 0);
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(origin)));
+            attackers.add(new EngagementAttacker(bioform.id(), List.of(origin, relay.anchor()), 0));
+        }
+
+        HiveOperationCommandAuthority authority = HiveRouteEngagementCommandSupport.admit(state, attackers, 3_000L).orElseThrow();
+
+        assertEquals(HiveCommandAuthorityKind.RELAY, authority.kind());
+        assertEquals(relay.id(), authority.currentAuthorityId());
+        assertEquals(relay.anchor(), authority.relayCoverage().orElseThrow().centre());
+        assertEquals(attackers.stream().map(EngagementAttacker::actorId).toList(), authority.rosterIds());
+    }
+
+    @Test void relayLossSurvivesRestartAsBoundedMemoryThenInstinctWithoutRewritingItsProof() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        SubjectId hive = state.bootstrap().hive().id(), eastNest = new SubjectId("nest:seed-east");
+        HiveOrgan ganglion = state.bootstrap().hive().organs().stream()
+                .filter(value -> value.nestId().equals(eastNest) && value.kind() == HiveOrganKind.GANGLION).findFirst().orElseThrow();
+        HiveOrgan relay = new HiveOrgan(new SubjectId("organ:east-loss-relay"), hive, eastNest, HiveOrganKind.RELAY,
+                ganglion.anchor().offset(32, 0, 0), Optional.empty());
+        state = state.addHiveOrgan(relay);
+        List<Bioform> localBodies = state.bootstrap().hive().bioforms().stream()
+                .filter(value -> value.nestId().equals(eastNest) && (value.isDefender() || value.isExplosiveAssaulter())).limit(2).toList();
+        List<EngagementAttacker> attackers = new java.util.ArrayList<>();
+        for (int index = 0; index < localBodies.size(); index++) {
+            Bioform bioform = localBodies.get(index);
+            BlockPosition origin = relay.anchor().offset(index + 1, 0, 0);
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(origin)));
+            attackers.add(new EngagementAttacker(bioform.id(), List.of(origin, relay.anchor()), 0));
+        }
+        HiveOperationCommandAuthority authority = HiveRouteEngagementCommandSupport.admit(state, attackers, 3_000L).orElseThrow();
+        assertEquals(HiveCommandAuthorityKind.RELAY, authority.kind());
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:relay-loss"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:relay-loss"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()), Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.ACTIVE, Optional.of(relay.anchor()));
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        RouteEngagement engagement = new RouteEngagement(new SubjectId("engagement:relay-loss"), task.id(), operation.id(), hive,
+                attackers, relay.anchor(), authority, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
+        state = HiveRouteEngagementProcess.reduceStarted(state, hive, new RouteEngagementStarted(engagement));
+        assertTrue(HiveRouteEngagementCommandSupport.connected(state, engagement));
+
+        HiveOrgan selectedRelay = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(value -> value.id().equals(authority.currentAuthorityId())).findFirst().orElseThrow();
+        state = destroyOrgan(state, selectedRelay);
+        assertFalse(state.isHiveOrganOperational(selectedRelay.id()));
+        assertEquals(HiveCommandAuthorityKind.RELAY, state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority().kind());
+        assertEquals(selectedRelay.id(), state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority().currentAuthorityId());
+        assertFalse(HiveRouteEngagementCommandSupport.connected(state,
+                state.strategicPlans().routeEngagements().get(engagement.id())));
+        state = reduceControl(state, engagement.id(), 3_010L);
+        HiveOperationCommandAuthority memory = state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority();
+        assertEquals(HiveCommandSignalPhase.SIGNAL_MEMORY, memory.signalPhase());
+        assertEquals(authority.rosterIds(), memory.rosterIds());
+        assertEquals(authority.relayCoverage(), memory.relayCoverage());
+
+        FrontierWorldState restarted = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        restarted = reduceControl(restarted, engagement.id(), 3_210L);
+        HiveOperationCommandAuthority instinct = restarted.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority();
+        assertEquals(HiveCommandSignalPhase.INSTINCT, instinct.signalPhase());
+        assertEquals(memory.rosterIds(), instinct.rosterIds());
+        assertEquals(memory.relayCoverage(), instinct.relayCoverage());
+    }
+
+    @Test void signalTransitionCannotRewriteTheExactCommandRosterOrCapacity() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:command-forgery"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:command-forgery"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()), Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
+        state = withSighting(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)), operation, 3_000L);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, (StrategicTaskTransition) events.getFirst().payload());
+        RouteEngagementStarted started = events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteEngagementStarted.class::isInstance).map(RouteEngagementStarted.class::cast).findFirst().orElseThrow();
+        state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(started.engagement().id());
+        HiveOperationCommandAuthority expected = engagement.commandAuthority();
+        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        ActorLocation controller = actors.get(expected.currentAuthorityId());
+        actors.put(expected.currentAuthorityId(), new ActorLocation(controller.body(), ActorCondition.dead()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        HiveOperationCommandAuthority forged = new HiveOperationCommandAuthority(expected.kind(), expected.originalAuthorityId(), expected.currentAuthorityId(),
+                expected.rosterIds(), expected.subordinateWeight() + 1, expected.relayCoverage(), HiveCommandSignalPhase.SIGNAL_MEMORY, 3_010L);
+        FrontierWorldState retained = state;
+
+        assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceCommandAuthorityChanged(retained, hive,
+                new RouteEngagementCommandAuthorityChanged(engagement.id(), expected, forged)));
+    }
+
+    @Test void controllerLossUsesBoundedMemoryThenInstinctAndAnExactSecondOverseerReclaimsSurvivors() {
+        FrontierWorldState state = enRouteState();
+        RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
+        BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream().filter(value -> value.isDefender() || value.isExplosiveAssaulter() || value.isOverseer()).toList()) {
+            state = FrontierTestPositions.deployBioform(state, bioform.id(), BodyPosition.above(new SurfaceAnchor(intercept)));
+        }
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:controller-loss"), hive,
+                StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:controller-loss"), objective.id(), hive,
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()), Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
+        state = withSighting(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)), operation, 3_000L);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> started = HiveRouteEngagementProcess.planStart(state, HiveRouteEngagementProcess.start(task, 3_000L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, (StrategicTaskTransition) started.getFirst().payload());
+        RouteEngagementStarted start = (RouteEngagementStarted) started.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteEngagementStarted.class::isInstance).findFirst().orElseThrow();
+        state = HiveRouteEngagementProcess.reduceStarted(state, hive, start);
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : started) {
+            if (event.payload() instanceof RouteEngagementTransition transition) {
+                state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
+            }
+        }
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(start.engagement().id());
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, engagement.status());
+        assertEquals(List.of(engagement.id()), state.coldEngagementSceneCandidates().stream().map(SceneEngagementCandidate::engagementId).toList());
+        SubjectId fallen = engagement.commandAuthority().currentAuthorityId();
+        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        ActorLocation controller = actors.get(fallen); actors.put(fallen, new ActorLocation(controller.body(), ActorCondition.dead()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+
+        state = reduceControl(state, engagement.id(), 3_010L);
+        assertEquals(HiveCommandSignalPhase.SIGNAL_MEMORY, state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority().signalPhase());
+        state = reduceControl(state, engagement.id(), 3_210L);
+        assertEquals(HiveCommandSignalPhase.INSTINCT, state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority().signalPhase());
+        assertTrue(state.coldEngagementSceneCandidates().isEmpty(), "instinct survivors may not admit a new coordinated HOT scene");
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> instinctCombat = HiveRouteEngagementProcess.planCombat(state,
+                HiveRouteEngagementProcess.combat(engagement, 3_211L));
+        assertEquals(1, instinctCombat.size(), "instinct may wait for a reclaim, never continue strategic target selection");
+        ScheduleEffect.Created instinctRetry = (ScheduleEffect.Created) instinctCombat.getFirst().payload();
+        assertEquals("frontier.hive_route_engagement.control", instinctRetry.action().kind());
+        RouteEngagementStrike forbiddenStrike = new RouteEngagementStrike(engagement.id(), engagement.attackerIds().getFirst(),
+                operation.participantIds().getFirst(), engagement.nextStrikeEpoch(),
+                RouteEngagementCombatRules.damage(state, engagement.attackerIds().getFirst()));
+        FrontierWorldState instinctRetained = state;
+        assertThrows(IllegalArgumentException.class, () -> HiveRouteEngagementProcess.reduceStrike(instinctRetained, hive, forbiddenStrike));
+        SceneLease forbiddenScene = FrontierTestSceneLeases.exact(state, new SceneLeaseId("lease:instinct-command-forbidden"), operation.id(), operation.cargoId(),
+                operation.currentPosition(), new SimInstant(3_211L), 0L, Optional.of(engagement.id()),
+                java.util.stream.Stream.concat(operation.participantIds().stream(), engagement.attackerIds().stream()).sorted().toList());
+        FrontierWorldState instinctState = state;
+        assertThrows(IllegalArgumentException.class, () -> instinctState.prepareSceneLease(forbiddenScene),
+                "a hand-crafted physical lease may not bypass the same command authority boundary");
+        state = reduceControl(state, engagement.id(), 3_220L);
+        HiveOperationCommandAuthority reclaimed = state.strategicPlans().routeEngagements().get(engagement.id()).commandAuthority();
+        assertEquals(HiveCommandSignalPhase.RECLAIMED, reclaimed.signalPhase());
+        assertFalse(reclaimed.currentAuthorityId().equals(fallen));
+        assertEquals(engagement.attackerIds(), reclaimed.rosterIds(), "reclaim changes signal authority, not exact survivor roster or actor ownership");
+        RouteEngagementCommandAuthorityChanged persisted = new RouteEngagementCommandAuthorityChanged(engagement.id(), engagement.commandAuthority(), reclaimed);
+        assertEquals(persisted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(persisted.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(persisted)));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
     private static FrontierWorldState enRouteState() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:intercept"), 91L));
@@ -436,5 +640,26 @@ class HiveRouteEngagementProcessTest {
         state = FrontierTestPositions.deployBioform(state, scout.id(), BodyPosition.above(new SurfaceAnchor(carrierPosition)));
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), carrierPosition, observedAt);
         return state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
+    }
+
+    private static FrontierWorldState destroyOrgan(FrontierWorldState state, HiveOrgan organ) {
+        int losses = (FrontierGrayboxPlan.intactOrganCellCount(state.bootstrap().terrain(), organ) + 2) / 3;
+        List<GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells().values().stream().filter(cell -> cell.ownerId().equals(organ.id()))
+                .sorted(java.util.Comparator.comparingInt((GrayboxCell cell) -> cell.position().x()).thenComparingInt(cell -> cell.position().y())
+                        .thenComparingInt(cell -> cell.position().z())).limit(losses).toList();
+        if (cells.size() != losses) throw new IllegalStateException("test organ has too few exact cells");
+        for (GrayboxCell cell : cells) {
+            state = state.recordPhysicalDelta(new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                    Optional.of(organ.id()), Optional.of(cell.semanticPart()), "test:relay-loss"));
+        }
+        return state;
+    }
+
+    private static FrontierWorldState reduceControl(FrontierWorldState state, SubjectId engagementId, long at) {
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planCommandControl(state,
+                new ScheduledAction(new ScheduleId("schedule:control-" + at), new SimInstant(at), 0, engagementId, "frontier.hive_route_engagement.control", 1));
+        RouteEngagementCommandAuthorityChanged changed = events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(RouteEngagementCommandAuthorityChanged.class::isInstance).map(RouteEngagementCommandAuthorityChanged.class::cast).findFirst().orElseThrow();
+        return HiveRouteEngagementProcess.reduceCommandAuthorityChanged(state, state.bootstrap().hive().id(), changed);
     }
 }

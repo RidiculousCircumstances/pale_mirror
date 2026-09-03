@@ -606,6 +606,40 @@ Four-seed annual runs show a long contest with plausible divergent outcomes,
 the accepted one-to-two-day attack grace, no guaranteed winner, no impossible
 resource creation and stable deterministic replay.
 
+## Materialization completeness gate
+
+Before Wave 6 can claim a process complete, classify and prove it under
+`docs/frontier-v3-materialization-completeness.md`. In particular, an exact
+physical receipt or final block/container state is only M1 evidence; it does not
+close a duration-bearing process without the same worker/actuator, progress,
+intervention and HOT/COLD continuity at M2.
+
+Close the confirmed gaps in dependency order:
+
+1. establish one reusable class-C work-scene foundation from the existing
+   engineering and medical verticals: exact assignment, facility ports/stations,
+   approach, progress, effect hand-off, drain and recovery;
+2. make farm preparation/harvest the first end-to-end work reference, then use
+   the same boundary for workshop production, structural repair and
+   decontamination rather than adding executor-specific shortcuts;
+3. bind exact human patrols and hive expeditions to retained operation movement
+   and observed HOT arrival; generic ambient movement cannot execute an
+   assignment;
+4. add staged exact-recipient provisioning and household/birth lifecycle work;
+5. materialize hive nutrient flow, digestion, organism/organ growth and their
+   player-interruptible hiveroot/cocoon dependencies;
+6. convert crop/infection/growth/retreat projection to bounded retained spatial
+   progress, preserving atomic execution only for truly instantaneous effects;
+7. make exact hunger/exposure/infection/recovery readable on HOT residents and
+   reconcile real contact with the same canonical condition model;
+8. complete the decision-to-visible-consequence matrix for markets, shortages,
+   quarantine and doctrine, then run the unbriefed M3 comprehension gate.
+
+`MAT-001` through `MAT-007` are P0 Wave-6 blockers. `MAT-008` through
+`MAT-010` block Wave-7 product acceptance. An earlier audit closure for conservation,
+receipt or recovery remains valid at its evidence level but cannot be cited as
+closure of the corresponding `MAT-*` item.
+
 ## Wave 6 — production materialization
 
 ### Deliverables
@@ -639,6 +673,10 @@ resource creation and stable deterministic replay.
 
 ### Verification
 
+- Maintain a machine-reviewed inventory mapping every canonical process to its
+  materialization class, current M0–M3 evidence and open `MAT-*` debt. A process
+  with no spatial manifestation must carry an explicit accepted class-G reason
+  and a visible downstream consequence.
 - Focused GameTests for each materialized semantic and failure/recovery path.
 - Randomized property tests over lease/body/container uniqueness.
 - Repeated leave/return/restart tests during work, transit, battle, explosion,
@@ -650,9 +688,11 @@ resource creation and stable deterministic replay.
 
 ### Exit gate
 
-Every agreed canonical process has a distinguishable physical manifestation or
-an explicit documented reason it is not spatial. The user accepts continuous
-motion, combat, damage, infection and causal feedback as one Minecraft world.
+Every agreed canonical process reaches its required M2 level or has an explicit
+accepted class-G reason it is not spatial plus a distinguishable downstream
+consequence. No P0 `MAT-*` item remains open. The user accepts continuous
+motion, work, transport, combat, damage, infection and causal feedback as one
+Minecraft world.
 
 ## Wave 7 — balance, product validation and cutover
 

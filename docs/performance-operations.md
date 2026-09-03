@@ -58,13 +58,13 @@ For an evidence-grade profile, run the private server on its JDK 22 runtime and 
 scripts/capture-runtime-jfr.sh <server-pid> 120s build/profiles/pale-mirror-runtime.jfr
 ```
 
-The Visuals GameTest and packaged two-start harness include the exact private
-Sable 2.0.3 runtime, because it was present in the original watchdog deadlock.
+The Visuals GameTest and packaged two-start harness use only the current supported
+runtime profile; the retired Sable renderer integration is not loaded.
 
 The hot-path acceptance target is: no loaded-chunk static construction, no
 full loaded-entity census, no vertical chunk-volume rail scan, no repeated
-unchanged projection reconciliation, and no watchdog stall while Sable is
-enabled. Worldgen slice timing is also reported by the Visuals runtime and in
+unchanged projection reconciliation, and no watchdog stall. Worldgen slice timing
+is also reported by the Visuals runtime and in
 the server log when its immutable catalog becomes ready.
 
 ## Frontier v3 physical-scene scale protocol

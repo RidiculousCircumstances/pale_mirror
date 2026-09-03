@@ -116,10 +116,11 @@ removes `WORKER/SCOUT/GUARD/BOMBER` entirely: a Sentinel Scout is
 assignment are canonical fields and independent stable-tag persistence values.
 Vitality remains the existing exact `ActorLocation.condition`; current body
 position and HOT physical custody remain that actor location plus its persisted
-ambient lease. Schema 111/envelope 23 retains cocoon/lifecycle, exact task
+ambient lease. Schema 112/envelope 24 retains cocoon/lifecycle, exact task
 mobilisation, its original settlement sighting, exact Overseer and the one-edge
 expected-cursor assembly receipt plus one terminal departure payload containing
-the exact assault it owns. Wounds,
+the exact assault it owns, plus one independently persisted route-engagement
+command authority. Wounds,
 structural/reserve biomass and controller-loss behaviour remain later owning-process
 cuts rather than duplicated prematurely in this profile.
 
@@ -254,6 +255,17 @@ last order for a bounded signal-memory interval and then fall back to explicit
 instincts: engage an immediate threat, protect current cargo, seek signal,
 return or become locally feral. They do not die, freeze, disappear or continue
 complex coordinated replanning. Another Overseer may later reclaim them.
+
+The current route-interception vertical makes this concrete rather than treating
+it as flavour: every engagement persists either a Relay/Ganglion/radius proof
+covering every retained attacker-route cell or an exact Overseer and ordered
+weighted roster. That same fact gates COLD approach, COLD-combat admission and
+creation of a new HOT scene. Signal loss changes only the command phase;
+`SIGNAL_MEMORY` may finish the retained order, while `INSTINCT` cannot advance
+the group or open a new battlefield. A reclaim requires another live eligible
+Overseer at the retained intercept and preserves the original exact roster,
+coverage facts, bodies and leases. The durable compare-and-set transition never
+creates a substitute body or silently rewrites capacity.
 
 Overseer survival comes primarily from behavior: distance, cover, subordinate
 screens, route choice, early retreat and mucus obstruction. It must not be an

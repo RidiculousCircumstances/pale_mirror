@@ -16,7 +16,7 @@ import java.util.List;
 /** WAL codecs for an exact route engagement and its per-bioform COLD travel. */
 final class RouteEngagementPayloadCodecs {
     private RouteEngagementPayloadCodecs() { }
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), transition(), strike(), resolved())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), transition(), strike(), resolved(), commandAuthorityChanged())); }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_engagement_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> write(output, ((RouteEngagementStarted) payload).engagement())); }
@@ -63,6 +63,15 @@ final class RouteEngagementPayloadCodecs {
             return new RouteEngagementResolved(engagement, FrontierWireTags.require(RouteEngagementOutcome.class, outcome));
         }); }
     }; }
+    static PayloadCodec commandAuthorityChanged() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_engagement_command_authority_changed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            RouteEngagementCommandAuthorityChanged changed = (RouteEngagementCommandAuthorityChanged) payload;
+            subject(output, changed.engagementId()); HiveOperationCommandAuthorityCodec.write(output, changed.expected()); HiveOperationCommandAuthorityCodec.write(output, changed.next());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new RouteEngagementCommandAuthorityChanged(subject(input), HiveOperationCommandAuthorityCodec.read(input), HiveOperationCommandAuthorityCodec.read(input))); }
+    }; }
     private static void write(DataOutputStream output, RouteEngagement engagement) throws IOException {
         subject(output, engagement.id()); subject(output, engagement.taskId()); subject(output, engagement.operationId()); subject(output, engagement.hiveId());
         output.writeByte(engagement.attackers().size());
@@ -71,7 +80,7 @@ final class RouteEngagementPayloadCodecs {
             for (BlockPosition position : attacker.route()) position(output, position);
             output.writeByte(attacker.routeIndex());
         }
-        position(output, engagement.intercept()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
+        position(output, engagement.intercept()); HiveOperationCommandAuthorityCodec.write(output, engagement.commandAuthority()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
         output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().wireTag());
     }
     private static RouteEngagement read(DataInputStream input) throws IOException {
@@ -82,10 +91,10 @@ final class RouteEngagementPayloadCodecs {
             for (int point = 0, size = input.readUnsignedByte(); point < size; point++) route.add(position(input));
             attackers.add(new EngagementAttacker(actor, route, input.readUnsignedByte()));
         }
-        BlockPosition intercept = position(input); int status = input.readUnsignedByte(), epoch = input.readInt();
+        BlockPosition intercept = position(input); HiveOperationCommandAuthority authority = HiveOperationCommandAuthorityCodec.read(input); int status = input.readUnsignedByte(), epoch = input.readInt();
         java.util.Optional<RouteEngagementOutcome> outcome = input.readBoolean() ? java.util.Optional.of(readOutcome(input)) : java.util.Optional.empty();
         if (status >= RouteEngagementStatus.values().length) throw new IllegalArgumentException("unknown route engagement status");
-        return new RouteEngagement(id, task, operation, hive, attackers, intercept, FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome);
+        return new RouteEngagement(id, task, operation, hive, attackers, intercept, authority, FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome);
     }
     private static RouteEngagementOutcome readOutcome(DataInputStream input) throws IOException {
         int value = input.readUnsignedByte(); if (value >= RouteEngagementOutcome.values().length) throw new IllegalArgumentException("unknown route engagement outcome");

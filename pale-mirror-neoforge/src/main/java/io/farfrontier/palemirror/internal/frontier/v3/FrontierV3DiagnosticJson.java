@@ -370,7 +370,7 @@ final class FrontierV3DiagnosticJson {
         String hiveIntercept = HivePerceptionProcess.interceptTask(state, operation.id())
                 .map(task -> ",\"hiveIntercept\":{\"position\":" + position(task.position()) + ",\"status\":\"" + quote(task.status()) + "\"}").orElse("");
         String hiveEngagement = HivePerceptionProcess.interceptEngagement(state, operation.id())
-                .map(engagement -> ",\"hiveEngagement\":{\"status\":\"" + quote(engagement.status()) + "\"}").orElse("");
+                .map(FrontierV3DiagnosticJson::hiveEngagement).orElse("");
         return base("operation", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(operation.settlementId().value())
                 + "\",\"cargo\":\"" + quote(operation.cargoId().value()) + "\",\"destination\":\"" + quote(operation.destinationId().value())
                 + "\",\"stage\":\"" + operation.stage() + "\",\"routeIndex\":" + operation.routeIndex()
@@ -378,6 +378,18 @@ final class FrontierV3DiagnosticJson {
                 + (settlementUnavailableEdges == 0L) + ",\"settlementUnavailableEdges\":" + settlementUnavailableEdges
                 + ",\"participants\":[" + members + "]" + assembly + travel + hiveSighting + hiveIntercept + hiveEngagement
                 + readiness.map(FrontierV3DiagnosticJson::assemblyReadiness).orElse("") + "}";
+    }
+
+    /** Bounded operator evidence for the one retained command source of an active hive engagement. */
+    private static String hiveEngagement(HivePerceptionProcess.InterceptEngagement engagement) {
+        var authority = engagement.command();
+        String coverage = authority.relayCoverage().map(value -> ",\"relay\":\"" + quote(authority.currentAuthorityId().value())
+                + "\",\"ganglion\":\"" + quote(value.ganglionId().value()) + "\",\"radius\":" + value.radius()).orElse("");
+        return ",\"hiveEngagement\":{\"status\":\"" + quote(engagement.status()) + "\",\"command\":{\"kind\":\""
+                + quote(authority.kind()) + "\",\"original\":\"" + quote(authority.originalAuthorityId().value())
+                + "\",\"controller\":\"" + quote(authority.currentAuthorityId().value()) + "\",\"signal\":\""
+                + quote(authority.signalPhase()) + "\",\"members\":" + authority.rosterSize() + ",\"subordinateWeight\":"
+                + authority.subordinateWeight() + coverage + "}}";
     }
 
     /** One declared supply topology, with grade facts only; diagnostics never survey or alter Minecraft terrain. */

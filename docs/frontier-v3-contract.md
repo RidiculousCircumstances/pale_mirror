@@ -439,6 +439,25 @@ events.
 
 ## Materialization and physical causality
 
+Materialization completeness is governed by
+`docs/frontier-v3-materialization-completeness.md`. Canonical correctness and a
+loaded-world postcondition are necessary foundations, but they are not evidence
+that a duration-bearing process exists in play. Every process is classified as
+baseline state, atomic local interaction, actor/machine work, coordinated
+movement, distributed environment, lifecycle/care or decision/information.
+When naturally loaded, every applicable non-baseline process must retain and
+expose the same participants/actuator, semantic stations, progress and
+interruption path used by COLD execution.
+
+A duration-bearing job may not be completed by an endpoint executor that omits
+its named worker, team, machine, carrier or physical frontier. Generic ambient
+wandering, final block/container state, board text and diagnostics do not count
+as the job. One-turn execution is reserved for genuinely atomic local
+interactions whose exact participants, item and target are simultaneously
+present at one semantic station, or for intrinsically instantaneous effects
+such as a single explosion. HOT completion requires observable start, progress
+and terminal result plus ordinary player interference and restart recovery.
+
 NeoForge keeps four independent responsibilities:
 
 1. the desired-state materializer projects current actors, objects, containers,

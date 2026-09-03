@@ -50,7 +50,7 @@ public final class StrategicPlanStateCodec {
                 for (BlockPosition position : attacker.route()) writePosition(output, position);
                 output.writeByte(attacker.routeIndex());
             }
-            writePosition(output, engagement.intercept()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
+            writePosition(output, engagement.intercept()); HiveOperationCommandAuthorityCodec.write(output, engagement.commandAuthority()); output.writeByte(engagement.status().wireTag()); output.writeInt(engagement.nextStrikeEpoch());
             output.writeBoolean(engagement.outcome().isPresent()); if (engagement.outcome().isPresent()) output.writeByte(engagement.outcome().orElseThrow().wireTag());
         }
         writeCount(output, plans.settlementAssaults().size());
@@ -179,9 +179,14 @@ public final class StrategicPlanStateCodec {
                 for (int point = 0, routeSize = readCount(input); point < routeSize; point++) route.add(readPosition(input));
                 attackers.add(new EngagementAttacker(attackerId, route, input.readUnsignedByte()));
             }
-            BlockPosition intercept = readPosition(input); int status = input.readUnsignedByte(), epoch = input.readInt();
+            BlockPosition intercept = readPosition(input); HiveOperationCommandAuthority authority = HiveOperationCommandAuthorityCodec.read(input); int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<RouteEngagementOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
-            if (status >= RouteEngagementStatus.values().length || engagements.put(id, new RouteEngagement(id, task, operation, hive, attackers, intercept, FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome)) != null) {
+            if (status >= RouteEngagementStatus.values().length) {
+                throw new IllegalArgumentException("invalid or duplicate route engagement");
+            }
+            RouteEngagement engagement = new RouteEngagement(id, task, operation, hive, attackers, intercept, authority,
+                    FrontierWireTags.require(RouteEngagementStatus.class, status), epoch, outcome);
+            if (engagements.put(id, engagement) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route engagement");
             }
         }

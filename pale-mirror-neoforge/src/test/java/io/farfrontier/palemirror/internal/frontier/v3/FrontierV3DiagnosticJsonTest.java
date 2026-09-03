@@ -347,11 +347,16 @@ class FrontierV3DiagnosticJsonTest {
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
-        String id = state.coldEngagementSceneCandidates().getFirst().engagementId().value();
+        var candidate = state.coldEngagementSceneCandidates().getFirst();
+        String id = candidate.engagementId().value();
 
         String scene = FrontierV3DiagnosticJson.render("scene", id, checkpoint, state, Optional.empty());
+        String operation = FrontierV3DiagnosticJson.render("operation", candidate.operationId().value(), checkpoint, state, Optional.empty());
 
         assertTrue(scene.contains("\"status\":\"not_found\""), "without a materialized scene lease the read-only view must not create one");
+        assertTrue(operation.contains("\"hiveEngagement\":{\"status\":\"COLD_COMBAT\",\"command\":{\"kind\":\"OVERSEER\"")
+                && operation.contains("\"signal\":\"CONNECTED\""),
+                "the player-facing operation diagnostic retains its exact command-admission fact without creating a scene");
         assertTrue(runtime.decodedState().orElseThrow().sceneLeases().isEmpty(), "diagnostics never mutate the canonical scene state");
     }
 

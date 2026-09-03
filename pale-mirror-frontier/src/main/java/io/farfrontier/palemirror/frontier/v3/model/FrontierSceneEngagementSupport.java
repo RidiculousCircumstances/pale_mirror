@@ -13,6 +13,10 @@ final class FrontierSceneEngagementSupport {
     static List<SceneEngagementCandidate> candidates(FrontierWorldState state) {
         return state.strategicPlans().routeEngagements().values().stream()
                 .filter(engagement -> engagement.status() == RouteEngagementStatus.COLD_COMBAT)
+                // A scene is a new coordinated action. Instinct-bound survivors remain exact
+                // actors and may fight locally, but may not create a new HOT battlefield until
+                // an exact Overseer reclaim restores durable command.
+                .filter(engagement -> engagement.commandAuthority().permitsCoordinatedAdvance())
                 .sorted(Comparator.comparing(RouteEngagement::id)).map(engagement -> candidate(state, engagement)).toList();
     }
 

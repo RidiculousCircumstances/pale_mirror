@@ -75,7 +75,7 @@ class RouteEngagementTest {
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task)
                 .startEngagement(new RouteEngagement(new SubjectId("engagement:missing-operation"), task.id(), new SubjectId("operation:missing"), hive,
                         List.of(new EngagementAttacker(attacker, List.of(FrontierTestPositions.supportOf(initial.actorLocations().get(attacker)), new BlockPosition(1, 64, 1)), 0)),
-                        new BlockPosition(1, 64, 1), RouteEngagementStatus.APPROACHING, 0, Optional.empty()));
+                        new BlockPosition(1, 64, 1), authority(List.of(attacker)), RouteEngagementStatus.APPROACHING, 0, Optional.empty()));
 
         assertThrows(IllegalArgumentException.class, () -> initial.withStrategicPlans(plans));
     }
@@ -84,6 +84,12 @@ class RouteEngagementTest {
         BlockPosition intercept = new BlockPosition(1, 64, 1);
         return new RouteEngagement(new SubjectId("engagement:1"), new SubjectId("task:1"), new SubjectId("operation:1"),
                 new SubjectId("hive:frontier"), attackers.stream().map(attacker -> new EngagementAttacker(attacker,
-                List.of(new BlockPosition(0, 64, 0), intercept), 0)).toList(), intercept, RouteEngagementStatus.APPROACHING, 0, Optional.empty());
+                List.of(new BlockPosition(0, 64, 0), intercept), 0)).toList(), intercept, authority(attackers), RouteEngagementStatus.APPROACHING, 0, Optional.empty());
+    }
+
+    private static HiveOperationCommandAuthority authority(List<SubjectId> attackers) {
+        SubjectId overseer = attackers.getFirst();
+        return new HiveOperationCommandAuthority(HiveCommandAuthorityKind.OVERSEER, overseer, overseer, attackers, 0,
+                Optional.empty(), HiveCommandSignalPhase.CONNECTED, 0L);
     }
 }

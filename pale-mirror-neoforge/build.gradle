@@ -59,6 +59,8 @@ def frontierV3PilotServerRunDirectory = frontierV3PilotServerDirectory.get().asF
 def frontierV3PilotWorldName = providers.gradleProperty('frontierV3PilotWorld').orElse('frontier-v3-pilot-world').get()
 def frontierV3PilotSeed = providers.gradleProperty('frontierV3PilotSeed').orElse('41').get()
 def frontierV3PilotPort = providers.gradleProperty('frontierV3PilotPort').orElse('25575').get()
+def frontierV3PilotRconPort = providers.gradleProperty('frontierV3PilotRconPort').orElse('25576').get()
+def frontierV3PilotRconPassword = providers.environmentVariable('FRONTIER_V3_PILOT_RCON_PASSWORD').orElse('').get()
 def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
 def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
@@ -912,16 +914,19 @@ tasks.named('runFrontierV3PilotServer') {
         def world = frontierV3PilotWorldName
         def seed = frontierV3PilotSeed
         def port = frontierV3PilotPort
+        def rconPort = frontierV3PilotRconPort
+        def rconPassword = frontierV3PilotRconPassword
         def username = frontierV3PilotOperator
         if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
+                || !(rconPort ==~ /[0-9]{2,5}/) || port == rconPort || !(rconPassword ==~ /[0-9a-f-]{36}/)
                 || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
                 || !(frontierV3PilotProfile in frontierV3PilotProfiles)
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
-            throw new GradleException('Frontier v3 pilot world, username, port, view distance, profile or run id is invalid')
+            throw new GradleException('Frontier v3 pilot world, username, port, RCON endpoint, view distance, profile or run id is invalid')
         }
         directory.mkdirs()
         new File(directory, 'eula.txt').text = 'eula=true\n'
-        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=${frontierV3PilotViewDistance}\nsimulation-distance=${frontierV3PilotViewDistance}\n"
+        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nenable-rcon=true\nrcon.port=${rconPort}\nrcon.password=${rconPassword}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=${frontierV3PilotViewDistance}\nsimulation-distance=${frontierV3PilotViewDistance}\n"
         def uuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8))
         new File(directory, 'ops.json').text = '[\n  {"uuid":"' + uuid + '","name":"' + username + '","level":4,"bypassesPlayerLimit":false}\n]\n'
     }

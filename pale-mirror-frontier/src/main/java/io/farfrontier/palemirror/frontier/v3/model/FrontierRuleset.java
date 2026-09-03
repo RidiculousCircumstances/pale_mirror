@@ -206,7 +206,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
 
     /** Exact mobile synaptic command budget; each value is world-balance data. */
     public record HiveCommand(int overseerSubordinateCapacity, int runtSubordinateWeight,
-                              int sentinelSubordinateWeight, int visibleMutationSurcharge) {
+                              int sentinelSubordinateWeight, int visibleMutationSurcharge,
+                              long signalMemoryTicks, long instinctReclaimInterval) {
         public HiveCommand {
             requirePositive(overseerSubordinateCapacity, "overseer subordinate capacity");
             requirePositive(runtSubordinateWeight, "runt subordinate weight");
@@ -214,11 +215,13 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             if (visibleMutationSurcharge < 0) {
                 throw new IllegalArgumentException("visible mutation command surcharge must be non-negative");
             }
+            requirePositive(signalMemoryTicks, "hive signal memory interval");
+            requirePositive(instinctReclaimInterval, "hive instinct reclaim interval");
         }
 
         private String canonicalText() {
             return overseerSubordinateCapacity + "," + runtSubordinateWeight + "," + sentinelSubordinateWeight
-                    + "," + visibleMutationSurcharge;
+                    + "," + visibleMutationSurcharge + "," + signalMemoryTicks + "," + instinctReclaimInterval;
         }
     }
 

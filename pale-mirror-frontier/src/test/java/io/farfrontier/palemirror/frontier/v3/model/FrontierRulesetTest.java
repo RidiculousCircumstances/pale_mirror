@@ -48,7 +48,7 @@ class FrontierRulesetTest {
         FrontierRuleset production = FrontierRulesets.production();
         FrontierRuleset changed = new FrontierRuleset("frontier-v3-test-ruleset-command", production.schemaVersion(), production.cadence(), production.spatial(),
                 production.rates(), production.facilityCapacity(), production.combat(),
-                new FrontierRuleset.HiveCommand(5, 1, 2, 1));
+                new FrontierRuleset.HiveCommand(5, 1, 2, 1, 200L, 100L));
 
         assertNotEquals(production.contentSha256(), changed.contentSha256());
     }

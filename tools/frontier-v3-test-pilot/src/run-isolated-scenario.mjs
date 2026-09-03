@@ -5,6 +5,7 @@ import { createConnection } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, logOffsetAfterMarker, pilotServerPid, pilotServerReady, restartSegments } from './scenario.mjs';
+import { requestRconStop } from './rcon.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -18,10 +19,13 @@ const jfr = jfrCaptureRequest(process.env, project);
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 const runId = randomUUID();
 const port = Number(process.env.FRONTIER_V3_PILOT_PORT ?? 25575);
-if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('FRONTIER_V3_PILOT_PORT must be 1024..65535');
+if (!Number.isInteger(port) || port < 1024 || port >= 65535) throw new Error('FRONTIER_V3_PILOT_PORT must be 1024..65534');
+const rconPort = port + 1;
+const rconPassword = randomUUID();
 // The disposable runner owns this listener exclusively.  Do not let Gradle/Minecraft discover
 // a stale pilot JVM only after it has created a fresh world directory and emitted a crash log.
 if (await portOpen(port)) throw new Error(`disposable v3 pilot port ${port} is already occupied; stop the exact previous pilot server first`);
+if (await portOpen(rconPort)) throw new Error(`disposable v3 pilot RCON port ${rconPort} is already occupied; stop the exact previous pilot server first`);
 const world = `v3-${scenario.id.replace(/[^a-z0-9_-]/g, '-').slice(0, 36)}-${runId.slice(0, 8)}`;
 const output = resolve(project, outputPath);
 const ephemeralScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-scenario.json`);
@@ -84,16 +88,17 @@ async function startServer(reset) {
   const serverRunId = randomUUID();
   const serverArgs = [':pale-mirror-neoforge:runFrontierV3PilotServer', '--no-daemon',
     `-PfrontierV3PilotWorld=${world}`, `-PfrontierV3PilotSeed=${scenario.isolation.seed}`,
-    `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
+    `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotRconPort=${rconPort}`,
+    `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
     `-PfrontierV3PilotReset=${reset}`, `-PfrontierV3PilotRunId=${serverRunId}`,
     `-PfrontierV3PilotProfile=${scenario.server.profile ?? defaultPilotProfile()}`,
     `-PfrontierV3PilotViewDistance=${scenario.server.viewDistance ?? 10}`];
   const child = spawn(gradle, serverArgs, {
-    cwd: project, env: process.env, stdio: ['pipe', 'pipe', 'pipe']
+    cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_RCON_PASSWORD: rconPassword }, stdio: ['pipe', 'pipe', 'pipe']
   });
   let output = '';
   for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { process.stdout.write(chunk); output += chunk; });
-  const session = { child, output: () => output, logOffset: 0, serverRunId, serverPid: undefined };
+  const session = { child, output: () => output, logOffset: 0, serverRunId, serverPid: undefined, rconPort, rconPassword };
   await waitForServer(session, 180_000);
   session.serverPid = pilotServerPid(output, serverRunId);
   if (!Number.isInteger(session.serverPid)) throw new Error('disposable v3 server did not announce its exact JVM identity');
@@ -169,14 +174,11 @@ async function writeScenario(path, value) {
 }
 
 async function stopServerSafely(server, logPath, offset, serverPort) {
-  // Gradle's JavaExec wrapper is not the world owner. Sending a signal to it
-  // can fan out more than one shutdown signal to its child, which leaves
-  // Minecraft re-entering chunk-unload/save work while the runner mistakes the
-  // wrapper's lifecycle for the server's lifecycle. The exact JVM nonce is
-  // therefore the sole graceful-stop target, just as it is for abrupt recovery.
-  // A request is never evidence: only Minecraft's own durable marker below may
-  // authorize a restart or cleanup.
-  requestGracefulStop(server.serverPid);
+  // RCON reaches Minecraft's normal `stop` command.  SIGTERM reaches the JVM
+  // shutdown hook and can interrupt world persistence before its own flush
+  // marker. A request is never evidence: only the marker below authorizes
+  // restart or cleanup.
+  await requestRconStop({ port: server.rconPort, password: server.rconPassword });
   const stopped = await waitForLog(logPath, offset, 'ThreadedAnvilChunkStorage: All dimensions are saved', DURABLE_STOP_TIMEOUT_MS);
   if (!stopped) throw new Error('disposable v3 server did not confirm a flushed world; preserving it for diagnosis');
   // The Gradle wrapper may linger after its dedicated Minecraft child has
@@ -233,11 +235,6 @@ function releaseWrapper(child) {
 function killIfPresent(pid) {
   try { process.kill(pid, 'SIGKILL'); }
   catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not abruptly stop exact disposable process ${pid}: ${failure}`); }
-}
-function requestGracefulStop(pid) {
-  if (!Number.isInteger(pid) || pid <= 1) throw new Error('disposable server did not expose an exact JVM identity');
-  try { process.kill(pid, 'SIGTERM'); }
-  catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not gracefully stop exact disposable JVM ${pid}: ${failure}`); }
 }
 async function logOffsetAfter(path, marker, timeoutMs) {
   const deadline = Date.now() + timeoutMs;

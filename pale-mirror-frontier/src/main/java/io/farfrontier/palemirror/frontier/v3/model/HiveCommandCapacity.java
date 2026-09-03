@@ -38,6 +38,9 @@ public final class HiveCommandCapacity {
             if (overseerId.equals(memberId)) continue;
             Bioform member = bioforms.get(memberId);
             if (member == null) throw new IllegalArgumentException("hive command member is absent: " + memberId.value());
+            // A reclaimed operation retains its original dead controller in the immutable
+            // operation roster as causal history; it is not a subordinate of its reclaimer.
+            if (member.isOverseer()) continue;
             total = Math.addExact(total, subordinateWeight(ruleset, member));
         }
         return total;

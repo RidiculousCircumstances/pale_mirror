@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotDiagnosticActionStep, pilotServerPid, pilotServerReady, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { decodeRconFrames, encodeRconFrame } from '../src/rcon.mjs';
 
 const scenario = {
   schema: 1,
@@ -18,6 +19,14 @@ test('scenario separates setup from evidence-bearing actions', () => {
   assert.doesNotThrow(() => validateScenario(scenario));
   assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/kill @s' }] }), /unsupported actions action/);
   assert.throws(() => validateScenario({ ...scenario, setup: [{ type: 'break', position: { x: 1, y: 2, z: 3 } }] }), /unsupported setup action/);
+});
+
+test('disposable RCON uses bounded little-endian authenticated frames and retains partial TCP data', () => {
+  const auth = encodeRconFrame(71_001, 3, 'one-time-secret');
+  const decoded = decodeRconFrames(Buffer.concat([auth, auth.subarray(0, 5)]));
+  assert.deepEqual(decoded.frames, [{ id: 71_001, type: 3, payload: 'one-time-secret' }]);
+  assert.equal(decoded.tail.length, 5);
+  assert.throws(() => decodeRconFrames(Buffer.from([1, 0, 0, 0, 0])), /invalid RCON frame length/);
 });
 
 test('summary diagnostics need no object identity while object diagnostics do', () => {
