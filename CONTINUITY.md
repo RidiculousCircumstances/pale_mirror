@@ -246,6 +246,15 @@
   (guardrails, check, build/package, 287/287 GameTests) pass. V3-AUD-042 is
   closed; r70 must be replaced by a fresh-world deployment of this correction
   before the live server is again a valid living-world test target.
+- Verified detached commit `c78282d5` is now deployed as fresh disposable
+  `frontier-v3-live-r71` on `25565`; r70 remains only as earlier diagnostic
+  evidence. The installed `pale_mirror-hosted.jar` SHA-512 is
+  `8928ff0fbb735601571a0f79fa6f1218ac1485b2bc5abaf208f06a64ae734b261595ba9032e74eba140ec8b94205121548295968caeb8ee7d7b22506a89269fc`.
+  Preflight proved the clean detached source, Java 22 and absent selected
+  world. The first verifier correctly observed Java before it had opened the
+  port; the following read-only verifier proved live PID `2330086`, port,
+  fresh `Done`, Frontier-v3 startup and no quarantine. This is server-only;
+  no client update is required.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained
