@@ -202,6 +202,15 @@
   conflict; only an attempted advance is rejected. Focused tests cover
   occupied-body, blocked-edge and surveyed-grade cases. It remains unconnected
   until the next atomic `RoutePatrol` schema/process replacement.
+- `PatrolAssemblyCorridor` now compiles the first concrete human ingress from
+  each exact resident's declared home surface through the resident-ingress
+  topology and the semantic Hall route port. The leader's retained assembly
+  crosses the first declared supply edge while the scout ends at the route
+  port, so the subsequent `PatrolTravel` can begin as a one-cell column rather
+  than co-locating or relocating the unit. It rejects a blocked first edge and
+  has no nearest-road query, loaded-world lookup or cargo semantics. Focused
+  pure corridor/assembly/travel tests pass; it is still unconnected pending
+  the one atomic fresh-schema `RoutePatrol` state/process cutover.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained
