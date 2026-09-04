@@ -372,6 +372,21 @@
   invalid completed-work/HOT-lease intermediate state. Focused pure normal and
   recovery tests pass, as does the existing 55/55 Scene regression slice;
   dedicated service GameTest/native/restart evidence remains required for M2.
+- MAT-003 decontamination M2 is closed on fresh schema-125/envelope-40 worlds:
+  the exact `MEDICAL WORKER` runs the two retained corridors, exact source
+  transfer, 80-tick work stage and endpoint effect under one HOT service lease.
+  An accepted edge atomically writes the service cursor, exact lease recovery
+  body and sole canonical `ActorLocation`; post-restart input/effect validation
+  therefore cannot consume from a stale worker position. Recovery may reconcile
+  only the observed immediate next retained surface, otherwise it returns within
+  the bounded current cell or conflicts—never rebases or chooses a path. Focused
+  normal/forgery/one-edge/restart tests and the 56/56 Scene slice pass. Native
+  disposable scenario `disposable_service_decontamination_restart` proves an
+  active named medic before graceful restart (`109f8a50-5a47-4090-8ad9-75685310745b`),
+  then one exact post-restart `CONFIRMED` receipt with the reagent gone and the
+  same service work closed (`18840c72-2979-402e-8e83-58ccdee13b2f`). Its clean
+  player-height frame proves body identity but not player readability: the medic
+  is still lost among graybox residents, so MAT-003 M3 remains explicitly open.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

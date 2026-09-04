@@ -28,17 +28,43 @@ final class FrontierV3SettlementServiceDecontaminationExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
-                .filter(intent -> SettlementServiceDecontaminationStateSupport.owns(state, intent))
-                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
-                        || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).findFirst()
+        FrontierV3PhysicalIntentScheduling.firstActionable(pendingIntents(state), intent -> readiness(level, state, intent))
                 .ifPresent(intent -> execute(level, runtime, state, intent));
+    }
+
+    static List<PhysicalIntent> pendingIntents(FrontierWorldState state) {
+        return state.physicalIntents().values().stream().filter(intent -> SettlementServiceDecontaminationStateSupport.owns(state, intent))
+                .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
+                        || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).toList();
+    }
+
+    static FrontierV3PhysicalIntentScheduling.Readiness readiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        FrontierV3PhysicalIntentScheduling.Readiness canonical = canonicalReadiness(state, intent);
+        if (canonical != FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE) return canonical;
+        Target target = target(level, state, intent);
+        if (target == null || target.markers().stream().anyMatch(position -> !level.hasChunkAt(position))) {
+            return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+        }
+        return FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+    }
+
+    static FrontierV3PhysicalIntentScheduling.Readiness canonicalReadiness(FrontierWorldState state, PhysicalIntent intent) {
+        return switch (SettlementServiceDecontaminationStateSupport.executionEligibility(state, intent)) {
+            case INVALID -> FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+            case DEFERRED -> FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+            case READY -> FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+        };
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(level, state, intent);
-        if (target == null) { unknown(runtime, intent.id(), "canonical-conflict"); return; }
+        if (target == null) {
+            // UNKNOWN is retained for later postcondition inspection; it is not an idempotent
+            // transition that an executor may submit again every tick.
+            if (intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) unknown(runtime, intent.id(), "canonical-conflict");
+            return;
+        }
         if (target.markers().stream().anyMatch(position -> !level.hasChunkAt(position))) return;
         if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(level, runtime, intent, target); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectRunning(level, runtime, intent, target); return; }

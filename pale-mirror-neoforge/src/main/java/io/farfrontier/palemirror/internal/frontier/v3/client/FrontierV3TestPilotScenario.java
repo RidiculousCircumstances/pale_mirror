@@ -265,7 +265,8 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("scene") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("productionCurrent") || diagnosticField.equals("productionNext") || diagnosticField.equals("productionNextBody")
-                || diagnosticField.equals("productionFutureBody")));
+                || diagnosticField.equals("productionFutureBody")))
+                || (view.equals("scene") && requiredId(reference, "id", "service:") && diagnosticField.equals("serviceCurrent"));
     }
 
     /** A production route's exact unoccupied future body may be used as a dynamic placement target. */

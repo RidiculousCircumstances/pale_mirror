@@ -110,17 +110,6 @@ final class FrontierV3SceneExecutor {
 
     enum BodyMaterialization { COMPLETE, DEFERRED, CONFLICT }
 
-    /** Read-only materialization preflight; never creates, moves, claims or loads a body. */
-    /**
-     * Bounded read-only loaded-world preflight. Member positions make a paused PREPARED scene
-     * diagnosable without granting the diagnostic any movement or materialization authority.
-     */
-    record Readiness(String bodies, String carrier, List<String> members) {
-        Readiness {
-            members = List.copyOf(members);
-        }
-    }
-
     private FrontierV3SceneExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -420,58 +409,6 @@ final class FrontierV3SceneExecutor {
             }
         }
         return BodyMaterialization.COMPLETE;
-    }
-
-    static Optional<Readiness> readiness(ServerLevel level, FrontierWorldState state, SubjectId sceneSubject) {
-        SceneLease lease = currentLease(state, sceneSubject).orElse(null);
-        if (lease == null) return Optional.empty();
-        String carrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)
-                ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name() : "NOT_APPLICABLE";
-        return Optional.of(new Readiness(bodyReadiness(level, state, lease), carrier, observedMembers(level, lease)));
-    }
-
-    /**
-     * A scene is addressable either through its engagement or through its route operation.  A
-     * terminal historical lease must never hide the current continuation from diagnostics.
-     */
-    static Optional<SceneLease> currentLease(FrontierWorldState state, SubjectId sceneSubject) {
-        return state.sceneLeases().values().stream()
-                .filter(lease -> FrontierSceneBehaviors.owns(lease, sceneSubject))
-                .max(Comparator.comparingInt((SceneLease lease) -> lease.status() == SceneLeaseStatus.CLOSED ? 0 : 1)
-                        .thenComparing(SceneLease::handoffInstant)
-                        .thenComparingLong(SceneLease::revision)
-                        .thenComparing(SceneLease::id));
-    }
-
-    private static String bodyReadiness(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        // A CLOSED lease is retained canonical history, not a claimant over its former Minecraft
-        // bodies.  Its tags can still be present for a tick while the normal cleanup/ambient
-        // hand-off runs; treating that expected release window as a UUID conflict made the
-        // read-only diagnostic falsely imply duplicate actor ownership.
-        if (lease.status() == SceneLeaseStatus.CLOSED) return "CLOSED";
-        boolean allCurrent = true;
-        for (int index = 0; index < lease.members().size(); index++) {
-            SceneMember member = lease.members().get(index); Entity existing = level.getEntity(member.entityId());
-            if (existing != null) {
-                if (owned(existing, state, lease, member)) continue;
-                return "UUID_CONFLICT";
-            }
-            allCurrent = false;
-            if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
-            BodyPosition canonical = lease.memberPosition(member.actorId());
-            BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
-            if (!level.hasChunkAt(candidate)) return "UNLOADED";
-            if (FrontierV3StandingPosition.aboveExactFloor(level, candidate) == null) return "AWAITING_EXACT_FLOOR";
-        }
-        return allCurrent ? "CURRENT" : "READY";
-    }
-
-    private static List<String> observedMembers(ServerLevel level, SceneLease lease) {
-        return lease.members().stream().map(member -> {
-            Entity entity = level.getEntity(member.entityId());
-            if (entity == null) return member.actorId().value() + "@absent";
-            return member.actorId().value() + "@" + entity.getBlockX() + "," + entity.getBlockY() + "," + entity.getBlockZ();
-        }).toList();
     }
 
     /**
@@ -929,10 +866,7 @@ final class FrontierV3SceneExecutor {
         // deliberately cargo-free, so conflict reporting must consult the typed registry before
         // asking the logistics-only carrier executor to decode a cause.  The diagnostic remains
         // complete without inventing a synthetic logistics binding for other scene families.
-        String carrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease)
-                ? FrontierV3CargoCarrierExecutor.readiness(level, state, lease).name()
-                : "NOT_APPLICABLE";
-        Readiness readiness = new Readiness(bodyReadiness(level, state, lease), carrier, observedMembers(level, lease));
+        FrontierV3SceneReadiness.Value readiness = FrontierV3SceneReadiness.forLease(level, state, lease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_conflict:" + cause + ":" + readiness.bodies() + ":" + readiness.carrier(), lease,
                 submit(runtime, "scene-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
     }

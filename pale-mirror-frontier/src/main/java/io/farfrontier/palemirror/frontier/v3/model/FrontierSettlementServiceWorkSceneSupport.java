@@ -78,7 +78,13 @@ public final class FrontierSettlementServiceWorkSceneSupport {
         works.put(replacement.id(), replacement);
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
         leases.put(leaseId, lease.withMemberPositions(Map.of(current.workerId(), observedWorker)));
-        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).sceneLeases(leases));
+        // The retained HOT body checkpoint is not a second position authority.  The exact
+        // observed edge commits the service cursor, the lease recovery anchor and the actor's
+        // canonical body together; later custody/effect validation reads that one actor body.
+        Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(current.workerId(), actors.get(current.workerId()).withBody(observedWorker));
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .actorLocations(actors).serviceWorks(works).sceneLeases(leases));
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {

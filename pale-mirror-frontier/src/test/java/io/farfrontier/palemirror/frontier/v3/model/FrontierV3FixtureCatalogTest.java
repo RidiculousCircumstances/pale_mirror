@@ -2,11 +2,15 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveMobilizationProcess;
 import org.junit.jupiter.api.Test;
@@ -23,7 +27,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(26, profiles.size());
+        assertEquals(27, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -67,6 +71,77 @@ class FrontierV3FixtureCatalogTest {
         assertEquals("minecraft:honey_bottle", remedy.itemKind());
         assertTrue(state.humanPopulation().medicalOperations().isEmpty(), "the fixture must not fabricate an active treatment before its actual depot exists");
         assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.objective.review") && action.dueAt().ticks() == 1_000L));
+    }
+
+    @Test
+    void serviceDecontaminationFixtureStartsBeforeItsDepotLeaseAndEffectExist() {
+        var configuration = FrontierV3FixtureCatalog.serviceDecontaminationConfiguration(new WorldId("frontier:service-decontamination-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState(); SubjectId depot = new SubjectId("container:9-depot");
+        ExactItemStack reagent = state.inventory().items().get(new SubjectId("item:development-service-decontamination-reagent"));
+
+        assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(depot).status());
+        assertEquals("minecraft:glowstone_dust", reagent.itemKind());
+        assertTrue(state.serviceWorks().isEmpty() && state.sceneLeases().isEmpty() && state.physicalIntents().isEmpty(),
+                "the fixture may retain an ordinary strategic precondition, never a hidden worker, effect or receipt");
+        assertEquals(1, state.strategicPlans().tasks().size());
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.kind().equals("frontier.decontamination.scan") && action.dueAt().ticks() == 1_000L));
+    }
+
+    @Test
+    void serviceDecontaminationAdmissionRemainsCanonicalWhenItsOrdinaryDepotIsActive() {
+        WorldId world = new WorldId("frontier:service-decontamination-admission");
+        var base = FrontierV3FixtureCatalog.serviceDecontaminationConfiguration(world, 41L);
+        SubjectId depot = new SubjectId("container:9-depot");
+        FrontierWorldState materialized = base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        var configuration = new FrontierEngineConfiguration<>(base.worldId(), materialized, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(configuration);
+
+        var result = engine.advanceTo(new SimInstant(1_000L), new WorkBudget(64, 256));
+
+        assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("service admission quarantined"));
+        FrontierWorldState admitted = engine.canonicalState().state();
+        assertEquals(1, admitted.serviceWorks().size());
+        assertEquals(2, admitted.physicalIntents().size());
+        var inputIssue = admitted.physicalIntents().values().stream()
+                .filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE)
+                .findFirst().orElseThrow();
+        assertEquals(SettlementServiceInputIssueStateSupport.ExecutionEligibility.DEFERRED,
+                SettlementServiceInputIssueStateSupport.executionEligibility(admitted, inputIssue),
+                "the exact reagent remains reserved while its medic traverses to the source station; it is not a conflict");
+        var endpoint = admitted.physicalIntents().values().stream()
+                .filter(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION)
+                .findFirst().orElseThrow();
+        assertEquals(SettlementServiceDecontaminationStateSupport.ExecutionEligibility.DEFERRED,
+                SettlementServiceDecontaminationStateSupport.executionEligibility(admitted, endpoint),
+                "the endpoint is durably reserved but must wait for the same medic's retained work progress");
+    }
+
+    @Test
+    void admittedServiceWorkCorridorsNeverPlaceTheMedicBodyInsideCompiledGrayboxGeometry() {
+        WorldId world = new WorldId("frontier:service-decontamination-geometry");
+        var base = FrontierV3FixtureCatalog.serviceDecontaminationConfiguration(world, 41L);
+        SubjectId depot = new SubjectId("container:9-depot");
+        FrontierWorldState materialized = base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        var configuration = new FrontierEngineConfiguration<>(base.worldId(), materialized, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(configuration);
+
+        assertEquals(EngineStatus.Kind.ACTIVE, engine.advanceTo(new SimInstant(1_000L), new WorkBudget(64, 256)).status().kind());
+        SettlementServiceWork work = engine.canonicalState().state().serviceWorks().values().iterator().next();
+        var geometry = FrontierGrayboxPlan.compile(engine.canonicalState().state()).cells();
+
+        java.util.stream.Stream.concat(work.inputTraversal().linearCorridorSurfaces().stream(), work.workTraversal().linearCorridorSurfaces().stream())
+                .forEach(surface -> {
+                    assertTrue(!geometry.containsKey(surface.support().offset(0, 1, 0)),
+                            () -> "service corridor body feet collide with planned geometry at " + surface);
+                    assertTrue(!geometry.containsKey(surface.support().offset(0, 2, 0)),
+                            () -> "service corridor body head collides with planned geometry at " + surface);
+                });
     }
 
     @Test

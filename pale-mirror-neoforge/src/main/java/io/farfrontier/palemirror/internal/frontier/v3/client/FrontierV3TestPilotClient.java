@@ -407,7 +407,9 @@ public final class FrontierV3TestPilotClient {
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
         }).stream().findFirst().isPresent();
         if (visible) { advance("assert_visible_entity"); return; }
-        timeout(minecraft, action, "camera never saw local entity " + expectedType + " named " + expectedName);
+        timeout(minecraft, action, "camera never saw local entity " + expectedType + " named " + expectedName
+                + "; candidates=" + localEntityEvidence(minecraft, expectedType, expectedName, maxDistance)
+                + "; view=" + Math.round(view.x * 100.0D) + "," + Math.round(view.y * 100.0D) + "," + Math.round(view.z * 100.0D));
     }
 
     /** Rotates only the local test camera towards one locally rendered named body. */
@@ -417,6 +419,7 @@ public final class FrontierV3TestPilotClient {
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         Entity target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
                         !entity.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
+                                && (entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
                                 && entity.getCustomName() != null && entity.getCustomName().getString().contains(expectedName)
                                 && minecraft.player.hasLineOfSight(entity))
                 .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
@@ -426,7 +429,10 @@ public final class FrontierV3TestPilotClient {
                     + "; candidates=" + localEntityEvidence(minecraft, expectedType, expectedName, maximum));
             return;
         }
-        minecraft.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+        // Use the same direct local rotation primitive as the coordinate camera actions.  The
+        // inherited Entity#lookAt path is authoritative for server entities but does not
+        // consistently update the client render view between consecutive pilot actions.
+        look(minecraft, target.getEyePosition());
         advance("look_nearest_entity");
     }
 
@@ -694,8 +700,13 @@ public final class FrontierV3TestPilotClient {
     }
 
     private static void look(Minecraft minecraft, BlockPos target) {
+        look(minecraft, Vec3.atCenterOf(target));
+    }
+
+    /** Updates the local render camera only; no target UUID or server selection is involved. */
+    private static void look(Minecraft minecraft, Vec3 target) {
         Vec3 eye = minecraft.player.getEyePosition();
-        Vec3 delta = Vec3.atCenterOf(target).subtract(eye);
+        Vec3 delta = target.subtract(eye);
         minecraft.player.setYRot((float) (Mth.atan2(-delta.x, delta.z) * Mth.RAD_TO_DEG));
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
     }

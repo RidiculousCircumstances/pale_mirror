@@ -68,7 +68,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                 || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
                 || !at(body, lease.memberPosition(member.actorId()).supportingSurface())) return;
-        SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+        SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), FrontierV3SurfaceObservation.observedAt(body, lease.memberPosition(member.actorId()).supportingSurface()),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
         SceneLease captured = lease.withMemberPositions(Map.of(member.actorId(), capture.body())).withAmbientHandoff(Set.of(member.actorId()));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "production_work_handoff", captured,
@@ -97,20 +97,20 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (!at(worker, current)) {
             if (job.traversalCursor() < route.size() - 1 && at(worker, route.get(job.traversalCursor() + 1))) {
                 submit(runtime, "production-work-traversal", lease.id().value(),
-                        new ProductionWorkTraversalAdvanced(job.id(), lease.id(), observed(worker), job.traversalCursor() + 1));
-            } else conflict(level, runtime, lease, "cursor-body-mismatch");
+                        new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1));
+            } else if (!reacquireRetainedSurface(level, worker, current)) conflict(level, runtime, lease, "cursor-body-mismatch");
             return;
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
             worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-            submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), observed(worker), ProductionWorkProgress.inputReady()));
+            submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), ProductionWorkProgress.inputReady()));
             return;
         }
         if (job.traversalCursor() < route.size() - 1) {
             SurfaceAnchor next = route.get(job.traversalCursor() + 1);
-            if (at(worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), observed(worker), job.traversalCursor() + 1));
+            if (at(worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
             else if (!clearNextBody(level, worker, next)) submit(runtime, "production-work-route-blocked", lease.id().value(),
-                    new ProductionWorkTraversalBlocked(job.id(), lease.id(), observed(worker), job.traversalCursor() + 1));
+                    new ProductionWorkTraversalBlocked(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), job.traversalCursor() + 1));
             else FrontierV3ControlledMobMotion.moveToward(level, worker, point(next));
             return;
         }
@@ -122,17 +122,25 @@ final class FrontierV3ProductionWorkSceneExecutor {
             case OUTPUT_READY -> throw new IllegalStateException("terminal work may not continue");
         };
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-        submit(runtime, "production-work-progress", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), observed(worker), next));
+        submit(runtime, "production-work-progress", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next));
     }
-    private static boolean at(Mob worker, SurfaceAnchor surface) {
-        return worker.getBlockX() == surface.x() && worker.getBlockY() == surface.y() + 1 && worker.getBlockZ() == surface.z()
-                && worker.distanceToSqr(point(surface)) <= READY_DISTANCE_SQUARED;
-    }
-    private static BodyPosition observed(Mob worker) { return new BodyPosition(worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()); }
-    private static Vec3 point(SurfaceAnchor surface) { return new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D); }
+    private static boolean at(Mob worker, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(worker, surface); }
+    private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
     /** Tests the exact retained target body against loaded physical collision without choosing an alternate edge. */
     static boolean clearNextBody(ServerLevel level, Mob worker, SurfaceAnchor surface) {
         return level.noCollision(worker, worker.getBoundingBox().move(point(surface).subtract(worker.position())));
+    }
+
+    /**
+     * Minecraft may push a body one local cell between observations.  This does not advance or
+     * rewrite the immutable canonical cursor: it merely lets the same exact body walk back to
+     * that retained surface.  A farther displacement or an occupied target remains a visible
+     * scene conflict, never a hidden route repair.
+     */
+    static boolean reacquireRetainedSurface(ServerLevel level, Mob worker, SurfaceAnchor surface) {
+        if (!FrontierV3SurfaceObservation.mayReacquire(worker, surface) || !clearNextBody(level, worker, surface)) return false;
+        FrontierV3ControlledMobMotion.moveToward(level, worker, point(surface));
+        return true;
     }
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) { submit(runtime, "production-work-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)); }
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {

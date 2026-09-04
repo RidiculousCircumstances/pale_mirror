@@ -11,6 +11,9 @@ import java.util.Map;
 
 /** Exact custody owner for a depot-to-retained-service-worker hand-off. */
 public final class SettlementServiceInputIssueStateSupport {
+    /** Domain-owned distinction between an invalid request and one waiting for its retained route. */
+    public enum ExecutionEligibility { INVALID, DEFERRED, READY }
+
     private SettlementServiceInputIssueStateSupport() { }
 
     public static boolean owns(PhysicalIntent intent) {
@@ -34,6 +37,29 @@ public final class SettlementServiceInputIssueStateSupport {
                 || item == null || !item.custody().equals(work.inputSource()) || surface == null
                 || surface.status() != ContainerSurfaceStatus.ACTIVE) {
             throw new IllegalArgumentException("service input issue has lost its worker, source station or exact source stack");
+        }
+    }
+
+    /**
+     * Establishes whether the retained physical hand-off may be considered by a Minecraft
+     * executor.  A service work atomically reserves its input intent before the worker has
+     * traversed to the source station; that normal earlier phase is a deferral, never a
+     * canonical conflict.
+     */
+    public static ExecutionEligibility executionEligibility(FrontierWorldState state, PhysicalIntent intent) {
+        if (!owns(intent) || intent.subjectIds().size() != 3) return ExecutionEligibility.INVALID;
+        SubjectId workId = intent.subjectIds().getFirst();
+        SettlementServiceWork work = state.serviceWorks().get(workId);
+        if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
+                || !intent.subjectIds().equals(java.util.List.of(workId, work.workerId(), work.inputItemId()))) {
+            return ExecutionEligibility.INVALID;
+        }
+        if (work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return ExecutionEligibility.DEFERRED;
+        try {
+            validateIntent(state, intent);
+            return ExecutionEligibility.READY;
+        } catch (IllegalArgumentException invalid) {
+            return ExecutionEligibility.INVALID;
         }
     }
 

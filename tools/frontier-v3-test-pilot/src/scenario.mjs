@@ -306,7 +306,8 @@ function validResolvablePosition(value) {
     && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
-        && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field)));
+        && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))
+      || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent'));
 }
 
 function validPlacePosition(value) {

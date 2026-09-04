@@ -118,14 +118,24 @@ class SettlementServiceWorkProcessTest {
                 List.of(new SceneMember(work.workerId(), SceneLease.deterministicEntityId(bootstrap.worldId(), work.workerId()))),
                 java.util.Map.of(work.workerId(), start.standingBody()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = admitted.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        FrontierWorldState afterRestart = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(
+                hot.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART)));
+        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, afterRestart.sceneLeases().get(lease.id()).status());
+        assertEquals(SettlementServiceWorkPhase.PREPARED, afterRestart.serviceWorks().get(work.id()).phase(),
+                "lost body custody before an input/effect must retain the exact unfinished service stage");
+        assertEquals(0, afterRestart.serviceWorks().get(work.id()).inputTraversalCursor(),
+                "restart uncertainty must not discard the durable traversal cursor");
+        FrontierWorldState reclaimed = afterRestart.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         SurfaceAnchor next = work.inputTraversal().linearCorridorSurfaces().get(1);
         SettlementServiceWorkTraversalAdvanced advance = new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 1);
 
-        FrontierWorldState advanced = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(hot, settlement.id(), advance);
+        FrontierWorldState advanced = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(), advance);
 
         assertEquals(1, advanced.serviceWorks().get(work.id()).inputTraversalCursor());
         assertEquals(next.standingBody(), advanced.sceneLeases().get(lease.id()).memberPosition(work.workerId()));
-        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(hot, settlement.id(),
+        assertEquals(next.standingBody(), advanced.actorLocations().get(work.workerId()).body(),
+                "the observed HOT cursor is also the sole canonical worker position for the later exact hand-off");
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(reclaimed, settlement.id(),
                 new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 2)),
                 "an observed arrival may not skip a retained edge");
     }

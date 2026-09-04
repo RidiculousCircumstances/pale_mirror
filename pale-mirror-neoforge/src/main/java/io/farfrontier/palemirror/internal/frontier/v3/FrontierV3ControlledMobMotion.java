@@ -84,7 +84,22 @@ final class FrontierV3ControlledMobMotion {
 
     static void stop(Mob actor) {
         PENDING.remove(actor);
+        // The prior authority may already have submitted a collision move or left an ordinary
+        // Minecraft velocity on the body.  Cancelling only our queued intent lets that residual
+        // velocity carry a newly leased worker across its retained support between the durable
+        // hand-off and the next scene tick.  Stopping is the authority-transfer boundary: it
+        // freezes motion, but never rewrites the observed physical position or canonical cursor.
+        actor.setDeltaMovement(Vec3.ZERO);
         actor.stopInPlace();
+    }
+
+    /**
+     * Bounded read-only inspection for a HOT-scene diagnostic.  It exposes only whether this
+     * actuator still owns a one-tick intent and never supplies a destination to any caller.
+     */
+    static String readiness(Mob actor) {
+        MotionIntent intent = PENDING.get(actor);
+        return intent == null ? "IDLE" : "PENDING_AT_" + intent.applyAtGameTime();
     }
 
     private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous) {
@@ -107,11 +122,12 @@ final class FrontierV3ControlledMobMotion {
         Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
         // A retained operation/assembly edge has one persisted next support. Letting the
         // physical actuator try a side-step or a lifted alternate here would make a blocked
-        // canonical edge look successful without any topology command. Free local ambience is
-        // deliberately different: it may use those presentation-only alternatives because it
-        // owns no retained route cursor.
-        List<Vec3> candidates = continuous ? List.of(direct, new Vec3(-direct.z, vertical, direct.x),
-                new Vec3(direct.z, vertical, -direct.x)) : List.of(direct);
+        // canonical edge look successful without any topology command. The same is true for
+        // ambient presentation: it owns no route cursor, but it still owns one retained
+        // support column for a later exact scene hand-off. A collision-driven lateral fallback
+        // can leave that column even when its visual target is clamped locally. Presentation
+        // may therefore pause at an obstruction; it never sidesteps around it.
+        List<Vec3> candidates = motionCandidates(direct, continuous);
         for (Vec3 step : candidates) {
             Vec3 before = actor.position();
             actor.move(MoverType.SELF, step);
@@ -137,6 +153,16 @@ final class FrontierV3ControlledMobMotion {
             actor.hasImpulse = true;
             return;
         }
+    }
+
+    /**
+     * A single exact vector is deliberate for both retained travel and local ambience.  The
+     * boolean remains part of the intent because it controls arrival behaviour, not permission
+     * to choose an alternate spatial edge.
+     */
+    static List<Vec3> motionCandidates(Vec3 direct, boolean continuous) {
+        if (direct == null) throw new IllegalArgumentException("motion direct vector is required");
+        return List.of(direct);
     }
 
     /**

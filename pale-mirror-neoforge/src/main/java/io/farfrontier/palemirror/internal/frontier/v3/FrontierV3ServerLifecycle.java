@@ -133,10 +133,10 @@ public final class FrontierV3ServerLifecycle {
                 // The immutable canonical formatter remains the source of the not-found response.
             }
         }
-        java.util.Optional<FrontierV3SceneExecutor.Readiness> sceneReadiness = java.util.Optional.empty();
+        java.util.Optional<FrontierV3SceneReadiness.Value> sceneReadiness = java.util.Optional.empty();
         if ("scene".equals(view)) {
             try {
-                sceneReadiness = FrontierV3SceneExecutor.readiness(FrontierV3PhysicalWorld.require(server), state,
+                sceneReadiness = FrontierV3SceneReadiness.forSubject(FrontierV3PhysicalWorld.require(server), state,
                         new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
             } catch (IllegalArgumentException ignored) {
                 // The immutable canonical formatter remains the source of the not-found response.

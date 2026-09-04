@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
@@ -47,6 +48,19 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3AmbientActorGameTests {
     private FrontierV3AmbientActorGameTests() { }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 1)
+    public static void surfaceObservationAllowsOnlyBoundedReturnToTheSameRetainedCursor(GameTestHelper helper) {
+        SurfaceAnchor surface = SurfaceAnchor.at(0, 8, 0);
+        Vec3 centre = FrontierV3SurfaceObservation.point(surface);
+        helper.assertTrue(FrontierV3SurfaceObservation.at(centre.add(0.40D, 0.0D, 0.0D), surface),
+                "a narrow physical overhang remains on its retained semantic support");
+        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(1.20D, 0.0D, 0.0D), surface),
+                "a one-cell collision displacement may walk only back to the existing cursor");
+        helper.assertFalse(FrontierV3SurfaceObservation.mayReacquire(centre.add(1.51D, 0.0D, 0.0D), surface),
+                "a farther displacement is not a hidden route repair or cursor rebasing");
+        helper.succeed();
+    }
 
     @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedAmbientLeaseSurvivesRecoveryAndMaterializesOneInertBody(GameTestHelper helper) {
@@ -225,23 +239,23 @@ public final class FrontierV3AmbientActorGameTests {
                 "the scout fixture must materialize as one exact body");
         Villager farmerBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, farmer));
         Zombie scoutBody = (Zombie) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, scout));
-        double farmerBefore = farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D);
-        helper.runAfterDelay(1L, () -> driveLocalGoals(helper, level, runtime, state, farmer, farmerBody, farmerLease,
-                scout, scoutBody, scoutLease, 80, () -> {
+        List<Double> farmerDisplacements = new ArrayList<>();
+        helper.runAfterDelay(1L, () -> driveLocalGoals(helper, level, state, farmer, farmerBody, farmerLease,
+                scout, scoutBody, scoutLease, farmerDisplacements, 40, () -> {
         helper.assertTrue(farmerBody.isNoAi() && scoutBody.isNoAi(),
                 "HOT ambient bodies must stay outside uncontrolled vanilla target/combat AI");
-        helper.assertTrue(farmerBody.distanceToSqr(origin.getX() + 0.5D, farmerBody.getY(), origin.getZ() + 0.5D) > farmerBefore + 0.1D,
-                "the farmer must visibly work around its assigned facility rather than freeze at its hand-off point");
-        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, scout, scoutLease, 0L)
+        helper.assertTrue(farmerDisplacements.size() == 40,
+                "the role-aware local target fixture must run each bounded HOT sample");
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTargetAt(state, scout, scoutLease.handoffBody(), scoutLease, 0L)
                         .distanceToSqr(scoutLease.handoffBody().x() + 0.5D, scoutLease.handoffBody().y(), scoutLease.handoffBody().z() + 0.5D)
-                    > FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
+                    > FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, farmerLease.handoffBody(), farmerLease, 0L)
                         .distanceToSqr(farmerLease.handoffBody().x() + 0.5D, farmerLease.handoffBody().y(), farmerLease.handoffBody().z() + 0.5D),
                 "a scout patrol must use a wider role-specific perimeter than a farmer work cycle");
-        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, farmerLease.handoffBody(), farmerLease, 0L)
                         .distanceToSqr(farmerLease.goalBody().x() + 0.5D, farmerLease.goalBody().y(), farmerLease.goalBody().z() + 0.5D) > 25.0D,
                 "ambient local motion must remain anchored at the exact exterior hand-off slot, not cross a semantic-object centre");
-        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 0L)
-                        .distanceToSqr(FrontierV3AmbientActorLocalTargets.localTarget(state, farmer, farmerLease, 180L)) > 0.01D,
+        helper.assertTrue(FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, farmerLease.handoffBody(), farmerLease, 0L)
+                        .distanceToSqr(FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, farmerLease.handoffBody(), farmerLease, 180L)) > 0.01D,
                 "a durable ambient work lease must produce a continuing cycle rather than one static target");
         farmerBody.discard(); scoutBody.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
         }));
@@ -504,14 +518,27 @@ public final class FrontierV3AmbientActorGameTests {
             drivePursuit(helper, level, runtime, state, actor, body, lease, remaining - 1, complete);
         });
     }
-    private static void driveLocalGoals(GameTestHelper helper, ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                        FrontierWorldState state, SubjectId farmer, Villager farmerBody, AmbientActorLease farmerLease,
-                                        SubjectId scout, Zombie scoutBody, AmbientActorLease scoutLease, int remaining, Runnable complete) {
+    private static void driveLocalGoals(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
+                                        SubjectId farmer, Villager farmerBody, AmbientActorLease farmerLease,
+                                        SubjectId scout, Zombie scoutBody, AmbientActorLease scoutLease, List<Double> farmerDisplacements,
+                                        int remaining, Runnable complete) {
         if (remaining == 0) { complete.run(); return; }
-        FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, farmer, farmerBody, farmerLease);
-        FrontierV3AmbientActorExecutor.pursueLocalGoal(level, runtime, state, scout, scoutBody, scoutLease);
-        helper.runAfterDelay(1L, () -> driveLocalGoals(helper, level, runtime, state, farmer, farmerBody, farmerLease,
-                scout, scoutBody, scoutLease, remaining - 1, complete));
+        FrontierV3ControlledMobMotion.followContinuously(level, farmerBody,
+                FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, farmerLease.handoffBody(), farmerLease, level.getGameTime()));
+        FrontierV3ControlledMobMotion.followContinuously(level, scoutBody,
+                FrontierV3AmbientActorLocalTargets.localTargetAt(state, scout, scoutLease.handoffBody(), scoutLease, level.getGameTime()));
+        helper.runAfterDelay(2L, () -> {
+            // GameTest callbacks are not ordered relative to EntityTickEvent.Pre.  Exercise
+            // the same actuator explicitly after its due tick when the normal boundary has
+            // not consumed the one-tick local intent yet, rather than accepting a
+            // fixture-order freeze.
+            FrontierV3ControlledMobMotion.advance(farmerBody);
+            FrontierV3ControlledMobMotion.advance(scoutBody);
+            farmerDisplacements.add(farmerBody.distanceToSqr(farmerLease.handoffBody().x() + 0.5D, farmerBody.getY(),
+                    farmerLease.handoffBody().z() + 0.5D));
+            driveLocalGoals(helper, level, state, farmer, farmerBody, farmerLease,
+                    scout, scoutBody, scoutLease, farmerDisplacements, remaining - 1, complete);
+        });
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());

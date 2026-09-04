@@ -782,7 +782,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         boolean allowed = current.status() == PhysicalIntentStatus.PREPARED && (nextStatus == PhysicalIntentStatus.RUNNING || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                 || current.status() == PhysicalIntentStatus.RUNNING && (nextStatus == PhysicalIntentStatus.CONFIRMED || nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                 || current.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && nextStatus == PhysicalIntentStatus.CONFIRMED;
-        if (!allowed) throw new IllegalArgumentException("physical intent transition is not allowed");
+        if (!allowed) throw new IllegalArgumentException("physical intent transition is not allowed: " + current.id().value() + " kind=" + current.kind() + " " + current.status() + "->" + nextStatus);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         if (nextStatus != PhysicalIntentStatus.CONFIRMED) {
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.empty()));

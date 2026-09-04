@@ -244,7 +244,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
                 completed.add(commit(CauseChain.root(cause), action.dueAt(), events, Optional.empty()));
             } catch (RuntimeException error) {
-                status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
+                status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(
+                        new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error)));
                 return advanceResult(completed, Optional.of(action));
             }
         }
@@ -346,8 +347,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             if (event.payload() instanceof ScheduleEffect effect) {
                 ScheduleEffectApplier.apply(nextSchedules, effect);
             } else {
-                try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.REDUCTION, event.payload().type(), event.subject().value())) {
-                    nextState = Objects.requireNonNull(reducer.apply(nextState, event), "reducer state");
+                try {
+                    try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.REDUCTION, event.payload().type(), event.subject().value())) {
+                        nextState = Objects.requireNonNull(reducer.apply(nextState, event), "reducer state");
+                    }
+                } catch (RuntimeException error) {
+                    throw new IllegalStateException("reducer failed for " + event.payload().type() + " at " + event.id().value(), error);
                 }
             }
             events.add(event);
@@ -433,6 +438,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private static String boundedFailure(RuntimeException error) {
         String detail = error.getClass().getSimpleName() + ": " + Objects.toString(error.getMessage(), "no detail");
+        Throwable cause = error.getCause();
+        if (cause != null && cause != error) {
+            detail += " <- " + cause.getClass().getSimpleName() + ": " + Objects.toString(cause.getMessage(), "no detail");
+        }
         return detail.length() <= 240 ? detail : detail.substring(0, 240);
     }
 }

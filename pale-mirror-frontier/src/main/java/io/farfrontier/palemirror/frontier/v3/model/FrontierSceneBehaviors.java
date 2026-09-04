@@ -597,7 +597,11 @@ public final class FrontierSceneBehaviors {
                         || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
                 case DRAINING -> work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.COMPLETED
                         || work.phase() == SettlementServiceWorkPhase.BLOCKED;
-                case UNKNOWN_AFTER_RESTART -> work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
+                // Losing custody of a HOT body at server stop is not evidence that an
+                // unstarted input/work/effect changed.  Preserve its retained cursor and
+                // stage while the lease is UNKNOWN; a physical-intent inspector separately
+                // moves the work itself to UNKNOWN_AFTER_RESTART if an effect was in flight.
+                case UNKNOWN_AFTER_RESTART -> work.phase().active();
                 case CONFLICT -> work.phase().active();
                 case CLOSED -> work.phase() == SettlementServiceWorkPhase.COMPLETED || work.phase() == SettlementServiceWorkPhase.BLOCKED
                         || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;

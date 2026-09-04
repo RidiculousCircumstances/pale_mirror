@@ -61,6 +61,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("operationAssembly", FrontierV3FixtureCatalog::operationAssemblyConfiguration),
             Map.entry("healthQuarantine", FrontierV3FixtureCatalog::healthQuarantineConfiguration),
             Map.entry("medicalTreatment", FrontierV3FixtureCatalog::medicalTreatmentConfiguration),
+            Map.entry("serviceDecontamination", FrontierV3FixtureCatalog::serviceDecontaminationConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionWork", FrontierV3FixtureCatalog::productionWorkConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
@@ -199,6 +200,17 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> medicalTreatmentConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MedicalTreatmentFixture fixture = FrontierDevelopmentScenarios.medicalTreatmentFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    /**
+     * One player-loadable service-work precondition. The fixture retains an ordinary pending
+     * local-containment task, one depot reagent and one infection cell, but neither a worker
+     * lease nor an effect receipt. A loaded depot and the normal service scan must perform the
+     * complete admission and materialized work.
+     */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> serviceDecontaminationConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.ServiceDecontaminationFixture fixture = FrontierDevelopmentScenarios.serviceDecontaminationFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

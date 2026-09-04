@@ -13,6 +13,9 @@ import java.util.Map;
 
 /** Service-work-owned endpoint rule: one medic-held exact reagent changes one observed infection cell. */
 public final class SettlementServiceDecontaminationStateSupport {
+    /** Domain-owned distinction between retained future work and a malformed effect request. */
+    public enum ExecutionEligibility { INVALID, DEFERRED, READY }
+
     private SettlementServiceDecontaminationStateSupport() { }
 
     public static boolean owns(FrontierWorldState state, PhysicalIntent intent) {
@@ -50,6 +53,30 @@ public final class SettlementServiceDecontaminationStateSupport {
         SceneLease lease = FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, findHotLease(state, work));
         if (!lease.memberPosition(work.workerId()).equals(work.workStation().standingBody())) {
             throw new IllegalArgumentException("service decontamination worker is not at its retained work station");
+        }
+    }
+
+    /**
+     * The endpoint intent is reserved with the exact service work, before that work reaches
+     * its physical effect station.  Only the retained effect-ready/recovery phase permits a
+     * materializer to inspect or execute it; earlier phases are ordinary deferral.
+     */
+    public static ExecutionEligibility executionEligibility(FrontierWorldState state, PhysicalIntent intent) {
+        if (!owns(state, intent)) return ExecutionEligibility.INVALID;
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION || !intent.id().equals(work.endpointIntentId())
+                || !intent.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))) {
+            return ExecutionEligibility.INVALID;
+        }
+        boolean ready = work.phase() == SettlementServiceWorkPhase.EFFECT_READY && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
+        boolean recovering = work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
+                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
+        if (!ready && !recovering) return ExecutionEligibility.DEFERRED;
+        try {
+            validateIntent(state, intent);
+            return ExecutionEligibility.READY;
+        } catch (IllegalArgumentException invalid) {
+            return ExecutionEligibility.INVALID;
         }
     }
 

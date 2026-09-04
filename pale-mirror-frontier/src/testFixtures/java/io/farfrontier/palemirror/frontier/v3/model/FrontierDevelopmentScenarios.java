@@ -560,6 +560,53 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Disposable service-work fixture for the actual medic-held decontamination path. The
+     * fixture intentionally does not make the depot surface active: an ordinary player visit is
+     * the only way to materialize it, after which the retained normal scan admits the service.
+     */
+    static ServiceDecontaminationFixture serviceDecontaminationFixture(WorldId worldId, long seed) {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed);
+        FrontierWorldState state = FrontierWorldState.initial(bootstrap);
+        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().value().equals("settlement:9"))
+                .findFirst().orElseThrow(() -> new IllegalStateException("service fixture needs settlement:9"));
+        SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
+                .findFirst().orElseThrow(() -> new IllegalStateException("service fixture needs one infirmary"));
+        InfectionCell cell = treatmentCell(bootstrap, infirmary);
+        SubjectId reagent = new SubjectId("item:development-service-decontamination-reagent");
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        state = state.withInfection(cell, new FixedRatio(new FixedScalar(750_000L)))
+                .withInventory(state.inventory().store(new ExactItemStack(reagent, settlement.id(), DecontaminationPolicy.REAGENT, 1,
+                        new InventoryCustody.ContainerSlot(depot, 1))));
+        String suffix = settlement.id().value().replace(':', '-');
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-" + suffix + "-decontamination"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(cell), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-" + suffix + "-decontamination"), objective.id(), settlement.id(),
+                StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(cell), List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY,
+                StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        // The player has ample time to enter the ordinary settlement before the first scan. A
+        // failed early scan would correctly block this exact task, which is not the condition
+        // this fixture is intended to exercise.
+        return new ServiceDecontaminationFixture(state, SimInstant.ZERO, List.of(SettlementServiceWorkProcess.scan(1, 1_000L)),
+                settlement.id(), cell, reagent);
+    }
+
+    private static InfectionCell treatmentCell(FrontierBootstrap bootstrap, SettlementStructure infirmary) {
+        for (int radius = 4; radius <= 32; radius += 4) for (int dx = -radius; dx <= radius; dx += 4) {
+            for (int dz = -radius; dz <= radius; dz += 4) {
+                if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
+                InfectionCell cell = InfectionCell.at(infirmary.anchor().offset(dx, 0, dz));
+                try {
+                    if (!InfectionTreatmentWorksite.candidates(bootstrap, cell).isEmpty()) return cell;
+                } catch (IllegalArgumentException ignored) {
+                    // The same bounded worksite compiler remains the authority for eligibility.
+                }
+            }
+        }
+        throw new IllegalStateException("service fixture has no treatment cell near its infirmary");
+    }
+
+    /**
      * Read-only starting condition for one real displaced resident.  The fixture creates the
      * ordinary bounded route and its exact bed reservation, but deliberately owns no HOT body:
      * a visiting player must cause the normal ambient executor to materialize and advance it.
@@ -758,6 +805,13 @@ final class FrontierDevelopmentScenarios {
 
     record MedicalTreatmentFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         MedicalTreatmentFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record ServiceDecontaminationFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                         SubjectId settlementId, InfectionCell cell, SubjectId reagentId) {
+        ServiceDecontaminationFixture {
             schedules = List.copyOf(schedules);
         }
     }

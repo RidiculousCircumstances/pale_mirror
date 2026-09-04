@@ -54,6 +54,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         if (event.payload() instanceof SettlementServiceWorkSceneLeaseHandoff handoff) {
             if (!event.subject().equals(FrontierSettlementServiceWorkSceneSupport.owner(state, FrontierSceneBehaviors.serviceWork(handoff.lease())))
                     || !handoff.lease().handoffInstant().equals(event.instant())) throw new IllegalArgumentException("service-work hand-off has foreign owner or instant");
+            FrontierSettlementServiceWorkSceneSupport.validatePrepared(state, handoff.lease());
             return state.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
         }
         if (event.payload() instanceof SettlementServiceWorkTraversalAdvanced advanced) {

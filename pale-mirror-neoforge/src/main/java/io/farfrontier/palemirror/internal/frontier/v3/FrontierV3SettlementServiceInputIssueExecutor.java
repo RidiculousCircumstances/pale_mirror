@@ -58,8 +58,14 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     }
 
     static FrontierV3PhysicalIntentScheduling.Readiness readiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        FrontierV3PhysicalIntentScheduling.Readiness canonical = canonicalReadiness(state, intent);
+        if (canonical != FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE) return canonical;
         Target target = target(state, intent);
-        if (target == null) return FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+        // The work state owns when this hand-off becomes eligible.  A HOT scene is an
+        // execution location, not an additional admission authority: while it is still
+        // preparing its retained worker, the exact intent must wait rather than poison
+        // itself as a canonical conflict.
+        if (target == null) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         if (!level.hasChunkAt(target.chestPosition())) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         if (chest == null) return FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
@@ -67,10 +73,49 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
                 : FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
     }
 
+    /**
+     * Read-only explanation of the exact input-issue boundary for a scene diagnostic.  It is
+     * deliberately owned here, beside the executor's real preconditions, so an operator never
+     * has to infer a missing chest or worker from an unrelated terminal intent timeout.
+     */
+    static String diagnosticReadiness(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
+        FrontierV3PhysicalIntentScheduling.Readiness canonical = canonicalReadiness(state, intent);
+        if (canonical != FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE) return "CANONICAL_" + canonical;
+        Target target = target(state, intent);
+        if (target == null) return "TARGET_DEFERRED";
+        if (!level.hasChunkAt(target.chestPosition())) return "CHEST_UNLOADED";
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
+        if (chest == null) return "CHEST_NOT_ACTIVE";
+        return resident(level, state, target) == null ? "WORKER_NOT_AT_INPUT" : "RUNNABLE";
+    }
+
+    /**
+     * Separates a malformed retained request from an ordinary earlier service phase.
+     *
+     * <p>The input intent is durably prepared together with its work so that no later
+     * actor can claim the reagent.  It therefore normally exists while the worker is
+     * still approaching the source station.  Treating that durable reservation as an
+     * invalid executable effect made physical executor ordering part of canonical
+     * correctness and could repeatedly transition {@code UNKNOWN_AFTER_RESTART}.</p>
+     */
+    static FrontierV3PhysicalIntentScheduling.Readiness canonicalReadiness(FrontierWorldState state, PhysicalIntent intent) {
+        return switch (SettlementServiceInputIssueStateSupport.executionEligibility(state, intent)) {
+            case INVALID -> FrontierV3PhysicalIntentScheduling.Readiness.INVALID;
+            case DEFERRED -> FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED;
+            case READY -> FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE;
+        };
+    }
+
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent);
-        if (target == null) { unknown(runtime, intent.id(), "canonical-conflict"); return; }
+        if (target == null) {
+            // A prior physical conflict is intentionally retained for loaded-world
+            // inspection.  Re-submitting UNKNOWN is not a legal state transition and
+            // must never quarantine the whole simulation.
+            if (intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) unknown(runtime, intent.id(), "canonical-conflict");
+            return;
+        }
         if (!level.hasChunkAt(target.chestPosition())) return;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, target.chestPosition(), target.sourceSlot().containerId());
         Villager worker = resident(level, state, target);
