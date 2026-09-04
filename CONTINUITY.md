@@ -194,6 +194,14 @@
   retained body and the column cannot stretch beyond one cursor. The next code
   cut must persist and own it through `RoutePatrol`; no M0/M2 promotion is
   claimed until the legacy direct body rewrites are removed.
+- `PatrolAssembly` is the paired pure ingress primitive: it retains one
+  individual bounded pedestrian corridor/cursor per exact patrol member, with
+  unique current and destination bodies and one-at-a-time collision-safe
+  progress. It deliberately has no cargo/carrier semantics. A blocked retained
+  edge is persistable in either assembly/travel so the owning patrol can expose
+  conflict; only an attempted advance is rejected. Focused tests cover
+  occupied-body, blocked-edge and surveyed-grade cases. It remains unconnected
+  until the next atomic `RoutePatrol` schema/process replacement.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained

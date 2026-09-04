@@ -112,8 +112,8 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
 
     private static TraversalTopology requirePedestrian(TraversalTopology topology) {
         if (topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
-                || !edge.traversableBy(TraversalCapability.PEDESTRIAN))) {
-            throw new IllegalArgumentException("patrol travel requires open pedestrian topology");
+                || !edge.capabilities().contains(TraversalCapability.PEDESTRIAN))) {
+            throw new IllegalArgumentException("patrol travel requires pedestrian topology");
         }
         if (topology.linearCorridorSurfaces().size() < 2 || topology.linearCorridorSurfaces().size() > OperationTravel.MAX_CELLS) {
             throw new IllegalArgumentException("patrol travel corridor is outside bounded profile");

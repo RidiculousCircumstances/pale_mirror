@@ -36,7 +36,7 @@ class PatrolTravelTest {
     }
 
     @Test
-    void rejectsOverlappingOrForeignLeaderFormationAndUnavailableEdges() {
+    void rejectsOverlappingOrForeignLeaderFormationAndNeverCrossesUnavailableEdges() {
         TraversalTopology route = corridor("route", List.of(0, 1));
         TraversalTopology blocked = new TraversalTopology(route.id(), route.revision(), route.provenance(), route.nodes(),
                 route.edges().stream().map(edge -> new TraversalTopology.Edge(edge.id(), edge.from(), edge.to(), edge.kind(), edge.capabilities(),
@@ -45,7 +45,10 @@ class PatrolTravelTest {
                 LEADER, new PatrolTravel.Member(route, 0), SCOUT, new PatrolTravel.Member(route, 0))));
         assertThrows(IllegalArgumentException.class, () -> new PatrolTravel(LEADER, route, Map.of(
                 LEADER, new PatrolTravel.Member(corridor("other", List.of(0, 1)), 0), SCOUT, new PatrolTravel.Member(route, 1))));
-        assertThrows(IllegalArgumentException.class, () -> new PatrolTravel.Member(blocked, 0));
+        PatrolTravel blockedTravel = new PatrolTravel(LEADER, blocked, Map.of(
+                LEADER, new PatrolTravel.Member(blocked, 0), SCOUT, new PatrolTravel.Member(route, 1)));
+        assertEquals(List.of(), blockedTravel.safeAdvances());
+        assertThrows(IllegalArgumentException.class, () -> blockedTravel.advanceOne(LEADER));
     }
 
     @Test
@@ -62,9 +65,26 @@ class PatrolTravelTest {
         assertFalse(advanced.bodies().get(LEADER).equals(advanced.bodies().get(SCOUT)));
     }
 
+    @Test
+    void retainsTheSameColumnAcrossSurveyedGradeChanges() {
+        TraversalTopology leaderRoute = topology("leader-grade", List.of(
+                new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0), new BlockPosition(2, 66, 0)));
+        TraversalTopology scoutRoute = topology("scout-grade", List.of(
+                new BlockPosition(-1, 64, 0), new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0)));
+        PatrolTravel advanced = new PatrolTravel(LEADER, leaderRoute, Map.of(
+                LEADER, new PatrolTravel.Member(leaderRoute, 0), SCOUT, new PatrolTravel.Member(scoutRoute, 0))).advanceCold();
+
+        assertTrue(advanced.complete());
+        assertEquals(new BodyPosition(2, 67, 0), advanced.bodies().get(LEADER));
+        assertEquals(new BodyPosition(1, 66, 0), advanced.bodies().get(SCOUT));
+    }
+
     private static TraversalTopology corridor(String suffix, List<Integer> xs) {
+        return topology(suffix, xs.stream().map(x -> new BlockPosition(x, 64, 0)).toList());
+    }
+
+    private static TraversalTopology topology(String suffix, List<BlockPosition> surfaces) {
         return TraversalTopology.corridor(new TraversalTopologyId("topology:patrol-test:" + suffix), 0L, PATROL,
-                TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN),
-                xs.stream().map(x -> new SurfaceAnchor(new BlockPosition(x, 64, 0))).toList());
+                TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), surfaces.stream().map(SurfaceAnchor::new).toList());
     }
 }
