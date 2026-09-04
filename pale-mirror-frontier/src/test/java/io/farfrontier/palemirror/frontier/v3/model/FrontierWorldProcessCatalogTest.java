@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.process.SettlementServiceWorkProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
@@ -9,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -114,18 +116,19 @@ class FrontierWorldProcessCatalogTest {
 
     @Test
     void everyProcessDescriptorRoundTripsOneOwnedRepresentativePayload() {
-        Map<String, FrontierPayload> representatives = Map.of(
-                "kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative")),
-                "physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),
-                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty()),
-                "ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE),
-                "logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT),
-                "population", new ResidentMigrationBlocked(new SubjectId("resident:representative"), ResidentMigrationBlockReason.QUARANTINE),
-                "economy", new MarketDemandExpired(new SubjectId("demand:representative")),
-                "resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0),
-                "hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE)),
-                "infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative")),
-                "strategy", new StrategicTaskTransition(new SubjectId("task:representative"), StrategicTaskStatus.ACTIVE));
+        Map<String, FrontierPayload> representatives = Map.ofEntries(
+                Map.entry("kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative"))),
+                Map.entry("physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())),
+                Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
+                Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
+                Map.entry("population", new ResidentMigrationBlocked(new SubjectId("resident:representative"), ResidentMigrationBlockReason.QUARANTINE)),
+                Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
+                Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
+                Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),
+                Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"))),
+                Map.entry("settlement-service-work", serviceWorkRepresentative()),
+                Map.entry("strategy", new StrategicTaskTransition(new SubjectId("task:representative"), StrategicTaskStatus.ACTIVE)));
         assertEquals(FrontierWorldProcessCatalog.descriptors().stream().map(
                 io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet()), representatives.keySet());
@@ -146,5 +149,35 @@ class FrontierWorldProcessCatalogTest {
         TransactionRecord wal = new TransactionRecord(transactionId, worldId, new Revision(1L), new SimInstant(1L),
                 walEvents, Optional.empty());
         assertEquals(wal, KernelCodec.decodeTransaction(KernelCodec.encodeTransaction(wal, codecs), codecs));
+    }
+
+    private static SettlementServiceWorkStarted serviceWorkRepresentative() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-representative"), 301L);
+        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().value().equals("settlement:9")).findFirst().orElseThrow();
+        SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
+        InfectionCell cell = treatmentCell(bootstrap, infirmary);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:service-representative-reagent");
+        FrontierWorldState initial = FrontierWorldState.initial(bootstrap).withInfection(cell, new FixedRatio(new FixedScalar(750_000L)));
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:service-representative"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(cell), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:service-representative"), objective.id(), settlement.id(),
+                StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(cell), List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY,
+                StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.PENDING);
+        FrontierWorldState state = initial.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(initial.inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+        return SettlementServiceWorkProcess.planDecontamination(state, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
+                .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+    }
+
+    private static InfectionCell treatmentCell(FrontierBootstrap bootstrap, SettlementStructure infirmary) {
+        for (int radius = 4; radius <= 32; radius += 4) for (int dx = -radius; dx <= radius; dx += 4) for (int dz = -radius; dz <= radius; dz += 4) {
+            if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
+            InfectionCell candidate = InfectionCell.at(infirmary.anchor().offset(dx, 0, dz));
+            try {
+                if (!InfectionTreatmentWorksite.candidates(bootstrap, candidate).isEmpty()) return candidate;
+            } catch (IllegalArgumentException ignored) { }
+        }
+        throw new IllegalStateException("service representative has no treatment cell");
     }
 }

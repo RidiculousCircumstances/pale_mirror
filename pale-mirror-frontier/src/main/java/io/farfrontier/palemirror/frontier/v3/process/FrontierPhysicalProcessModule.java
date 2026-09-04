@@ -178,6 +178,14 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance transition lacks route-network ownership");
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
+        if (intent.kind() == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE) {
+            SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+            SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+            if (work == null || !subject.equals(work.settlementId())) {
+                throw new IllegalArgumentException("service input issue transition lacks its retained settlement work owner");
+            }
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
             SubjectId owner = intent.kind() == PhysicalIntentKind.DECONTAMINATION ? DecontaminationProcess.owner(state, intent.causeSubjectId()).id()
                     : FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId());

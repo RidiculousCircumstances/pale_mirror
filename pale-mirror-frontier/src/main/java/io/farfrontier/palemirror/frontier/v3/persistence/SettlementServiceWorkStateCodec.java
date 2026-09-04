@@ -23,54 +23,62 @@ final class SettlementServiceWorkStateCodec {
     static void write(DataOutputStream output, Map<SubjectId, SettlementServiceWork> values) throws IOException {
         FrontierWorldStateCodec.writeCount(output, values.size());
         for (SettlementServiceWork work : values.values().stream().sorted(java.util.Comparator.comparing(SettlementServiceWork::id)).toList()) {
-            FrontierWorldStateCodec.writeString(output, work.id().value());
-            output.writeByte(work.kind().wireTag());
-            FrontierWorldStateCodec.writeString(output, work.settlementId().value());
-            FrontierWorldStateCodec.writeString(output, work.workerId().value());
-            FrontierWorldStateCodec.writeString(output, work.facilityId().value());
-            FrontierWorldStateCodec.writeString(output, work.inputSource().containerId().value());
-            output.writeByte(work.inputSource().slot());
-            FrontierWorldStateCodec.writePosition(output, work.inputStation().support());
-            FrontierWorldStateCodec.writePosition(output, work.workStation().support());
-            FrontierWorldStateCodec.writeString(output, work.inputItemId().value());
-            writeTarget(output, work.target());
-            FrontierWorldStateCodec.writeString(output, work.inputIssueIntentId().value());
-            FrontierWorldStateCodec.writeString(output, work.endpointIntentId().value());
-            TraversalTopologyStateCodec.write(output, work.inputTraversal());
-            output.writeShort(work.inputTraversalCursor());
-            TraversalTopologyStateCodec.write(output, work.workTraversal());
-            output.writeShort(work.workTraversalCursor());
-            output.writeByte(work.phase().wireTag());
-            output.writeByte(work.completedWorkTicks());
+            writeOne(output, work);
         }
     }
 
     static Map<SubjectId, SettlementServiceWork> read(DataInputStream input) throws IOException {
         Map<SubjectId, SettlementServiceWork> values = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SettlementServiceWorkKind kind = SettlementServiceWorkKind.fromWireTag(input.readUnsignedByte());
-            SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SubjectId facility = new SubjectId(FrontierWorldStateCodec.readString(input));
-            io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte());
-            SurfaceAnchor inputStation = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
-            SurfaceAnchor workStation = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
-            SubjectId item = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SettlementServiceTarget target = readTarget(input);
-            PhysicalIntentId inputIssueIntent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
-            PhysicalIntentId endpointIntent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
-            TraversalTopology inputTraversal = TraversalTopologyStateCodec.read(input);
-            int inputCursor = input.readUnsignedShort();
-            TraversalTopology workTraversal = TraversalTopologyStateCodec.read(input);
-            int workCursor = input.readUnsignedShort();
-            SettlementServiceWorkPhase phase = SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte());
-            SettlementServiceWork work = new SettlementServiceWork(id, kind, settlement, worker, facility, source, inputStation, workStation,
-                    item, target, inputIssueIntent, endpointIntent, inputTraversal, inputCursor, workTraversal, workCursor, phase, input.readUnsignedByte());
-            if (values.put(id, work) != null) throw new IllegalArgumentException("duplicate settlement service-work id");
+            SettlementServiceWork work = readOne(input);
+            if (values.put(work.id(), work) != null) throw new IllegalArgumentException("duplicate settlement service-work id");
         }
         return Map.copyOf(values);
+    }
+
+    static void writeOne(DataOutputStream output, SettlementServiceWork work) throws IOException {
+        FrontierWorldStateCodec.writeString(output, work.id().value());
+        output.writeByte(work.kind().wireTag());
+        FrontierWorldStateCodec.writeString(output, work.settlementId().value());
+        FrontierWorldStateCodec.writeString(output, work.workerId().value());
+        FrontierWorldStateCodec.writeString(output, work.facilityId().value());
+        FrontierWorldStateCodec.writeString(output, work.inputSource().containerId().value());
+        output.writeByte(work.inputSource().slot());
+        FrontierWorldStateCodec.writePosition(output, work.inputStation().support());
+        FrontierWorldStateCodec.writePosition(output, work.workStation().support());
+        FrontierWorldStateCodec.writeString(output, work.inputItemId().value());
+        writeTarget(output, work.target());
+        FrontierWorldStateCodec.writeString(output, work.inputIssueIntentId().value());
+        FrontierWorldStateCodec.writeString(output, work.endpointIntentId().value());
+        TraversalTopologyStateCodec.write(output, work.inputTraversal());
+        output.writeShort(work.inputTraversalCursor());
+        TraversalTopologyStateCodec.write(output, work.workTraversal());
+        output.writeShort(work.workTraversalCursor());
+        output.writeByte(work.phase().wireTag());
+        output.writeByte(work.completedWorkTicks());
+    }
+
+    static SettlementServiceWork readOne(DataInputStream input) throws IOException {
+        SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SettlementServiceWorkKind kind = SettlementServiceWorkKind.fromWireTag(input.readUnsignedByte());
+        SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId facility = new SubjectId(FrontierWorldStateCodec.readString(input));
+        io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
+                new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte());
+        SurfaceAnchor inputStation = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
+        SurfaceAnchor workStation = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
+        SubjectId item = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SettlementServiceTarget target = readTarget(input);
+        PhysicalIntentId inputIssueIntent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
+        PhysicalIntentId endpointIntent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
+        TraversalTopology inputTraversal = TraversalTopologyStateCodec.read(input);
+        int inputCursor = input.readUnsignedShort();
+        TraversalTopology workTraversal = TraversalTopologyStateCodec.read(input);
+        int workCursor = input.readUnsignedShort();
+        SettlementServiceWorkPhase phase = SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte());
+        return new SettlementServiceWork(id, kind, settlement, worker, facility, source, inputStation, workStation,
+                item, target, inputIssueIntent, endpointIntent, inputTraversal, inputCursor, workTraversal, workCursor, phase, input.readUnsignedByte());
     }
 
     private static void writeTarget(DataOutputStream output, SettlementServiceTarget target) throws IOException {

@@ -41,6 +41,10 @@ final class FrontierV3DecontaminationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = state(runtime); if (state == null) return;
         state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id)).filter(intent -> intent.kind() == PhysicalIntentKind.DECONTAMINATION)
+                // A service-work endpoint becomes executable only when its own retained worker
+                // reaches EFFECT_READY.  Until then this legacy terminal adapter has no authority
+                // to inspect, run or starve the new aggregate's prepared endpoint.
+                .filter(intent -> !state.serviceWorks().containsKey(intent.causeSubjectId()))
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING).findFirst()
                 .ifPresent(intent -> execute(level, runtime, state, intent));
     }

@@ -6,9 +6,9 @@ import net.minecraft.server.level.ServerLevel;
 /**
  * Registered physical owner for the service-work scene family.
  *
- * <p>MAT-003 has not yet admitted service work or emitted a service lease, so this deliberately
- * has no candidate or effect fallback. The subsequent vertical adds its retained-worker HOT
- * executor here; it must not borrow production or medical scene behavior.</p>
+ * <p>MAT-003 now admits retained service work, but has not yet emitted a service lease. This
+ * deliberately has no candidate or effect fallback: the subsequent vertical adds its
+ * retained-worker HOT executor here, and must not borrow production or medical scene behavior.</p>
  */
 final class FrontierV3SettlementServiceWorkSceneExecutor {
     private FrontierV3SettlementServiceWorkSceneExecutor() { }

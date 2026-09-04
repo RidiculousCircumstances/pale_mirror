@@ -48,6 +48,7 @@ public final class FrontierPhysicalIntentCommandProcess {
                         state, intent, transition, command.submittedAt().ticks()));
                 case EQUIPMENT_ISSUE -> equipmentIssueTransition(state, intent, transition, command.submittedAt().ticks());
                 case EQUIPMENT_RETURN -> equipmentReturnTransition(state, intent, transition, command.submittedAt().ticks());
+                case SETTLEMENT_SERVICE_INPUT_ISSUE -> serviceInputIssueTransition(state, intent, transition);
                 case CARGO_HANDOFF -> routeTransition(state, intent, transition, command.submittedAt().ticks());
                 case EXPLOSION -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition)));
                 case SCENE_STRIKE -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
@@ -83,6 +84,13 @@ public final class FrontierPhysicalIntentCommandProcess {
     private static CommandPlan equipmentReturnTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
         return new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, true));
+    }
+
+    private static CommandPlan serviceInputIssueTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null) return rejected("service input issue has no exact retained work");
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(work.settlementId(), transition)));
     }
 
     /**

@@ -40,6 +40,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("resource-sites", FrontierWorldPayloadCodecs.resourceSiteCodecs());
         result.put("hive", FrontierWorldPayloadCodecs.hiveCodecs());
         result.put("infrastructure", FrontierWorldPayloadCodecs.infrastructureCodecs());
+        result.put("settlement-service-work", FrontierWorldPayloadCodecs.settlementServiceWorkCodecs());
         result.put("strategy", FrontierWorldPayloadCodecs.strategyCodecs());
         return Map.copyOf(result);
     }

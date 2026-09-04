@@ -95,11 +95,13 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_maintenance_closed",
             "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
             "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed");
+    private static final Set<String> SETTLEMENT_SERVICE_WORK = types(
+            "frontier.settlement_service_work_started");
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
-            HIVE, INFRASTRUCTURE, STRATEGY);
+            HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.of(
             "physical-observation", new FrontierPhysicalProcessModule(),
             "ambient-actors", new FrontierAmbientProcessModule(),
@@ -109,6 +111,7 @@ public final class FrontierWorldProcessCatalog {
             "resource-sites", new FrontierResourceSiteProcessModule(),
             "hive", new FrontierHiveProcessModule(),
             "infrastructure", new FrontierInfrastructureProcessModule(),
+            "settlement-service-work", new FrontierSettlementServiceWorkProcessModule(),
             "strategy", new FrontierStrategyProcessModule());
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
@@ -155,7 +158,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.hive_route_engagement.combat", (state, action, autonomous) -> HiveRouteEngagementProcess.planCombat(state, action)),
             Map.entry("frontier.hive_route_engagement.control", (state, action, autonomous) -> HiveRouteEngagementProcess.planCommandControl(state, action)),
             Map.entry("frontier.hive.scout.patrol", (state, action, autonomous) -> HiveScoutPatrolProcess.plan(state, action)),
-            Map.entry("frontier.decontamination.scan", (state, action, autonomous) -> DecontaminationProcess.plan(state, action)),
+            Map.entry("frontier.decontamination.scan", (state, action, autonomous) -> SettlementServiceWorkProcess.planDecontamination(state, action)),
             Map.entry("frontier.objective.review", StrategicObjectiveProcess::plan),
             Map.entry("frontier.objective.reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planReconsideration(state, action)),
             Map.entry("frontier.objective.interrupt", (state, action, autonomous) -> StrategicObjectiveProcess.planOpportunity(state, action)),
@@ -186,6 +189,8 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
                 descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),
                 descriptor("infrastructure", infrastructureCommands(), infrastructureSchedules(), INFRASTRUCTURE, emissions("infrastructure"), INFRASTRUCTURE),
+                descriptor("settlement-service-work", serviceWorkCommands(), serviceWorkSchedules(), SETTLEMENT_SERVICE_WORK,
+                        emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY));
     }
 
@@ -211,7 +216,7 @@ public final class FrontierWorldProcessCatalog {
         FrontierRuleset.Cadence cadence = bootstrap.ruleset().cadence();
         List<ScheduledAction> actions = new java.util.ArrayList<>(List.of(StructuralRepairProcess.scan(1, cadence.structuralRepairInitialScanTick()),
                 RouteConstructionProcess.scan(1, cadence.routeConstructionInitialScanTick()), RouteMaintenanceProcess.scan(1, cadence.routeConstructionInitialScanTick()),
-                DecontaminationProcess.scan(1, cadence.decontaminationInitialScanTick())));
+                SettlementServiceWorkProcess.scan(1, cadence.decontaminationInitialScanTick())));
         for (int index = 0; index < bootstrap.settlements().size(); index++) {
             actions.add(StrategicObjectiveProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
@@ -289,6 +294,7 @@ public final class FrontierWorldProcessCatalog {
      */
     private static Set<String> infrastructureCommands() { return types(
             "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced"); }
+    private static Set<String> serviceWorkCommands() { return Set.of(); }
     private static Set<String> strategyCommands() { return Set.of(); }
 
     private static Set<String> logisticsSchedules() { return types(
@@ -315,7 +321,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_construction.assembly_progress", "frontier.route_construction.progress", "frontier.route_construction.return_progress",
             "frontier.route_maintenance.scan", "frontier.route_maintenance.assembly_progress",
             "frontier.route_maintenance.progress", "frontier.route_maintenance.return_progress",
-            "frontier.route_patrol.start", "frontier.route_patrol.progress", "frontier.decontamination.scan"); }
+            "frontier.route_patrol.start", "frontier.route_patrol.progress"); }
+    private static Set<String> serviceWorkSchedules() { return types("frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
@@ -445,6 +452,9 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition", "frontier.medical_treatment_started", "frontier.medical_treatment_transition", "frontier.settlement_infection_observed",
                     "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
+            case "settlement-service-work" -> types(
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.settlement_service_work_started", "frontier.strategic_task_transition");
             case "strategy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
