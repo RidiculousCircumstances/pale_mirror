@@ -220,11 +220,18 @@
 - The working correction makes the hot worker's release receipt the ordering
   boundary: an output-ready materialized job cannot prepare its physical
   transform while its lease is non-closed; release schedules one same-job
-  completion on the next tick. The focused 33-test production suite passes,
-  including the HOT deferral → closed lease → confirmed bread regression.
-  The full pure suite must be rerun after the concurrent MAT-004 fixture
-  catalog cut is made consistent, followed by Economy/Scene slices, a critical
-  gate and a fresh disposable deployment; do not deploy this uncommitted work.
+  completion on the next tick. Verified commit `faec9ec5` contains that
+  correction plus the registered HOT route-patrol cut; focused production
+  regressions, Economy 17/17, Scene 56/56 and the critical gate
+  (`guardrails`, `check`, build/package, 287/287 GameTests) pass. It is now
+  deployed as the fresh disposable `frontier-v3-live-r70` on `25565` with
+  SHA-512
+  `57e2aeffe2067de40f52eb844bde644904c9ca32cfdd84f76cd2a7bfe6ebfe5fc0bc955ad2e3d9c3193e68e2d1b2d39344444cec581efb03d1f533c39151338f`.
+  Read-only preflight proved the clean detached source, Java 22 and absent
+  target world; post-start verification proved PID `2285809`, port, fresh
+  `Done`, Frontier-v3 startup and no quarantine. V3-AUD-042 remains open until
+  its native production scenario exercises this exact release-before-confirm
+  order on r70.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained
