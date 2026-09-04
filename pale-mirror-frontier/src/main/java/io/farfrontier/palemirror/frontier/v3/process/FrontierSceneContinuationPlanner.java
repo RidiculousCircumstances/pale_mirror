@@ -159,7 +159,11 @@ public final class FrontierSceneContinuationPlanner {
             if (job == null || !job.workProgress().terminalEffectEligible()) {
                 throw new IllegalArgumentException("production completion continuation has no exact output-ready job");
             }
-            return List.of(new ProposedEvent(job.settlementId(), new ScheduleEffect.Created(ProductionProcess.complete(job, resume.dueAt()))));
+            // planCompletion retains this same stable completion review while the worker is
+            // HOT/DRAINING.  The release receipt moves that review forward atomically; creating
+            // another action would collide with the retained schedule and quarantine the runtime.
+            io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction replacement = ProductionProcess.complete(job, resume.dueAt());
+            return List.of(new ProposedEvent(job.settlementId(), new ScheduleEffect.Rescheduled(replacement.id(), replacement)));
         }
     }
 

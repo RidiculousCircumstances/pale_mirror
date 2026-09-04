@@ -97,8 +97,12 @@ public final class ProductionProcess {
             }
             // The worker scene owns the live body until its release receipt is committed.  A
             // physical output receipt must never remove this job while the HOT/DRAINING lease
-            // still names it; releasePlan schedules this exact completion on the next tick.
-            if (hasOpenWorkScene(state, job.id())) return List.of();
+            // still names it. Keep this one durable completion review retained so the later
+            // release receipt can move it to the next tick without creating a second schedule
+            // with the same stable job identity.
+            if (hasOpenWorkScene(state, job.id())) {
+                return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+            }
         }
         if (job.inputHold() instanceof ProductionInputHold.Cold held) {
             ExactItemStack input = held.item();
@@ -593,6 +597,10 @@ public final class ProductionProcess {
             new SimInstant(due), 0, job.id(), "frontier.settlement.production.task.complete", 1); }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    private static ProposedEvent reschedule(ScheduledAction current, ScheduledAction replacement) {
+        if (!current.id().equals(replacement.id())) throw new IllegalArgumentException("production completion reschedule must retain its stable identity");
+        return new ProposedEvent(current.subject(), new ScheduleEffect.Rescheduled(current.id(), replacement));
+    }
     private static FixedPosition fixed(BlockPosition position) { return new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())); }
     private static void requireOwner(SubjectId actual, SubjectId expected) { if (!expected.equals(actual)) throw new IllegalArgumentException("production event subject does not own the work"); }
 }

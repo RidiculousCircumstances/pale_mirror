@@ -232,6 +232,20 @@
   `Done`, Frontier-v3 startup and no quarantine. V3-AUD-042 remains open until
   its native production scenario exercises this exact release-before-confirm
   order on r70.
+- The required native run exposed one remaining ownership fault in that first
+  correction: its release receipt tried to create a second completion action
+  with the already retained stable schedule ID, so the engine correctly
+  quarantined rather than duplicate it. The coherent replacement retains and
+  reschedules that same completion review while the worker lease is HOT or
+  DRAINING, then uses the release receipt to reschedule the same ID for the
+  closed-lease tick. Native
+  `disposable_materialized_production_work_restart`
+  `74b66054-6464-4279-afb0-7cd8f3730591` now reaches the exact 64-bread depot
+  receipt, survives graceful restart and finishes without quarantine. Focused
+  production coverage, Economy 17/17, Scene 56/56 and the full critical gate
+  (guardrails, check, build/package, 287/287 GameTests) pass. V3-AUD-042 is
+  closed; r70 must be replaced by a fresh-world deployment of this correction
+  before the live server is again a valid living-world test target.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained

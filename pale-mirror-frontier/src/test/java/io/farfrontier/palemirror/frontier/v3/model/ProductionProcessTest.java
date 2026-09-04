@@ -260,20 +260,24 @@ class ProductionProcessTest {
         hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady)));
         ScheduledAction completion = ProductionProcess.complete(outputReady, 1_000L);
 
-        assertTrue(ProductionProcess.planCompletion(hot, completion).isEmpty(),
-                "a scheduled COLD completion must not prepare an effect while its exact worker body remains HOT");
+        ScheduleEffect.Rescheduled deferred = assertInstanceOf(ScheduleEffect.Rescheduled.class,
+                ProductionProcess.planCompletion(hot, completion).getFirst().payload(),
+                "a scheduled COLD completion must retain—not consume—its one review while the exact worker remains HOT");
+        assertEquals(completion.id(), deferred.scheduleId());
+        assertEquals(completion.id(), deferred.replacement().id());
         assertTrue(hot.physicalIntents().isEmpty());
 
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         SceneLeaseReleased released = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(outputReady.workerId(), worker.body(), worker.condition().health())));
         List<ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining, lease, 1_000L, released);
         assertEquals(2, continuation.size());
-        ScheduleEffect.Created scheduled = assertInstanceOf(ScheduleEffect.Created.class, continuation.get(1).payload());
-        assertEquals(1_001L, scheduled.action().dueAt().ticks());
-        assertEquals(outputReady.id(), scheduled.action().subject());
+        ScheduleEffect.Rescheduled scheduled = assertInstanceOf(ScheduleEffect.Rescheduled.class, continuation.get(1).payload());
+        assertEquals(completion.id(), scheduled.scheduleId());
+        assertEquals(1_001L, scheduled.replacement().dueAt().ticks());
+        assertEquals(outputReady.id(), scheduled.replacement().subject());
 
         FrontierWorldState closed = draining.releaseSceneLease(leaseId, released.members());
-        List<ProposedEvent> effect = ProductionProcess.planCompletion(closed, scheduled.action());
+        List<ProposedEvent> effect = ProductionProcess.planCompletion(closed, scheduled.replacement());
         PhysicalIntentPrepared physical = assertInstanceOf(PhysicalIntentPrepared.class, effect.getFirst().payload());
         FrontierWorldState withIntent = closed.preparePhysicalIntent(physical.intent())
                 .transitionPhysicalIntent(physical.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
