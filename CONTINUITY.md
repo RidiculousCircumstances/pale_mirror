@@ -11,7 +11,7 @@
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
 - Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): the active route-patrol cut accepts only snapshot schema 126 and persistence-envelope v41 state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
-- One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
+- One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie. Minecraft resource quantities are exact one-for-one units, while fungible vanilla stacks may split and merge under canonical lots, allocations and custody accounts.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
 - No simulation, materialization or audit path force-loads chunks. Start at most one visible client on `DISPLAY=:0` and run only relevant gates.
@@ -22,7 +22,9 @@
 - One simulation unit is one running server tick. Zero-player server time advances; stopped-server time pauses; sleep advances through an explicit command; `/time` alone does not.
 - Fixed-point arithmetic, checked rounding and keyed/counter RNG make v3 deterministic from its own input stream without Python numerical parity.
 - Exact-person migration is one bounded Transit journey: its adjacent-position cursor and destination-bed reservation are canonical; COLD advances the same journey in short steps, while the forthcoming naturally loaded HOT executor may only take/release that identity and cursor, never create a second movement state.
-- HOT scenes use persisted atomic leases; Minecraft supplies actual movement, collision, combat, inventory and effect results while leased COLD actions are suspended.
+- HOT scenes are persisted atomic physical-execution leases over an already-existing canonical process, never process owners. Player/chunk demand selects HOT versus COLD execution but cannot create, start, reset or accelerate work. Every duration-bearing process has paired registered COLD/HOT drivers over one authoritative cursor; acquire, observed checkpoints and release update that process and lease atomically. Atomic effects, distributed frontiers and ambient presence keep their distinct intent/frontier/custody boundaries.
+- `docs/frontier-v3-seamless-foundation.md` is the mandatory implementation handoff for the current correction programme. F0 must close replica/custody separation, deferred physical aftermath, fungible resource custody, bounded operation fronts with local navigation, fenced restart recovery, failure taxonomy, observer neutrality and first-visibility readiness before MAT-004 or any new materialization breadth resumes.
+- `docs/frontier-v3-terra-implementation-brief.md` is the mandatory executable handoff for the GPT-5.6 Terra continuation agent. It operationalizes F0 without changing its source-of-truth order: the ledger names the current slice; the architecture map, contract, foundation brief and audit own their respective facts.
 - The accepted terrain-aware movement contract treats the flat graybox as one provider, not the spatial model. Typed surface/body/port/transport positions, semantic oriented facility ports and one bounded immutable 3D capability topology own movement; COLD and HOT advance the same retained edge/cursor, while loaded obstruction/damage changes topology through typed evidence. Pedestrian/bioform and future rail graphs are distinct, and Create may only implement the rail physical provider.
 - V3 persistence is checksummed snapshots plus ordered WAL. Player custody and non-replayable physical effects are durable before acknowledgement/execution and recover by postcondition inspection, never blind replay.
 - Buildings/organs have stable IDs, semantic block parts and domain state. Infection uses a sparse 4×4 surface field; territory and actor positions use separate resolutions; baseline plus bounded sparse deltas retain physical aftermath.
@@ -31,9 +33,9 @@
 - The accepted human capability contract is `docs/frontier-v3-human-capabilities.md`: one exact resident separately owns condition, trainable skills, profession/employment, exclusive current assignment, exact equipment and work/tactical organization. The first composition is small exact defence, patrol/escort, engineering/recovery and medical/evacuation units, never cohorts or permanent mob classes. Combat functions are derived rather than permanent classes; mobilization has explicit civilian opportunity cost, and leader/equipment loss degrades the same people instead of replacing them. Existing `ResidentRole` is provisional bootstrap affinity requiring an explicit stable-tag/schema migration before broader Wave-4 role expansion.
 - `docs/frontier-v3-create-direction.md` is the accepted post-graybox industrial direction, not a current cutover gate. Create will be a NeoForge physical provider over unchanged v3 authority. Transport scope is rail only—long lines, exact freight trains, stations/yards, switches/signals, bridges/tunnels, loading and repair; road freight and aeronautics are excluded. The future physical scope is factories, farms, weapons, turrets, extraction, energy, metallurgy/materials, warehousing/rail logistics and construction/engineering. Current graybox work must retain provider-neutral facility ports, rail topology, exact train/cargo leases and observed consequences so this remains an incremental replacement rather than a second economy.
 - A settlement assault is a distinct bounded hive operation rooted in one fresh Scout settlement sighting and fresh local territorial evidence. It retains its own attackers, target, lifecycle and HOT/COLD scene cause; it never uses a route operation, cargo carrier or hidden global query as a substitute.
-- Exact slot-owned resources, containers and cargo are the economy. Every exact stack has one canonical economic claim distinct from custody: active owned slots and confirmed cargo receipt transfer it, while player/world carriers retain it; there is no hidden aggregate stock and meaningful player supply may require tens or hundreds of stacks.
+- Exact resource units, containers and cargo are the economy. Canonical resource lots and exact allocations own provenance and claims; transient slot bindings and player/world carriers own observed physical custody. Ordinary stack split/merge and partial transfer must conserve quantity without inventing permanent per-stack identity, hidden aggregate stock or duplicate placement. Meaningful player supply may require tens or hundreds of stacks.
 - An insolvent account rejects new debits, reservations and work admission, but may still receive an exact zero-sum payment. Debt recovery or recapitalization must never be blocked by the debtor's status or compensate it by minting money.
-- Each materialized container surface will have a durable canonical lifecycle (`UNMATERIALIZED`, prepared/owned, active, conflict) distinct from its exact slot inventory. A missing or altered previously active surface is a conflict, never permission to recreate it; a prepared surface recovers only by loaded-chunk postcondition inspection.
+- Durable replica realization is distinct from current physical custody. A container may remain a known realized replica while unloaded without forcing its economy into HOT execution; loaded ownership is a renewable fenced lease. Recognized loss/theft/damage becomes a domain disruption, ambiguous local evidence isolates only that asset, and only canonical/persistence corruption quarantines the frontier.
 - Evidence levels remain separate: architecture, automated correctness, real-world continuity and unbriefed player comprehension.
 - Frontier v3 causal changes use the smallest relevant checked-in pilot scenario: read-only fixture, ordinary player action, terminal domain assertion and PMV3 trace; visible claims add a semantic camera/frame check, while durable/recovery changes add a declared restart split.
 - A pilot visual frame is a local test-only barrier, not a player action: `clean` is the default and closes incidental screens, hides generic UI/chat, settles rendering and waits for exact capture acknowledgement before the next action. `player` is explicit for UI evidence; ordinary HUD toggles are prohibited.
@@ -177,8 +179,23 @@
 - Verified detached commit `474d3da7` (including the `6ff19426` overseer/mobilisation vertical) is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r63`; r62 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `6f43dd7f19fccdef4694d1da97fdb18ec02658f2c17ddf12d5ed2617452e387915322b4ff774b2fffcb6c25811d0502a989d295cbf347d97a7e2165bf3ead56b`. Preflight proved the clean detached source, Java 22, selected empty world and exact pin; startup reached `Done` then `Frontier v3 runtime started` with no quarantine, and the post-start verifier passed. A deployment race was closed in outer-pack commit `a032959`: verifier optionally waits up to 60 seconds for both records instead of treating `Done` alone as ready. The first call exposed the 0.9-second ordering race; it was not a missing v3 runtime.
 - Verified detached commit `f0b9c90b` is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r64`; r63 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `513334e273fcaba34c565020ab4e3e971b11cc293d9a6aa0dc6b23f72cd4ec4f97bc521ddd4d4a8dc21abc4d1a0304621121e932f7511deb8eb060c2054f4a45`. Preflight proved a clean detached source, Java 22, selected empty world and exact pin. The first post-start probe ran before Java opened 25565; the second read-only verifier passed after normal mod loading, proving PID `2769208`, the listening port, `Done`, `Frontier v3 runtime started` and no fresh quarantine. The update is server-only; no client update is required.
 ### Now
-- `MAT-004` / `V3-AUD-038` remains the active replacement slice. Verified
-  commit `5248e11c` wires individual `PatrolAssembly` ingress and `PatrolTravel`
+- The active work is the mandatory F0 seamless-foundation correction defined
+  in `docs/frontier-v3-seamless-foundation.md`. F0.0 inventories the current
+  ownership surfaces and installs source/architecture guards; F0.1 closes
+  V3-AUD-043 through MAT-001 as the paired COLD/HOT reference. F0.2 through
+  F0.6 then replace permanent ACTIVE custody, player-gated history, permanent
+  stack identity, unbounded operation scenes, direct scripted locomotion,
+  indefinite restart limbo and generic conflict handling. No new scene family
+  or MAT breadth may bypass this gate.
+- F0.0 now has its first mechanical recurrence guard: the architecture-debt
+  policy inventories all 39 current production references to legacy
+  `ContainerSurfaceStatus.ACTIVE` across 30 files and fails if a reference
+  appears in a new file or grows in an approved one. The inventory assigns
+  harvest to F0.1 and every remaining affected owner to F0.2–F0.5; it is a
+  shrinking baseline, not evidence that `ACTIVE` remains valid authority.
+  Focused debt negative tests (15/15) and the standalone debt verifier pass.
+- `MAT-004` / `V3-AUD-038` is paused behind F0, with its verified WIP preserved.
+  Commit `5248e11c` wires individual `PatrolAssembly` ingress and `PatrolTravel`
   into `RoutePatrol`, changes patrol advances from a whole-roster relocation to
   one exact retained edge, and raises the in-progress format to snapshot 126 /
   envelope 41. Old bytes reject before decode. Admission deterministically
@@ -186,6 +203,14 @@
   formation cells; no loaded-world lookup or nearest-road fallback exists.
   It is M0 WIP only: no `ROUTE_PATROL` HOT behavior or materialized evidence is
   claimed.
+- The accepted V3-AUD-043 correction makes the process/execution boundary
+  universal without making behavior generic: one canonical aggregate owns
+  purpose, schedule, identities, topology, cursor, progress and outcome; a
+  `SceneLease` owns only temporary physical execution. The current harvest
+  unload/return probe shows why this is required: a lease can close while its
+  reservation/work remains, then the exact farmer is not readmitted. Earlier
+  MAT-001 HOT/restart evidence remains useful but no longer proves complete
+  HOT/COLD continuity.
 - The cut now retains a failed operation ID and exact observed carriageway
   cell in a patrol task, compiles inspection from that operation's persisted
   route, and proves a HOT-to-COLD failure reaches the owning settlement's
@@ -791,7 +816,16 @@
 - Frontier v3 now has one V3-owned `FrontierV3PhysicalWorld`: lifecycle execution, restart inspection and all public physical-event bridges use only Graybox; other dimensions are explicit no-ops. Its canonical `WorldId` is `frontier:graybox`, invalidating the faulty r5 state; Graybox's known light-gray-concrete baseline is accepted exactly for field preparation. SourceGraybox delegates to the same physical dimension identity without a V3→legacy dependency. Fresh r6 materialized the Northwatch field and exposed one HOT/COLD route-lease race; `4b68424` made the lease exclusive, deferred COLD start/progress/readiness/combat and excluded a generic route scene during unresolved interception. The critical gate passed with 222 required GameTests.
 - Fresh r7 exposed COLD combat changing an actor under unresolved ambient recovery; `1d2de76` makes ambient authority exclusive. r8 then exposed PREPARED restart turning permanent UNKNOWN; `0e7896d` retains PREPARED, but r9 found bootstrap resident anchors inside Hall. `FrontierSettlementActorSlots` now compiles bounded, unique clear street/perimeter anchors for bootstrap and births; r10 then found legacy admission cancelling V3 bodies. Strict canonical UUID/type/lease proof permits only exact V3 bodies. `0e1a8a4` freezes HOT leases at server stop; an initial fresh-r11 graceful recovery retained resident `1-1`'s UUID, but a later ordinary client reconnect exposed a separate duplicate-UUID race: late `EntityLeave` had closed a lease after the old body entered chunk NBT. The r11 world is tainted as recovery evidence. `e0cd261` replaces that late close with fail-closed HOT recovery and the only COLD hand-off with 200-tick absent-demand/64-block-safe durable capture followed by explicit body discard; the contract/map and GameTest negative path match it. Fresh r12 proved normal player leave/rejoin and stop/restart with 20 recovered HOT leases and no duplicate UUID/quarantine, but its field exposed a separate V2/V3 single-writer violation: frozen SourceGraybox could republish into V3 Graybox. The r12 field is tainted. The successor makes launch-mode V3 exclusively own Graybox, pauses/rejects V2 writers even after V3 quarantine, and has focused launch-ownership coverage; without competing client/server load its full critical gate passed 223/223 GameTests plus build/package verification.
 ### Next
-- Close the materialization P0s in dependency order: reusable exact
+- Execute F0.0, then F0.1 through F0.6 in the order fixed by
+  `docs/frontier-v3-seamless-foundation.md`. Each slice must include its
+  architecture/source guard, pure normal and negative/recovery tests, and the
+  smallest causal GameTest or pilot proof required by its risk. MAT-001 is the
+  paired-driver reference: prove never-loaded, arrive-mid-process,
+  unload/return, intervention and graceful/abrupt restart. Foundation closure
+  additionally requires ordinary stack split/merge/partial transfer, deferred
+  unloaded aftermath, multi-front operation ownership, local terrain-aware HOT
+  navigation, fenced stale-body recovery and observer-neutral equivalence.
+- After the F0 completion gate, resume the materialization P0s in dependency order: reusable exact
   worker/actuator work lifecycle; farm HOT reference; workshop/repair/
   decontamination; exact patrol and expedition motion; provision/birth;
   hiveroot nutrient flow and staged hive growth. Each item requires M2 normal,

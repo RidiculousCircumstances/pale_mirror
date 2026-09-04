@@ -152,6 +152,10 @@ never add an ad-hoc HUD toggle to a scenario.
 
 ## Frontier v3 materialization completeness discipline
 
+- Before extending a v3 process, scene, inventory surface, physical effect or
+  movement family, read `docs/frontier-v3-seamless-foundation.md`. Its active
+  F0 correction slices block new MAT breadth until their stated exit gates and
+  recurrence guards pass; an older green endpoint/HOT test does not waive them.
 - Classify every canonical process with
   `docs/frontier-v3-materialization-completeness.md` before calling it
   materialized. Report M0 canonical, M1 physical endpoint, M2 continuous HOT and
@@ -181,8 +185,10 @@ never add an ad-hoc HUD toggle to a scenario.
   semantic facility port compiled by the owning plan.
 - COLD advances only a retained topology edge/cursor. HOT delegates local
   collision and navigation to the registered physical movement provider and
-  advances that same cursor only from observed arrival; it may not invent a
-  sidestep, teleport or hidden alternate entrance.
+  advances that same cursor only from observed arrival. The provider may find
+  a bounded local path inside the process-owned navigation envelope, but may
+  not leave it, skip a checkpoint, teleport, or select a different semantic
+  entrance or strategic route.
 - Every movement-bearing extension needs a focused non-flat fixture plus a
   blocked or damaged edge/entrance case. The flat graybox is one provider test,
   not evidence that the architecture supports real terrain.
@@ -231,8 +237,11 @@ never add an ad-hoc HUD toggle to a scenario.
   observed/materialized representations, never a second source of truth.
 - Every long-lived mutable record has one owner, explicit identity, and a
   retention/compaction or cleanup story.
-- Executors check preconditions and postconditions. Unknown/player-owned world
-  changes are conflicts to report, never data to overwrite by default.
+- Recognized player/world actions are ordinary typed domain disruptions with
+  an owner and recovery/abandonment path. Unclassified or ambiguous physical
+  drift is an isolated reconciliation conflict, never data to overwrite by
+  default; only canonical invariant or persistence corruption quarantines the
+  whole frontier instance.
 - Fail closed and visibly on an invariant violation. Do not conceal it with a
   fallback unless the architecture map explicitly permits that fallback.
 

@@ -124,26 +124,53 @@ classes: changed work/facility state, cargo flow, deployment, closure, behaviour
 or physical outcome. A diagnostic value or board text alone is not a gameplay
 materialization claim.
 
+## Execution-mode ownership
+
+For every duration-bearing class, the canonical process exists and begins from
+domain causes whether or not its area is loaded. Player demand selects only the
+executor: COLD advances bounded semantic progress without Minecraft bodies,
+while a physical lease lets the process-specific HOT driver advance the same
+next steps from observations. The lease is not a second process and owns no
+independent progress or outcome.
+
+Acquire, checkpoint and release must atomically bind one process version, its
+exact participants/resources and its authoritative cursor. Returning to a
+loaded area shows the retained current state; it never starts the work, resets
+its clock, recreates a participant or reenacts missed history. A process cannot
+reach M2 if viable off-screen work waits for a player, or if leaving and
+returning loses its actuator even though canonical work remains active.
+
+This rule does not force every class into a scene. Class-B atomic effects use a
+durable intent and observed postcondition; class-E environmental work owns a
+spatial frontier; class-G decisions use downstream consequences; ambient bodies
+may hold presence custody without becoming a work operation.
+
 ## Universal definition of done
 
 A spatial process reaches M2 only when all applicable conditions pass:
 
 1. one canonical owner retains exact participants, objects, resources and the
    authoritative progress/cursor;
-2. HOT admission leases those same identities before any body/effect appears;
-3. semantic access, work, input and output ports are explicit and terrain-aware;
-4. start, progress, blocked/interrupted state and terminal result are visually
+2. domain causes schedule and begin the process independently of player/chunk
+   demand, and a registered COLD driver can advance its same progress model;
+3. HOT admission leases those same identities and authoritative process version
+   before any body/effect appears;
+4. semantic access, work, input and output ports are explicit and terrain-aware;
+5. start, progress, blocked/interrupted state and terminal result are visually
    distinguishable at player height;
-5. ordinary player actions can kill, steal, break, obstruct or counter the
+6. ordinary player actions can kill, steal, break, obstruct or counter the
    relevant physical subject and generate typed evidence for the same process;
-6. COLD and HOT advance the same progress model without teleport, duplicate work
+7. COLD and HOT advance the same progress model without teleport, duplicate work
    or a fabricated reenactment on return;
-7. graceful and abrupt restart recover the exact partial state and inspect
+8. HOT acquire, observed checkpoint and release atomically update the lease and
+   owning process, leaving no independent scene cursor or terminal outcome;
+9. graceful and abrupt restart recover the exact partial state and inspect
    non-replayable postconditions rather than replaying them;
-8. a non-flat case and a blocked/damaged port or route fail visibly;
-9. bounded diagnostics and one correlation chain explain owner, lease, progress,
+10. a non-flat case and a blocked/damaged port or route fail visibly;
+11. bounded diagnostics and one correlation chain explain owner, lease, progress,
    physical action, observation and terminal result;
-10. focused normal plus negative/recovery tests pass, followed by one native
+12. focused never-loaded, arrive-mid-process, leave/return, intervention and
+    restart tests pass, followed by one native
     scenario that asserts the domain result and captures the process in progress.
 
 M3 additionally requires a clean player-height review in which an unbriefed
@@ -179,6 +206,21 @@ The audit is anchored in the following current-source boundaries:
 - hive-growth and hive-nutrient pilot scenarios still assert terminal
   diagnostics/receipts and result frames, not their missing in-progress actors
   or physical frontiers; `MAT-001` is the implemented exception below.
+
+V3-AUD-043 supersedes the earlier `MAT-001` M2-closure label in the inventory
+below. Its existing HOT, death and restart evidence remains valid, but MAT-001
+is currently reopened because it has not proved independent COLD start/progress
+or an unload-to-COLD-to-return continuation. The row will be rewritten when
+that paired-driver exit evidence is complete; it must not be cited as closed in
+the meantime.
+
+The broader F0 correction programme in
+`docs/frontier-v3-seamless-foundation.md` is now a mandatory predecessor to new
+MAT breadth. MAT-001 supplies the paired-driver reference, but does not by
+itself close replica/custody separation, deferred unloaded aftermath, fungible
+resource custody, bounded operation fronts, local navigation, fenced recovery,
+failure taxonomy, observer neutrality or first-visibility readiness. MAT-004
+and later rows remain paused until the complete F0 gate passes.
 
 | ID | Priority | Current strongest evidence | Gap and closure requirement |
 |---|---:|---|---|

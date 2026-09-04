@@ -6,6 +6,11 @@ This document is the stable contract for Frontier v3. Implementation details may
 change, but changing an invariant or player promise here requires an explicit
 product and architecture decision in the same commit.
 
+The mandatory ownership and recovery refinements needed before further
+materialization breadth are specified in
+`docs/frontier-v3-seamless-foundation.md`. They are part of this contract, not
+an optional implementation note.
+
 ## Player promise
 
 The player enters an autonomous world that was living before they arrived,
@@ -323,6 +328,32 @@ their profile catalog and their selecting bootstrap provider exist only on a
 dedicated moddev/test classpath and are absent from the production JAR;
 production startup cannot select one through JVM properties.
 
+A scene is a temporary physical execution session for an already-existing
+canonical process. It does not own that process's purpose, schedule, phase,
+participants, resources, topology, progress, outcome or next transition. A
+player loading a chunk may change only the eligible execution mode; it may not
+create, start, restart, accelerate or otherwise become the cause of the domain
+work. The process must therefore be able to exist, begin and retain meaningful
+partial progress without any player or Minecraft entity present.
+
+Every duration-bearing process has one authoritative process aggregate and
+paired execution drivers over the same state model. Its COLD driver advances
+bounded semantic work while no physical lease is held. Its process-specific HOT
+driver executes the same next semantic step through Minecraft and advances it
+only from typed observations. Acquiring a HOT lease, checkpointing observed
+progress and releasing back to COLD are atomic compare-and-set transitions over
+the process version and exact identities. There is never an independent scene
+cursor, outcome or recovery history that can diverge from the process.
+
+This is a universal ownership and hand-off protocol, not a universal behavior
+algorithm. Farms, production, combat, transport and treatment retain distinct
+registered drivers. Genuinely atomic local effects use a durable
+`PhysicalIntent` without inventing a duration scene; distributed processes such
+as infection or collapse retain a spatial frontier rather than a fictitious
+worker; strategic decisions remain canonical and become visible through their
+downstream processes. Ambient physical presence may use a custody lease without
+pretending to be an operation.
+
 All scene kinds share one generic lifecycle (`candidate → admission → PREPARED
 → HOT → DRAINING → CLOSED/UNKNOWN/CONFLICT`) and one persisted `SceneLease`.
 A closed NeoForge `SceneBehavior` registry dispatches each known typed cause to
@@ -340,6 +371,8 @@ through the lifecycle.
 - COLD execution advances exact actors and processes through domain events
   without Minecraft entities or force-loaded chunks.
 - A scene becomes HOT only from naturally loaded non-spectator player demand.
+  Demand selects physical execution for existing eligible work; absence of
+  demand selects COLD execution and never pauses or suppresses that work.
   One persisted scene lease names its revision, members, custody and hand-off
   instant before any body or container appears. The broad hand-off point is
   demand/readability metadata only: the lease separately snapshots one exact
@@ -353,12 +386,14 @@ through the lifecycle.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
-- A physical world-effect executor first checks present naturally loaded
-  non-spectator player demand at the intent's exact physical origin, before it
-  resolves or recompiles any semantic geometry. A merely retained chunk is not
-  demand: the intent stays durable and pending until an ordinary visit. This
-  keeps a stale loaded repair/build from spending material or consuming an
-  unbounded server tick in background geometry work.
+- Player demand may gate only immediate Minecraft execution and presentation,
+  never the semantic consequence or liveness of its owning process. A HOT
+  world-effect executor first checks naturally available physical evidence at
+  the exact origin and uses a durable-before-effect receipt. If the region is
+  unavailable, the canonical consequence advances from known facts and emits a
+  bounded chunk-indexed deferred aftermath record. Natural later loading shows
+  the current result without replaying the old action; unclassified drift is
+  observed before any write and blocks only its smallest owner.
 - Every spatial logistics operation owns an immutable bounded `OperationTravel`:
   strategic route milestones remain planning facts, while its adjacent-cell
   corridor, cursor, formation positions and cargo anchor are the one movement
@@ -396,17 +431,14 @@ through the lifecycle.
   the naturally loaded Minecraft world remains the final admission authority.
 - HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
-  intents. If its hand-off surface remains naturally loaded, it durably closes
-  the lease and removes the exact body before serializing the chunk. If vanilla
-  unloads the surface before the hysteresis elapses, the runtime may use only
-  its bounded last complete HOT observation to close the lease; the unchanged
-  serialized projection is removed on that chunk's ordinary next load before a
-  new scene can claim the actor. After restart, where that volatile observation
-  does not exist, DRAINING waits for natural inspection rather than inventing a
-  release. A late Minecraft entity-leave callback never closes a HOT lease: it
-  is recovery evidence for the same UUID, not proof that a COLD hand-off
-  happened. Only then may physical custody be released and future domain work
-  scheduled.
+  intents. Durable lease epochs fence every physical binding. A current exact
+  binding may be reclaimed; a completely checkpointed lease may be revoked and
+  resumed COLD under a newer epoch. An older body or carrier loaded later is a
+  stale projection and is removed/reconciled without emitting a second death,
+  item or effect. Ambiguous non-replayable effects remain locally unresolved
+  until their postcondition can be inspected, but never freeze unrelated work.
+  A late Minecraft entity-leave callback is evidence only and cannot itself
+  close authority.
 - COLD-to-HOT first advances the scene to the lease instant, then reconstructs
   its current state. Dead actors and completed effects are never replayed to
   make a cinematic history.
@@ -429,8 +461,11 @@ through the lifecycle.
   exact missing identities as recovery evidence and blocks that delivery. It
   does not recreate actors, infer deaths, duplicate the cargo, or reschedule
   the same unknown scene forever; unrelated settlement work continues.
-- Battles and operations use one scene-level lease so participants, terrain,
-  cargo and effects cross the boundary atomically.
+- A strategic operation owns one or more bounded disjoint spatial fronts. Each
+  front may hold one scene-level lease so its local participants, cargo and
+  effects cross the boundary atomically; the complete operation is never one
+  unbounded physical transaction. Exact reserves and transit actors remain
+  canonical people/bioforms at their real positions, not cohorts.
 
 If a player leaves a battle and later returns, they see current survivors,
 positions, damage, infection and structures produced by COLD continuation. They
@@ -473,6 +508,13 @@ observed baseline matches its precondition. Unknown or player-changed blocks are
 recorded as conflicts/deltas and are never silently overwritten to restore a
 template.
 
+Persistent physical presence and current execution custody are independent.
+An owned chest, body or structure may remain serialized after a lease closes,
+but its last emitted revision is only a replica fingerprint. Canonical work may
+not branch on whether that replica was ever materialized. A new HOT lease first
+matches the current physical fingerprint and authority epoch; changed evidence
+is reconciled before any projection update.
+
 A naturally demanded engineering scene may additionally materialize a small
 project-owned temporary worksite floor under each exact worker. These floors
 are distinct from completed route surfaces: they provide real support for the
@@ -495,6 +537,13 @@ This distinction is invariant: materialization cannot overwrite unknown
 reality, while a legitimate causal effect is allowed to change any physically
 reachable reality and must account for it afterwards.
 
+A COLD legitimate effect follows the same rule through a durable bounded
+aftermath footprint. Known semantic consequences commit at their original
+simulation time. The footprint is realized idempotently when its chunks become
+naturally available, affecting foreign/player construction unless a later
+durable event proves it postdates the effect. The old projectile, explosion or
+fight is never replayed for presentation.
+
 Infection materializes as an obviously foreign dynamic surface and visible
 contamination of structures and organs. Growth, retreat, removal and spread
 remain canonical processes; the adapter does not paint infection merely for
@@ -506,9 +555,11 @@ a second mutable infection state.
 
 ## Physical economy and custody
 
-Canonical storage is exact slot-level inventory, even while COLD. Every stored
-resource has a named owner, container/cargo ID, item kind, count and slot or
-custody position.
+Canonical storage retains exact integer quantities and custody even while COLD.
+Fungible resources live in bounded lots and custody accounts; exact allocations
+bind quantities to contracts, cargo, equipment and process reservations.
+Physical slots are temporary bindings while HOT, not permanent identity for an
+otherwise interchangeable Vanilla stack.
 
 An inventory reconciliation conflict is durable evidence anchored to one known
 physical container slot. It may also name the exact item that was observed, but
@@ -544,8 +595,8 @@ compact only after no job, reservation, cargo or physical intent refers to them.
 - HOT warehouses and depots use ordinary Minecraft containers representing
   those exact slots. They are displays and interaction surfaces for the same
   inventory, not a second stock counter.
-- Player deposits, withdrawals, theft, destruction and delivery become exact
-  versioned observations immediately.
+- Player deposits, withdrawals, split/merge, partial transfer, theft,
+  destruction and delivery become exact zero-sum versioned observations.
 - Transport uses identified batches in real carriers while HOT and exact
   canonical custody while COLD. It never creates an entity per resource unit.
 - Production blocks, spills or schedules new capacity when no valid storage is
@@ -574,8 +625,10 @@ Transactions have two durability classes:
 Recovery loads the newest valid snapshot, replays complete WAL transactions in
 order and rejects gaps, checksum errors, duplicate conflicting IDs or invalid
 references. A prepared/running physical intent is inspected against the real
-world and completed or quarantined from its postcondition; it is never blindly
-replayed.
+world when required and is never blindly replayed. Authority epochs permit a
+safely checkpointed physical lease to resume COLD without waiting for an
+unrelated future player visit; a later old binding is fenced as stale. Only an
+ambiguous non-replayable effect remains isolated pending physical inspection.
 
 Checkpointing atomically writes a new snapshot, verifies it, then compacts only
 WAL segments fully covered by that snapshot. Detailed terminal events,

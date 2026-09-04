@@ -77,6 +77,15 @@ the evidence recorded for earlier causality/recovery closures.
 | V3-AUD-040 | P1 | Confirmed defect | Existing acceptance frequently proves only terminal diagnostics and before/after frames. Crop/infection projection batch-replaces a complete aggregate stage, and scenarios for harvest/hive transfer/growth assert endpoint state without an in-progress physical actor/frontier. The evidence model did not distinguish canonical correctness, physical endpoint, continuous HOT execution and unbriefed player comprehension. |
 | V3-AUD-041 | P0 | Confirmed defect | The initial `SettlementServiceWork` foundation retained only a worker-to-worksite topology while its exact reagent remained in a depot slot. Any subsequent executor would have had to consume remotely, create an untracked pickup, or silently place the item in the worker hand. |
 | V3-AUD-042 | P0 | Confirmed defect | Live disposable r69 proved a production terminal-ordering violation: a COLD completion could prepare `PRODUCTION_TRANSFORMATION` after its exact worker reached `OUTPUT_READY` but before the same `PRODUCTION_WORK` lease released. Confirmation then removed the job while the non-closed lease still required it, causing `NullPointerException: production-work scene job`; the runtime correctly quarantined at 11:15:30 rather than accept an unowned HOT body. |
+| V3-AUD-043 | P0 | Confirmed defect; replacement contract accepted | The resource-harvest implementation treats the HOT scene as the only meaningful work driver. A native unload/return probe can close the lease while retaining the harvest reservation and canonical work, then fail to rematerialize its exact farmer; off-screen progress and arrival-mid-process continuity are not established. This makes player demand part of starting/continuing work and splits authority among job cursor, actor location and lease recovery position. The accepted replacement makes every scene only an atomic physical-execution lease over one process-owned cursor, with paired COLD/HOT drivers and no demand-created operation. |
+| V3-AUD-044 | P0 | Confirmed defect; replacement contract accepted | `ContainerSurfaceStatus.ACTIVE` is irreversible and process code selects COLD versus physical economy from that historical state. Once a depot or hive store has been visited, later viable work can wait for its unloaded chest, so observation changes future liveness. FND-01 separates persistent replica evidence from temporary physical custody. |
+| V3-AUD-045 | P0 | Confirmed contract defect; replacement accepted | The physical-effect contract lets a durable effect remain pending until a player visits its origin. Used as a process prerequisite, this makes player demand the clock for construction, repair, consumption or destruction. FND-02 commits known semantic consequences COLD and retains bounded deferred physical aftermath without force-loading or replay. |
+| V3-AUD-046 | P0 | Confirmed defect; replacement contract accepted | One permanent ID per ordinary Minecraft stack cannot represent Vanilla split/merge: a split duplicates the tag and a merge of distinct tags is rejected or becomes foreign/duplicate evidence. FND-03 retains exact unit quantities and stable allocations while making physical stack bindings temporary. |
+| V3-AUD-047 | P0 | Confirmed contract/scale defect; replacement accepted | The contract assigns one scene lease to a complete battle/operation while `SceneLease` accepts at most 32 members. Raising the cap conflicts with bounded physical work and cannot support exact hundred-body operations. FND-04 partitions one exact strategic operation into disjoint bounded spatial fronts, each with its own local lease. |
+| V3-AUD-048 | P0 | Confirmed product-architecture defect; replacement accepted | The common HOT actuator disables AI, stops navigation and attempts only one direct vector with no sidestep. Exact cell ownership is useful graybox evidence but cannot deliver living role-aware movement across doors, slopes, local avoidance and combat. FND-05 gives the canon semantic checkpoints/envelopes and a HOT provider bounded local navigation. |
+| V3-AUD-049 | P0 | Confirmed autonomy/recovery defect; replacement accepted | After restart, an unloaded `DRAINING`/unknown projection can retain physical authority until that location is naturally inspected. A never-revisited chunk can therefore freeze its exact actor or operation indefinitely. FND-06 uses durable authority epochs and stale-projection fencing while retaining separate postcondition inspection for ambiguous non-replayable effects. |
+| V3-AUD-050 | P0 | Confirmed failure-model defect; replacement accepted | Expected gameplay actions and ambiguous reconciliation frequently converge on terminal `CONFLICT`/blocked paths designed for invariant safety. Without a generic owning response, ordinary death, theft, obstruction or partial transfer accumulates frozen work. FND-07 separates domain disruption, isolated reconciliation ambiguity and frontier-corrupting invariant failure. |
+| V3-AUD-051 | P1 | Underspecified product contract; correction accepted | “Same truth and fidelity” does not define whether neutral HOT and COLD combat/work require identical outcomes or only equivalent rules. Exact equality scripts HOT physics; unconstrained divergence makes observation alter history. FND-08 defines identity/conservation equality plus fixed-seed calibrated outcome tolerances and observer-neutrality gates. |
 
 ## Remediation status
 
@@ -128,6 +137,15 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-040 | OPEN | Enforce the M0–M3 evidence levels and class matrix from `docs/frontier-v3-materialization-completeness.md`; convert batch environmental changes under `MAT-008` to retained spatial progress and map decisions to gameplay consequences under `MAT-009`. Guardrails and review must reject endpoint-only claims for duration-bearing processes. |
 | V3-AUD-041 | OPEN | Before a service work may be admitted, reshape it into a two-station exact custody process: retain the source-container service port and source slot, durable input-issue intent, exact actor custody and separate source/work traversal cursors. Prove source theft, worker death, station loss and restart; never let the endpoint executor consume a remote depot stack. |
 | V3-AUD-042 | CLOSED | The first correction retained the job until its HOT lease released, but the required native scenario then found the remaining schedule-owner defect: release attempted `ScheduleEffect.Created` for the already retained stable `schedule:production-task-complete-*` action and correctly quarantined rather than duplicate it. `ProductionProcess.planCompletion` now reschedules that one durable review while the exact worker lease is HOT/DRAINING; the release receipt reschedules the same ID to the next tick, where the closed lease permits the terminal transform. The focused ordinary/negative regression, Economy 17/17, Scene 56/56 and critical gate (guardrails, check, build/package, 287/287 GameTests) pass. Native `disposable_materialized_production_work_restart` run `74b66054-6464-4279-afb0-7cd8f3730591` reaches the exact 64-bread depot receipt, survives graceful restart and completes without quarantine. |
+| V3-AUD-043 | OPEN | Treat `SceneLease` as execution authority only. First repair `MAT-001`: its canonical harvest must begin and advance without player demand, HOT must attach at the current process cursor, and release must atomically return the next unfinished step to COLD. Close with never-loaded, arrive-mid-process, unload/return, interruption and graceful/abrupt restart evidence. Then add a composition/source gate requiring paired HOT/COLD drivers for every duration-bearing process before reusing the contract elsewhere. |
+| V3-AUD-044 | OPEN | F0.0 baseline is installed: the architecture-debt ratchet counts all 39 production `ContainerSurfaceStatus.ACTIVE` references and rejects new/growing use. Execute F0.2 to replace historical container `ACTIVE` authority with separately persisted replica fingerprint and current custody lease/epoch. Convert one settlement depot and one hive store, then prove never-visited and visited-unloaded liveness plus changed-replica observation before write. |
+| V3-AUD-045 | OPEN | Execute F0.2. Introduce the bounded chunk-indexed semantic-consequence/physical-receipt/deferred-aftermath protocol. Prove one off-screen unrestricted explosion and one constructive obstruction without force-load, replay or unrelated process stall. |
+| V3-AUD-046 | OPEN | Execute F0.3. Introduce fungible resource lots, stable claim allocations, custody accounts and transient physical bindings. Convert all current item owners in one fresh-world format cut and prove split, merge, partial movement, hopper, drop/pickup, theft and replay conservation. |
+| V3-AUD-047 | OPEN | Execute F0.4. Replace operation-wide scene atomicity with operation phase plus disjoint bounded fronts and local leases. Preserve one-to-one actor identity and current scene safety limits; require two-front causality and same-seed JFR before any cap increase. |
+| V3-AUD-048 | OPEN | Execute F0.4 with V3-AUD-019. Replace the direct-vector actuator as the final movement contract with a registered local navigator constrained by one canonical port/checkpoint envelope. Prove slopes, stairs/doors, local avoidance, persistent obstruction and no semantic route escape. |
+| V3-AUD-049 | OPEN | Execute F0.5. Add monotonic physical authority epochs and stale projection fencing for body, cargo, container and effect bindings. Prove hard-crash recovery can resume safe COLD work without a visit and later stale load neither duplicates nor invents a death/effect. |
+| V3-AUD-050 | OPEN | Execute F0.5. Give every normal disruption and ambiguity a smallest owning aggregate, visible reason, bounded retry/repair/replan/abandonment and compaction rule. Retain whole-frontier quarantine only for canonical/persistence corruption. |
+| V3-AUD-051 | OPEN | Execute F0.6. Add fixed-seed HOT/COLD invariant and tolerance comparison, keyed randomness checks and an observer-neutrality report. Exact identities, claims and conservation remain strict; physical trajectories and hit sequences do not. |
 
 ## Findings and required corrections
 
@@ -607,6 +625,52 @@ Exit evidence: zero forced v3 GameTest chunk loads; packaged-JAR rejection of
 the two moved test helpers; focused GameTest slice plus the named native scene
 scenarios remain green.
 
+### V3-AUD-043 — a physical scene can become the work owner
+
+The shared lease lifecycle correctly prevents duplicate HOT/COLD custody, but
+it does not by itself prove that the canonical process can begin and advance in
+both modes. Resource harvest currently exposes the distinction: the retained
+job and reservation can survive an unloaded release while the exact farmer no
+longer has an admissible continuation on return. Earlier HOT and restart proofs
+therefore establish a valid physical episode, not universal execution
+continuity.
+
+Correction: one process aggregate owns schedule, identities, resources,
+topology, cursor, progress and outcome. A scene is only a versioned capability
+grant to a registered HOT driver; its acquire, observed checkpoints and release
+atomically update that same aggregate. A paired COLD driver advances the same
+semantic steps whenever no physical lease exists. Player demand chooses the
+executor and cannot create, start, reset or accelerate the process. Atomic
+effects, environmental frontiers and ambient custody retain their distinct
+intent/frontier/presence boundaries instead of being forced through a work
+scene.
+
+Exit evidence: a mechanical registry/composition check rejects a
+duration-bearing process without both drivers; `MAT-001` passes never-loaded,
+arrival-mid-progress, ordinary unload/return, intervention and graceful/abrupt
+restart tests with one process cursor and exact farmer identity; the native
+scenario shows later current state without replay, disappearance or a
+demand-created start.
+
+### V3-AUD-044 through V3-AUD-051 — seamless-world foundation correction
+
+The scene-owner defect exposed a wider family of observer-dependent
+assumptions: historical materialization can become permanent custody, physical
+effects can become off-screen schedulers, permanent stack tags reject normal
+Vanilla transformations, one scene is treated as a whole army, exact cell
+motion is treated as final animation, restart uncertainty can wait for a future
+visitor, and ordinary disruption can be mistaken for corruption. HOT/COLD
+outcome equivalence is also not precise enough to prevent either scripted
+physics or an observer advantage.
+
+The normative diagnosis, target ownership records, ordered F0.0–F0.6 migration,
+negative/recovery matrix and stop conditions are in
+`docs/frontier-v3-seamless-foundation.md`. This audit owns finding status; that
+document owns the complete implementation hand-off. New MAT breadth is paused
+until all P0 foundation findings close. Existing tests remain valid only for
+their proven boundary and must be rewritten when their expected result encodes
+one of the rejected FND assumptions.
+
 ## Explicit non-defects
 
 - Immutable canonical state and fail-closed complete validation are retained.
@@ -621,11 +685,13 @@ scenarios remain green.
 ## Remediation order
 
 The implementation plan owns execution. The original hardening sequence through
-V3-AUD-036 is complete. Execute the materialization-completeness gate in its documented
-dependency order: reusable work lifecycle and farm reference, production and
-service work, exact assigned movement, human lifecycle, hive metabolism, then
-distributed-environment and decision-comprehension closure. Do not add another
-endpoint-only executor as a shortcut. Each correction lowers the checked-in
-debt ratchet. Raising a baseline requires an accepted architecture amendment
-with a new finding and removal plan; it is never an ordinary implementation
-edit.
+V3-AUD-036 is complete. Execute the ordered F0 programme in
+`docs/frontier-v3-seamless-foundation.md`: V3-AUD-043 first establishes process
+ownership, then V3-AUD-044 through V3-AUD-051 correct replica custody,
+aftermath, resources, navigation/fronts, recovery/failure policy and
+observer-neutrality. Only after F0 may the materialization-completeness plan
+resume exact assigned movement, human lifecycle, hive metabolism, distributed
+environment and decision comprehension. Do not add another endpoint-only
+executor as a shortcut. Each correction lowers the checked-in debt ratchet.
+Raising a baseline requires an accepted architecture amendment with a new
+finding and removal plan; it is never an ordinary implementation edit.

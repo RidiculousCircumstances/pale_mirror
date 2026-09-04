@@ -3,6 +3,17 @@
 Status: approved execution plan for the target contract in
 [`frontier-v3-contract.md`](frontier-v3-contract.md).
 
+The active precondition for further materialization breadth is the normative
+[`frontier-v3-seamless-foundation.md`](frontier-v3-seamless-foundation.md)
+correction programme. Its F0 slices supersede the previous assumption that a
+valid endpoint executor or one monolithic scene is sufficient foundation.
+
+The designated GPT-5.6 Terra continuation agent must follow the executable
+[`frontier-v3-terra-implementation-brief.md`](frontier-v3-terra-implementation-brief.md).
+It expands the F0 contract into ownership, recovery, scenario, testing and
+handoff rules; it does not authorize a deviation from this plan or
+`architecture.yml`.
+
 This is the implementation source of truth for Frontier v3. An engineer or
 agent works only on the current wave recorded in `CONTINUITY.md`, proves that
 wave's exit gate, commits it, and then advances the ledger. Later-wave code is
@@ -23,10 +34,17 @@ not added speculatively.
   precondition, but normal starts must always use the ordinary world profile;
   fixtures may never be an AI, planner, production or live-server fallback and
   must be absent from the production packaged JAR.
+- A scene is only a persisted physical-execution lease over an already-owned
+  canonical process. Player/chunk demand may select HOT execution but may not
+  create, start or own the process. Every duration-bearing process must register
+  paired COLD and HOT drivers over one authoritative progress model; atomic and
+  distributed process classes use their appropriate intent/frontier boundary
+  instead of a fictitious scene.
 - Scene kinds use one persisted lifecycle and a closed NeoForge behavior
-  registry. Add a new `SceneCause` with one behavior and its normal,
-  negative/recovery tests; do not spread `if cause` branches through generic
-  materialization, persistence or diagnostics.
+  registry. Add a new `SceneCause` with one process-specific behavior and its
+  normal, negative/recovery tests; do not spread `if cause` branches through
+  generic materialization, persistence or diagnostics. Generic lifecycle code
+  owns exclusivity and atomic acquire/checkpoint/release, never domain progress.
 - Each commit must leave `architecture.yml`, implementation and
   `CONTINUITY.md` consistent. No wave is complete from code existence alone.
 - Run only the focused tests for the current behavior plus the risk-level gate
@@ -34,6 +52,47 @@ not added speculatively.
 - Preserve both Git histories. Frontier source/docs belong only to the nested
   `pale-mirror/` repository; packaging/deployment changes belong to the outer
   repository and land only after a verified v3 artifact exists.
+
+## Mandatory seamless-foundation correction gate
+
+Before resuming `MAT-004` or adding any other process, scene, inventory or
+effect family, execute F0 from
+[`frontier-v3-seamless-foundation.md`](frontier-v3-seamless-foundation.md):
+
+1. **F0.0 — inventory and recurrence guards.** Classify every current duration
+   process, physical surface, effect, movement owner and conflict producer;
+   install mechanical checks for paired execution ownership and forbidden
+   historical-materialization authority.
+2. **F0.1 — one process, two drivers.** Close V3-AUD-043 through MAT-001 with
+   never-loaded, arrive-mid-process, unload/return, intervention and crash
+   evidence over one process cursor.
+3. **F0.2 — replica custody and deferred aftermath.** Separate persistent
+   physical replicas from temporary authority, remove permanent `ACTIVE`
+   economic branching and make COLD consequences produce bounded idempotent
+   physical aftermath rather than wait for a player.
+4. **F0.3 — fungible exact resources.** Replace permanent Vanilla-stack
+   identity with exact lots, allocations, custody accounts and transient
+   physical bindings that support ordinary split/merge/partial transfer.
+5. **F0.4 — semantic navigation and operation fronts.** Give HOT a bounded
+   local navigation envelope under canonical checkpoints and partition large
+   exact operations into disjoint local fronts instead of one unbounded scene.
+6. **F0.5 — fenced recovery and failure ownership.** Add authority epochs,
+   stale-projection rejection and distinct domain-disruption, reconciliation
+   and canonical-corruption outcomes with bounded recovery/abandonment.
+7. **F0.6 — observer-neutrality, first visibility and scale.** Prove calibrated
+   HOT/COLD semantic equivalence, pre-visible graybox catch-up and concurrent
+   twelve-settlement/hive-front performance.
+
+F0 is an ordered correction, not a parallel feature list. An implementation
+agent works on only the first incomplete slice recorded in `CONTINUITY.md`,
+commits each coherent fresh-world format cut independently and updates the
+audit/architecture/ledger in the same commit. Existing M0–M2 evidence remains
+valid only for the boundary it actually proves; tests encoding a rejected FND
+assumption must be rewritten rather than preserved as compatibility behavior.
+
+The detailed brief owns the data responsibilities, negative cases, stop
+conditions and exit evidence. This plan owns sequencing: no later MAT or Wave 6
+breadth may bypass F0.
 
 ## Mandatory architecture hardening gate
 
@@ -608,6 +667,36 @@ resource creation and stable deterministic replay.
 
 ## Materialization completeness gate
 
+### Process/execution continuity correction
+
+Before adding another duration-bearing scene family, make the universal
+process/execution boundary mechanically true:
+
+This subsection is the original narrow V3-AUD-043 gate. It is now executed as
+F0.1 and must be followed by F0.2–F0.6; closing MAT-001 alone does not reopen
+materialization breadth.
+
+1. inventory each duration-bearing process's canonical aggregate, COLD driver,
+   HOT driver, progress/cursor, lease and terminal effect adapter;
+2. reject any flow in which player demand or chunk load creates/starts domain
+   work, or in which absence of demand pauses an otherwise viable process;
+3. make HOT acquire, each observed checkpoint and HOT release atomic against the
+   same process version and exact actor/item/topology identities;
+4. keep `PhysicalIntent` for genuinely atomic effects, retained spatial
+   frontiers for distributed environmental work and custody-only leases for
+   ambient bodies instead of forcing those classes through a work scene;
+5. repair `MAT-001` as the reference implementation: begin and advance harvest
+   in COLD, attach HOT at its current retained cursor, release to continued COLD
+   work, then return to the later current state without replay or disappearance;
+6. prove never-loaded, arrive-mid-process, leave/return, player interruption and
+   graceful/abrupt restart paths before applying the boundary to production,
+   service work, patrols, expeditions and later rail transport.
+
+This gate changes ownership, not game balance: HOT remains real-time Minecraft
+execution and COLD remains bounded event-driven semantic progress. Completion
+requires a source guard or composition test that prevents a new duration
+process from registering only one driver.
+
 Before Wave 6 can claim a process complete, classify and prove it under
 `docs/frontier-v3-materialization-completeness.md`. In particular, an exact
 physical receipt or final block/container state is only M1 evidence; it does not
@@ -639,7 +728,7 @@ Close the confirmed gaps in dependency order:
 8. complete the decision-to-visible-consequence matrix for markets, shortages,
    quarantine and doctrine, then run the unbriefed M3 comprehension gate.
 
-`MAT-001` through `MAT-007` are P0 Wave-6 blockers. `MAT-008` through
+After F0 completes, `MAT-001` through `MAT-007` are P0 Wave-6 blockers. `MAT-008` through
 `MAT-010` block Wave-7 product acceptance. An earlier audit closure for conservation,
 receipt or recovery remains valid at its evidence level but cannot be cited as
 closure of the corresponding `MAT-*` item.

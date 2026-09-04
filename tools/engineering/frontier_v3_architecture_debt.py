@@ -58,6 +58,11 @@ PROCESS_UNHASHED_TUNING = re.compile(
     r"\b(?:public|private|protected)?\s*static\s+final\s+(?:long|int|FixedScalar)\s+"
     r"(?!LEGACY_)(?:\w*(?:INTERVAL|DELAY|RADIUS|STEP|GAIN|LIFETIME|COST|PRICE)\w*)\b"
 )
+# F0.0: ACTIVE is the legacy mixed "replica existed/current Minecraft custody"
+# status.  It is deliberately inventory-ratcheted until F0.2 replaces it with
+# a replica record plus epoch-fenced custody lease.  New production uses are a
+# regression even when their immediate caller happens to be a NeoForge adapter.
+HISTORICAL_SURFACE_ACTIVE = re.compile(r"\bContainerSurfaceStatus\.ACTIVE\b")
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -143,6 +148,9 @@ def collect(root: Path) -> dict[str, Any]:
             relative = source.as_posix()
             unbounded_scheduled_queue_paths[relative] = unbounded_scheduled_queue_paths.get(relative, 0) + 1
     process_unhashed_tuning_constants = _counts(root, (FRONTIER_MAIN / "process",), PROCESS_UNHASHED_TUNING)
+    historical_surface_active_references = _counts(
+        root, (FRONTIER_MAIN,), HISTORICAL_SURFACE_ACTIVE
+    )
     model_root = root / FRONTIER_MAIN / "model"
     model_forbidden_dependencies: dict[str, int] = {}
     for path in _java_files(root, FRONTIER_MAIN / "model"):
@@ -173,6 +181,7 @@ def collect(root: Path) -> dict[str, Any]:
         "event_reducer_cases": len(RUNTIME_REDUCER_CASE.findall(event_reducer)),
         "domain_emission_fallbacks": len(DOMAIN_EMISSION_FALLBACK.findall(process_catalog)),
         "process_unhashed_tuning_constants": process_unhashed_tuning_constants,
+        "historical_surface_active_references": historical_surface_active_references,
         "production_development_configurations": len(
             DEVELOPMENT_CONFIGURATION.findall(runtime)
         ),
@@ -299,6 +308,11 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         metrics["process_unhashed_tuning_constants"],
         policy.get("process_unhashed_tuning_constants"),
         "process_unhashed_tuning_constants",
+    )
+    _validate_counted_files(
+        metrics["historical_surface_active_references"],
+        policy.get("historical_surface_active_references"),
+        "historical_surface_active_references",
     )
 
     fixture_configuration_limit = _positive_int(

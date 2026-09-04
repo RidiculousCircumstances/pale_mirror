@@ -22,6 +22,41 @@ max_domain_emission_fallbacks: 0
 process_unhashed_tuning_constants:
   max_total: 0
   allowed_files: {}
+# F0.0 legacy baseline. This is a shrinking inventory, not a permitted
+# pattern: F0.2 must remove entries as replica realization and custody leases
+# replace ContainerSurfaceStatus.ACTIVE. New files or references fail.
+historical_surface_active_references:
+  max_total: 39
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EngineeringEquipmentStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EquipmentIssueStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EquipmentReturnStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ExactItemConsumptionStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSettlementWorkDiagnostic.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWireTags.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/MedicalEvacuationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ProductionTransformationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionStateSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteMaintenanceStateSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementServiceInputIssueStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/ContainerSurfaceProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DecontaminationProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DefenderEquipmentProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DefenderEquipmentReturnProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/EngineeringEquipmentProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldPhysicalObservationProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/HiveGrowthProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/MedicalTreatmentProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/PopulationBirthProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/ProductionProcess.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteConstructionProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteMaintenanceProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementProvisionProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementServiceWorkProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/StructuralRepairProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SupplyOperationProcess.java: 2
 max_production_development_configurations: 0
 max_lifecycle_fixture_profile_branches: 0
 max_process_classes_in_model: 0
