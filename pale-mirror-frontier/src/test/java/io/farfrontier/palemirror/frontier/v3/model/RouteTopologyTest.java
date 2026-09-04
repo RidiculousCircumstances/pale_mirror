@@ -224,7 +224,9 @@ class RouteTopologyTest {
                 StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(patrolTask, objective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol active = new RoutePatrol(patrolTask, settlement.id(), guard.id(), baseline, 1, RoutePatrolStatus.EN_ROUTE, Optional.empty());
+        List<ResidentProfile> patrolMembers = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        RoutePatrol active = RoutePatrol.planned(state, patrolTask, settlement,
+                RouteUnitManifest.patrol(patrolTask, patrolMembers.getFirst().id(), List.of(patrolMembers.get(1).id())));
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(active)
                 .confirmPatrolObstruction(patrolTask, baseline.get(1)).transitionTask(patrolTask, StrategicTaskStatus.COMPLETED);
         RoutePatrol terminal = plans.routePatrols().get(patrolTask);
@@ -238,7 +240,7 @@ class RouteTopologyTest {
         assertEquals(cutOver, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(cutOver)),
                 "the completed patrol is historical evidence and must survive route-replacement recovery");
 
-        RoutePatrol staleActive = new RoutePatrol(patrolTask, settlement.id(), guard.id(), baseline, 0, RoutePatrolStatus.EN_ROUTE, Optional.empty());
+        RoutePatrol staleActive = active;
         assertThrows(IllegalArgumentException.class, () -> cutOver.withStrategicPlans(StrategicPlanState.empty().addObjective(
                 new StrategicObjective(new SubjectId("objective:stale-patrol"), settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                         Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE)).addTask(

@@ -30,7 +30,7 @@ public final class FrontierPersistenceCodec {
      * Fresh-world v3 envelope.  Bumping this rejects an entire old WAL tail before any payload
      * decoder runs, so a recreated world cannot accidentally replay a previous campaign.
      */
-    private static final int VERSION = 40;
+    private static final int VERSION = 41;
     private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 

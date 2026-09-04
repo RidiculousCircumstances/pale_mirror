@@ -6,12 +6,12 @@ import java.util.Map;
 
 /** Installed immutable ruleset catalog. Selection is always exact by id, schema and content digest. */
 public final class FrontierRulesets {
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r1");
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r2", 4, 20L);
     /**
      * Explicit anchor for snapshots written before selector persistence existed. It is not a
      * current default: decoding old bytes is a named compatibility migration with fixed data.
      */
-    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79");
+    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 100L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
             LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79);
 
@@ -32,11 +32,11 @@ public final class FrontierRulesets {
         return ruleset;
     }
 
-    private static FrontierRuleset ruleset(String id) {
-        return new FrontierRuleset(id, 3,
+    private static FrontierRuleset ruleset(String id, int schemaVersion, long routePatrolStepInterval) {
+        return new FrontierRuleset(id, schemaVersion,
                 new FrontierRuleset.Cadence(1L, 3_000L, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
                         1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L, 20L, 800L, 100L, 20L, 20L, 20L,
-                        100L, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L, 6_000L, 1_000L,
+                        routePatrolStepInterval, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L, 6_000L, 1_000L,
                         8_000L, 8_100L, 1_600L, 20L, 3_200L, 100L, 2_400L, 2_400L),
                 new FrontierRuleset.Spatial(160, 160, 96, 32, 48, 64, 128, 16, 16, 64, 12),
                 new FrontierRuleset.Rates(new FixedScalar(125_000L), new FixedScalar(250_000L), FixedScalar.whole(100L), FixedScalar.whole(2L)),

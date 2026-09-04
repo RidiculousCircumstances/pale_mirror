@@ -36,11 +36,16 @@ public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId owner
         if (requirements.stream().distinct().count() != requirements.size() || dependencies.stream().distinct().count() != dependencies.size()) {
             throw new IllegalArgumentException("strategic task requirements and dependencies must be unique");
         }
-        if (kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION != operationTarget.isPresent()) {
-            throw new IllegalArgumentException("only route-intercept task may retain its exact operation target");
+        boolean operationBacked = kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION || kind == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
+        if (!operationBacked && operationTarget.isPresent()) throw new IllegalArgumentException("task may not retain a foreign operation target");
+        if (operationTarget.isPresent() != operationObservationPosition.isPresent()) {
+            throw new IllegalArgumentException("operation-backed task must retain both exact operation and observation");
         }
-        if (kind != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && operationObservationPosition.isPresent()) {
-            throw new IllegalArgumentException("only route-intercept task may retain an observed operation position");
+        if (kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && operationTarget.isEmpty()) {
+            throw new IllegalArgumentException("route-intercept task must retain its exact operation target");
+        }
+        if (!operationBacked && operationObservationPosition.isPresent()) {
+            throw new IllegalArgumentException("task may not retain a foreign operation observation");
         }
         if (kind == StrategicTaskKind.HARVEST_RESOURCE_SITE != resourceSiteTarget.isPresent()) {
             throw new IllegalArgumentException("only resource-harvest task may retain its exact field target");

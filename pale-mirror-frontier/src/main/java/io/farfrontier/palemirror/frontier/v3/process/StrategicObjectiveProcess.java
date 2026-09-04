@@ -39,7 +39,7 @@ public final class StrategicObjectiveProcess {
         String owner = settlementId.value().replace(':', '-');
         String position = obstruction.x() + "-" + obstruction.y() + "-" + obstruction.z();
         return new ScheduledAction(new ScheduleId("schedule:objective-route-" + trigger + "-" + owner + "-" + position + "-" + ordinal),
-                new SimInstant(dueAt), 0, settlementId, "frontier.objective.reconsider", 1);
+                new SimInstant(dueAt), RoutePatrolProcess.REACTIVE_INSPECTION_PRIORITY, settlementId, "frontier.objective.reconsider", 1);
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -288,15 +288,30 @@ public final class StrategicObjectiveProcess {
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
+        Optional<RouteLoss> causalLoss = failedRouteLoss(state, settlement.id());
         boolean blockedRoute = !state.routeTopology().supplyPassable(state.bootstrap(), settlement.id());
+        boolean operationOwnsRouteLoss = state.operations().values().stream()
+                .filter(operation -> operation.stage() == OperationStage.ASSEMBLING || operation.stage() == OperationStage.EN_ROUTE
+                        || operation.stage() == OperationStage.RETURNING || operation.stage() == OperationStage.ARRIVED
+                        || operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED)
+                .anyMatch(operation -> state.physicalDeltas().values().stream().anyMatch(delta -> isOwnedRouteLoss(delta)
+                        && FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), delta.position())));
         // A confirmed physical logistics failure outranks ordinary production and containment
         // selection.  It does not cancel an already active task; lane ownership remains the
         // sole authority for that decision.
-        if (!constructionActive && alreadyConfirmed) {
-            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS, Optional.empty(), Long.MAX_VALUE));
-        }
-        if (!constructionActive && !alreadyConfirmed && blockedRoute) {
-            return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE));
+        // A patrol proves one exact physical loss.  Its independent maintenance owner
+        // repairs that retained cell; it is not authorization to invent a replacement
+        // corridor.  A future re-route policy must be an explicit graph decision with
+        // its own evidence, never an accidental consequence of inspection completion.
+        if (!constructionActive && alreadyConfirmed) return Optional.empty();
+        // An active convoy has the narrower retained cause and will publish its
+        // operation-backed inspection on terminal failure. A periodic review
+        // must not race that source with duplicate generic settlement patrols.
+        if (!constructionActive && !alreadyConfirmed && causalLoss.isEmpty() && operationOwnsRouteLoss) return Optional.empty();
+        if (!constructionActive && !alreadyConfirmed && (blockedRoute || causalLoss.isPresent())) {
+            return Optional.of(causalLoss.map(loss -> new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
+                    Optional.empty(), Optional.empty(), Optional.of(loss.operationId()), Optional.of(loss.position()), Long.MAX_VALUE))
+                    .orElseGet(() -> new Candidate(StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE, Optional.empty(), Long.MAX_VALUE)));
         }
         // Food may preempt a pending containment task that is waiting for an infirmary reagent,
         // but never a physical effect already under execution.
@@ -397,13 +412,30 @@ public final class StrategicObjectiveProcess {
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS;
             case SETTLEMENT_HARVEST_RESOURCE_SITE -> StrategicTaskKind.HARVEST_RESOURCE_SITE;
         };
-        Optional<SubjectId> operation = kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION ? observedOperation : Optional.empty();
-        Optional<BlockPosition> observation = kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION ? operationObservationPosition : Optional.empty();
+        boolean operationBacked = kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION || kind == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
+        Optional<SubjectId> operation = operationBacked ? observedOperation : Optional.empty();
+        Optional<BlockPosition> observation = operationBacked ? operationObservationPosition : Optional.empty();
         if (kind == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION && (operation.isEmpty() || observation.isEmpty())) {
             throw new IllegalArgumentException("hive interception requires one exact scout sighting");
         }
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
                 objective.infectionTarget(), operation, objective.resourceSiteTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING, observation);
+    }
+    /** The patrol cause is an exact retained failed operation, never a nearest visible route. */
+    private static Optional<RouteLoss> failedRouteLoss(FrontierWorldState state, SubjectId settlementId) {
+        return state.operations().values().stream().filter(operation -> operation.settlementId().equals(settlementId))
+                .filter(operation -> operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED)
+                .sorted(Comparator.comparing(RouteOperation::id)).flatMap(operation -> state.physicalDeltas().values().stream()
+                        .filter(StrategicObjectiveProcess::isOwnedRouteLoss)
+                        .map(PhysicalDelta::position).filter(position -> FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), position))
+                        .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
+                        .map(position -> new RouteLoss(operation.id(), position))).findFirst();
+    }
+    private static boolean isOwnedRouteLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+                && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
+                || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
     private static List<SubjectId> dependencies(FrontierWorldState state, StrategicObjective objective) {
         if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS) {
@@ -450,4 +482,5 @@ public final class StrategicObjectiveProcess {
                 .thenComparing(value -> value.operationObservationPosition().map(BlockPosition::x).orElse(Integer.MIN_VALUE))
                 .thenComparing(value -> value.operationObservationPosition().map(BlockPosition::z).orElse(Integer.MIN_VALUE));
     }
+    private record RouteLoss(SubjectId operationId, BlockPosition position) { }
 }

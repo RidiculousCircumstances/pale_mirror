@@ -243,6 +243,7 @@ public final class StrategicPlanState {
         });
         routePatrols.values().forEach(patrol -> {
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, patrol.settlementId());
+            StrategicTask task = tasks.get(patrol.taskId());
             if (patrol.memberIds().stream().map(humanPopulation::resident).anyMatch(resident -> resident == null || !resident.settlementId().equals(settlement.id())
                     || resident.profession() != ResidentProfession.SECURITY_WORKER)) {
                 throw new IllegalArgumentException("route patrol has a foreign or non-security member");
@@ -251,9 +252,18 @@ public final class StrategicPlanState {
             // topology.  Terminal patrols are retained historical evidence: a completed
             // bypass deliberately replaces their route, so revalidating that evidence against
             // the replacement would quarantine a correct recovered world.
-            if (patrol.status() == RoutePatrolStatus.EN_ROUTE
-                    && !patrol.route().equals(routeTopology.supplyWaypoints(bootstrap, settlement.id()))) {
+            if (task == null || task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || !task.ownerId().equals(settlement.id())) {
+                throw new IllegalArgumentException("route patrol has no matching patrol task");
+            }
+            if (task.operationTarget().isPresent() != task.operationObservationPosition().isPresent()) {
+                throw new IllegalArgumentException("operation-backed patrol task must retain both source identities");
+            }
+            if (patrol.active() && task.operationTarget().isEmpty()
+                    && !patrol.inspectionRoute().equals(routeTopology.supplyTraversalTopology(bootstrap, settlement.id()))) {
                 throw new IllegalArgumentException("route patrol does not retain its canonical route");
+            }
+            if (task.operationTarget().isPresent() && !patrol.inspectionRoute().provenance().equals(task.operationTarget().orElseThrow())) {
+                throw new IllegalArgumentException("operation-backed patrol does not retain its causal operation provenance");
             }
         });
     }
@@ -313,10 +323,10 @@ public final class StrategicPlanState {
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
 
-    public StrategicPlanState advancePatrol(SubjectId taskId, int routeIndex) {
+    public StrategicPlanState advancePatrol(SubjectId taskId, SubjectId actorId) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
-        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(routeIndex));
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.advance(actorId));
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
@@ -333,6 +343,14 @@ public final class StrategicPlanState {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
         Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.fail());
+        return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
+    }
+
+    public StrategicPlanState blockPatrol(SubjectId taskId) {
+        RoutePatrol current = routePatrols.get(taskId);
+        if (current == null) throw new IllegalArgumentException("unknown route patrol");
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.block());
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults);
     }
@@ -566,10 +584,11 @@ public final class StrategicPlanState {
                 || !task.ownerId().equals(patrol.settlementId())) {
             throw new IllegalArgumentException("route patrol must bind one settlement patrol task");
         }
-        if (patrol.status() == RoutePatrolStatus.EN_ROUTE && task.status() != StrategicTaskStatus.ACTIVE
+        if (patrol.active() && task.status() != StrategicTaskStatus.ACTIVE
                 || patrol.status() == RoutePatrolStatus.ROUTE_CLEAR && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.COMPLETED
                 || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.COMPLETED
-                || patrol.status() == RoutePatrolStatus.FAILED && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.BLOCKED) {
+                || (patrol.status() == RoutePatrolStatus.FAILED || patrol.status() == RoutePatrolStatus.BLOCKED)
+                && task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.BLOCKED) {
             throw new IllegalArgumentException("route patrol status must match its task terminal state");
         }
     }

@@ -27,10 +27,25 @@ The patrol record retains:
   `OBSTRUCTION_CONFIRMED`, `BLOCKED`, `FAILED` and
   `UNKNOWN_AFTER_RESTART`.
 
+When a failed cargo operation is the cause, the task additionally retains that
+exact operation ID and the observed owned carriageway cell. Its inspection
+topology is compiled only from that operation's persisted route; a nearby
+settlement corridor may not confirm the loss on its behalf. A resident whose
+current body is not on the declared home-ingress topology is ineligible for
+this home-originating patrol. Admission tries another exact pair or blocks the
+task visibly; it never snaps the stranded resident home or quarantines the
+world.
+
+While an active or failed operation retains such a loss, it is the sole
+immediate inspection cause. Overlapping settlement corridors may remain
+blocked, but their recurring reviews must not fan out generic patrols; the
+causal patrol's exact-cell maintenance is the network repair owner.
+
 The operation owns no cargo, alternate route, world repair authority or
 unbounded navigator result. `PhysicalDelta` and Foundry observations remain
 evidence of a changed retained edge; route maintenance or a separately admitted
-bypass owns any repair or replan.
+bypass owns any explicitly admitted replan. A confirmed loss alone starts no
+hidden bypass: the existing exact-cell maintenance owner handles repair.
 
 ## Exact continuity lifecycle
 

@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 125 and persistence-envelope v40 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): the active route-patrol cut accepts only snapshot schema 126 and persistence-envelope v41 state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -177,40 +177,32 @@
 - Verified detached commit `474d3da7` (including the `6ff19426` overseer/mobilisation vertical) is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r63`; r62 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `6f43dd7f19fccdef4694d1da97fdb18ec02658f2c17ddf12d5ed2617452e387915322b4ff774b2fffcb6c25811d0502a989d295cbf347d97a7e2165bf3ead56b`. Preflight proved the clean detached source, Java 22, selected empty world and exact pin; startup reached `Done` then `Frontier v3 runtime started` with no quarantine, and the post-start verifier passed. A deployment race was closed in outer-pack commit `a032959`: verifier optionally waits up to 60 seconds for both records instead of treating `Done` alone as ready. The first call exposed the 0.9-second ordering race; it was not a missing v3 runtime.
 - Verified detached commit `f0b9c90b` is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r64`; r63 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `513334e273fcaba34c565020ab4e3e971b11cc293d9a6aa0dc6b23f72cd4ec4f97bc521ddd4d4a8dc21abc4d1a0304621121e932f7511deb8eb060c2054f4a45`. Preflight proved a clean detached source, Java 22, selected empty world and exact pin. The first post-start probe ran before Java opened 25565; the second read-only verifier passed after normal mod loading, proving PID `2769208`, the listening port, `Done`, `Frontier v3 runtime started` and no fresh quarantine. The update is server-only; no client update is required.
 ### Now
-- `MAT-004` / `V3-AUD-038` is the active replacement slice. Source inspection
-  confirmed that the legacy `RoutePatrolProcess` starts and advances every
-  exact patrol member through direct COLD actor-body rewrites, while ambient
-  security still uses generic settlement `GUARD`; it is not a valid seamless
-  patrol implementation. `docs/frontier-v3-route-patrol-contract.md` now
-  defines the required fresh-world-only replacement: individual ingress,
-  distinct formation, retained 3D topology/cursor and registered `ROUTE_PATROL`
-  HOT scene. Existing patrol bytes will be rejected on the next format cut,
-  never adapted. No implementation/evidence claim is made yet.
-- The first pure replacement primitive is now present but intentionally not
-  wired into legacy patrol state: `PatrolTravel` retains individual immutable
-  pedestrian corridors/cursors and distinct body formation, with the leader's
-  route as the sole inspection cursor. Its focused normal/overlap/foreign-
-  leader/blocked-edge tests prove that one actor advances only into a vacated
-  retained body and the column cannot stretch beyond one cursor. The next code
-  cut must persist and own it through `RoutePatrol`; no M0/M2 promotion is
-  claimed until the legacy direct body rewrites are removed.
-- `PatrolAssembly` is the paired pure ingress primitive: it retains one
-  individual bounded pedestrian corridor/cursor per exact patrol member, with
-  unique current and destination bodies and one-at-a-time collision-safe
-  progress. It deliberately has no cargo/carrier semantics. A blocked retained
-  edge is persistable in either assembly/travel so the owning patrol can expose
-  conflict; only an attempted advance is rejected. Focused tests cover
-  occupied-body, blocked-edge and surveyed-grade cases. It remains unconnected
-  until the next atomic `RoutePatrol` schema/process replacement.
-- `PatrolAssemblyCorridor` now compiles the first concrete human ingress from
-  each exact resident's declared home surface through the resident-ingress
-  topology and the semantic Hall route port. The leader's retained assembly
-  crosses the first declared supply edge while the scout ends at the route
-  port, so the subsequent `PatrolTravel` can begin as a one-cell column rather
-  than co-locating or relocating the unit. It rejects a blocked first edge and
-  has no nearest-road query, loaded-world lookup or cargo semantics. Focused
-  pure corridor/assembly/travel tests pass; it is still unconnected pending
-  the one atomic fresh-schema `RoutePatrol` state/process cutover.
+- `MAT-004` / `V3-AUD-038` is the active replacement slice. The uncommitted
+  fresh-world cut wires individual `PatrolAssembly` ingress and `PatrolTravel`
+  into `RoutePatrol`, changes patrol advances from a whole-roster relocation to
+  one exact retained edge, and raises the in-progress format to snapshot 126 /
+  envelope 41. Old bytes reject before decode. Admission deterministically
+  chooses a security pair whose immutable ingress can actually reach distinct
+  formation cells; no loaded-world lookup or nearest-road fallback exists.
+  It is M0 WIP only: no `ROUTE_PATROL` HOT behavior or materialized evidence is
+  claimed.
+- The cut now retains a failed operation ID and exact observed carriageway
+  cell in a patrol task, compiles inspection from that operation's persisted
+  route, and proves a HOT-to-COLD failure reaches the owning settlement's
+  confirmed patrol and exact-cell maintenance. A generic neighbouring corridor
+  cannot confirm it. The shared scene-return failure path now carries its
+  event time into the same causal reconsideration; it cannot record a failure
+  while omitting its follow-up. An unavailable home-ingress pair is skipped or
+  visibly blocks the task, never quarantines the engine or teleports a stranded
+  resident. Confirmed loss no longer creates a hidden bypass task.
+- The closed focused patrol, assembly-corridor and route-scene-return tests now
+  include an ordinary later HOT loss, COLD return, exact operation-backed
+  inspection, in-place maintenance, no generic overlapping-corridor fanout and
+  no implicit bypass. The full frontier module and critical release gate pass:
+  `guardrails`, `check`, build/package verification and 287/287 GameTests.
+  The next required action is a clean commit, then a fresh-world deployment;
+  this remains M0 only until a registered `ROUTE_PATROL` HOT behaviour has its
+  own materialization/restart evidence.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained

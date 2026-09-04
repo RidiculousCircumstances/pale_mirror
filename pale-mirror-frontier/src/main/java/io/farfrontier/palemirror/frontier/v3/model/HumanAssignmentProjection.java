@@ -36,7 +36,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
                             member.duty() == RouteUnitDuty.CARGO_CREW ? HumanAssignmentKind.CARGO_TRANSPORT : HumanAssignmentKind.ESCORT, operation.id()));
                 });
         state.strategicPlans().routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId))
-                .filter(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE)
+                .filter(RoutePatrol::active)
                 .forEach(patrol -> patrol.memberIds().forEach(member -> claim(values, member, HumanAssignmentKind.ROUTE_PATROL, patrol.taskId())));
         state.strategicPlans().settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id))
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)

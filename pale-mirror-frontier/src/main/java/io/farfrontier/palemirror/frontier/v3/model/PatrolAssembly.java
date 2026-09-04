@@ -50,7 +50,8 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
         List<SubjectId> safe = new ArrayList<>();
         members.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             Member member = entry.getValue();
-            if (!member.arrived() && !occupied.contains(member.nextBody())) safe.add(entry.getKey());
+            if (!member.arrived() && member.topology().edgeAfterCursor(member.cursor()).traversableBy(TraversalCapability.PEDESTRIAN)
+                    && !occupied.contains(member.nextBody())) safe.add(entry.getKey());
         });
         return List.copyOf(safe);
     }

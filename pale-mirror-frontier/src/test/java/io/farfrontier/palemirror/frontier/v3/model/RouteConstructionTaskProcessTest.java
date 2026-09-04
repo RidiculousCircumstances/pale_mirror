@@ -341,13 +341,14 @@ class RouteConstructionTaskProcessTest {
         List<BlockPosition> route = state.routeTopology().supplyWaypoints(bootstrap, settlement.id()); BlockPosition obstruction = route.get(1);
         state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
-        Resident guard = settlement.residents().stream().filter(resident -> resident.role() == ResidentRole.GUARD).findFirst().orElseThrow();
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
         StrategicObjective patrolObjective = new StrategicObjective(new SubjectId("objective:patrol"), settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask patrolTask = new StrategicTask(new SubjectId("task:patrol"), patrolObjective.id(), settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.PENDING);
         StrategicPlanState plans = StrategicPlanState.empty().addObjective(patrolObjective).addTask(patrolTask).transitionTask(patrolTask.id(), StrategicTaskStatus.ACTIVE);
-        RoutePatrol patrol = new RoutePatrol(patrolTask.id(), settlement.id(), guard.id(), route, 1, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(obstruction));
+        RoutePatrol patrol = RoutePatrol.planned(state, patrolTask.id(), settlement,
+                RouteUnitManifest.patrol(patrolTask.id(), guards.getFirst().id(), List.of(guards.get(1).id()))).confirm(obstruction);
         plans = plans.startPatrol(patrol).transitionTask(patrolTask.id(), StrategicTaskStatus.COMPLETED);
         StrategicObjective constructionObjective = new StrategicObjective(new SubjectId("objective:construction"), settlement.id(), StrategicObjectiveKind.SETTLEMENT_CONSTRUCT_ROUTE_BYPASS,
                 Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);

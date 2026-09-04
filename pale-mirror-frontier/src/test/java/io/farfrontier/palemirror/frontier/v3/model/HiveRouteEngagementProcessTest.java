@@ -164,12 +164,10 @@ class HiveRouteEngagementProcessTest {
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-intercept"), hive,
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:hive-intercept"), objective.id(), hive,
+        assertThrows(IllegalArgumentException.class, () -> new StrategicTask(new SubjectId("task:hive-intercept"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(new SubjectId("operation:missing")),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
-        StrategicPlanState plans = StrategicPlanState.empty().addObjective(objective).addTask(task);
-
-        assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(plans));
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING),
+                "a current-format interception cannot omit its retained observed position");
     }
 
     @Test void legacyInterceptTaskWithoutAnObservedPositionCannotAcquireOneAtExecutionTime() {
@@ -178,17 +176,10 @@ class HiveRouteEngagementProcessTest {
         SubjectId hive = state.bootstrap().hive().id();
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-legacy-intercept"), hive,
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:hive-legacy-intercept"), objective.id(), hive,
+        assertThrows(IllegalArgumentException.class, () -> new StrategicTask(new SubjectId("task:hive-legacy-intercept"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING);
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
-
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveRouteEngagementProcess.planStart(state,
-                HiveRouteEngagementProcess.start(task, 3_000L));
-
-        assertEquals(List.of(new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED)),
-                events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).toList());
-        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING),
+                "fresh schema rejects a legacy interception before it can invent a target at execution time");
     }
 
     @Test void coldCombatPersistsEveryExactStrikeAndFailsTheRouteWithoutAPlayer() {

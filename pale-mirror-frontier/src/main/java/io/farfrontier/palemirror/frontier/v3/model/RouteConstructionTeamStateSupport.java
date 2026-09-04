@@ -22,7 +22,7 @@ final class RouteConstructionTeamStateSupport {
                 .forEach(job -> assigned.add(job.workerId()));
         operations.values().stream().filter(operation -> FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation))
                 .forEach(operation -> assigned.addAll(operation.participantIds()));
-        plans.routePatrols().values().stream().filter(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE)
+        plans.routePatrols().values().stream().filter(RoutePatrol::active)
                 .forEach(patrol -> assigned.addAll(patrol.memberIds()));
         plans.settlementAssaults().values().stream().filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> assigned.addAll(assault.defenderIds()));

@@ -130,7 +130,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             boolean operationClaim = operations.values().stream().anyMatch(operation -> FrontierWorldStateSupport.retainsParticipantClaim(validatedContracts, operation)
                     && operation.participantIds().contains(journey.residentId()));
-            boolean patrolClaim = validatedPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+            boolean patrolClaim = validatedPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.active()
                     && patrol.memberIds().contains(journey.residentId()));
             if (operationClaim || patrolClaim) {
                 throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
@@ -269,7 +269,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 if (FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation) && !assignedParticipants.add(participant)) {
                     throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
                 }
-                boolean patrolClaim = strategicPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+                boolean patrolClaim = strategicPlans.routePatrols().values().stream().anyMatch(patrol -> patrol.active()
                         && patrol.memberIds().contains(participant));
                 if (FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation)
                         && (humanPopulation.migrations().containsKey(participant) || patrolClaim)) {
@@ -459,7 +459,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
                 }
                 boolean patrolClaim = strategicPlans.routePatrols().values().stream()
-                        .anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.memberIds().contains(participant));
+                        .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(participant));
                 if (humanPopulation.migrations().containsKey(participant) || patrolClaim) {
                     throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
                 }
@@ -467,7 +467,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
         for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
             boolean patrolClaim = strategicPlans.routePatrols().values().stream()
-                    .anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.memberIds().contains(journey.residentId()));
+                    .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(journey.residentId()));
             if (patrolClaim) throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
         }
     }

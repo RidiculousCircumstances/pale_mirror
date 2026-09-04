@@ -43,6 +43,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RoutePatrolAdvanced advanced -> RoutePatrolProcess.reduceAdvanced(state, event.subject(), advanced);
             case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
+            case RoutePatrolBlocked blocked -> RoutePatrolProcess.reduceBlocked(state, event.subject(), blocked);
             default -> throw new IllegalArgumentException("infrastructure process does not own event: " + event.payload().type());
         };
     }

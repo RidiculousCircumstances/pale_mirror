@@ -9,7 +9,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Optional;
 
 /** WAL codecs for one persistent route-patrol traversal and its physical finding. */
@@ -23,9 +22,9 @@ final class RoutePatrolPayloadCodecs {
     static PayloadCodec advanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_advanced"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            RoutePatrolAdvanced advanced = (RoutePatrolAdvanced) payload; subject(output, advanced.taskId()); output.writeByte(advanced.routeIndex());
+            RoutePatrolAdvanced advanced = (RoutePatrolAdvanced) payload; subject(output, advanced.taskId()); subject(output, advanced.actorId());
         }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolAdvanced(subject(input), input.readUnsignedByte())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolAdvanced(subject(input), subject(input))); }
     }; }
     static PayloadCodec obstruction() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_obstruction_confirmed"; }
@@ -39,23 +38,23 @@ final class RoutePatrolPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> subject(output, ((RoutePatrolFailed) payload).taskId())); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolFailed(subject(input))); }
     }; }
+    static PayloadCodec blocked() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_patrol_blocked"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> subject(output, ((RoutePatrolBlocked) payload).taskId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolBlocked(subject(input))); }
+    }; }
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
-        subject(output, patrol.taskId()); subject(output, patrol.settlementId()); output.writeByte(0xFF); RouteUnitManifestCodec.write(output, patrol.unit()); output.writeByte(patrol.route().size());
-        for (BlockPosition point : patrol.route()) position(output, point);
-        output.writeByte(patrol.routeIndex()); output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
+        subject(output, patrol.taskId()); subject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
+        TraversalTopologyStateCodec.write(output, patrol.inspectionRoute()); PatrolStateCodec.writeAssembly(output, patrol.assembly()); PatrolStateCodec.writeTravel(output, patrol.travel());
+        output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
         if (patrol.obstruction().isPresent()) position(output, patrol.obstruction().orElseThrow());
     }
     private static RoutePatrol readPatrol(DataInputStream input) throws IOException {
-        SubjectId task = subject(input), settlement = subject(input);
-        if (input.readUnsignedByte() != 0xFF) {
-            throw new IllegalArgumentException("route patrol payload requires the current unit-manifest envelope");
-        }
-        RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
-        ArrayList<BlockPosition> route = new ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) route.add(position(input));
-        int cursor = input.readUnsignedByte(), status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();
+        SubjectId task = subject(input), settlement = subject(input); RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
+        TraversalTopology inspection = TraversalTopologyStateCodec.read(input); PatrolAssembly assembly = PatrolStateCodec.readAssembly(input); PatrolTravel travel = PatrolStateCodec.readTravel(input);
+        int status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();
         if (status >= RoutePatrolStatus.values().length) throw new IllegalArgumentException("unknown route patrol status");
-        return new RoutePatrol(task, settlement, unit, route, cursor, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
+        return new RoutePatrol(task, settlement, unit, inspection, assembly, travel, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
     }
     private static void subject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, id); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }

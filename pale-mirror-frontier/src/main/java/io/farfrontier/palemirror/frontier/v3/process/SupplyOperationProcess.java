@@ -227,7 +227,13 @@ public final class SupplyOperationProcess {
      * strategic lane.  A fresh reconsideration belongs at the terminal failure boundary,
      * after its delivery task has released that lane, rather than as a retrying side queue.
      */
-    private static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason, long now) {
+    /**
+     * One terminal route failure owns both its durable result and the exact
+     * causal reconsideration.  COLD progression and HOT-scene return must use
+     * this same boundary; otherwise a scene can record an obstruction without
+     * ever admitting the inspection that makes it actionable.
+     */
+    static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason, long now) {
         List<ProposedEvent> events = new ArrayList<>(failed(state, operation, reason));
         if (reason.equals("route-obstructed")) {
             firstObservedRouteLoss(state, operation).ifPresent(loss -> events.add(schedule(
@@ -243,7 +249,7 @@ public final class SupplyOperationProcess {
                 .filter(delta -> delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
                         || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent())
                 .map(PhysicalDelta::position)
-                .filter(position -> !state.routeTopology().supplyPassable(state.bootstrap(), operation.settlementId()))
+                .filter(position -> FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), position))
                 .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
                 .findFirst();
     }

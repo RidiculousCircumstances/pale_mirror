@@ -29,6 +29,13 @@ public final class PatrolAssemblyCorridor {
 
     public static PatrolAssembly compile(FrontierWorldState state, SubjectId patrolId, Settlement settlement,
                                          RouteUnitManifest unit) {
+        return compile(state, patrolId, settlement, unit,
+                state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id()));
+    }
+
+    /** Compiles ingress only onto the caller's already retained causal inspection topology. */
+    public static PatrolAssembly compile(FrontierWorldState state, SubjectId patrolId, Settlement settlement,
+                                         RouteUnitManifest unit, TraversalTopology supply) {
         Objects.requireNonNull(state, "patrol assembly state");
         Objects.requireNonNull(patrolId, "patrol assembly id");
         Objects.requireNonNull(settlement, "patrol assembly settlement");
@@ -37,11 +44,8 @@ public final class PatrolAssemblyCorridor {
             throw new IllegalArgumentException("graybox patrol assembly requires one exact leader and scout");
         }
 
-        TraversalTopology supply = state.routeTopology().supplyTraversalTopology(state.bootstrap(), settlement.id());
         List<SurfaceAnchor> route = supply.linearCorridorSurfaces();
-        if (route.size() < 3 || !supply.edgeAfterCursor(0).traversableBy(TraversalCapability.PEDESTRIAN)) {
-            throw new IllegalArgumentException("patrol assembly requires an open first surveyed route edge");
-        }
+        if (route.size() < 3) throw new IllegalArgumentException("patrol assembly requires a surveyed first route edge");
         SettlementResidentIngressPlan.Plan residentIngress = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(),
                 state.bootstrap().terrain(), settlement, state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
         SurfaceAnchor routePort = route.getFirst();
@@ -53,17 +57,41 @@ public final class PatrolAssemblyCorridor {
         SubjectId scout = unit.memberIds().stream().filter(member -> !member.equals(leader)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("patrol unit has no scout"));
         Map<SubjectId, PatrolAssembly.Member> members = new LinkedHashMap<>();
-        members.put(leader, member(state, patrolId, residentIngress.topology(), leader, routePort, route.get(1)));
-        members.put(scout, member(state, patrolId, residentIngress.topology(), scout, routePort, null));
+        members.put(leader, member(state, patrolId, residentIngress.topology(), leader, routePort, route.get(1),
+                supply.edgeAfterCursor(0).availability()));
+        members.put(scout, member(state, patrolId, residentIngress.topology(), scout, routePort, null, TraversalAvailability.OPEN));
         PatrolAssembly assembly = new PatrolAssembly(members);
-        if (!completesUnderRetainedSchedule(assembly)) {
-            throw new IllegalArgumentException("patrol assembly has no collision-safe retained ingress schedule");
-        }
         return assembly;
     }
 
+    /**
+     * Admission predicate for a named pair.  A guard left at an earlier
+     * operation's lateral formation cell is not silently snapped home merely
+     * because a route inspection needs staff; it is simply not a valid member
+     * of this home-originating patrol.  The selector can therefore try the
+     * next exact pair without converting an ordinary staffing fact into an
+     * engine quarantine.
+     */
+    public static boolean canCompile(FrontierWorldState state, Settlement settlement, RouteUnitManifest unit,
+                                     TraversalTopology supply) {
+        Objects.requireNonNull(state, "patrol assembly admission state");
+        Objects.requireNonNull(settlement, "patrol assembly admission settlement");
+        Objects.requireNonNull(unit, "patrol assembly admission unit");
+        Objects.requireNonNull(supply, "patrol assembly admission route");
+        if (unit.kind() != RouteUnitKind.PATROL || unit.memberIds().size() != 2 || supply.linearCorridorSurfaces().size() < 3) return false;
+        SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
+                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
+        if (!ingress.topology().nodes().containsValue(supply.linearCorridorSurfaces().getFirst())) return false;
+        return unit.memberIds().stream().allMatch(actorId -> {
+            ActorLocation actor = state.actorLocations().get(actorId);
+            return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE
+                    && ingress.topology().nodes().containsValue(actor.supportingSurface());
+        });
+    }
+
     private static PatrolAssembly.Member member(FrontierWorldState state, SubjectId patrolId, TraversalTopology ingress,
-                                                SubjectId actorId, SurfaceAnchor routePort, SurfaceAnchor firstInspectionSurface) {
+                                                SubjectId actorId, SurfaceAnchor routePort, SurfaceAnchor firstInspectionSurface,
+                                                TraversalAvailability finalAvailability) {
         ActorLocation actor = state.actorLocations().get(actorId);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("patrol assembly actor is absent or not alive");
@@ -76,6 +104,9 @@ public final class PatrolAssemblyCorridor {
         TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:patrol-assembly:"
                 + patrolId.value() + ":" + actorId.value()), revision(surfaces), patrolId, TraversalKind.PEDESTRIAN,
                 Set.of(TraversalCapability.PEDESTRIAN), surfaces);
+        if (finalAvailability != TraversalAvailability.OPEN) {
+            topology = topology.withAvailability(Set.of(topology.edges().getLast().id()), finalAvailability);
+        }
         return new PatrolAssembly.Member(topology, 0);
     }
 
@@ -118,18 +149,6 @@ public final class PatrolAssemblyCorridor {
             result.addFirst(nodes.get(cursor));
             if (cursor.equals(start)) return List.copyOf(result);
         }
-    }
-
-    private static boolean completesUnderRetainedSchedule(PatrolAssembly initial) {
-        PatrolAssembly current = initial;
-        int maximumMoves = current.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
-        for (int move = 0; move < maximumMoves; move++) {
-            if (current.complete()) return true;
-            List<SubjectId> safe = current.safeAdvances();
-            if (safe.isEmpty()) return false;
-            current = current.advanceOne(safe.getFirst());
-        }
-        return current.complete();
     }
 
     private static long revision(List<SurfaceAnchor> surfaces) {

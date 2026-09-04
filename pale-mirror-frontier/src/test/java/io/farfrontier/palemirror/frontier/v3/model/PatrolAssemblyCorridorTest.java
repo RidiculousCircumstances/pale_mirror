@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PatrolAssemblyCorridorTest {
@@ -32,7 +31,7 @@ class PatrolAssemblyCorridorTest {
     }
 
     @Test
-    void refusesAnAlreadyBlockedFirstInspectionEdge() {
+    void retainsAnAlreadyBlockedFirstInspectionEdgeForThePatrolConflictOwner() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:patrol-ingress-blocked"), 41L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         TraversalTopology route = initial.routeTopology().supplyTraversalTopology(initial.bootstrap(), settlement.id());
@@ -42,7 +41,8 @@ class PatrolAssemblyCorridorTest {
         List<ResidentProfile> candidates = FrontierWorldStateSupport.availableRouteResidents(blocked, settlement.id(), ResidentProfession.SECURITY_WORKER);
         RouteUnitManifest unit = RouteUnitManifest.patrol(new SubjectId("task:patrol-ingress-blocked"), candidates.getFirst().id(), List.of(candidates.get(1).id()));
 
-        assertThrows(IllegalArgumentException.class, () -> PatrolAssemblyCorridor.compile(blocked, unit.ownerId(), settlement, unit));
+        PatrolAssembly assembly = PatrolAssemblyCorridor.compile(blocked, unit.ownerId(), settlement, unit);
+        assertEquals(TraversalAvailability.BLOCKED, assembly.members().get(unit.leaderId()).topology().edges().getLast().availability());
     }
 
     private static boolean completes(PatrolAssembly initial) {

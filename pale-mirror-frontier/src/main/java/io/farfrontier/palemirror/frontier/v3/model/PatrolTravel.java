@@ -23,7 +23,8 @@ import java.util.Set;
 public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
                            Map<SubjectId, Member> members) {
     public static final int MAX_MEMBERS = 4;
-    public static final int MAX_COLD_ADVANCES = 32;
+    /** Bounded background catch-up; HOT still commits only one observed arrival. */
+    public static final int MAX_COLD_ADVANCES = 64;
 
     public PatrolTravel {
         leaderId = Objects.requireNonNull(leaderId, "patrol leader");

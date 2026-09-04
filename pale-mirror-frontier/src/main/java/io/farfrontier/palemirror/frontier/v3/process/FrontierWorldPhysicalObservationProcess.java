@@ -23,7 +23,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         appendProductionFacilityFailures(after, List.of(observed.delta()), events);
-        if (isKnownRouteLoss(observed.delta())) {
+        if (isKnownRouteLoss(observed.delta()) && !hasActiveAffectedOperation(after, observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), observed.delta().position(), "loss", Math.addExact(submittedAt, 1L));
@@ -49,10 +49,13 @@ public final class FrontierWorldPhysicalObservationProcess {
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         appendProductionFacilityFailures(after, observed.deltas(), events);
-        if (observed.deltas().stream().anyMatch(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)) {
+        java.util.Optional<PhysicalDelta> genericRouteLoss = observed.deltas().stream()
+                .filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)
+                .filter(delta -> !hasActiveAffectedOperation(after, delta)).findFirst();
+        if (genericRouteLoss.isPresent()) {
             for (Settlement settlement : after.bootstrap().settlements()) {
                 if (!after.routeTopology().supplyPassable(after.bootstrap(), settlement.id())) {
-                    PhysicalDelta cause = observed.deltas().stream().filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss).findFirst().orElseThrow();
+                    PhysicalDelta cause = genericRouteLoss.orElseThrow();
                     var reconsideration = StrategicObjectiveProcess.routeReconsideration(settlement.id(), cause.position(), "loss", Math.addExact(submittedAt, 1L));
                     events.add(new ProposedEvent(settlement.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(reconsideration)));
                 }
@@ -70,6 +73,20 @@ public final class FrontierWorldPhysicalObservationProcess {
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
+    }
+
+    /**
+     * A moving operation retains the narrowest available causal source for a
+     * route loss.  Letting every settlement with an overlapping long-haul
+     * corridor start an immediate generic patrol duplicates work, obscures the
+     * actual convoy cause and can saturate the bounded scheduler.  Its terminal
+     * failure emits the exact operation-backed reconsideration instead.
+     */
+    private static boolean hasActiveAffectedOperation(FrontierWorldState state, PhysicalDelta delta) {
+        return state.operations().values().stream()
+                .filter(operation -> operation.stage() == OperationStage.ASSEMBLING || operation.stage() == OperationStage.EN_ROUTE
+                        || operation.stage() == OperationStage.RETURNING || operation.stage() == OperationStage.ARRIVED)
+                .anyMatch(operation -> FrontierRouteNetwork.containsOperationSurfaceCell(operation.route(), delta.position()));
     }
 
     /** One physical observation may damage several graybox cells, but each named workshop job is blocked once. */

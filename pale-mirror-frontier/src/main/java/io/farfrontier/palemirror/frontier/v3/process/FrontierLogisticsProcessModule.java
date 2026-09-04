@@ -96,7 +96,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof SceneLeaseReleased released) return planSceneReleased(state, command, released);
-        if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) return planRecoveryUnresolved(state, unresolved);
+        if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) return planRecoveryUnresolved(state, command, unresolved);
         if (command.payload() instanceof ActorDied death) return planActorDied(state, death);
         return FrontierWorldCommandPlanner.rejected("logistics process does not admit command: " + command.payload().type());
     }
@@ -138,12 +138,12 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
-    private static CommandPlan planRecoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
+    private static CommandPlan planRecoveryUnresolved(FrontierWorldState state, FrontierCommand command, SceneLeaseRecoveryUnresolved unresolved) {
         SceneLease lease = state.sceneLeases().get(unresolved.leaseId());
         if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent()) {
             return FrontierWorldCommandPlanner.rejected("scene recovery evidence does not bind one unresolved restart lease");
         }
-        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.recoveryUnresolvedEvents(state, lease, unresolved)); }
+        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.recoveryUnresolvedEvents(state, lease, command.submittedAt().ticks(), unresolved)); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 

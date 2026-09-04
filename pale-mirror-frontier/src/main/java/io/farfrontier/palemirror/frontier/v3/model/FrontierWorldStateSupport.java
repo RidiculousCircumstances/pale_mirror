@@ -162,7 +162,7 @@ public final class FrontierWorldStateSupport {
     }
 
     public static boolean activePatrolClaim(FrontierWorldState state, SubjectId residentId) {
-        return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.status() == RoutePatrolStatus.EN_ROUTE
+        return state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.active()
                 && patrol.memberIds().contains(residentId));
     }
 

@@ -61,7 +61,10 @@ class RouteSceneReturnRepairTest {
         assertTrue(after.operations().get(operation.id()).stage() == OperationStage.FAILED);
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED),
-                () -> "route loss did not reach a confirmed patrol: " + after.strategicPlans().routePatrols());
+                () -> "route loss did not reach a confirmed patrol for " + operation.settlementId() + ": " + patrolSummary(after)
+                        + ", expected operation=" + operation.id());
+        assertTrue(after.strategicPlans().routePatrols().values().stream().allMatch(patrol -> patrol.settlementId().equals(operation.settlementId())),
+                () -> "one active operation loss must not fan out generic patrols: " + patrolSummary(after));
         assertTrue(after.routeMaintenances().values().stream().anyMatch(maintenance -> maintenance.settlementId().equals(operation.settlementId())
                         && maintenance.repairCell().equals(obstruction) && maintenance.status() == RouteMaintenanceStatus.BUILDING),
                 () -> "confirmed patrol did not start exact route maintenance; maintenance=" + after.routeMaintenances());
@@ -114,7 +117,10 @@ class RouteSceneReturnRepairTest {
         FrontierWorldState after = state(engine);
         assertEquals(OperationStage.FAILED, after.operations().get(operation.id()).stage());
         assertTrue(after.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(operation.settlementId())
-                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED), () -> "later obstruction did not reach the patrol: " + after.strategicPlans());
+                && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED), () -> "later obstruction did not reach the patrol: "
+                + patrolSummary(after) + ", expected=" + operation.settlementId());
+        assertTrue(after.strategicPlans().routePatrols().values().stream().allMatch(patrol -> patrol.settlementId().equals(operation.settlementId())),
+                () -> "later active-operation loss fanned out generic patrols: " + patrolSummary(after));
         assertTrue(after.routeMaintenances().values().stream().anyMatch(maintenance -> maintenance.settlementId().equals(operation.settlementId())
                         && maintenance.repairCell().equals(obstruction) && maintenance.status() == RouteMaintenanceStatus.BUILDING),
                 () -> "later obstruction did not start exact route maintenance; maintenance=" + after.routeMaintenances()
@@ -162,4 +168,10 @@ class RouteSceneReturnRepairTest {
     private static FrontierWorldState state(FrontierEngine<FrontierWorldProjection> engine) {
         return new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
     }
+
+    private static List<String> patrolSummary(FrontierWorldState state) {
+        return state.strategicPlans().routePatrols().values().stream().map(patrol -> patrol.settlementId().value()
+                + ":" + patrol.status() + ":" + patrol.routeIndex()).toList();
+    }
+
 }

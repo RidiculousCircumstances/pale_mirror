@@ -1,10 +1,12 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-/** Terminal evidence retained for a guard's bounded COLD route patrol. */
+/** Durable lifecycle of one exact patrol column. */
 public enum RoutePatrolStatus {
+    ASSEMBLING,
     EN_ROUTE,
     ROUTE_CLEAR,
     OBSTRUCTION_CONFIRMED,
+    BLOCKED,
     FAILED
 ;
 
