@@ -14,6 +14,19 @@ import java.util.List;
 /** Exact reducer owner for route construction and patrol facts. */
 final class FrontierInfrastructureProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof RoutePatrolSceneLeasePrepared prepared) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRoutePatrolSceneSupport.owner(state,
+                    FrontierSceneBehaviors.routePatrol(prepared.lease())), prepared))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof RoutePatrolSceneLeaseHandoff handoff) {
+            try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRoutePatrolSceneSupport.owner(state,
+                    FrontierSceneBehaviors.routePatrol(handoff.lease())), handoff))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof RoutePatrolTraversalObserved observed) return planPatrolTraversal(state, observed);
+        if (command.payload() instanceof RoutePatrolBlocked blocked) return planPatrolBlocked(state, blocked);
+        if (command.payload() instanceof RoutePatrolObstructionConfirmed confirmed) return planPatrolObstruction(state, confirmed, command.submittedAt().ticks());
         if (command.payload() instanceof RouteConstructionAssemblyAdvanced advanced) {
             RouteConstruction project = state.routeConstructions().get(advanced.projectId());
             return planEngineeringAssemblyAdvance(state, command, project, advanced.assembly(), advanced,
@@ -44,8 +57,70 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
             case RoutePatrolBlocked blocked -> RoutePatrolProcess.reduceBlocked(state, event.subject(), blocked);
+            case RoutePatrolSceneLeasePrepared prepared -> reducePatrolPrepared(state, event.subject(), event, prepared);
+            case RoutePatrolSceneLeaseHandoff handoff -> reducePatrolHandoff(state, event.subject(), event, handoff);
+            case RoutePatrolTraversalObserved observed -> reducePatrolTraversal(state, event.subject(), observed);
             default -> throw new IllegalArgumentException("infrastructure process does not own event: " + event.payload().type());
         };
+    }
+
+    private static CommandPlan planPatrolTraversal(FrontierWorldState state, RoutePatrolTraversalObserved observed) {
+        try {
+            RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
+            FrontierRoutePatrolSceneSupport.advanceObserved(state, patrol, observed.leaseId(), observed.actorId(), observed.observedBody());
+            RoutePatrol next = patrol.advance(observed.actorId());
+            List<ProposedEvent> events = new java.util.ArrayList<>(List.of(new ProposedEvent(patrol.settlementId(), observed)));
+            if (next.status() == RoutePatrolStatus.ROUTE_CLEAR) {
+                events.add(new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.COMPLETED)));
+            }
+            return new CommandPlan.Accepted(List.copyOf(events));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan planPatrolBlocked(FrontierWorldState state, RoutePatrolBlocked blocked) {
+        try {
+            RoutePatrol patrol = state.strategicPlans().routePatrols().get(blocked.taskId());
+            if (patrol == null || !patrol.active()) throw new IllegalArgumentException("route-patrol block has no active patrol");
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(patrol.settlementId(), blocked),
+                    new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.BLOCKED))));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan planPatrolObstruction(FrontierWorldState state, RoutePatrolObstructionConfirmed confirmed, long submittedAt) {
+        try {
+            RoutePatrol patrol = state.strategicPlans().routePatrols().get(confirmed.taskId());
+            if (patrol == null || !patrol.active() || !state.physicalDeltas().containsKey(confirmed.position())) {
+                throw new IllegalArgumentException("route-patrol obstruction has no retained physical evidence");
+            }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(patrol.settlementId(), confirmed),
+                    new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.COMPLETED)),
+                    new ProposedEvent(patrol.settlementId(), new ScheduleEffect.Created(StrategicObjectiveProcess.routeReconsideration(patrol.settlementId(),
+                            confirmed.position(), "confirmed", Math.addExact(submittedAt, 1L))))));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static FrontierWorldState reducePatrolPrepared(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                           RoutePatrolSceneLeasePrepared prepared) {
+        if (!subject.equals(FrontierRoutePatrolSceneSupport.owner(state, FrontierSceneBehaviors.routePatrol(prepared.lease())))
+                || !prepared.lease().handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("route-patrol scene preparation does not match its retained formation");
+        }
+        return state.prepareSceneLease(prepared.lease());
+    }
+
+    private static FrontierWorldState reducePatrolHandoff(FrontierWorldState state, SubjectId subject, FrontierEvent event,
+                                                          RoutePatrolSceneLeaseHandoff handoff) {
+        if (!subject.equals(FrontierRoutePatrolSceneSupport.owner(state, FrontierSceneBehaviors.routePatrol(handoff.lease())))
+                || !handoff.lease().handoffInstant().equals(event.instant())) {
+            throw new IllegalArgumentException("route-patrol scene hand-off does not match its retained formation");
+        }
+        return state.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
+    }
+
+    private static FrontierWorldState reducePatrolTraversal(FrontierWorldState state, SubjectId subject, RoutePatrolTraversalObserved observed) {
+        RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
+        if (!subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route-patrol traversal has a foreign owner");
+        return FrontierRoutePatrolSceneSupport.advanceObserved(state, patrol, observed.leaseId(), observed.actorId(), observed.observedBody());
     }
 
     private static CommandPlan planEngineeringAssemblyAdvance(FrontierWorldState state, FrontierCommand command,

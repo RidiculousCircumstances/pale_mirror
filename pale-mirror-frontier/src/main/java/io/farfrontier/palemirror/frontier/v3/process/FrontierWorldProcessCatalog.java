@@ -94,7 +94,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
             "frontier.route_maintenance_closed",
             "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
-            "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed", "frontier.route_patrol_blocked");
+            "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed", "frontier.route_patrol_blocked",
+            "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff", "frontier.route_patrol_traversal_observed");
     private static final Set<String> SETTLEMENT_SERVICE_WORK = types(
             "frontier.settlement_service_work_started", "frontier.settlement_service_work_scene_lease_prepared",
             "frontier.settlement_service_work_scene_lease_handoff", "frontier.settlement_service_work_traversal_advanced",
@@ -295,7 +296,9 @@ public final class FrontierWorldProcessCatalog {
      * retained one-cell corridor transition before reducing either one.
      */
     private static Set<String> infrastructureCommands() { return types(
-            "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced"); }
+            "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced",
+            "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff", "frontier.route_patrol_traversal_observed",
+            "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"); }
     private static Set<String> serviceWorkCommands() { return types(
             "frontier.settlement_service_work_scene_lease_prepared", "frontier.settlement_service_work_scene_lease_handoff",
             "frontier.settlement_service_work_traversal_advanced", "frontier.settlement_service_work_traversal_blocked",
@@ -449,6 +452,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
                     "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced", "frontier.route_maintenance_closed",
                     "frontier.route_patrol_started", "frontier.route_patrol_advanced", "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed", "frontier.route_patrol_blocked",
+                    "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff", "frontier.route_patrol_traversal_observed",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.resident_born", "frontier.resident_migrated",

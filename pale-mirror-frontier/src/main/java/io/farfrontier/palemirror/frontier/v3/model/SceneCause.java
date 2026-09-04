@@ -7,6 +7,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
  * validated by its owning domain before it may be prepared.</p>
  */
 public sealed interface SceneCause permits LogisticsSceneCause, SettlementAssaultSceneCause, EngineeringWorkSceneCause, MedicalTreatmentSceneCause,
-        ResourceSiteHarvestSceneCause, ProductionWorkSceneCause, SettlementServiceWorkSceneCause {
+        ResourceSiteHarvestSceneCause, ProductionWorkSceneCause, SettlementServiceWorkSceneCause, RoutePatrolSceneCause {
     SceneCauseKind kind();
 }

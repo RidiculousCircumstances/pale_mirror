@@ -67,6 +67,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
             Map.entry("routeMaintenanceColdSourceFairness", FrontierV3FixtureCatalog::routeMaintenanceColdSourceFairnessConfiguration),
+            Map.entry("routePatrol", FrontierV3FixtureCatalog::routePatrolConfiguration),
             Map.entry("steppedRoute", FrontierV3FixtureCatalog::steppedRouteConfiguration));
     private static final Catalog CATALOG = loadCatalog();
     public static final String DEFAULT_PROFILE = CATALOG.defaultProfile();
@@ -240,6 +241,11 @@ public final class FrontierV3FixtureCatalog {
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routeMaintenanceColdSourceFairnessConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteMaintenanceFairnessFixture fixture = FrontierDevelopmentScenarios.routeMaintenanceColdSourceFairnessFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routePatrolConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.RoutePatrolFixture fixture = FrontierDevelopmentScenarios.routePatrolFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

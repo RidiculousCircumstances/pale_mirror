@@ -91,8 +91,14 @@ public final class ProductionProcess {
                 || (marketBacked && CompanyWorkPaymentProcess.contractFor(state, job).isEmpty())) {
             return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.WORKER_UNAVAILABLE);
         }
-        if (job.inputHold() instanceof ProductionInputHold.Materialized && !job.workProgress().terminalEffectEligible()) {
-            return List.of(schedule(complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            if (!job.workProgress().terminalEffectEligible()) {
+                return List.of(schedule(complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+            }
+            // The worker scene owns the live body until its release receipt is committed.  A
+            // physical output receipt must never remove this job while the HOT/DRAINING lease
+            // still names it; releasePlan schedules this exact completion on the next tick.
+            if (hasOpenWorkScene(state, job.id())) return List.of();
         }
         if (job.inputHold() instanceof ProductionInputHold.Cold held) {
             ExactItemStack input = held.item();

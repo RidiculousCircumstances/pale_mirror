@@ -209,6 +209,22 @@
   Preflight proved the clean detached ref, Java 22, empty selected world and
   graybox datapack; post-start verification proved active PID `2134717`, port,
   fresh `Done`, Frontier-v3 startup and no quarantine. r68 remains untouched.
+- Live r69 then exposed V3-AUD-042: at 11:15:30 the runtime correctly entered
+  quarantine when a COLD production completion confirmed a chest replacement
+  while its exact `PRODUCTION_WORK` lease was still HOT. The confirmation
+  removed the job which the open lease still required, yielding
+  `NullPointerException: production-work scene job`; subsequent client
+  disconnect/reconnect did not cause the failure and cannot resume a
+  quarantined canonical runtime. The server process remains available only as
+  diagnostic evidence; it must not be treated as a living v3 world.
+- The working correction makes the hot worker's release receipt the ordering
+  boundary: an output-ready materialized job cannot prepare its physical
+  transform while its lease is non-closed; release schedules one same-job
+  completion on the next tick. The focused 33-test production suite passes,
+  including the HOT deferral → closed lease → confirmed bread regression.
+  The full pure suite must be rerun after the concurrent MAT-004 fixture
+  catalog cut is made consistent, followed by Economy/Scene slices, a critical
+  gate and a fresh disposable deployment; do not deploy this uncommitted work.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained

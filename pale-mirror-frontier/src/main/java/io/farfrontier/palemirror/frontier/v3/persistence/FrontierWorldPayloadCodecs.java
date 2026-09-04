@@ -53,7 +53,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
             RouteConstructionPayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.started(), RouteMaintenancePayloadCodecs.materialLoaded(),
             RouteMaintenancePayloadCodecs.assemblyStarted(), RouteMaintenancePayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.closed(), RoutePatrolPayloadCodecs.started(),
-            RoutePatrolPayloadCodecs.advanced(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), RoutePatrolPayloadCodecs.blocked())); }
+            RoutePatrolPayloadCodecs.advanced(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), RoutePatrolPayloadCodecs.blocked(),
+            RoutePatrolPayloadCodecs.prepared(), RoutePatrolPayloadCodecs.handoff(), RoutePatrolPayloadCodecs.traversalObserved())); }
     static PayloadCodecs settlementServiceWorkCodecs() { return SettlementServiceWorkPayloadCodecs.codecs(); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
             StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }

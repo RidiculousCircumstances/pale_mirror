@@ -72,6 +72,41 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Disposable-only class-D boundary.  The fixture advances only the ordinary retained COLD
+     * ingress to its first route formation and then stops: no scene lease, body, world block or
+     * outcome is injected.  A naturally visiting player is the sole admission demand for the
+     * first observed HOT edge.
+     */
+    static RoutePatrolFixture routePatrolFixture(WorldId worldId, long seed) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        List<ResidentProfile> guards = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER);
+        if (guards.size() < 2) throw new IllegalStateException("route-patrol fixture needs two exact security residents");
+        SubjectId objectiveId = new SubjectId("objective:development-route-patrol");
+        SubjectId taskId = new SubjectId("task:development-route-patrol");
+        StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
+                Optional.empty(), 99, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(taskId, objectiveId, settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
+                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
+        RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
+                RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
+        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol));
+        int maximumTransitions = patrol.assembly().members().values().stream()
+                .mapToInt(member -> member.corridor().size() - 1).sum();
+        for (int transition = 0; transition <= maximumTransitions; transition++) {
+            RoutePatrol current = state.strategicPlans().routePatrols().get(taskId);
+            if (current.status() == RoutePatrolStatus.EN_ROUTE) {
+                return new RoutePatrolFixture(state, new SimInstant(1_000L), List.of(), taskId, current);
+            }
+            if (current.status() != RoutePatrolStatus.ASSEMBLING || current.safeAdvances().isEmpty()) {
+                throw new IllegalStateException("route-patrol fixture ingress cannot reach its retained formation");
+            }
+            state = RoutePatrolProcess.reduceAdvanced(state, settlement.id(), new RoutePatrolAdvanced(taskId, current.safeAdvances().getFirst()));
+        }
+        throw new IllegalStateException("route-patrol fixture ingress did not reach its declared bounded formation");
+    }
+
+    /**
      * Disposable-only real assault boundary. The fixture advances the normal bounded Scout
      * sighting and attacker approach process to COLD_COMBAT, but creates neither a scene lease
      * nor a Minecraft body: a naturally visiting player must admit the typed HOT scene.
@@ -760,6 +795,13 @@ final class FrontierDevelopmentScenarios {
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
         RouteSceneReturnFixture {
+            schedules = List.copyOf(schedules);
+        }
+    }
+
+    record RoutePatrolFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                              SubjectId taskId, RoutePatrol patrol) {
+        RoutePatrolFixture {
             schedules = List.copyOf(schedules);
         }
     }

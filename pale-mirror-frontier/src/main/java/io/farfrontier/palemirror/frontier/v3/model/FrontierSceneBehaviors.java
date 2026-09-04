@@ -22,7 +22,7 @@ import java.util.Set;
 public final class FrontierSceneBehaviors {
     private static final FrontierSceneBehaviors CURRENT = new FrontierSceneBehaviors(List.of(
             new LogisticsBehavior(), new SettlementAssaultBehavior(), new EngineeringWorksiteBehavior(), new MedicalTreatmentBehavior(),
-            new ResourceSiteHarvestBehavior(), new ProductionWorkBehavior(), new SettlementServiceWorkBehavior()));
+            new ResourceSiteHarvestBehavior(), new ProductionWorkBehavior(), new SettlementServiceWorkBehavior(), new RoutePatrolBehavior()));
 
     private final Map<SceneCauseKind, SceneBehavior<?>> behaviors;
 
@@ -87,6 +87,7 @@ public final class FrontierSceneBehaviors {
     public static ResourceSiteHarvestSceneCause resourceSiteHarvest(SceneLease lease) { return behavior(lease).resourceSiteHarvest(lease); }
     public static ProductionWorkSceneCause productionWork(SceneLease lease) { return behavior(lease).productionWork(lease); }
     public static SettlementServiceWorkSceneCause serviceWork(SceneLease lease) { return behavior(lease).serviceWork(lease); }
+    public static RoutePatrolSceneCause routePatrol(SceneLease lease) { return behavior(lease).routePatrol(lease); }
 
     public static boolean isLogistics(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.LOGISTICS; }
     public static boolean isSettlementAssault(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.SETTLEMENT_ASSAULT; }
@@ -95,6 +96,7 @@ public final class FrontierSceneBehaviors {
     public static boolean isResourceSiteHarvest(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.RESOURCE_SITE_HARVEST; }
     public static boolean isProductionWork(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.PRODUCTION_WORK; }
     public static boolean isServiceWork(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.SERVICE_WORK; }
+    public static boolean isRoutePatrol(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.ROUTE_PATROL; }
     public static boolean owns(SceneLease lease, SubjectId subjectId) { return behavior(lease).owns(lease, subjectId); }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) { behavior(lease).validatePrepared(state, lease); }
@@ -178,6 +180,9 @@ public final class FrontierSceneBehaviors {
         }
         default SettlementServiceWorkSceneCause serviceWork(SceneLease lease) {
             throw new IllegalStateException("scene behavior has no service-work binding: " + kind());
+        }
+        default RoutePatrolSceneCause routePatrol(SceneLease lease) {
+            throw new IllegalStateException("scene behavior has no route-patrol binding: " + kind());
         }
         boolean owns(SceneLease lease, SubjectId subjectId);
         SubjectId owner(FrontierWorldState state, SceneLease lease);
@@ -554,7 +559,10 @@ public final class FrontierSceneBehaviors {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
             boolean blocked = state.strategicPlans().tasks().values().stream().anyMatch(task -> task.ownerId().equals(job.settlementId())
                     && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.BLOCKED);
-            SceneContinuation continuation = blocked ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id()) : new SceneContinuation.None();
+            SceneContinuation continuation = blocked ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id())
+                    : job.workProgress().terminalEffectEligible()
+                    ? new SceneContinuation.ResumeProductionCompletion(job.id(), Math.addExact(submittedAt, 1L))
+                    : new SceneContinuation.None();
             return new SceneReleasePlan(owner(state, lease), released, continuation);
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
@@ -638,6 +646,78 @@ public final class FrontierSceneBehaviors {
                 }
             }
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works));
+        }
+    }
+
+    /** Class-D route patrol: generic guard motion never substitutes for this retained formation. */
+    private static final class RoutePatrolBehavior implements SceneBehavior<RoutePatrolSceneCause> {
+        @Override public SceneCauseKind kind() { return SceneCauseKind.ROUTE_PATROL; }
+        @Override public Class<RoutePatrolSceneCause> causeType() { return RoutePatrolSceneCause.class; }
+        @Override public RoutePatrolSceneCause sampleCause() { return new RoutePatrolSceneCause(new SubjectId("task:route-patrol-registry")); }
+        @Override public RoutePatrolSceneCause routePatrol(SceneLease lease) { return cause(lease); }
+        @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).taskId().equals(subjectId); }
+        @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) {
+            return FrontierRoutePatrolSceneSupport.owner(state, cause(lease));
+        }
+        @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) {
+            FrontierRoutePatrolSceneSupport.validatePrepared(state, lease);
+        }
+        @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
+                                                         Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
+                                                         Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
+                                                         StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
+                                                         Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
+            RoutePatrol patrol = plans.routePatrols().get(cause(lease).taskId());
+            if (patrol == null) {
+                if (lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("route-patrol scene has no retained patrol");
+                return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
+            }
+            boolean allowed = switch (lease.status()) {
+                case PREPARED -> patrol.active();
+                // A terminal patrol can remain HOT only for the one bounded drain turn which
+                // captures the same exact surviving formation. It may never resume movement.
+                case HOT -> patrol.active() || patrol.status() == RoutePatrolStatus.ROUTE_CLEAR
+                        || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED || patrol.status() == RoutePatrolStatus.BLOCKED
+                        || patrol.status() == RoutePatrolStatus.FAILED;
+                case DRAINING -> patrol.active() || patrol.status() == RoutePatrolStatus.ROUTE_CLEAR
+                        || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED || patrol.status() == RoutePatrolStatus.BLOCKED
+                        || patrol.status() == RoutePatrolStatus.FAILED;
+                case UNKNOWN_AFTER_RESTART, CONFLICT -> patrol.active() || patrol.status() == RoutePatrolStatus.BLOCKED
+                        || patrol.status() == RoutePatrolStatus.FAILED;
+                case CLOSED -> true;
+            };
+            if (!allowed) throw new IllegalArgumentException("route-patrol scene and retained patrol lifecycle disagree");
+            return Set.copyOf(patrol.memberIds());
+        }
+        @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
+            return state.strategicPlans();
+        }
+        @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            return FrontierRoutePatrolSceneSupport.releasedBody(state, lease, actorId, observed);
+        }
+        @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
+            RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, cause(lease));
+            SceneContinuation continuation = patrol.active()
+                    ? new SceneContinuation.ResumeRoutePatrol(patrol.taskId(), Math.addExact(submittedAt,
+                    state.bootstrap().ruleset().cadence().routePatrolStepInterval()))
+                    : new SceneContinuation.None();
+            return new SceneReleasePlan(owner(state, lease), released, continuation);
+        }
+        @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
+            return new SceneRecoveryPlan(owner(state, lease), unresolved,
+                    new SceneContinuation.BlockRoutePatrol(cause(lease).taskId()));
+        }
+        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+            RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, cause(lease));
+            if (!patrol.memberIds().contains(actorId) || !patrol.active()) return SceneDeathOutcome.unchanged(state);
+            // Death is the patrol's terminal evidence.  Keep task and patrol terminal states in
+            // the same authoritative transaction; a later generic continuation would leave a
+            // briefly active task with a dead member and permit a second planner to race it.
+            StrategicPlanState plans = state.strategicPlans().blockPatrol(patrol.taskId())
+                    .transitionTask(patrol.taskId(), StrategicTaskStatus.BLOCKED);
+            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
+                    state.physicalIntents(), state.serviceWorks());
         }
     }
 }

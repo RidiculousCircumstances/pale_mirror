@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWorkSceneCause;
@@ -38,6 +39,7 @@ final class SceneCauseStateCodec {
         if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4); FrontierWorldStateCodec.writeString(output, harvest.jobId().value()); return; }
         if (cause instanceof ProductionWorkSceneCause production) { output.writeByte(5); FrontierWorldStateCodec.writeString(output, production.jobId().value()); return; }
         if (cause instanceof SettlementServiceWorkSceneCause service) { output.writeByte(6); FrontierWorldStateCodec.writeString(output, service.workId().value()); return; }
+        if (cause instanceof RoutePatrolSceneCause patrol) { output.writeByte(7); FrontierWorldStateCodec.writeString(output, patrol.taskId().value()); return; }
         throw new IllegalArgumentException("unknown scene cause: " + cause.getClass().getName());
     }
 
@@ -51,6 +53,7 @@ final class SceneCauseStateCodec {
             case 4 -> new ResourceSiteHarvestSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 5 -> new ProductionWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 6 -> new SettlementServiceWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
+            case 7 -> new RoutePatrolSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
             default -> throw new IllegalArgumentException("unknown scene cause kind");
         };
     }

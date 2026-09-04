@@ -95,7 +95,13 @@ public final class FrontierSceneAdmission {
                 || FrontierEngineeringWorkSceneSupport.nextCandidate(state).stream()
                 .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId))
                 || FrontierResourceSiteHarvestSceneSupport.nextCandidate(state).stream()
-                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId));
+                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId))
+                // An active class-D patrol is a retained operation, not a generic GUARD goal.
+                // A pre-existing ambient body stays still until the patrol scene can atomically
+                // adopt that exact entity; an absent body is materialized by the typed scene at
+                // its retained canonical formation, never by ambient wandering.
+                || state.strategicPlans().routePatrols().values().stream()
+                .filter(RoutePatrol::active).anyMatch(patrol -> patrol.memberIds().contains(actorId));
     }
 
     /**
@@ -127,7 +133,12 @@ public final class FrontierSceneAdmission {
         // after restart), leaving the worksite indefinitely unavailable to itself.
         FrontierEngineeringWorkSceneSupport.nextCandidate(state)
                 .ifPresent(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
-        // Field work uses the typed atomic ambient-to-scene hand-off.  It deliberately is not
+        // A pre-scene route patrol uses the typed atomic ambient-to-scene hand-off. It is not
+        // a generic reservation: draining an already-visible resident before admission would
+        // replace a real entity rather than transfer it. The separate precursor predicate
+        // freezes generic ambient goals until the patrol either adopts its body or materializes
+        // an as-yet absent exact canonical actor at the retained formation.
+        // Field work uses the same atomic ambient-to-scene hand-off.  It deliberately is not
         // a pre-lease COLD reservation: the loaded Villager must remain available for that
         // hand-off rather than be drained and respawned at a guessed canonical surface.
         return Set.copyOf(reserved);

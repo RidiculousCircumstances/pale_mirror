@@ -241,6 +241,51 @@ class ProductionProcessTest {
     }
 
     @Test
+    void outputReadyHotWorkerMustReleaseBeforeItsPhysicalTransformationCanBePrepared() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
+                .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob workJob = prepared.job().withWorkTraversal(
+                ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop, worker, prepared.job().id()), 0);
+        var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-output-ready-release");
+        SceneLease lease = SceneLease.forCause(leaseId, prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(workJob.id()),
+                worker.supportingSurface().support(), new SimInstant(100L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(workJob.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), workJob.workerId()))),
+                java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)))
+                .prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        ProductionJob outputReady = workJob.withWorkProgress(ProductionWorkProgress.outputReady());
+        hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady)));
+        ScheduledAction completion = ProductionProcess.complete(outputReady, 1_000L);
+
+        assertTrue(ProductionProcess.planCompletion(hot, completion).isEmpty(),
+                "a scheduled COLD completion must not prepare an effect while its exact worker body remains HOT");
+        assertTrue(hot.physicalIntents().isEmpty());
+
+        FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(outputReady.workerId(), worker.body(), worker.condition().health())));
+        List<ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining, lease, 1_000L, released);
+        assertEquals(2, continuation.size());
+        ScheduleEffect.Created scheduled = assertInstanceOf(ScheduleEffect.Created.class, continuation.get(1).payload());
+        assertEquals(1_001L, scheduled.action().dueAt().ticks());
+        assertEquals(outputReady.id(), scheduled.action().subject());
+
+        FrontierWorldState closed = draining.releaseSceneLease(leaseId, released.members());
+        List<ProposedEvent> effect = ProductionProcess.planCompletion(closed, scheduled.action());
+        PhysicalIntentPrepared physical = assertInstanceOf(PhysicalIntentPrepared.class, effect.getFirst().payload());
+        FrontierWorldState withIntent = closed.preparePhysicalIntent(physical.intent())
+                .transitionPhysicalIntent(physical.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        ExactItemStack input = withIntent.inventory().items().get(outputReady.consumedItemId());
+        ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:production-after-release"),
+                physical.intent().id(), input.id(), outputReady.outputItemId(), input.count(), outputReady.outputCount());
+        FrontierWorldState completed = withIntent.transitionPhysicalIntent(physical.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        assertTrue(completed.productionJobs().isEmpty());
+        assertEquals(SceneLeaseStatus.CLOSED, completed.sceneLeases().get(leaseId).status());
+    }
+
+    @Test
     void productionStartRetainsTheExactCrafterToWorkshopPortTopology() {
         FrontierWorldState state = productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-route"), 91L)),
                 StrategicTaskStatus.PENDING);

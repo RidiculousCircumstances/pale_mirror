@@ -43,6 +43,9 @@ public final class RoutePatrolProcess {
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(action.subject());
         if (patrol == null || !patrol.active()) return List.of();
+        if (state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                && FrontierSceneBehaviors.isRoutePatrol(lease)
+                && FrontierSceneBehaviors.routePatrol(lease).taskId().equals(patrol.taskId()))) return List.of();
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         RoutePatrol current = patrol;
         List<ProposedEvent> events = new ArrayList<>();
@@ -95,7 +98,8 @@ public final class RoutePatrolProcess {
         return state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
     }
 
-    static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolAdvanced advanced) {
+    /** Shared deterministic reducer boundary for the engine and test-only read-only fixture assembly. */
+    public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolAdvanced advanced) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(advanced.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route patrol advancement has a foreign owner");
         if (!patrol.safeAdvances().contains(advanced.actorId())) throw new IllegalArgumentException("route patrol advance does not name a safe retained member");
@@ -132,7 +136,7 @@ public final class RoutePatrolProcess {
         return state.withStrategicPlans(state.strategicPlans().blockPatrol(blocked.taskId()));
     }
 
-    private static ScheduledAction progress(RoutePatrol patrol, long due) { return new ScheduledAction(new ScheduleId("schedule:route-patrol-progress-" + patrol.taskId().value().replace(':', '-')),
+    static ScheduledAction progress(RoutePatrol patrol, long due) { return new ScheduledAction(new ScheduleId("schedule:route-patrol-progress-" + patrol.taskId().value().replace(':', '-')),
             new SimInstant(due), REACTIVE_INSPECTION_PRIORITY, patrol.taskId(), "frontier.route_patrol.progress", 1); }
     private static RoutePatrol selectIngressCapablePatrol(FrontierWorldState state, StrategicTask task, Settlement settlement,
                                                            List<ResidentProfile> candidates) {

@@ -114,6 +114,12 @@ final class FrontierV3DiagnosticTrace {
                     new Context("", lease.id().value(), "",
                             lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
         }
+        if (FrontierSceneBehaviors.isRoutePatrol(lease)) {
+            var patrol = FrontierSceneBehaviors.routePatrol(lease);
+            return new SceneTrace("route-patrol:" + patrol.taskId().value(), patrol.taskId(),
+                    new Context("", lease.id().value(), "",
+                            lease.members().stream().map(member -> member.actorId().value()).sorted().toList()));
+        }
         var logistics = FrontierSceneBehaviors.logistics(lease);
         return new SceneTrace("operation:" + logistics.operationId().value(), logistics.operationId(),
                 new Context(logistics.operationId().value(), lease.id().value(), logistics.cargoId().value(),

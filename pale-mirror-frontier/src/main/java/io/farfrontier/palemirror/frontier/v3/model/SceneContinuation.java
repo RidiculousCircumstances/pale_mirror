@@ -14,7 +14,8 @@ import java.util.Objects;
  */
 public sealed interface SceneContinuation permits SceneContinuation.None, SceneContinuation.ResumeOperation,
         SceneContinuation.FailOperation, SceneContinuation.ResumeEngagement, SceneContinuation.ResumeSettlementAssault,
-        SceneContinuation.FinalizeProductionWork {
+        SceneContinuation.FinalizeProductionWork, SceneContinuation.ResumeProductionCompletion,
+        SceneContinuation.ResumeRoutePatrol, SceneContinuation.BlockRoutePatrol {
     Kind kind();
 
     enum Kind {
@@ -23,7 +24,10 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
         FAIL_OPERATION,
         RESUME_ENGAGEMENT,
         RESUME_SETTLEMENT_ASSAULT,
-        FINALIZE_PRODUCTION_WORK
+        FINALIZE_PRODUCTION_WORK,
+        RESUME_PRODUCTION_COMPLETION,
+        RESUME_ROUTE_PATROL,
+        BLOCK_ROUTE_PATROL
     }
 
     record None() implements SceneContinuation {
@@ -57,5 +61,27 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
     record FinalizeProductionWork(SceneLeaseId leaseId, SubjectId jobId) implements SceneContinuation {
         public FinalizeProductionWork { Objects.requireNonNull(leaseId, "production scene lease"); Objects.requireNonNull(jobId, "production job id"); }
         @Override public Kind kind() { return Kind.FINALIZE_PRODUCTION_WORK; }
+    }
+
+    /**
+     * A loaded worker may trigger the physical transformation only after its exact HOT body
+     * has released.  The retained job is therefore still present for the release receipt but
+     * may safely retire when the later transformation confirmation is committed.
+     */
+    record ResumeProductionCompletion(SubjectId jobId, long dueAt) implements SceneContinuation {
+        public ResumeProductionCompletion { Objects.requireNonNull(jobId, "production job id"); }
+        @Override public Kind kind() { return Kind.RESUME_PRODUCTION_COMPLETION; }
+    }
+
+    /** A drained exact patrol resumes its same retained COLD cursor; it is not replaced by guard ambience. */
+    record ResumeRoutePatrol(SubjectId taskId, long dueAt) implements SceneContinuation {
+        public ResumeRoutePatrol { Objects.requireNonNull(taskId, "route-patrol task"); }
+        @Override public Kind kind() { return Kind.RESUME_ROUTE_PATROL; }
+    }
+
+    /** Unknown post-restart custody blocks the same patrol until explicit inspection, never movement replay. */
+    record BlockRoutePatrol(SubjectId taskId) implements SceneContinuation {
+        public BlockRoutePatrol { Objects.requireNonNull(taskId, "route-patrol task"); }
+        @Override public Kind kind() { return Kind.BLOCK_ROUTE_PATROL; }
     }
 }

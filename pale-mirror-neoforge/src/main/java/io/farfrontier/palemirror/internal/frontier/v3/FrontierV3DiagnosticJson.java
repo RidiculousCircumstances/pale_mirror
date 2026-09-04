@@ -613,8 +613,11 @@ final class FrontierV3DiagnosticJson {
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.productionWork(lease) : null;
         var service = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isServiceWork(lease)
                 ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.serviceWork(lease) : null;
+        var routePatrol = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isRoutePatrol(lease)
+                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.routePatrol(lease) : null;
         ProductionJob productionJob = production == null ? null : state.productionJobs().get(production.jobId());
         var serviceWork = service == null ? null : state.serviceWorks().get(service.workId());
+        var patrol = routePatrol == null ? null : state.strategicPlans().routePatrols().get(routePatrol.taskId());
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
@@ -629,14 +632,15 @@ final class FrontierV3DiagnosticJson {
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
                 + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT"
                 : engineering != null ? "ENGINEERING_WORKSITE" : medical != null ? "MEDICAL_TREATMENT" : harvest != null ? "RESOURCE_SITE_HARVEST"
-                : production != null ? "PRODUCTION_WORK" : service != null ? "SETTLEMENT_SERVICE_WORK" : "UNKNOWN")
+                : production != null ? "PRODUCTION_WORK" : service != null ? "SETTLEMENT_SERVICE_WORK" : routePatrol != null ? "ROUTE_PATROL" : "UNKNOWN")
                 + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
                 + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
                 + "\",\"project\":\"" + quote(engineering == null ? "" : engineering.projectId().value())
                 + "\",\"medical\":\"" + quote(medical == null ? "" : medical.operationId().value())
                 + "\",\"harvestJob\":\"" + quote(harvest == null ? "" : harvest.jobId().value())
                 + "\",\"productionJob\":\"" + quote(production == null ? "" : production.jobId().value())
-                + "\"" + productionTraversal(productionJob) + serviceTraversal(serviceWork)
+                + "\",\"patrolTask\":\"" + quote(routePatrol == null ? "" : routePatrol.taskId().value())
+                + "\"" + productionTraversal(productionJob) + serviceTraversal(serviceWork) + patrolTraversal(patrol)
                 + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
@@ -670,6 +674,20 @@ final class FrontierV3DiagnosticJson {
                 + ",\"serviceInputCursor\":" + work.inputTraversalCursor() + ",\"serviceInputNodes\":" + work.inputTraversal().linearCorridorSurfaces().size()
                 + ",\"serviceWorkCursor\":" + work.workTraversalCursor() + ",\"serviceWorkNodes\":" + work.workTraversal().linearCorridorSurfaces().size()
                 + ",\"serviceTarget\":\"" + quote(work.target().toString()) + "\"";
+    }
+
+    /** Read-only next-edge evidence for a class-D patrol; it never selects or moves a resident. */
+    private static String patrolTraversal(io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
+        if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
+        var bodies = io.farfrontier.palemirror.frontier.v3.model.FrontierRoutePatrolSceneSupport.bodies(patrol);
+        var leader = bodies.get(patrol.guardId());
+        java.util.List<io.farfrontier.palemirror.frontier.v3.api.SubjectId> safe = patrol.safeAdvances();
+        io.farfrontier.palemirror.frontier.v3.model.BodyPosition nextBody = safe.isEmpty() ? null
+                : io.farfrontier.palemirror.frontier.v3.model.FrontierRoutePatrolSceneSupport.bodies(patrol.advance(safe.getFirst())).get(safe.getFirst());
+        return ",\"patrolStatus\":\"" + patrol.status() + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
+                + ",\"patrolCurrent\":" + position(leader.supportingSurface().support())
+                + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : position(nextBody.supportingSurface().support()))
+                + ",\"patrolNextBody\":" + (nextBody == null ? "null" : position(nextBody));
     }
 
     /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */

@@ -9,6 +9,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneFinalized;
 import io.farfrontier.palemirror.frontier.v3.model.RouteEngagement;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.RoutePatrol;
+import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolBlocked;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneContinuation;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
@@ -69,6 +73,9 @@ public final class FrontierSceneContinuationPlanner {
         register(handlers, new ResumeEngagementHandler());
         register(handlers, new ResumeSettlementAssaultHandler());
         register(handlers, new FinalizeProductionWorkHandler());
+        register(handlers, new ResumeProductionCompletionHandler());
+        register(handlers, new ResumeRoutePatrolHandler());
+        register(handlers, new BlockRoutePatrolHandler());
         if (handlers.size() != SceneContinuation.Kind.values().length) {
             throw new IllegalStateException("missing scene continuation handler");
         }
@@ -141,6 +148,39 @@ public final class FrontierSceneContinuationPlanner {
             ProductionJob job = state.productionJobs().get(finalize.jobId());
             if (job == null) throw new IllegalArgumentException("production scene finalization has no active job");
             return List.of(new ProposedEvent(job.settlementId(), new ProductionWorkSceneFinalized(finalize.leaseId(), job.id())));
+        }
+    }
+
+    private static final class ResumeProductionCompletionHandler implements ContinuationHandler {
+        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_PRODUCTION_COMPLETION; }
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+            if (!(continuation instanceof SceneContinuation.ResumeProductionCompletion resume)) throw invalid(continuation, kind());
+            ProductionJob job = state.productionJobs().get(resume.jobId());
+            if (job == null || !job.workProgress().terminalEffectEligible()) {
+                throw new IllegalArgumentException("production completion continuation has no exact output-ready job");
+            }
+            return List.of(new ProposedEvent(job.settlementId(), new ScheduleEffect.Created(ProductionProcess.complete(job, resume.dueAt()))));
+        }
+    }
+
+    private static final class ResumeRoutePatrolHandler implements ContinuationHandler {
+        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_ROUTE_PATROL; }
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+            if (!(continuation instanceof SceneContinuation.ResumeRoutePatrol resume)) throw invalid(continuation, kind());
+            RoutePatrol patrol = state.strategicPlans().routePatrols().get(resume.taskId());
+            if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene continuation has no active route patrol");
+            return List.of(new ProposedEvent(patrol.settlementId(), new ScheduleEffect.Created(RoutePatrolProcess.progress(patrol, resume.dueAt()))));
+        }
+    }
+
+    private static final class BlockRoutePatrolHandler implements ContinuationHandler {
+        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.BLOCK_ROUTE_PATROL; }
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+            if (!(continuation instanceof SceneContinuation.BlockRoutePatrol block)) throw invalid(continuation, kind());
+            RoutePatrol patrol = state.strategicPlans().routePatrols().get(block.taskId());
+            if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene recovery has no active route patrol");
+            return List.of(new ProposedEvent(patrol.settlementId(), new RoutePatrolBlocked(patrol.taskId())),
+                    new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.BLOCKED)));
         }
     }
 
