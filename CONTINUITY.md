@@ -342,6 +342,19 @@
   exact source receipt, actor custody, source theft rejection and death recovery;
   it passes. The decontamination cutover must now introduce its own process
   owner atomically rather than extend the old endpoint-only planner.
+- The service-input physical boundary now exists behind that intentionally
+  unreachable aggregate: one `SETTLEMENT_SERVICE_INPUT_ISSUE` executor accepts
+  only a HOT `SERVICE_WORK` lease, exact declared depot slot and exact worker
+  at the retained input body cell. It transitions durable `RUNNING` before
+  moving the tagged stack into the Villager's empty main hand, confirms only
+  after exact postcondition inspection, and recovery inspects rather than
+  replays. The focused Scene GameTest slice and full critical gate pass
+  (286/286 GameTests). Its initial full-suite regression proved the existing
+  tiny-template rule: a distant fixture coordinate overlapped a neighbouring
+  test cell and left a Villager visible to the village observer. The fixture
+  now uses its own interior and discards its evidence-only actor. This does not
+  advance MAT-003 above M1 because planner, continuous movement/progress,
+  endpoint and native evidence remain absent.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

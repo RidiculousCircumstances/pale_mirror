@@ -4,8 +4,11 @@ Status: accepted implementation contract for `MAT-003`. The persisted aggregate,
 immutable decontamination worksite compiler, closed `SERVICE_WORK` cause and
 snapshot codec exist; exact-worker death blocks the same aggregate and leaves
 its in-flight intents unknown. The aggregate now retains two semantic stations,
-two immutable corridors and a durable exact source-to-worker hand-off. Planner,
-HOT executor and endpoint hand-off remain open.
+two immutable corridors and a durable exact source-to-worker hand-off. The
+loaded physical input executor now moves only the exact tagged source stack to
+the exact HOT service worker at that retained input station, and recovery
+inspects both endpoints rather than replaying it. Planner, HOT scene lifecycle
+and endpoint hand-off remain open.
 
 ## Purpose
 

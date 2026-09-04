@@ -897,7 +897,8 @@ final class FrontierV3SceneExecutor {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(bioform -> bioform.id().equals(actorId)).anyMatch(Bioform::isExplosiveAssaulter);
     }
-    private static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
+    /** Exact scene-body provenance check shared by typed physical effects attached to a HOT scene. */
+    static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved() && member.entityId().equals(entity.getUUID())
                 && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
                 && member.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
