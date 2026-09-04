@@ -186,6 +186,14 @@
   distinct formation, retained 3D topology/cursor and registered `ROUTE_PATROL`
   HOT scene. Existing patrol bytes will be rejected on the next format cut,
   never adapted. No implementation/evidence claim is made yet.
+- The first pure replacement primitive is now present but intentionally not
+  wired into legacy patrol state: `PatrolTravel` retains individual immutable
+  pedestrian corridors/cursors and distinct body formation, with the leader's
+  route as the sole inspection cursor. Its focused normal/overlap/foreign-
+  leader/blocked-edge tests prove that one actor advances only into a vacated
+  retained body and the column cannot stretch beyond one cursor. The next code
+  cut must persist and own it through `RoutePatrol`; no M0/M2 promotion is
+  claimed until the legacy direct body rewrites are removed.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained
