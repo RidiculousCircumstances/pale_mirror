@@ -96,7 +96,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_advanced",
             "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed");
     private static final Set<String> SETTLEMENT_SERVICE_WORK = types(
-            "frontier.settlement_service_work_started");
+            "frontier.settlement_service_work_started", "frontier.settlement_service_work_scene_lease_prepared",
+            "frontier.settlement_service_work_scene_lease_handoff", "frontier.settlement_service_work_traversal_advanced",
+            "frontier.settlement_service_work_traversal_blocked", "frontier.settlement_service_work_progressed");
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
@@ -294,7 +296,10 @@ public final class FrontierWorldProcessCatalog {
      */
     private static Set<String> infrastructureCommands() { return types(
             "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced"); }
-    private static Set<String> serviceWorkCommands() { return Set.of(); }
+    private static Set<String> serviceWorkCommands() { return types(
+            "frontier.settlement_service_work_scene_lease_prepared", "frontier.settlement_service_work_scene_lease_handoff",
+            "frontier.settlement_service_work_traversal_advanced", "frontier.settlement_service_work_traversal_blocked",
+            "frontier.settlement_service_work_progressed"); }
     private static Set<String> strategyCommands() { return Set.of(); }
 
     private static Set<String> logisticsSchedules() { return types(
@@ -454,7 +459,10 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.strategic_objective_selected", "frontier.strategic_task_planned", "frontier.strategic_task_transition");
             case "settlement-service-work" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
-                    "frontier.settlement_service_work_started", "frontier.strategic_task_transition");
+                    "frontier.settlement_service_work_started", "frontier.settlement_service_work_scene_lease_prepared",
+                    "frontier.settlement_service_work_scene_lease_handoff", "frontier.settlement_service_work_traversal_advanced",
+                    "frontier.settlement_service_work_traversal_blocked", "frontier.settlement_service_work_progressed",
+                    "frontier.scene_lease_transition", "frontier.strategic_task_transition");
             case "strategy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",

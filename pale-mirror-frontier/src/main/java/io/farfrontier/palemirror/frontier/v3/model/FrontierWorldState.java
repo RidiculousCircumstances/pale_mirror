@@ -327,7 +327,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, operations, contracts, sceneLeases, routeConstructions, routeMaintenances, routeTopology);
+        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, operations, contracts, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks);
         ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -798,6 +798,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteConstructionStateSupport.conflict(this, current, next);
             if (RouteMaintenanceStateSupport.ownsIntent(current) && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return RouteMaintenanceStateSupport.conflict(this, current, next);
             if (HiveNutrientTransferStateSupport.isEndpointIntent(current) && nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return HiveNutrientTransferStateSupport.unknownEndpoint(this, current, next);
+            if (nextStatus == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && SettlementServiceDecontaminationStateSupport.owns(this, current)) return SettlementServiceDecontaminationStateSupport.unknown(this, current, next);
             return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
                     next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
         }
@@ -805,10 +806,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (!current.id().equals(evidence.intentId()) || physicalObservations.containsKey(evidence.id())) {
             throw new IllegalArgumentException("cargo hand-off observation does not match a unique confirmed intent");
         }
-        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION) {
-            if (!(evidence instanceof DecontaminationObservation decontamination)) throw new IllegalArgumentException("decontamination requires observation evidence");
-            return DecontaminationStateSupport.complete(this, current, decontamination, next);
-        }
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION)
+            return SettlementServiceDecontaminationStateSupport.complete(this, current, evidence, next);
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION) {
             if (!(evidence instanceof ResourceSitePreparationObservation preparation)) throw new IllegalArgumentException("resource-site preparation requires exact field evidence");
             return ResourceSitePhysicalIntentStateSupport.complete(this, current, preparation, next);

@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -83,6 +84,87 @@ public final class SettlementServiceWorkProcess {
         return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents));
     }
 
+    /** Commits only a loaded observation of the next edge on the current retained service leg. */
+    public static FrontierWorldState reduceHotTraversalAdvanced(FrontierWorldState state, SubjectId subject,
+                                                                 SettlementServiceWorkTraversalAdvanced advanced) {
+        SettlementServiceWork work = requireOwned(state, subject, advanced.workId());
+        SettlementServiceWork replacement = switch (work.phase()) {
+            case PREPARED, APPROACH_INPUT -> work.withInputTraversalCursor(advanced.nextCursor());
+            case APPROACH_WORK -> work.withWorkTraversalCursor(advanced.nextCursor());
+            default -> throw new IllegalArgumentException("service-work traversal is not currently eligible to advance");
+        };
+        return FrontierSettlementServiceWorkSceneSupport.advanceWorker(state, work, replacement, advanced.leaseId(), advanced.observedWorker());
+    }
+
+    /** Progress is legal only at the retained work station and only by one durable bounded tick. */
+    public static FrontierWorldState reduceHotProgressed(FrontierWorldState state, SubjectId subject,
+                                                          SettlementServiceWorkProgressed progressed) {
+        SettlementServiceWork work = requireOwned(state, subject, progressed.workId());
+        if (work.phase() != SettlementServiceWorkPhase.WORKING || !progressed.observedWorker().equals(work.workStation().standingBody())) {
+            throw new IllegalArgumentException("service-work progress must be observed at its retained work station");
+        }
+        FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, progressed.leaseId());
+        boolean legal = progressed.nextPhase() == SettlementServiceWorkPhase.WORKING
+                && progressed.completedWorkTicks() == work.completedWorkTicks() + 1
+                || progressed.nextPhase() == SettlementServiceWorkPhase.EFFECT_READY
+                && work.completedWorkTicks() == SettlementServiceWork.REQUIRED_WORK_TICKS - 1
+                && progressed.completedWorkTicks() == 0;
+        if (!legal) throw new IllegalArgumentException("service-work progress is not its retained next bounded step");
+        return replace(state, work, work.withPhase(progressed.nextPhase(), progressed.completedWorkTicks()));
+    }
+
+    /** A loaded full next body is canonical BLOCKED evidence, never authority for a detour. */
+    public static List<ProposedEvent> planHotTraversalBlocked(FrontierWorldState state, SubjectId subject,
+                                                               SettlementServiceWorkTraversalBlocked blocked) {
+        reduceHotTraversalBlocked(state, subject, blocked);
+        SettlementServiceWork work = state.serviceWorks().get(blocked.workId());
+        return List.of(new ProposedEvent(work.settlementId(), blocked),
+                new ProposedEvent(work.settlementId(), new StrategicTaskTransition(work.taskId(), StrategicTaskStatus.BLOCKED)),
+                new ProposedEvent(work.settlementId(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(blocked.leaseId(),
+                        io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING)));
+    }
+
+    /** Validates obstruction evidence; the following same-transaction event makes the work BLOCKED. */
+    public static FrontierWorldState reduceHotTraversalBlocked(FrontierWorldState state, SubjectId subject,
+                                                                SettlementServiceWorkTraversalBlocked blocked) {
+        SettlementServiceWork work = requireOwned(state, subject, blocked.workId());
+        int current = switch (work.phase()) {
+            case PREPARED, APPROACH_INPUT -> work.inputTraversalCursor();
+            case APPROACH_WORK -> work.workTraversalCursor();
+            default -> throw new IllegalArgumentException("service-work block has no active traversal leg");
+        };
+        int size = switch (work.phase()) {
+            case PREPARED, APPROACH_INPUT -> work.inputTraversal().linearCorridorSurfaces().size();
+            case APPROACH_WORK -> work.workTraversal().linearCorridorSurfaces().size();
+            default -> throw new IllegalStateException("unreachable service-work traversal phase");
+        };
+        if (blocked.blockedNextCursor() != current + 1 || blocked.blockedNextCursor() >= size
+                || !blocked.observedWorker().equals(FrontierSettlementServiceWorkSceneSupport.currentSurface(work).standingBody())) {
+            throw new IllegalArgumentException("service-work block does not name one retained next edge");
+        }
+        FrontierSettlementServiceWorkSceneSupport.requireHotLease(state, work, blocked.leaseId());
+        return replace(state, work, work.withPhase(SettlementServiceWorkPhase.BLOCKED, 0));
+    }
+
+    private static SettlementServiceWork requireOwned(FrontierWorldState state, SubjectId subject, SubjectId workId) {
+        SettlementServiceWork work = state.serviceWorks().get(workId);
+        if (work == null || !subject.equals(work.settlementId())) {
+            throw new IllegalArgumentException("service-work observation has no owned retained aggregate");
+        }
+        return work;
+    }
+
+    private static FrontierWorldState replace(FrontierWorldState state, SettlementServiceWork current, SettlementServiceWork replacement) {
+        if (!replacement.id().equals(current.id()) || !replacement.taskId().equals(current.taskId())
+                || !replacement.workerId().equals(current.workerId()) || !replacement.settlementId().equals(current.settlementId())
+                || !replacement.facilityId().equals(current.facilityId()) || !replacement.inputItemId().equals(current.inputItemId())) {
+            throw new IllegalArgumentException("service-work replacement may not change durable identities or owners");
+        }
+        LinkedHashMap<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
+        works.put(replacement.id(), replacement);
+        return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works));
+    }
+
     private static Optional<StrategicTask> pendingTask(FrontierWorldState state) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.DECONTAMINATE_INFECTION_CELL
                 && task.status() == StrategicTaskStatus.PENDING).sorted(Comparator.comparing(StrategicTask::id)).findFirst();
@@ -107,10 +189,11 @@ public final class SettlementServiceWorkProcess {
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) material.orElseThrow().custody();
         PhysicalIntentId inputIssueId = new PhysicalIntentId("intent:service-input-issue-" + ordinal);
         PhysicalIntentId endpointId = new PhysicalIntentId("intent:service-decontamination-" + ordinal);
-        SettlementServiceWork work = new SettlementServiceWork(workId, SettlementServiceWorkKind.DECONTAMINATION, settlement.id(), worker.orElseThrow().id(),
+        SettlementServiceWork work = new SettlementServiceWork(workId, task.id(), SettlementServiceWorkKind.DECONTAMINATION, settlement.id(), worker.orElseThrow().id(),
                 facility.orElseThrow().id(), source, traversal.inputStation(), traversal.workStation(), material.orElseThrow().id(),
                 new SettlementServiceTarget.Infection(cell), inputIssueId, endpointId, traversal.inputTraversal(), 0, traversal.workTraversal(), 0,
-                SettlementServiceWorkPhase.PREPARED, 0);
+                traversal.inputTraversal().linearCorridorSurfaces().size() == 1
+                        ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED, 0);
         PhysicalIntent inputIssue = new PhysicalIntent(inputIssueId, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED,
                 work.id(), List.of(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
                 PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);

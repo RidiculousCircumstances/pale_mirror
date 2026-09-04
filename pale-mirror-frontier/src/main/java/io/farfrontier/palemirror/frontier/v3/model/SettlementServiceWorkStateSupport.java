@@ -64,8 +64,11 @@ final class SettlementServiceWorkStateSupport {
                 if (!activeWorkers.add(work.workerId()) || !activeIntents.add(work.inputIssueIntentId()) || !activeIntents.add(work.endpointIntentId())) {
                     throw new IllegalArgumentException("active service work cannot share a worker or physical intent");
                 }
-                if (endpoint.status() == PhysicalIntentStatus.CONFIRMED || endpoint.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
-                        || inputIssue.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                if (endpoint.status() == PhysicalIntentStatus.CONFIRMED
+                        || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
+                        && endpoint.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && inputIssue.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        || work.phase() != SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART
+                        && (endpoint.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || inputIssue.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
                         || (work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH_INPUT
                         || work.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) && inputIssue.status() == PhysicalIntentStatus.CONFIRMED
                         || (work.phase() == SettlementServiceWorkPhase.APPROACH_WORK || work.phase() == SettlementServiceWorkPhase.WORKING

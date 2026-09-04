@@ -186,6 +186,16 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             }
             return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
         }
+        if (intent.kind() == PhysicalIntentKind.DECONTAMINATION && SettlementServiceDecontaminationStateSupport.owns(state, intent)) {
+            SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+            if (work == null || !subject.equals(work.settlementId())) {
+                throw new IllegalArgumentException("service decontamination transition lacks its retained settlement work owner");
+            }
+            if (transition.status() == PhysicalIntentStatus.RUNNING || transition.status() == PhysicalIntentStatus.CONFIRMED) {
+                SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
+            }
+            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        }
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
             SubjectId owner = intent.kind() == PhysicalIntentKind.DECONTAMINATION ? DecontaminationProcess.owner(state, intent.causeSubjectId()).id()
                     : FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId());

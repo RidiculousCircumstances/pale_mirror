@@ -85,7 +85,7 @@ class FrontierWorldStateTest {
         }
         if (cell == null || plan == null) throw new AssertionError("test fixture has no bounded service-work corridor");
         InfectionCell selectedCell = cell;
-        SettlementServiceWork work = new SettlementServiceWork(workId, SettlementServiceWorkKind.DECONTAMINATION, new SubjectId("settlement:1"),
+        SettlementServiceWork work = new SettlementServiceWork(workId, new SubjectId("task:service-work-1"), SettlementServiceWorkKind.DECONTAMINATION, new SubjectId("settlement:1"),
                 medic.id(), facility, new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1), plan.inputStation(), plan.workStation(),
                 new SubjectId("item:service-reagent"), new SettlementServiceTarget.Infection(selectedCell),
                 new PhysicalIntentId("intent:service-input-issue-1"), new PhysicalIntentId("intent:service-decontamination-1"),
@@ -140,7 +140,7 @@ class FrontierWorldStateTest {
         assertEquals(SettlementServiceWorkPhase.BLOCKED, afterDeath.serviceWorks().get(work.id()).phase());
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.inputIssueIntentId()).status());
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, afterDeath.physicalIntents().get(work.endpointIntentId()).status());
-        SettlementServiceWork forgedStation = new SettlementServiceWork(work.id(), work.kind(), work.settlementId(), work.workerId(), work.facilityId(),
+        SettlementServiceWork forgedStation = new SettlementServiceWork(work.id(), work.taskId(), work.kind(), work.settlementId(), work.workerId(), work.facilityId(),
                 work.inputSource(), medicLocation.supportingSurface(), medicLocation.supportingSurface(), work.inputItemId(), work.target(), work.inputIssueIntentId(), work.endpointIntentId(),
                 TraversalTopology.corridor(new TraversalTopologyId("topology:forged-service-input"), 0L, work.id(), TraversalKind.PEDESTRIAN,
                         java.util.Set.of(TraversalCapability.PEDESTRIAN), List.of(medicLocation.supportingSurface())), 0,
@@ -149,7 +149,7 @@ class FrontierWorldStateTest {
         assertThrows(IllegalArgumentException.class, () -> baseline.withChanges(FrontierWorldStateUpdate.begin()
                 .infection(withInfection(baseline.infection(), selectedCell)).inventory(inventory).serviceWorks(Map.of(work.id(), forgedStation))
                 .physicalIntents(Map.of(inputIssue.id(), inputIssue, endpoint.id(), endpoint))));
-        SettlementServiceWork duplicateWorker = new SettlementServiceWork(new SubjectId("service:decontamination-2"), SettlementServiceWorkKind.DECONTAMINATION,
+        SettlementServiceWork duplicateWorker = new SettlementServiceWork(new SubjectId("service:decontamination-2"), new SubjectId("task:service-work-2"), SettlementServiceWorkKind.DECONTAMINATION,
                 new SubjectId("settlement:1"), medic.id(), facility, work.inputSource(), plan.inputStation(), plan.workStation(), new SubjectId("item:service-reagent-2"),
                 new SettlementServiceTarget.Infection(selectedCell), new PhysicalIntentId("intent:service-input-issue-2"), new PhysicalIntentId("intent:service-decontamination-2"),
                 SettlementServiceWorkTraversal.compileDecontamination(baseline.bootstrap(), FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medicLocation, selectedCell,

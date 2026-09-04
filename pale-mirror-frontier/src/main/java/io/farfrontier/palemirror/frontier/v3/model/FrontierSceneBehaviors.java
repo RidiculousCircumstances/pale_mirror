@@ -587,8 +587,16 @@ public final class FrontierSceneBehaviors {
             }
             boolean lifecycleMatches = switch (lease.status()) {
                 case PREPARED -> work.phase() == SettlementServiceWorkPhase.PREPARED || work.phase() == SettlementServiceWorkPhase.APPROACH_INPUT;
-                case HOT -> FrontierSettlementServiceWorkSceneSupport.sceneEligible(work.phase()) || work.phase() == SettlementServiceWorkPhase.BLOCKED;
-                case DRAINING -> work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.BLOCKED;
+                // The exact worker remains HOT for the bounded terminal adapter.  Draining at
+                // EFFECT_READY would erase the actor/body precondition before the observed
+                // decontamination effect can be made durable and reconciled.
+                case HOT -> FrontierSettlementServiceWorkSceneSupport.sceneEligible(work.phase())
+                        || work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.BLOCKED
+                        // A reclaimed exact body resumes the same uncertain physical effect;
+                        // only its observed postcondition may complete it.
+                        || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
+                case DRAINING -> work.phase() == SettlementServiceWorkPhase.EFFECT_READY || work.phase() == SettlementServiceWorkPhase.COMPLETED
+                        || work.phase() == SettlementServiceWorkPhase.BLOCKED;
                 case UNKNOWN_AFTER_RESTART -> work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
                 case CONFLICT -> work.phase().active();
                 case CLOSED -> work.phase() == SettlementServiceWorkPhase.COMPLETED || work.phase() == SettlementServiceWorkPhase.BLOCKED

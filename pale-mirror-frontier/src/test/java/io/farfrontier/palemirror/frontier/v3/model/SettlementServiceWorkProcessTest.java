@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -11,6 +13,8 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -91,6 +95,124 @@ class SettlementServiceWorkProcessTest {
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceStarted(active, settlement.id(),
                 new SettlementServiceWorkStarted(planned.taskId(), planned.work(), planned.inputIssueIntent(), forgedEndpoint)));
     }
+
+    @Test
+    void hotWorkerAdvanceMovesOnlyOneRetainedCursorAndLeaseCheckpoint() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-work-hot"), 214L);
+        Settlement settlement = settlement(bootstrap, "settlement:9");
+        InfectionCell cell = treatmentCell(bootstrap, settlement);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId item = new SubjectId("item:service-work-hot-reagent");
+        FrontierWorldState source = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+        SettlementServiceWorkStarted started = SettlementServiceWorkProcess.planDecontamination(source, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
+                .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState active = source.withStrategicPlans(source.strategicPlans().transitionTask(started.taskId(), StrategicTaskStatus.ACTIVE));
+        FrontierWorldState admitted = SettlementServiceWorkProcess.reduceStarted(active, settlement.id(), started);
+        SettlementServiceWork work = admitted.serviceWorks().get(started.work().id());
+        assertTrue(work.inputTraversal().linearCorridorSurfaces().size() > 1, "fixture must exercise a real retained source approach");
+        SurfaceAnchor start = work.inputTraversal().linearCorridorSurfaces().getFirst();
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:service-work-hot"), bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()),
+                start.support(), new SimInstant(1_001L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(work.workerId(), SceneLease.deterministicEntityId(bootstrap.worldId(), work.workerId()))),
+                java.util.Map.of(work.workerId(), start.standingBody()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = admitted.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        SurfaceAnchor next = work.inputTraversal().linearCorridorSurfaces().get(1);
+        SettlementServiceWorkTraversalAdvanced advance = new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 1);
+
+        FrontierWorldState advanced = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(hot, settlement.id(), advance);
+
+        assertEquals(1, advanced.serviceWorks().get(work.id()).inputTraversalCursor());
+        assertEquals(next.standingBody(), advanced.sceneLeases().get(lease.id()).memberPosition(work.workerId()));
+        assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceHotTraversalAdvanced(hot, settlement.id(),
+                new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), next.standingBody(), 2)),
+                "an observed arrival may not skip a retained edge");
+    }
+
+    @Test
+    void medicHeldEndpointConsumesOnlyAfterWorkAndConfirmsTheExactCell() {
+        ReadyEndpoint ready = readyEndpoint(215L);
+        long prior = ready.state().infection().get(ready.cell()).value().raw();
+        FrontierWorldState running = ready.state().transitionPhysicalIntent(ready.intent().id(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        DecontaminationObservation observation = new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-complete"),
+                ready.intent().id(), ready.item(), ready.cell(), prior,
+                Math.max(0L, prior - ready.state().bootstrap().ruleset().rates().decontaminationReduction().raw()));
+
+        FrontierWorldState complete = running.transitionPhysicalIntent(ready.intent().id(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,
+                complete.physicalIntents().get(ready.intent().id()).status());
+        assertFalse(complete.inventory().items().containsKey(ready.item()));
+        assertEquals(SettlementServiceWorkPhase.COMPLETED, complete.serviceWorks().get(ready.work().id()).phase());
+        assertEquals(observation.remainingRaw(), complete.infection().get(ready.cell()).value().raw());
+    }
+
+    @Test
+    void unknownEndpointRetainsTheExactMedicAndRecoversOnlyByObservedPostcondition() {
+        ReadyEndpoint ready = readyEndpoint(216L);
+        FrontierWorldState unknown = ready.state().transitionPhysicalIntent(ready.intent().id(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
+        assertEquals(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, recovered.serviceWorks().get(ready.work().id()).phase());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                recovered.physicalIntents().get(ready.intent().id()).status());
+
+        SceneLeaseId leaseId = recovered.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isServiceWork)
+                .map(SceneLease::id).findFirst().orElseThrow();
+        recovered = recovered.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+
+        long prior = recovered.infection().get(ready.cell()).value().raw();
+        DecontaminationObservation observation = new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-recovered"),
+                ready.intent().id(), ready.item(), ready.cell(), prior,
+                Math.max(0L, prior - recovered.bootstrap().ruleset().rates().decontaminationReduction().raw()));
+        FrontierWorldState complete = recovered.transitionPhysicalIntent(ready.intent().id(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+
+        assertEquals(SettlementServiceWorkPhase.COMPLETED, complete.serviceWorks().get(ready.work().id()).phase());
+        assertFalse(complete.inventory().items().containsKey(ready.item()));
+    }
+
+    private static ReadyEndpoint readyEndpoint(long seed) {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-ready-" + seed), seed);
+        Settlement settlement = settlement(bootstrap, "settlement:9"); InfectionCell cell = treatmentCell(bootstrap, settlement);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:service-ready-" + seed);
+        FrontierWorldState source = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+        SettlementServiceWorkStarted started = SettlementServiceWorkProcess.planDecontamination(source, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
+                .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState admitted = SettlementServiceWorkProcess.reduceStarted(
+                source.withStrategicPlans(source.strategicPlans().transitionTask(started.taskId(), StrategicTaskStatus.ACTIVE)), settlement.id(), started);
+        SettlementServiceWork work = admitted.serviceWorks().get(started.work().id());
+        while (work.inputTraversalCursor() < work.inputTraversal().linearCorridorSurfaces().size() - 1) work = work.withInputTraversalCursor(work.inputTraversalCursor() + 1);
+        work = work.withInputIssued();
+        while (work.workTraversalCursor() < work.workTraversal().linearCorridorSurfaces().size() - 1) work = work.withWorkTraversalCursor(work.workTraversalCursor() + 1);
+        work = work.withPhase(SettlementServiceWorkPhase.EFFECT_READY, 0);
+        Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(admitted.serviceWorks()); works.put(work.id(), work);
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(admitted.physicalIntents());
+        SettlementServiceInputIssueObservation inputReceipt = new SettlementServiceInputIssueObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-input-" + seed), work.inputIssueIntentId(),
+                work.id(), work.workerId(), item, work.inputSource());
+        intents.put(work.inputIssueIntentId(), intents.get(work.inputIssueIntentId()).withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,
+                Optional.of(inputReceipt.id())));
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(admitted.physicalObservations());
+        observations.put(inputReceipt.id(), inputReceipt);
+        SceneLeaseId leaseId = new SceneLeaseId("lease:service-ready-" + seed);
+        SceneLease lease = SceneLease.forCause(leaseId, bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()), work.workStation().support(),
+                new SimInstant(1_001L), 1L, SceneLeaseStatus.HOT, List.of(new SceneMember(work.workerId(),
+                SceneLease.deterministicEntityId(bootstrap.worldId(), leaseId, work.workerId()))),
+                Map.of(work.workerId(), work.workStation().standingBody()), java.util.Set.of(), Optional.empty());
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(admitted.sceneLeases()); leases.put(leaseId, lease);
+        FrontierWorldState ready = admitted.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents).physicalObservations(observations).sceneLeases(leases)
+                .inventory(admitted.inventory().moveObservedItem(item, work.inputSource(), new InventoryCustody.Actor(work.workerId()))));
+        return new ReadyEndpoint(ready, work, ready.physicalIntents().get(work.endpointIntentId()), item, cell);
+    }
+
+    private record ReadyEndpoint(FrontierWorldState state, SettlementServiceWork work,
+                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, SubjectId item, InfectionCell cell) { }
 
     private static FrontierWorldState taskState(FrontierBootstrap bootstrap, Settlement settlement, InfectionCell cell) {
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap).withInfection(cell, new FixedRatio(new FixedScalar(750_000L)));

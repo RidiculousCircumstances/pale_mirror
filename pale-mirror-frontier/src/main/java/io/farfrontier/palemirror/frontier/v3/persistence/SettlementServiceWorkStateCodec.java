@@ -38,6 +38,7 @@ final class SettlementServiceWorkStateCodec {
 
     static void writeOne(DataOutputStream output, SettlementServiceWork work) throws IOException {
         FrontierWorldStateCodec.writeString(output, work.id().value());
+        FrontierWorldStateCodec.writeString(output, work.taskId().value());
         output.writeByte(work.kind().wireTag());
         FrontierWorldStateCodec.writeString(output, work.settlementId().value());
         FrontierWorldStateCodec.writeString(output, work.workerId().value());
@@ -60,6 +61,7 @@ final class SettlementServiceWorkStateCodec {
 
     static SettlementServiceWork readOne(DataInputStream input) throws IOException {
         SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId task = new SubjectId(FrontierWorldStateCodec.readString(input));
         SettlementServiceWorkKind kind = SettlementServiceWorkKind.fromWireTag(input.readUnsignedByte());
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -77,7 +79,7 @@ final class SettlementServiceWorkStateCodec {
         TraversalTopology workTraversal = TraversalTopologyStateCodec.read(input);
         int workCursor = input.readUnsignedShort();
         SettlementServiceWorkPhase phase = SettlementServiceWorkPhase.fromWireTag(input.readUnsignedByte());
-        return new SettlementServiceWork(id, kind, settlement, worker, facility, source, inputStation, workStation,
+        return new SettlementServiceWork(id, task, kind, settlement, worker, facility, source, inputStation, workStation,
                 item, target, inputIssueIntent, endpointIntent, inputTraversal, inputCursor, workTraversal, workCursor, phase, input.readUnsignedByte());
     }
 

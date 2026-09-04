@@ -10,7 +10,7 @@
 - Java 21, Minecraft 1.21.1 and NeoForge 21.1.248 remain the pinned development platform.
 - `pale-mirror-frontier` will be a pure-Java module under `io.farfrontier.palemirror.frontier.v3` with no dependency on `pale-mirror-domain`, `frontier.reference`, Python, Minecraft or NeoForge.
 - V3 is fresh-world-only. V2 remains frozen and isolated until the v3 cutover gate; there is no shared state, save migration or runtime fallback.
-- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 124 and persistence-envelope v39 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
+- Every v3 format or immutable projection change recreates every affected V3 world (disposable, local or deployed): snapshot schema 125 and persistence-envelope v40 are the only accepted state/WAL inputs. Older snapshot/WAL bytes fail closed before hydration or replay; reset is an explicit deployment operation, never an in-process migration.
 - One resident is one canonical person and one HOT Villager; one bioform is one canonical creature and one HOT graybox Zombie; one Minecraft item is one matching canonical item.
 - No player, settlement, hive, ownership class or operation boundary is a safe zone from legitimate physical effects. Every actual consequence must be observed and reconciled.
 - Desired-state materialization never silently overwrites an unknown/player change. Physical effects and post-impact accounting are a separate boundary.
@@ -324,7 +324,7 @@
   decontamination executors remain endpoint adapters. Route maintenance and
   hive organ regeneration remain separate engineering/MAT-007 owners. Its
   admission implementation is recorded below; it is not M2 evidence.
-- MAT-003 foundation is corrected at schema 124/envelope 39 (fresh world only):
+- MAT-003 foundation is corrected at schema 125/envelope 40 (fresh world only):
   `SettlementServiceWork` now retains one exact active-depot source slot and
   declared depot service station, a durable `SETTLEMENT_SERVICE_INPUT_ISSUE`
   intent, and two separate immutable pedestrian corridors/cursors: worker to
@@ -334,8 +334,8 @@
   immutable semantic depot port, not a chest-centre offset; the source port's
   declared access surfaces are the only structure-occupancy exception in the
   bounded compiler. The endpoint remains a terminal adapter and the HOT
-  executor is intentionally not yet connected, so MAT-003 is still only M1
-  foundation. `SERVICE_WORK` remains a closed registered scene family with exact
+  executor is now connected through a closed registered `SERVICE_WORK` scene
+  family with exact
   member/owner/cursor validation and sealed snapshot codec. Exact worker death
   blocks the retained work and marks both unfinished intents unknown without
   reassignment. Focused `FrontierWorldStateTest` now covers snapshot round-trip,
@@ -355,8 +355,8 @@
   now uses its own interior and discards its evidence-only actor. This does not
   advance MAT-003 above M1 because continuous movement/progress, endpoint and
   native evidence remain absent.
-- MAT-003 admission is now canonical at snapshot schema 124/persistence
-  envelope 39 (fresh world only). `frontier.decontamination.scan` is owned by
+- MAT-003 admission is now canonical at snapshot schema 125/persistence
+  envelope 40 (fresh world only). `frontier.decontamination.scan` is owned by
   `SettlementServiceWorkProcess`, which atomically activates the selected task
   and records exactly one qualified medic, intact infirmary, active exact depot
   slot, two immutable corridors/stations, input-issue intent and endpoint
@@ -364,8 +364,14 @@
   candidate and rejects forged worker, source, route or endpoint values; the
   old direct decontamination planner is no longer on the production schedule
   path. Focused admission/rejection/forgery, codec/snapshot and process-catalog
-  tests pass. This activates M1 only: no `SERVICE_WORK` scene yet moves the
-  worker, makes progress or enables the endpoint.
+  tests pass. The in-progress vertical now persists the originating `taskId`,
+  typed lease/advance/progress/block events, and an exact HOT medic which moves
+  only the retained next edge, works for 80 observed ticks and enables the
+  actor-held effect only at `EFFECT_READY`. The terminal adapter updates
+  work+lease atomically on confirmation or restart uncertainty, avoiding an
+  invalid completed-work/HOT-lease intermediate state. Focused pure normal and
+  recovery tests pass, as does the existing 55/55 Scene regression slice;
+  dedicated service GameTest/native/restart evidence remains required for M2.
 - Live r67 harvest diagnosis (2026-09-03): the service is healthy, but there
   is no evidence of a completed harvest since its 15:51 restart.  The only
   resource-site trace is a player-caused conflict at `site:11-wheat-field`.

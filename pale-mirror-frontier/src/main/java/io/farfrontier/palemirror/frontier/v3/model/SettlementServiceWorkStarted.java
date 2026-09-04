@@ -20,7 +20,7 @@ public record SettlementServiceWorkStarted(SubjectId taskId, SettlementServiceWo
         work = Objects.requireNonNull(work, "service work");
         inputIssueIntent = Objects.requireNonNull(inputIssueIntent, "service input issue intent");
         endpointIntent = Objects.requireNonNull(endpointIntent, "service endpoint intent");
-        if (!taskId.value().startsWith("task:") || !inputIssueIntent.id().equals(work.inputIssueIntentId())
+        if (!taskId.equals(work.taskId()) || !inputIssueIntent.id().equals(work.inputIssueIntentId())
                 || !endpointIntent.id().equals(work.endpointIntentId())) {
             throw new IllegalArgumentException("service-work admission must retain one task and both exact intents");
         }

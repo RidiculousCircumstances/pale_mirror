@@ -14,6 +14,7 @@ import java.util.Objects;
  */
 public record SettlementServiceWork(
         SubjectId id,
+        SubjectId taskId,
         SettlementServiceWorkKind kind,
         SubjectId settlementId,
         SubjectId workerId,
@@ -37,6 +38,7 @@ public record SettlementServiceWork(
 
     public SettlementServiceWork {
         id = Objects.requireNonNull(id, "service work id");
+        taskId = Objects.requireNonNull(taskId, "service work task");
         kind = Objects.requireNonNull(kind, "service work kind");
         settlementId = Objects.requireNonNull(settlementId, "service work settlement");
         workerId = Objects.requireNonNull(workerId, "service work worker");
@@ -51,7 +53,7 @@ public record SettlementServiceWork(
         inputTraversal = Objects.requireNonNull(inputTraversal, "service work input traversal");
         workTraversal = Objects.requireNonNull(workTraversal, "service work work traversal");
         phase = Objects.requireNonNull(phase, "service work phase");
-        if (!id.value().startsWith("service:") || !settlementId.value().startsWith("settlement:")
+        if (!id.value().startsWith("service:") || !taskId.value().startsWith("task:") || !settlementId.value().startsWith("settlement:")
                 || !workerId.value().startsWith("resident:") || !facilityId.value().startsWith("structure:")
                 || inputIssueIntentId.equals(endpointIntentId)
                 || !validTraversal(inputTraversal, id, inputTraversalCursor)
@@ -95,7 +97,9 @@ public record SettlementServiceWork(
 
     public SettlementServiceWork withInputIssued() {
         if (phase != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) throw new IllegalArgumentException("service input may issue only at its retained source station");
-        return copy(SettlementServiceWorkPhase.APPROACH_WORK, inputTraversalCursor, 0, 0);
+        SettlementServiceWorkPhase next = workTraversal.linearCorridorSurfaces().size() == 1
+                ? SettlementServiceWorkPhase.WORKING : SettlementServiceWorkPhase.APPROACH_WORK;
+        return copy(next, inputTraversalCursor, 0, 0);
     }
 
     public SettlementServiceWork withPhase(SettlementServiceWorkPhase next, int nextCompletedWorkTicks) {
@@ -103,7 +107,7 @@ public record SettlementServiceWork(
     }
 
     private SettlementServiceWork copy(SettlementServiceWorkPhase next, int nextInputCursor, int nextWorkCursor, int nextCompletedWorkTicks) {
-        return new SettlementServiceWork(id, kind, settlementId, workerId, facilityId, inputSource, inputStation, workStation,
+        return new SettlementServiceWork(id, taskId, kind, settlementId, workerId, facilityId, inputSource, inputStation, workStation,
                 inputItemId, target, inputIssueIntentId, endpointIntentId, inputTraversal, nextInputCursor, workTraversal,
                 nextWorkCursor, next, nextCompletedWorkTicks);
     }

@@ -36,7 +36,9 @@ public final class FrontierPhysicalIntentCommandProcess {
                 case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
                 case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(
                         state, intent, transition, command.submittedAt().ticks()));
-                case DECONTAMINATION -> new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
+                case DECONTAMINATION -> SettlementServiceDecontaminationStateSupport.owns(state, intent)
+                        ? serviceDecontaminationTransition(state, intent, transition)
+                        : new CommandPlan.Accepted(DecontaminationProcess.planTransition(state, intent, transition));
                 case RESOURCE_SITE_PREPARATION -> new CommandPlan.Accepted(
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks()));
                 case RESOURCE_SITE_HARVEST -> new CommandPlan.Accepted(
@@ -91,6 +93,25 @@ public final class FrontierPhysicalIntentCommandProcess {
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null) return rejected("service input issue has no exact retained work");
         return new CommandPlan.Accepted(List.of(new ProposedEvent(work.settlementId(), transition)));
+    }
+
+    private static CommandPlan serviceDecontaminationTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null) return rejected("service decontamination has no exact retained work");
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
+                || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
+        }
+        ProposedEvent physical = new ProposedEvent(work.settlementId(), transition);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            return new CommandPlan.Accepted(List.of(physical,
+                    new ProposedEvent(work.settlementId(), new StrategicTaskTransition(work.taskId(), StrategicTaskStatus.COMPLETED))));
+        }
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            return new CommandPlan.Accepted(List.of(physical,
+                    new ProposedEvent(work.settlementId(), new StrategicTaskTransition(work.taskId(), StrategicTaskStatus.BLOCKED))));
+        }
+        return new CommandPlan.Accepted(List.of(physical));
     }
 
     /**

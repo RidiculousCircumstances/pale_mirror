@@ -1,6 +1,6 @@
 # Frontier v3 service-work contract
 
-Status: active M1 implementation for `MAT-003`. The persisted aggregate,
+Status: M1 evidence complete; the M2 decontamination vertical is implemented but not yet closed for `MAT-003`. The persisted aggregate,
 immutable decontamination worksite compiler, closed `SERVICE_WORK` cause and
 snapshot codec exist; exact-worker death blocks the same aggregate and leaves
 its in-flight intents unknown. The aggregate now retains two semantic stations,
@@ -8,8 +8,10 @@ two immutable corridors and a durable exact source-to-worker hand-off. The
 loaded physical input executor now moves only the exact tagged source stack to
 the exact HOT service worker at that retained input station, and recovery
 inspects both endpoints rather than replaying it. The canonical decontamination
-scan now admits this aggregate atomically; HOT scene lifecycle and endpoint
-hand-off remain open.
+ scan now admits this aggregate atomically. The registered HOT scene advances
+ only observed retained edges, retains the exact medic through bounded work,
+ and enables the exact effect adapter only at `EFFECT_READY`; its dedicated
+ native/GameTest and restart evidence remain open.
 
 ## Purpose
 
@@ -75,9 +77,11 @@ therefore excludes the resident from all conflicting civilian/tactical work.
 4. At the retained work station, the HOT executor performs bounded visible work
    with the exact actor-held item and records persisted work progress. It may
    make the endpoint intent eligible only at `EFFECT_READY`.
-5. The existing repair/decontamination executor remains the only
-   durable-before-effect block/overlay and exact-item mutation. It consumes the
-   same item, observes the same target, then emits its existing typed receipt.
+5. The type-specific decontamination adapter remains the only
+   durable-before-effect overlay and exact-item mutation. It consumes the same
+   actor-held item, observes the same target, then emits its typed receipt.
+   `EFFECT_READY` deliberately remains HOT until that receipt atomically drains
+   the lease; no intermediate state can have a completed work and a HOT lease.
 6. Receipt, death, theft, facility/station loss, route obstruction and restart
    transition the same work. A terminal scene drains/releases its exact body;
    it never invents completion, a replacement worker, a refund, or an

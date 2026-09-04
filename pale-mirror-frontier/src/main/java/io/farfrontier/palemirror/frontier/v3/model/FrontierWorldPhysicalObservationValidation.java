@@ -17,7 +17,7 @@ final class FrontierWorldPhysicalObservationValidation {
                          Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                          Map<SubjectId, RouteOperation> operations, Map<SubjectId, SupplyContract> contracts, Map<SceneLeaseId, SceneLease> sceneLeases,
                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                         RouteTopology topology) {
+                         RouteTopology topology, Map<SubjectId, SettlementServiceWork> serviceWorks) {
         for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : observations.entrySet()) {
             PhysicalEffectObservation observation = entry.getValue();
             if (!entry.getKey().equals(observation.id())) throw new IllegalArgumentException("physical observation map key must match observation identity");
@@ -33,7 +33,9 @@ final class FrontierWorldPhysicalObservationValidation {
             } else if (observation instanceof SceneStrikeObservation strike) {
                 SceneStrikeStateSupport.validateObservation(operations, sceneLeases, intent, strike);
             } else if (observation instanceof DecontaminationObservation decontamination) {
-                DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
+                if (serviceWorks.containsKey(intent.causeSubjectId())) {
+                    SettlementServiceDecontaminationStateSupport.validateIntentForRecoveredReceipt(intent, decontamination, serviceWorks);
+                } else DecontaminationStateSupport.validateReceipt(bootstrap, infection, intent, decontamination);
             } else if (observation instanceof StructuralRepairObservation repair) {
                 StructuralRepairStateSupport.validateReceipt(intent, repair);
             } else if (observation instanceof ExactItemConsumedObservation consumed) {
