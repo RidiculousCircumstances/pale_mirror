@@ -624,9 +624,11 @@ Close the confirmed gaps in dependency order:
    decontamination rather than adding executor-specific shortcuts. The
    accepted `MAT-003` service-work ownership, spatial/recovery and evidence
    contract is [`frontier-v3-service-work-contract.md`](frontier-v3-service-work-contract.md);
-3. bind exact human patrols and hive expeditions to retained operation movement
-   and observed HOT arrival; generic ambient movement cannot execute an
-   assignment;
+3. replace waypoint/body-rewrite human patrols with the fresh-world exact
+   ingress, formation, retained topology/cursor and `ROUTE_PATROL` HOT scene
+   specified by [`frontier-v3-route-patrol-contract.md`](frontier-v3-route-patrol-contract.md),
+   then bind hive expeditions to the same operation-continuity standard;
+   generic ambient movement cannot execute an assignment;
 4. add staged exact-recipient provisioning and household/birth lifecycle work;
 5. materialize hive nutrient flow, digestion, organism/organ growth and their
    player-interruptible hiveroot/cocoon dependencies;

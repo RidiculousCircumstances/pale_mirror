@@ -177,6 +177,15 @@
 - Verified detached commit `474d3da7` (including the `6ff19426` overseer/mobilisation vertical) is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r63`; r62 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `6f43dd7f19fccdef4694d1da97fdb18ec02658f2c17ddf12d5ed2617452e387915322b4ff774b2fffcb6c25811d0502a989d295cbf347d97a7e2165bf3ead56b`. Preflight proved the clean detached source, Java 22, selected empty world and exact pin; startup reached `Done` then `Frontier v3 runtime started` with no quarantine, and the post-start verifier passed. A deployment race was closed in outer-pack commit `a032959`: verifier optionally waits up to 60 seconds for both records instead of treating `Done` alone as ready. The first call exposed the 0.9-second ordering race; it was not a missing v3 runtime.
 - Verified detached commit `f0b9c90b` is deployed to `far-frontier-v3-live.service` on `25565` with fresh disposable world `frontier-v3-live-r64`; r63 remains untouched. The hosted and installed `pale_mirror-hosted.jar` SHA-512 is `513334e273fcaba34c565020ab4e3e971b11cc293d9a6aa0dc6b23f72cd4ec4f97bc521ddd4d4a8dc21abc4d1a0304621121e932f7511deb8eb060c2054f4a45`. Preflight proved a clean detached source, Java 22, selected empty world and exact pin. The first post-start probe ran before Java opened 25565; the second read-only verifier passed after normal mod loading, proving PID `2769208`, the listening port, `Done`, `Frontier v3 runtime started` and no fresh quarantine. The update is server-only; no client update is required.
 ### Now
+- `MAT-004` / `V3-AUD-038` is the active replacement slice. Source inspection
+  confirmed that the legacy `RoutePatrolProcess` starts and advances every
+  exact patrol member through direct COLD actor-body rewrites, while ambient
+  security still uses generic settlement `GUARD`; it is not a valid seamless
+  patrol implementation. `docs/frontier-v3-route-patrol-contract.md` now
+  defines the required fresh-world-only replacement: individual ingress,
+  distinct formation, retained 3D topology/cursor and registered `ROUTE_PATROL`
+  HOT scene. Existing patrol bytes will be rejected on the next format cut,
+  never adapted. No implementation/evidence claim is made yet.
 - V3-AUD-036 is closed at schema 112/envelope 24. Every route engagement now
   owns a persisted Relay/Ganglion coverage proof or exact Overseer/weighted
   roster, and no reducer accepts a forged admission or a body already retained
