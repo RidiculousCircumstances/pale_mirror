@@ -61,8 +61,8 @@ export async function fingerprintPreparedBuild(project, artifact) {
       launcherDigest.update(`\n${entry}\0${content}`);
       portableLauncherDigest.update(`\n${content}`);
     }
-    const vmArgs = await fileDigest(project, launch?.[role]?.vmArgs, `${role} VM arguments`);
-    const programArgs = await fileDigest(project, launch?.[role]?.programArgs, `${role} program arguments`);
+    const vmArgs = await launchInputDigest(project, launch?.[role]?.vmArgs, `${role} VM arguments`);
+    const programArgs = await launchInputDigest(project, launch?.[role]?.programArgs, `${role} program arguments`);
     classpaths[role] = Object.freeze({ manifest: source, entries: entries.length, sha256: digest.digest('hex'),
       portableSha256: portableDigest.digest('hex'), launchEntries: launcherEntries.length,
       launchSha256: launcherDigest.digest('hex'), portableLaunchSha256: portableLauncherDigest.digest('hex') });
@@ -110,10 +110,10 @@ export function portablePreparedBuildIdentity(identity) {
   };
   const launch = (role) => {
     const value = identity.launchInputs[role];
-    if (!sha256(value?.vmArgs?.sha256) || !sha256(value?.programArgs?.sha256)) {
+    if (!sha256(value?.vmArgs?.portableSha256) || !sha256(value?.programArgs?.portableSha256)) {
       throw new Error(`portable ${role} launch identity is malformed`);
     }
-    return Object.freeze({ vmArgsSha256: value.vmArgs.sha256, programArgsSha256: value.programArgs.sha256 });
+    return Object.freeze({ vmArgsSha256: value.vmArgs.portableSha256, programArgsSha256: value.programArgs.portableSha256 });
   };
   if (!sha256(identity.preparedArtifact.sha256)) throw new Error('portable prepared artifact identity is malformed');
   return Object.freeze({ schema: 1, preparedArtifactSha256: identity.preparedArtifact.sha256,
@@ -155,6 +155,15 @@ async function fileDigest(project, candidate, name) {
   const root = resolve(project); const path = resolve(root, candidate); const rel = relative(root, path);
   if (rel === '' || rel.startsWith('..') || rel.includes('/..')) throw new Error(`prepared ${name} escapes project`);
   return Object.freeze({ path: rel, sha256: sha256(await readFile(path)) });
+}
+
+// ModDev writes each worker's checkout, cache, and temporary-home locations
+// into its launch arguments. Retain their raw digest for local drift checks,
+// but compare only location-neutral launch content across isolated workers.
+async function launchInputDigest(project, candidate, name) {
+  const raw = await fileDigest(project, candidate, name);
+  const bytes = await readFile(resolve(project, candidate), 'utf8');
+  return Object.freeze({ ...raw, portableSha256: sha256(bytes.replace(/(^|[=:])\/[^\s:]*/gm, '$1<private-absolute-path>')) });
 }
 
 async function parsedProgramArguments(project, candidate, name) {

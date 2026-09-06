@@ -87,6 +87,11 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await requirePreparedBuild(root, identity);
     await requirePreparedF0vBuild(root, identity);
     const portable = portablePreparedBuildIdentity(identity);
+    const relocatedLaunchInputs = structuredClone(identity);
+    relocatedLaunchInputs.launchInputs.server.vmArgs.sha256 = 'f'.repeat(64);
+    relocatedLaunchInputs.launchInputs.client.programArgs.sha256 = 'e'.repeat(64);
+    assert.deepEqual(portablePreparedBuildIdentity(relocatedLaunchInputs), portable,
+      'portable CI identity uses normalized launch content while the local identity retains raw paths');
     const relocated = structuredClone(identity);
     relocated.preparedArtifact.path = 'different-worker/pale_mirror-test.jar';
     relocated.launchManifest.path = 'different-worker/launch.json';
