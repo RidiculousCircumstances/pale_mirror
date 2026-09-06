@@ -684,8 +684,10 @@ terminal assertion or restart was weakened to turn either result green.
 advisory and the later retained22.52-percent reference measurement is accepted
 as sufficient optimization. Preserve the original failure reports unchanged;
 do not relabel them as historical passes or rerun solely to reach25 percent.
-Current-source correctness, actual recovery,3x feedback and2.5x provider evidence
-remain independently required.
+Current-source correctness and actual recovery remain independently required.
+The 2026-09-06 product decision makes feedback/provider ratios advisory:
+retain the accepted5.065026x local result and measure later real work without a
+standalone numeric certification campaign.
 
 Exit evidence: a mechanical registry/composition check rejects a
 duration-bearing process without both drivers; `MAT-001` passes never-loaded,

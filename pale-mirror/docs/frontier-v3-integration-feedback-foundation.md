@@ -301,8 +301,10 @@ turns timing noise into a false product defect.
   mandatory; historical timing is not promoted to current-source correctness;
 - mandatory substage F0.VA passes its persistent-matrix-client,
   content-addressed cache, executable test-pyramid, exact-barrier, four-worker
-  CI and immutable-development-fixture exit gate, including its measured 3x
-  feedback and 2.5x CI matrix targets;
+  CI and immutable-development-fixture correctness gates. Numeric feedback and
+  CI speedups are advisory telemetry: retain the accepted 5.065026x local
+  result and collect future samples from ordinary F0 work, without a standalone
+  provider benchmark blocking product progress;
 - focused tests, `guardrails`, `check`, the applicable GameTest slice, full
   critical-code gate and packaged-JAR fixture-absence checks pass;
 - the architecture audit and Continuity Ledger record the evidence and name

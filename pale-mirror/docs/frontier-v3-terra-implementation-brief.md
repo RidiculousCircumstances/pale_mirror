@@ -321,9 +321,11 @@ Its exit gate includes unchanged correctness evidence and measured benefit for
 the same graceful reference restart. The user accepted 22.52 percent on
 2026-09-05; 25 percent is an advisory target, not a blocking floor or reason to
 repeat native runs. Current-source correctness/recovery remains required. F0.VA
-additionally requires at least 3x aggregate median feedback acceleration for
-the three representative edit classes and at least 2.5x wall-clock acceleration
-for the same correctness matrix on four isolated CI workers.
+retains the 5.065026x local measurement as sufficient advisory evidence.
+Four-worker correctness composition, isolation and fail-closed merge remain
+required implementation properties, but no numeric provider-speed floor or
+standalone timing campaign blocks resumption of F0.V. Collect comparable timing
+from ordinary subsequent work.
 
 After F0.V is independently accepted, the engineer updates the ledger and issues
 the next order for preserved F0.1. Do not begin F0.2 or any MAT breadth first.

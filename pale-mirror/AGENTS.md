@@ -1,21 +1,5 @@
 # Pale Mirror engineering guardrails
 
-## Repository layout and migration authority
-
-This is the Pale Mirror source subproject of the monorepo, not a nested Git
-repository. Resolve project-relative commands, skills and architecture paths
-from this directory; Git commits/status cover the combined root repository.
-CI entry points live at `../.github/workflows/`, not inside this subproject;
-their relevant content remains part of verification identity. Root pack
-payload and source-project build outputs are distinct ownership boundaries.
-
-Temporary pre-adoption rule: the imported local `CONTINUITY.md` is historical.
-Also read the canonical ledger and active order in
-`/home/rd/proj/minecraft/pale-mirror/` before acting. Do not update this imported
-ledger as a competing active record. Engineer transfers authority only after
-the required remote-clone/provider migration gates; original checkouts and
-linked-worktree metadata remain preserved. No deployment permission follows.
-
 ## Continuity
 
 Maintain one compact Continuity Ledger in `CONTINUITY.md`. It is the canonical
@@ -96,6 +80,27 @@ implementation; release verification follows it.
 
 ### Managed engineer / executor workflow
 
+- Binding 2026-09-06 anti-micromanagement rules in the protocol take precedence
+  over older permission-only Gate A/B wording. Delegate diagnosis through full
+  authorized local verification as one outcome. Terra proceeds autonomously;
+  engineer intervention is limited to architectural/authority decisions,
+  evidenced risks or impasses, and final result review. No mandatory stop
+  between focused tests, full gates and ordinary fixes inside the granted
+  environment. No duplicate investigation or preference-only rewrites.
+- The protocol's intervention reasons are exhaustive: `ARCHITECTURE`,
+  `AUTHORITY`, `RISK`, `IMPASSE`, `FINAL_REVIEW`, `USER_AUDIT` or genuine
+  `LIVENESS`. Name one before contacting Terra or inspecting intermediate work.
+  If none applies, do not act. An older work-order checkpoint cannot override
+  this boundary; only a real outcome/safety/authority limit remains binding.
+- Routine status checks are at most once per ten minutes across turns, not a
+  required schedule or polling entitlement. With no evidence of a liveness
+  problem, perform zero routine checks. Prefer event notifications; passive wait
+  timeouts do not justify polling or interruption. Do not maintain
+  heartbeat/documentation churn merely to demonstrate supervisory activity.
+- Apply the protocol's enforceable supervisor self-check before intervening.
+  Count all routine status mechanisms together; do not bypass the polling limit
+  with messages or intermediate process/diff inspection. Ordinary in-scope
+  repairs remain autonomous, not permission-only terminal handoffs.
 - `docs/engineering-agent-protocol.md` is the accepted delivery protocol.
   The supervising engineer owns specifications, normative docs, the ledger
   and independent acceptance; it must not edit source, tests, scripts, build/CI
@@ -108,9 +113,12 @@ implementation; release verification follows it.
   Preserve existing WIP and obtain previous-writer handoff before granting a
   new writer; finish identity-bound measurements before changing their inputs.
 - Delegate bounded engineering outcomes: Terra owns diagnosis, local design,
-  helper/file choices and focused test iterations inside the approved boundary.
+  algorithms, helper/file choices, command/test design, sequencing and focused
+  through full-gate correction iterations inside the approved boundary.
   Expected files are guidance unless a specific safety constraint says otherwise.
-  Engineer reviews stable milestones and invariants, not every local choice;
+  Engineer states violated invariants and observable acceptance outcomes, not
+  implementation recipes; its implementation suggestions are non-binding.
+  Review terminal coherent results and invariants, not every local choice;
   do not routinely duplicate the executor's investigation or full test runs.
   Public/persistent meaning, owner boundaries, requirements and external or
   destructive authority still require explicit agreement.
@@ -309,24 +317,23 @@ architecture boundaries remain valid, failures are observable, and no
 unbounded state or silent fallback was introduced. Use concise Conventional
 Commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build:`).
 
-### Private supplied-reference gate
+### Private supplied-reference gate during migration
 
-Public CI and portable `guardrails` do not certify the genuine Hunyuan supplied
-reference. Full local pre-commit/release acceptance additionally requires,
-from this source directory:
+The user approved portable public CI plus a separately mandatory local
+authentic-reference check. In the monorepo candidate, full local pre-commit/
+release acceptance additionally requires, from its `pale-mirror/` directory:
 
 ```bash
 PALE_MIRROR_HARVESTER_REFERENCES=/absolute/private/reference-root ./gradlew verifyHunyuan2mvSuppliedReferenceIntegration --no-daemon
 ```
 
-Resolve the actual authorized local reference root; the example path is not
-a fixture. Run this gate again when its tool, test, wiring or reference inputs
-change. Missing/wrong/changed input is a failure, not a skip; report unavailable
-local evidence explicitly. Preserve the authentic positive assertions and
-report this gate separately from public mechanics/negative contract tests.
-Never upload the private image or derived private fixtures to public CI/Git.
-Synthetic mechanics and automated source checks do not grant likeness or human
-visual acceptance. This user-approved split does not waive any Frontier gate.
+Resolve the authorized actual path; do not use the example as a fixture.
+Revalidate changes to its tool, test, wiring or reference. Missing/wrong/changed
+input must fail, never skip. Public mechanics/negative tests cannot discharge
+the authentic positive or human likeness acceptance. Do not publish private
+images or their derived fixtures. The original checkout retains its historical
+test wiring until migration adoption; this command describes the candidate
+only and does not authorize source edits in the original checkout.
 
 ## Recurrence prevention
 

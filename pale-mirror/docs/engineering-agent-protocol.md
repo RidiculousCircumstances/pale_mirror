@@ -6,6 +6,108 @@ Autonomy amendment accepted on 2026-09-05: delegate complete bounded engineering
 outcomes, not predesigned patches. This amendment governs future orders and
 explicitly amended active orders; historical evidence is unchanged.
 
+Binding anti-micromanagement amendment accepted on 2026-09-06. The rules below
+replace mandatory intermediate Gate A/B permission exchanges. They govern new
+orders and all subsequent revisions of PM-CI-COMPILE-DEPS-01; historical
+evidence and unrelated external/destructive restrictions are not retroactively
+changed.
+
+### Normative force and precedence
+
+This amendment is a role boundary, not advice. `MUST`, `MUST NOT`, `ONLY` and
+`NO` in this section are mandatory. If an older work-order paragraph asks for a
+routine intermediate handoff, exact implementation recipe, progress checkpoint
+or separate permission for an already authorized local test/fix cycle, that
+paragraph is historical and non-operative. The latest explicit work-order
+revision still controls the bounded outcome and real safety/authority limits;
+it cannot silently restore micromanagement.
+
+The following reasons are exhaustive for engineer contact with, interruption
+of, or intermediate inspection of an executing Terra assignment:
+
+1. `ARCHITECTURE`: a product invariant, public/persistent meaning or owner
+   boundary needs a decision;
+2. `AUTHORITY`: an external, destructive, credentialed, paid, production or
+   otherwise ungranted action needs authority;
+3. `RISK`: concrete evidence identifies a safety or correctness risk outside
+   ordinary executor-owned iteration;
+4. `IMPASSE`: Terra reports an evidenced impasse or contradictory requirement;
+5. `FINAL_REVIEW`: Terra has delivered a coherent terminal result for Gate C;
+6. `USER_AUDIT`: the user explicitly requests an audit of current execution;
+7. `LIVENESS`: ownership or process liveness is genuinely uncertain and must be
+   resolved to protect work or resources. This is not a progress inquiry.
+
+Before acting, the engineer MUST name exactly one of these reasons in its own
+working note and in any message to Terra. If none applies, contact,
+interruption, intermediate diff/hash/process inspection and unsolicited design
+direction are prohibited. The ten-minute rule below is only an absolute rate
+limit on `LIVENESS`; it does not create a periodic polling entitlement. With no
+evidence of a liveness problem, the correct number of routine checks is zero.
+
+## Mandatory autonomy and intervention boundary
+
+- Delegate one complete, independently reviewable engineering result, including
+  diagnosis, local design, implementation, verification and correction. Do not
+  split an ordinary repair into separate permission-only work orders.
+- Terra owns algorithms, helpers, file choices within the affected components,
+  test design, command selection, sequencing and evidence-backed iterations.
+  The initial grant includes the necessary local full gates within its declared
+  resource envelope. Moving from focused tests to a full gate is not itself a
+  reason to request permission.
+- The engineer intervenes only for (1) architecture/product/invariant or genuine
+  ownership/authority decisions, (2) an executor-reported impasse or an evidenced
+  safety/correctness risk, (3) final review of a completed coherent result, or
+  the explicitly enumerated `USER_AUDIT`/`LIVENESS` cases above.
+  Optional progress notifications never become mandatory approval checkpoints.
+- Every blocking review finding must state the violated outcome/invariant and
+  concrete evidence or falsifiable failure sequence. Mark an untested risk as
+  such. Do not reject a solution merely because it differs from the engineer's
+  preferred implementation, helper layout or an unnecessarily narrow file map.
+  Terra owns the remedy; one consolidated review replaces serial micro-orders.
+- No routine duplicate investigation, full-suite rerun, intermediate diff/hash
+  inspection or re-audit of accepted evidence without changed inputs, a concrete
+  contradiction or a previously identified open acceptance item.
+- No approval for its own sake: each exception requiring an intermediate stop
+  must name the real risk or missing authority. A command being expensive, a
+  helper touching another file, or an ordinary test failing is insufficient.
+- The engineer must not make itself the scheduler of Terra's local work. If
+  Terra waits only for an ordinary in-scope test/repair permission, consolidate
+  the grant at the next safe boundary instead of adding another checkpoint.
+
+These rules do not waive tests, independent final acceptance, preservation of
+WIP, sole-writer/resource ownership, or human product gates. New public or
+persistent semantics, production operations, publication, paid infrastructure,
+credentials and destructive actions still require the appropriate authority.
+Authorize disposable test resources once with exact boundaries; do not seek
+fresh approval for each ordinary operation already covered by that envelope.
+
+### Enforceable supervisor self-check
+
+Before contacting the executor or inspecting intermediate work, the engineer
+must identify one permitted reason: a user-requested audit, a concrete
+architecture/authority decision, an evidenced risk or reported impasse, final
+acceptance, or a permitted liveness check. If none applies, do not intervene.
+Elapsed time, an automatic continuation and curiosity about implementation are
+not reasons. The ten-minute limit covers all routine status mechanisms together,
+including messages requesting status and process/diff inspection; switching
+tools does not reset it.
+
+An intervention names its reason in the message and states the outcome or
+decision needed, not a sequence of implementation commands. Do not create a
+separate supervision journal or require executor reporting just to fill one.
+Even when a defect is proven, prescribe the violated invariant and observable
+acceptance result, not the helper, file layout, algorithm or command sequence.
+Any implementation idea from the engineer is explicitly non-binding unless it
+is itself a previously accepted architectural invariant or safety boundary.
+Ordinary in-scope failed tests, launcher repairs and evidence-backed iterations
+remain executor-owned. A progress notification does not require approval, and
+the executor must not end an otherwise executable assignment merely to obtain
+permission to continue. A real missing-authority boundary still requires a stop.
+
+If supervision violates these rules, withdraw the unnecessary checkpoint and
+return the complete remaining in-scope outcome to Terra. Do not compensate by
+weakening acceptance or by adding another reporting ceremony.
+
 ## Mission and authority
 
 Deliver the existing Frontier v3 objective under `frontier-v3-contract.md`,
@@ -61,9 +163,11 @@ conversation. The executor cannot recursively delegate without new approval.
    new executor source-write authority. Read-only investigation may run earlier.
 
 The existing non-squashed monorepo/push gate remains ordered after local F0.VA
-closure and before actual provider evidence. This protocol is not permission
-to migrate, deploy or delete v2 early. Each such operation needs an explicit
-work order and the existing safety/verification gates.
+closure. Actual provider timing is advisory and may be observed during ordinary
+later work; it is not a reason for a standalone certification campaign. This
+protocol is not permission to migrate, deploy or delete v2 early. Each such
+operation needs an explicit work order and the existing safety/verification
+gates.
 
 ## Work-order contract
 
@@ -78,9 +182,10 @@ focused tests within the approved component/path boundary without intermediate
 permission. It explains material local choices in its delivery report. Exact
 file whitelists require a specific safety or ownership reason, not reviewer
 convenience. The engineer specifies outcomes and invariants, not helper method
-signatures or internal data structures. Crossing an
-owner/module, changing persistent meaning or expanding the public interface
-requires an amended order before implementation. A whole F0 phase is not an
+signatures or internal data structures. Changing an architectural owner,
+persistent meaning or public interface requires an amended order; merely using
+another implementation file in the approved affected components does not.
+A whole F0 phase is not an
 adequately bounded order where several independently reviewable cuts exist.
 
 Normative meaning comes from the accepted contract/map. If a work order or test
@@ -91,24 +196,23 @@ to manufacture progress.
 
 ## Execution state machine and review gates
 
-`DRAFT -> READY -> ACKNOWLEDGED -> IMPLEMENTING -> REVIEW -> VERIFYING -> ACCEPTED`
+`DRAFT -> AUTHORIZED -> EXECUTING -> FINAL_REVIEW -> ACCEPTED`
 
-`REVIEW` may return to `IMPLEMENTING`; any phase may enter `NEEDS_DECISION`.
+`FINAL_REVIEW` may return to `EXECUTING` with consolidated findings; any phase
+may enter `NEEDS_DECISION` for a genuine boundary or impasse.
 The ledger owns the active order, revision, executor, phase and last acceptance.
 An agent message is a notification, not a competing durable state database.
 
-- Gate A: engineer marks the specification READY; executor acknowledges scope,
-  baseline, intended transitions, tests and unresolved questions. Engineer
-  explicitly grants IMPLEMENTING. A READ_ONLY order grants no writes/runs.
-  Acknowledgement covers outcome, boundaries and risks, not approval of every
-  local design choice. The grant includes ordinary local diagnosis, focused
-  tests and correction iterations inside the declared scope; no new order is
-  needed for a local implementation decision.
-- Gate B: after the main change and focused tests, executor reports the exact
-  diff and failed/passed evidence; engineer reviews ownership and negative paths
-  before authorizing expensive native or full-gate verification. No ongoing
-  measurement is restarted just because a reviewer asks for a status update.
-- Gate C: engineer reviews the stable final diff and maps each acceptance item
+- Gate A (initial grant): authorize the outcome and its complete local test
+  envelope together. Terra acknowledges and proceeds without waiting for a
+  second implementation message unless it discovers a real conflict. READ_ONLY
+  is reserved for explicitly diagnostic requests or an unresolved authority
+  boundary; it is not the default prelude to every implementation.
+- Gate B (optional consultation): no mandatory stop before local full gates.
+  Use only for a named boundary, impasse or safety decision not covered by the
+  initial grant. Terra otherwise continues through verification and repairs.
+  No ongoing measurement is restarted for a reviewer status request.
+- Gate C (final review): engineer reviews the stable final diff and maps each acceptance item
   to the exact code/test/result. Only the engineer records ACCEPTED and issues
   the next order. Acceptance of an order is not closure of its whole F0 slice.
 
@@ -127,14 +231,20 @@ Use: order/revision, phase, completed change, test status, active command/run ID
 next step and decision needed. Do not send entire logs, JSON fingerprints or
 unchanged status repeatedly; link exact artifacts and project only needed fields.
 
-The engineer reviews a delivered evidence packet at each gate, not every method.
+The engineer reviews a completed result, not every internal milestone or method.
 During silence, routine agent-status checks occur no more than once per ten
-minutes, including across automatic goal continuations. Earlier checks require
+minutes, including across automatic goal continuations. This is a maximum
+frequency, not a schedule or a requirement to poll. Earlier checks require
 a user request, a delivered milestone/blocker, or concrete evidence of a safety
 or authority risk. Passive event-driven waiting takes precedence over repeated
 status, diff, process and hash queries. A long test is not a hang without
 process/output evidence. The supervisor keeps the user informed according to
-session rules without turning those updates into executor polling.
+session rules without turning those updates into executor polling. A passive
+wait timeout is not evidence of a hang and must not trigger a status request,
+new permission exchange or restart. Prefer event-driven waiting; do not build
+an extra heartbeat loop. Avoid repetitive user-facing "still waiting" messages
+where session-level communication requirements permit; never claim progress
+or change the ledger merely because another wait interval elapsed.
 
 The executor owns routine investigation and test operation. The engineer does
 not convert a reported implementation hypothesis into mandatory helper/state
@@ -186,8 +296,10 @@ sends proposed ledger facts. Compact or archive history through the existing
 ledger rules, never create another root or agent continuity file. Work orders
 retain specifications and review records, not a second active progress ledger.
 
-After interruption/compaction, read the ledger and current order, inspect agents
-and active commands, and resume the same executor if available. Replacing it
+After interruption/compaction, read the ledger and current order. Inspect agent
+and command handles when ownership/liveness is uncertain, respecting the same
+cross-turn polling limit; automatic continuation alone does not justify a new
+inspection. Resume the same executor if available. Replacing it
 requires releasing the previous write/run ownership first. Preserve all WIP
 and output; do not restart the project from an old plan paragraph.
 

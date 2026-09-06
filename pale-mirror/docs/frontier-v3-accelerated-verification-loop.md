@@ -24,8 +24,9 @@ The required order is:
 preserve current F0.V evidence
   -> F0.VA accelerated loop
   -> locally green F0.VA / history-preserving monorepo gate
-  -> actual four-worker GitHub-provider evidence
+  -> publish the reproducible four-worker workflow
   -> resume and close the original F0.V native/crash matrix
+  -> observe CI timing during ordinary subsequent F0 work
   -> resume preserved F0.1
 ```
 
@@ -48,8 +49,15 @@ User amendment, 2026-09-05: the graceful reference restart's 25-percent figure
 is an advisory optimization target, not a minimum gate. Its retained measured
 22.52-percent benefit is sufficient; do not spend native runs on that gap.
 Retain exact sample identities, correctness/recovery gates and explicit review
-of future regressions. This does not relax the separate 3x iterative-feedback
-or 2.5x four-worker targets for the whole development loop.
+of future regressions.
+
+User amendment, 2026-09-06: numeric feedback and provider speedups are
+observability signals, not release or slice gates. The retained 5.065026x local
+measurement is sufficient to start using the loop. Do not run or repair a
+standalone provider campaign solely to certify 3x or 2.5x. Collect comparable
+timing passively from ordinary subsequent F0 work and review a regression when
+it occurs. Correctness, isolation, exact identity, fail-closed evidence merge
+and required recovery semantics remain mandatory regardless of timing.
 
 Before implementation, retain the existing phase reports and add three
 repeatable same-host workflow baselines:
@@ -62,19 +70,19 @@ For each class, measure from change classification to the first trustworthy
 pass or attributable failure. Record selected tiers, cache status, build and
 artifact identity, elapsed wall time and executed work. Compare three-run
 medians against the former conservative path that runs all locally applicable
-checks. The sum of the three accelerated medians must be at least three times
-faster without omitting any semantically affected check. A cache hit alone is
-not proof: selection and invalidation negatives must demonstrate why the hit is
-legal.
+checks. Record the aggregate ratio without making it an acceptance threshold.
+A cache hit alone is not proof: selection and invalidation negatives must
+demonstrate why the hit is legal.
 
 Also retain two distinct matrix measurements:
 
 - sequential local native matrix with one client JVM kept for the matrix;
 - four-worker isolated CI correctness matrix, excluding provider queue time.
 
-The four-worker matrix must be at least 2.5 times faster in wall-clock time than
-the same sequential correctness matrix. The timing benchmark itself remains a
-separate, sequential, same-host job and never runs under competing matrix load.
+When a comparable four-worker run and sequential sample arise from ordinary
+work, record their wall-clock ratio. A dedicated timing job, if run, remains
+separate, sequential and same-host and never runs under competing matrix load;
+neither the sample nor any numeric floor blocks product work.
 
 ## Non-negotiable evidence boundaries
 
@@ -258,20 +266,22 @@ declared weight, not completion order. Crash lanes and ordinary lanes use
 independent worlds. Cancellation must still upload completed evidence and mark
 the aggregate incomplete. No shard is retried automatically.
 
-An actual four-worker workflow run must prove complete coverage and the 2.5x
-wall-clock target before F0.VA closes. Queue time is reported separately and is
-not hidden inside execution speed.
+Any actual four-worker workflow run used as correctness evidence must prove
+complete coverage. Queue time is reported separately and is not hidden inside
+execution speed. An actual provider timing result is not required to close
+F0.VA; it is gathered opportunistically from later ordinary work rather than by
+repeated standalone certification runs.
 
 The current local checkout contains the GitHub Actions workflow but has no
 configured Git remote or proven native/timing runner. If provider access or
 runner provisioning is unavailable to the implementation agent, it must still
 complete the checked-in workflow, deterministic shard/merge CLI and their
 local protocol tests, then record the external evidence as
-`UNCONFIRMED_EXTERNAL`. Follow the implementation plan's accepted sequence:
-finish local F0.VA gates, perform its history-preserving monorepo/push gate,
-then prove the actual four-worker run and pinned-host timing. External absence
-does not authorize resuming the original F0.V matrix or closing either gate.
-Report unavailable provider access/provisioning for a scoped operational decision.
+`UNCONFIRMED_EXTERNAL`. Finish local F0.VA correctness gates and the
+history-preserving monorepo/push gate before resuming the original F0.V matrix.
+Provider availability or a missing numeric timing sample does not block that
+resumption. Report unavailable provider access/provisioning without creating a
+standalone remediation campaign.
 
 ## F0.VA.6 — immutable development fixture images
 
@@ -310,8 +320,9 @@ F0.VA baseline
   -> F0.VA.6 optional development fixture images
   -> measured local F0.VA gates
   -> history-preserving monorepo and verified remote push
-  -> actual GitHub-provider evidence and engineer F0.VA acceptance
+  -> engineer F0.VA acceptance
   -> resume original F0.V matrix closure
+  -> gather provider timing from ordinary subsequent work
 ```
 
 The barrier protocol comes first because caching or distributing a racy runner
@@ -330,10 +341,11 @@ would only make failures faster and less attributable.
   images mechanically;
 - no coordination sleep remains in F0.V unless gameplay elapsed time is the
   named assertion;
-- a four-worker GitHub Actions run produces one complete merged matrix with no
-  duplicate/missing lanes and meets the 2.5x wall-clock target;
-- the three representative iterative workflows meet the aggregate 3x median
-  feedback target;
+- four-worker workflow composition and merge tests reject duplicate, missing,
+  stale, foreign and incomparable lanes; any actual provider result claimed as
+  correctness evidence is complete, but no provider timing result is required;
+- the representative iterative-workflow timing is recorded as advisory
+  evidence; the retained 5.065026x local result is sufficient for F0.VA;
 - the graceful-reference optimization has accepted measured benefit (the
   retained22.52 percent is accepted;25 percent is advisory), without waiving
   current-source correctness or recovery evidence;
@@ -343,8 +355,9 @@ would only make failures faster and less attributable.
 - the architecture audit and Continuity Ledger record the measured evidence
   and explicitly return current work to the remaining original F0.V exit gate.
 
-Only after this gate and the ordered monorepo/provider boundary may the engineer
-authorize further full-matrix time closing the remaining original F0.V variants
-and crash windows. `UNCONFIRMED_EXTERNAL` records missing evidence, not an
-exception to that order. F0.1 remains paused until the original F0.V exit gate,
-not merely F0.VA, is complete.
+Only after this gate and the ordered history-preserving monorepo/publication
+boundary may the engineer authorize further full-matrix time closing the
+remaining original F0.V variants and crash windows. `UNCONFIRMED_EXTERNAL`
+records provider evidence still absent, but does not block product work.
+F0.1 remains paused until the original F0.V exit gate, not merely F0.VA, is
+complete.

@@ -21,21 +21,53 @@ dependency selection, an executable test pyramid, exact lifecycle barriers,
 four isolated GitHub Actions workers and development-only immutable fixture
 images before the remaining expensive F0.V matrix is resumed.
 
+F0.VA qualifies the graybox development and verification loop; it is not a
+production natural-terrain acceptance gate. Its physical evidence may use the
+flat graybox provider plus bounded controlled non-flat, blocked-port and
+restart fixtures that prove the provider-neutral contracts. Whole authored
+regions, natural-site search, production terrain surveying, settlement
+earthworks and seed-specific `SETTLED` cleanup belong to a later terrain
+provider/hardening slice. A defect discovered there is retained and triaged,
+but blocks F0.VA only when it reproduces at the graybox/provider-neutral seam
+or invalidates an artifact, dependency or test result required by the F0.VA
+exit gate. Do not turn such a discovery into an unplanned real-terrain
+prerequisite.
+
 After every locally verifiable F0.VA gate is green, the two current repository
 histories must be combined by the post-F0.VA monorepo migration gate below and
-pushed to `git@github.com:RidiculousCircumstances/pale_mirror.git`. The actual
-GitHub four-worker provider run then closes the external F0.VA evidence before
-the original F0.V matrix resumes.
+pushed to `git@github.com:RidiculousCircumstances/pale_mirror.git`. The
+four-worker workflow remains available for ordinary development, but a
+standalone provider-speed certification no longer blocks F0.VA or resumption of
+the original F0.V matrix. Provider timing is collected from later real work.
 
 This is the implementation source of truth for Frontier v3. Delivery follows
 [`engineering-agent-protocol.md`](engineering-agent-protocol.md): the engineer
 owns requirements, normative documentation, the ledger and independent review;
 one `gpt-5.6-terra` high executor owns implementation. Work only within the
 approved versioned order under `docs/work-orders/` named in `CONTINUITY.md`.
-Gate A grants implementation, Gate B grants expensive verification and Gate C
-accepts the result before the engineer issues the next order. Neither a green
-test nor an executor report authorizes self-advancement, a commit or deployment.
-Later-wave code is not added speculatively.
+The binding 2026-09-06 autonomy amendment grants diagnosis, implementation,
+necessary local full verification and repairs together (Gate A). Gate B is
+optional consultation for an actual architectural/authority boundary or impasse,
+not permission to run ordinary tests. Gate C reviews the completed result before
+the engineer issues the next order. No micro-orders, duplicate investigations or
+preference-only rewrites; routine liveness checks at most once per ten minutes
+across turns, with event-driven waiting preferred. Before every intervention,
+the engineer applies the protocol's enforceable supervisor self-check and names
+the permitted reason; status messages and intermediate process/diff inspection
+count together. Ordinary in-scope failures and repairs remain Terra-owned and
+must not become terminal permission-only handoffs. Neither a green test nor an
+executor report authorizes self-advancement, a commit or deployment. Later-wave
+code is not added speculatively.
+
+For avoidance of doubt, the protocol's seven intervention reasons are
+exhaustive. In the absence of `ARCHITECTURE`, `AUTHORITY`, `RISK`, `IMPASSE`,
+`FINAL_REVIEW`, an explicit `USER_AUDIT`, or genuine `LIVENESS` uncertainty, the
+engineer does not contact Terra or inspect intermediate work. Ten minutes is an
+absolute liveness-check rate limit, never a cadence; normally there are no
+routine checks. Terra chooses the implementation and proceeds through ordinary
+failures and corrections to one coherent result. The engineer may require an
+observable invariant but may not turn a preferred algorithm, helper/file layout
+or command sequence into a blocking instruction.
 
 ## Execution rules
 
@@ -53,8 +85,9 @@ physical activity independent of visibility, bounded COLD knowledge, causal
 aftermath, cross-front interaction, actual crash confirmation and rapid-switch
 neutrality. It does not create another wave or waive existing M0–M3 gates.
 Changed comparator/assertion meaning invalidates affected cached acceptance;
-old evidence retains only its original scope. The monorepo/provider sequence
-below is unchanged.
+old evidence retains only its original scope. The monorepo/publication sequence
+below remains mandatory; provider timing is advisory under the 2026-09-06
+product decision.
 
 ### Standing rules
 
@@ -97,8 +130,8 @@ This is an ordered infrastructure boundary, not permission to interrupt an
 active measurement or fold uncommitted work into a synthetic import commit.
 It runs after all locally verifiable F0.VA implementation, timing, negative,
 critical-gate and original graceful-restart requirements are green, but before
-the GitHub-provider matrix and before resuming the remaining original F0.V
-matrix.
+resuming the remaining original F0.V matrix. A dedicated GitHub-provider timing
+matrix is no longer an intervening prerequisite.
 
 The resulting monorepo preserves the workspace layout: the Far Frontier
 pack/deployment tree is at its root and Pale Mirror remains at `pale-mirror/`.
@@ -160,14 +193,15 @@ Migration procedure and stop conditions:
    collision-free verified tags. Re-read the remote refs and clone the result
    independently before treating the remote as canonical or retiring the two
    recoverable pre-migration bundles/checkouts.
-9. Run the checked-in GitHub four-worker correctness matrix and serialized
-   pinned-host timing on that exact remote revision. Require complete,
-   duplicate-free lane merge and the F0.VA 2.5x provider result. Record remote
-   run URLs and exact commit/evidence identities in `CONTINUITY.md`.
-10. Only after the remote clone and provider gate pass may the engineer accept
-    migration and F0.VA complete, adopt the monorepo checkout for continued
-    work and resume the preserved original F0.V matrix. Keep recovery bundles
-    until the user explicitly accepts their removal.
+9. Keep the checked-in GitHub four-worker correctness matrix available for
+   ordinary development. Any result used as correctness evidence must have a
+   complete duplicate-free merge and exact commit/evidence identity. Record
+   comparable timing when it arises, but do not run or repair a standalone
+   campaign merely to meet a numeric speed ratio.
+10. After the clean remote clone and local F0.VA correctness gates pass, the
+    engineer may accept migration and F0.VA, adopt the monorepo checkout for
+    continued work and resume the preserved original F0.V matrix. Keep recovery
+    bundles until the user explicitly accepts their removal.
 
 ## Mandatory seamless-foundation correction gate
 
