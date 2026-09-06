@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "disposable_hive_growth",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hive-growth" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 1, "addedOrgans": 0, "spawnedBioforms": 0, "infectionCells": 18 } },
+      { "view": "intent", "id": "intent:hive-growth-biomass-1", "expect": { "status": "ok", "intentKind": "EXACT_ITEM_CONSUMPTION", "intentStatus": "PREPARED" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 412, "y": 65, "z": 420 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "occupiedCount": 0 }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 432, "y": 65, "z": 428 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1, "infectionCells": 19 }, "timeoutMs": 120000 },
+    { "type": "wait_until_block", "position": { "x": 430, "y": 64, "z": 432 }, "block": "minecraft:red_concrete", "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": 432, "y": 66, "z": 429 } },
+    { "type": "assert_visible_board", "text": "GANGLION", "position": { "x": 432, "y": 66, "z": 429 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "hive", "id": "hive:frontier" },
+    { "type": "inspect", "view": "intent", "id": "intent:hive-growth-biomass-1" },
+    { "type": "inspect", "view": "actor", "id": "bioform:east-grown-1" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1, "infectionCells": 19 } },
+    { "after": 8, "view": "intent", "id": "intent:hive-growth-biomass-1", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } },
+    { "after": 9, "view": "actor", "id": "bioform:east-grown-1", "expect": { "status": "ok", "actorKind": "BIOFORM", "role": "GUARD", "life": "ALIVE" } }
+  ],
+  "frames": [
+    { "after": 6, "name": "grown-hive-heart" }
+  ]
+}

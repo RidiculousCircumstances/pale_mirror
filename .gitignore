@@ -7,6 +7,3 @@ build/
 hosted/
 *.zip
 neoforge-*-installer.jar.log
-
-# Pale Mirror remains an independent nested Git repository.
-/pale-mirror/

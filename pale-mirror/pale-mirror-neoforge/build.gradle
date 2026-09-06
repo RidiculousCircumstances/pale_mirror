@@ -1,0 +1,1271 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.143'
+}
+
+base {
+    archivesName = rootProject.providers.gradleProperty('mod_id').get()
+}
+
+def crimsonIntegrationJar = layout.buildDirectory.file('integration/crimson_curse-1.4.3.1.jar')
+def crimsonIntegrationUrl = rootProject.providers.gradleProperty('crimson_integration_url').get()
+def crimsonIntegrationSha512 = rootProject.providers.gradleProperty('crimson_integration_sha512').get()
+def sporeIntegrationJar = layout.buildDirectory.file('integration/spore_1.21.1_2.2.0j_neo.jar')
+def sporeIntegrationUrl = rootProject.providers.gradleProperty('spore_integration_url').get()
+def sporeIntegrationSha512 = rootProject.providers.gradleProperty('spore_integration_sha512').get()
+def createIntegrationJar = layout.buildDirectory.file('integration/create-1.21.1-6.0.10.jar')
+def createIntegrationUrl = rootProject.providers.gradleProperty('create_integration_url').get()
+def createIntegrationSha512 = rootProject.providers.gradleProperty('create_integration_sha512').get()
+def railwayUntoldIntegrationJar = file(rootProject.findProperty('railway_untold_integration_jar')
+        ?: rootProject.layout.projectDirectory.file('../railways-untold-pm/build/libs/railwaysuntold-neoforge-1.2.1-pm.1.jar').asFile)
+def ftbQuestsIntegrationJar = layout.buildDirectory.file('integration/ftb-quests-neoforge-2101.1.30.jar')
+def ftbLibraryIntegrationJar = layout.buildDirectory.file('integration/ftb-library-neoforge-2101.1.35.jar')
+def ftbTeamsIntegrationJar = layout.buildDirectory.file('integration/ftb-teams-neoforge-2101.1.9.jar')
+def architecturyIntegrationJar = layout.buildDirectory.file('integration/architectury-13.0.11-neoforge.jar')
+def ftbQuestsIntegrationUrl = rootProject.providers.gradleProperty('ftb_quests_integration_url').get()
+def ftbQuestsIntegrationSha512 = rootProject.providers.gradleProperty('ftb_quests_integration_sha512').get()
+def ftbLibraryIntegrationUrl = rootProject.providers.gradleProperty('ftb_library_integration_url').get()
+def ftbLibraryIntegrationSha512 = rootProject.providers.gradleProperty('ftb_library_integration_sha512').get()
+def ftbTeamsIntegrationUrl = rootProject.providers.gradleProperty('ftb_teams_integration_url').get()
+def ftbTeamsIntegrationSha512 = rootProject.providers.gradleProperty('ftb_teams_integration_sha512').get()
+def architecturyIntegrationUrl = rootProject.providers.gradleProperty('architectury_integration_url').get()
+def architecturyIntegrationSha512 = rootProject.providers.gradleProperty('architectury_integration_sha512').get()
+def millenaireIntegrationJar = layout.buildDirectory.file('integration/millenaire-9.0.0-beta.2.jar')
+def millenaireIntegrationUrl = rootProject.providers.gradleProperty('millenaire_integration_url').get()
+def millenaireIntegrationSha512 = rootProject.providers.gradleProperty('millenaire_integration_sha512').get()
+def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
+def frontierV3SceneGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-scene-game-test').get().asFile
+def frontierV3EconomyGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-economy-game-test').get().asFile
+def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
+def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
+def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
+def railwayGameTestDirectory = layout.buildDirectory.dir('runs/railway-game-test').get().asFile
+def ftbGameTestDirectory = layout.buildDirectory.dir('runs/ftb-game-test').get().asFile
+def millenaireGameTestDirectory = layout.buildDirectory.dir('runs/millenaire-game-test').get().asFile
+def millenaireGameTestWorldDirectory = new File(millenaireGameTestDirectory, 'world')
+def crimsonGameTestWorldDirectory = new File(crimsonGameTestDirectory, 'world')
+def sporeGameTestWorldDirectory = new File(sporeGameTestDirectory, 'world')
+def createGameTestWorldDirectory = new File(createGameTestDirectory, 'world')
+def railwayGameTestWorldDirectory = new File(railwayGameTestDirectory, 'world')
+def railwayManagedConfig = layout.buildDirectory.file('runs/railway-game-test/config/railways-untold/config.toml')
+def railwayClientManagedConfig = layout.buildDirectory.file('runs/railway-client/config/railways-untold/config.toml')
+def frontierV3PilotClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-client')
+def frontierV3PilotPackClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-pack-client')
+def frontierV3PilotServerDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-server')
+// Resolve isolated-run inputs during Gradle configuration so the RunGame task remains
+// configuration-cache safe while it prepares a disposable game directory.
+def frontierV3PilotServerRunDirectory = frontierV3PilotServerDirectory.get().asFile
+def frontierV3PilotWorldName = providers.gradleProperty('frontierV3PilotWorld').orElse('frontier-v3-pilot-world').get()
+def frontierV3PilotSeed = providers.gradleProperty('frontierV3PilotSeed').orElse('41').get()
+def frontierV3PilotPort = providers.gradleProperty('frontierV3PilotPort').orElse('25575').get()
+def frontierV3PilotRconPort = providers.gradleProperty('frontierV3PilotRconPort').orElse('25576').get()
+def frontierV3PilotRconPassword = providers.environmentVariable('FRONTIER_V3_PILOT_RCON_PASSWORD').orElse('').get()
+def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
+def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
+def frontierV3PilotLifecycleControlDirectory = providers.gradleProperty('frontierV3PilotLifecycleControlDirectory').orElse('').get()
+def frontierV3PilotLifecycleSegment = providers.gradleProperty('frontierV3PilotLifecycleSegment').orElse('single').get()
+// F0.V exact crash rendezvous: all five fields are required together and are
+// consumed only by the disposable pilot server after a WAL append succeeds.
+def frontierV3PilotCrashBoundary = providers.gradleProperty('frontierV3PilotCrashBoundary').orElse('').get()
+def frontierV3PilotCrashOwner = providers.gradleProperty('frontierV3PilotCrashOwner').orElse('').get()
+def frontierV3PilotCrashRevision = providers.gradleProperty('frontierV3PilotCrashRevision').orElse('').get()
+def frontierV3PilotCrashPayload = providers.gradleProperty('frontierV3PilotCrashPayload').orElse('').get()
+def frontierV3PilotCatalog = new Properties()
+def frontierV3PilotCatalogFile = file('../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties')
+frontierV3PilotCatalogFile.withInputStream { frontierV3PilotCatalog.load(it) }
+def frontierV3PilotProfiles = frontierV3PilotCatalog.getProperty('profiles', '').split(',').collect { it.trim() }.findAll { !it.isEmpty() }
+def frontierV3PilotDefaultProfile = frontierV3PilotCatalog.getProperty('default', '').trim()
+if (!frontierV3PilotProfiles.contains(frontierV3PilotDefaultProfile)) {
+    throw new GradleException('Frontier v3 pilot catalog default must be one declared profile')
+}
+def frontierV3PilotProfile = providers.gradleProperty('frontierV3PilotProfile').orElse(frontierV3PilotDefaultProfile).get()
+if (!frontierV3PilotProfiles.contains(frontierV3PilotProfile)) {
+    throw new GradleException("unknown Frontier v3 pilot profile: ${frontierV3PilotProfile}")
+}
+if (frontierV3PilotCatalog.getProperty("${frontierV3PilotProfile}.runner") != 'disposable_lite') {
+    throw new GradleException("Frontier v3 pilot profile is not allowed for the disposable runner: ${frontierV3PilotProfile}")
+}
+def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
+def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
+// The graybox disabled-mod catalogue is owned by the companion pack, not by a
+// source checkout.  A release is deliberately built from a detached worktree,
+// which need not be a sibling of that pack.  Keep the normal workspace layout
+// as the default, but permit the verified pack input to be supplied explicitly.
+def frontierV3GrayboxDisabledModsCatalogOverride = providers.gradleProperty('frontierV3GrayboxDisabledModsCatalog').orNull
+def frontierV3GrayboxDisabledModsCatalog = frontierV3GrayboxDisabledModsCatalogOverride == null
+        ? new File(rootProject.projectDir.parentFile, 'config/graybox-disabled-mods.txt')
+        : file(frontierV3GrayboxDisabledModsCatalogOverride)
+if (!frontierV3GrayboxDisabledModsCatalog.isFile()) {
+    throw new GradleException("Frontier v3 pack-pilot requires the shared graybox mod catalog at ${frontierV3GrayboxDisabledModsCatalog}")
+}
+def frontierV3GrayboxDisabledMods = frontierV3GrayboxDisabledModsCatalog.readLines()
+        .collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith('#') }
+if (frontierV3GrayboxDisabledMods.isEmpty()) {
+    throw new GradleException("Frontier v3 pack-pilot graybox mod catalog is empty: ${frontierV3GrayboxDisabledModsCatalog}")
+}
+def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
+def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
+
+sourceSets {
+    pilot {
+        java.srcDir 'src/pilot/java'
+        // Compile the pure fixture sources into the pilot mod source set instead of placing a
+        // second jar with Frontier packages on NeoForge's module layer (which is a split package).
+        java.srcDir project(':pale-mirror-frontier').file('src/testFixtures/java')
+        resources.srcDir project(':pale-mirror-frontier').file('src/testFixtures/resources')
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+dependencies {
+    implementation project(':pale-mirror-api')
+    implementation project(':pale-mirror-domain')
+    implementation project(':pale-mirror-frontier')
+    pilotImplementation project(':pale-mirror-frontier')
+    // Pilot-only crash rendezvous is unit-tested from the ordinary test source set, but never
+    // participates in main compilation or the distributable JAR.
+    testImplementation sourceSets.pilot.output
+    testImplementation testFixtures(project(':pale-mirror-frontier'))
+    // API classes are referenced only by the isolated client plugin. JourneyMap
+    // itself stays optional and is never packaged into Pale Mirror.
+    compileOnly 'info.journeymap:journeymap-api-neoforge:2.0.0-1.21.1'
+    // Exact optional server API. DH itself is supplied by the private pack and is never shaded into PM.
+    compileOnly 'maven.modrinth:uCdwusMi:3.2.0-b-1.21.1'
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations {
+    pilotImplementation.extendsFrom implementation
+    pilotCompileOnly.extendsFrom compileOnly
+    pilotRuntimeOnly.extendsFrom runtimeOnly
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+neoForge {
+    version = rootProject.providers.gradleProperty('neo_version').get()
+
+    runs {
+        configureEach {
+            systemProperty 'pale_mirror.profile', 'core-only'
+            systemProperty 'pale_mirror.frontier_v3.enabled', providers.systemProperty('pale_mirror.frontier_v3.enabled').orElse('false').get()
+            // Pilot sources compile into this run's mod source set and never enter the production jar.
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', rootProject.providers.gradleProperty('mod_id').get()
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = coreGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        frontierV3SceneGameTestServer {
+            type = 'gameTestServer'
+            // The template stays in the minecraft namespace, so namespace filtering alone
+            // cannot select PM v3 tests. The opt-in mixin filters only the final GameTest
+            // collection passed to the dedicated test server; regular servers and the full
+            // GameTest gate keep the complete collection unchanged.
+            gameDirectory = frontierV3SceneGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'scene'
+        }
+        frontierV3EconomyGameTestServer {
+            type = 'gameTestServer'
+            // Exact-item and board tests are a separate bounded materialization boundary;
+            // scene leasing stays out of this daily economics slice.
+            gameDirectory = frontierV3EconomyGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'economy'
+        }
+        crimsonGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/crimson-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        sporeGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/spore-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+        }
+        createGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/create-game-test')
+            // Create sends client payloads when mock players join. Existing
+            // mock-player suites self-skip in this adapter-only profile.
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.create_adapter_only', 'true'
+        }
+        railwayGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/railway-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.create_adapter_only', 'true'
+        }
+        ftbGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/ftb-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.ftb_presentation_only', 'true'
+        }
+        millenaireGameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/millenaire-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.millenaire_adapter_only', 'true'
+        }
+        coreClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/core-client')
+            def auditServer = providers.gradleProperty('coreClientServer')
+            if (auditServer.isPresent()) {
+                programArgument '--username'
+                programArgument providers.gradleProperty('coreClientUsername').orElse('PMAudit').get()
+                programArgument '--quickPlayMultiplayer'
+                programArgument auditServer.get()
+            }
+        }
+        crimsonClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/crimson-client')
+        }
+        sporeClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/spore-client')
+        }
+        createClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/create-client')
+        }
+        railwayClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
+        }
+        visualAuditClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/railway-client')
+            programArgument '--username'
+            programArgument providers.gradleProperty('visualAuditUsername').orElse('PMAudit').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('visualAuditServer').orElse('127.0.0.1:25565').get()
+        }
+        frontierV3PilotClient {
+            client()
+            // Deliberately minimal v3 profile: NeoForge plus current source only.
+            // It connects only to the matching disposable Frontier v3 server.
+            gameDirectory = frontierV3PilotClientDirectory
+            // The pilot's acceptance frames are captured from its exact X11
+            // window.  On a Wayland desktop GLFW otherwise prefers a native
+            // surface which neither names nor exposes a capturable client
+            // window to the audit harness.  This isolated development run
+            // deliberately uses the existing XWayland bridge; it never
+            // changes normal-player client platform selection.
+            environment 'XDG_SESSION_TYPE', 'x11'
+            environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
+                    providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
+                    providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
+            // Present only in the F0.V disposable runner.  This allows the one visible native
+            // test client to reconnect after a runner-confirmed server restart without making a
+            // second JVM or a second player authority.
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.session_control_directory',
+                    providers.gradleProperty('frontierV3PilotSessionControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
+                    providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25575').get()
+            programArgument '--fullscreen'
+            programArgument '--username'
+            programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25575').get()
+        }
+        frontierV3PilotPackClient {
+            client()
+            // Full-pack pilot remains available only for final compatibility/visual acceptance.
+            gameDirectory = frontierV3PilotPackClientDirectory
+            environment 'XDG_SESSION_TYPE', 'x11'
+            environment 'WAYLAND_DISPLAY', '__pale_mirror_pilot_xwayland_only__'
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.scenario',
+                    providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
+                    providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.session_control_directory',
+                    providers.gradleProperty('frontierV3PilotSessionControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
+                    providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
+            programArgument '--fullscreen'
+            programArgument '--username'
+            programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
+            programArgument '--quickPlayMultiplayer'
+            programArgument providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
+        }
+        frontierV3PilotServer {
+            server()
+            // This server shares neither a pack profile nor a world directory with live work.
+            gameDirectory = frontierV3PilotServerDirectory
+            programArgument '--nogui'
+            programArgument '--mixin.config'
+            programArgument 'pale_mirror.frontier_v3.pilot_crash.mixins.json'
+            systemProperty 'pale_mirror.frontier_v3.enabled', 'true'
+            // A disposable runner receives the actual Minecraft JVM identity
+            // from its own nonce; Gradle's forked launcher is not that owner.
+            systemProperty 'pale_mirror.frontier_v3.pilot.run_id', frontierV3PilotRunId
+            systemProperty 'pale_mirror.frontier_v3.pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.boundary', frontierV3PilotCrashBoundary
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.owner', frontierV3PilotCrashOwner
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.revision', frontierV3PilotCrashRevision
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.payload', frontierV3PilotCrashPayload
+            // Consumed only by the non-packaged pilot bootstrap. Production startup ignores it.
+            systemProperty 'pale_mirror.frontier_v3.pilot.profile', frontierV3PilotProfile
+        }
+        ftbClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/ftb-client')
+        }
+        millenaireClient {
+            client()
+            gameDirectory = layout.buildDirectory.dir('runs/millenaire-client')
+        }
+    }
+
+    mods {
+        pale_mirror {
+            sourceSet sourceSets.main
+            sourceSet project(':pale-mirror-api').sourceSets.main
+            sourceSet project(':pale-mirror-domain').sourceSets.main
+            sourceSet project(':pale-mirror-frontier').sourceSets.main
+            sourceSet sourceSets.pilot
+        }
+    }
+}
+
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def properties = [
+            minecraft_version_range: rootProject.providers.gradleProperty('minecraft_version_range').get(),
+            neo_version            : rootProject.providers.gradleProperty('neo_version').get(),
+            loader_version_range   : rootProject.providers.gradleProperty('loader_version_range').get(),
+            mod_id                 : rootProject.providers.gradleProperty('mod_id').get(),
+            mod_name               : rootProject.providers.gradleProperty('mod_name').get(),
+            mod_license            : rootProject.providers.gradleProperty('mod_license').get(),
+            mod_version            : rootProject.providers.gradleProperty('mod_version').get()
+    ]
+    inputs.properties(properties)
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+    expand(properties)
+}
+
+sourceSets.main.resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
+
+tasks.named('jar', Jar).configure {
+    dependsOn project(':pale-mirror-api').tasks.named('classes')
+    dependsOn project(':pale-mirror-domain').tasks.named('classes')
+    dependsOn project(':pale-mirror-frontier').tasks.named('classes')
+    from project(':pale-mirror-api').sourceSets.main.output
+    from project(':pale-mirror-domain').sourceSets.main.output
+    from project(':pale-mirror-frontier').sourceSets.main.output
+}
+
+def distributableJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+
+tasks.register('verifyPackagedJar') {
+    group = 'verification'
+    description = 'Fails if the distributable mod jar omits the domain module or PM effect/combat/source-item safety boundaries.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def jarFile = distributableJar.get().asFile
+        def jar = new java.util.jar.JarFile(jarFile)
+        try {
+            [
+                    'io/farfrontier/palemirror/api/IntegrationAdapter.class',
+                    'io/farfrontier/palemirror/domain/WorldState.class',
+                    'io/farfrontier/palemirror/frontier/v3/persistence/FrontierStore.class',
+                    'io/farfrontier/palemirror/internal/effect/EffectLeaseLedger.class',
+                    'io/farfrontier/palemirror/internal/combat/ThreatCombatLedger.class',
+                    'io/farfrontier/palemirror/internal/combat/PmProjectileRuntime.class',
+                    'io/farfrontier/palemirror/internal/adapter/SourceItemFirewall.class',
+                    'io/farfrontier/palemirror/internal/integration/ftb/FtbQuestsPresentationAdapter.class',
+                    'io/farfrontier/palemirror/internal/integration/millenaire/MillenaireSettlementAdapter.class',
+                    'io/farfrontier/palemirror/internal/integration/railwaysuntold/RailwaysUntoldManagedAdapter.class',
+                    'io/farfrontier/palemirror/internal/world/ManagedRailwayRuntime.class',
+                    'io/farfrontier/palemirror/internal/world/CampaignMineSiteTemplate.class',
+                    'io/farfrontier/palemirror/internal/presentation/RegionalLedgerItem.class',
+                    'io/farfrontier/palemirror/internal/presentation/atlas/RegionalAtlasProjection.class',
+                    'io/farfrontier/palemirror/internal/client/PaleMirrorAtlasScreen.class',
+                    'io/farfrontier/palemirror/internal/integration/journeymap/PaleMirrorJourneyMapPlugin.class',
+                    'assets/pale_mirror/models/item/regional_ledger.json',
+                    'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
+                    'pale_mirror.item_firewall.mixins.json',
+                    'pale_mirror.frontier_v3.mixins.json'
+            ].each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
+            }
+            if (jar.entries().any { entry -> entry.name.startsWith('journeymap/') }) {
+                throw new GradleException("${jarFile} must not package JourneyMap API classes")
+            }
+            def fixtureEntries = [
+                    'io/farfrontier/palemirror/frontier/v3/model/FrontierDevelopmentScenarios.class',
+                    'io/farfrontier/palemirror/frontier/v3/model/FrontierV3FixtureCatalog.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotFixtureBootstrap.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotLifecycleSignal.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3CrashBoundaryProbe.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DurableCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3HarvestCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/mixin/FrontierV3DurableCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/mixin/FrontierV3HarvestCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotCrashHooks.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3GameTestSceneLeases.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteGameTests.class',
+                    'io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties'
+            ]
+            fixtureEntries.each { entry ->
+                if (jar.getEntry(entry) != null) throw new GradleException("${jarFile} must not package Frontier v3 test fixture entry ${entry}")
+            }
+            // Every former production fixture entry point is forbidden, not merely a representative
+            // sample.  The pilot may link these names only from its non-packaged source set.
+            def fixtureSymbols = [
+                    'pale_mirror.frontier_v3.pilot.profile',
+                    'pale_mirror.frontier_v3.pilot.crash.',
+                    'PMV3_CRASH_BOUNDARY',
+                    'pale_mirror.frontier_v3.pilot_crash.mixins.json',
+                    'developmentUncontestedSupplyConfiguration',
+                    'developmentAutonomousSupplyInterceptionConfiguration',
+                    'developmentHotSceneStrikeConfiguration',
+                    'developmentSettlementAssaultConfiguration',
+                    'developmentHiveGrowthConfiguration',
+                    'developmentHiveNutrientTransferConfiguration',
+                    'developmentSettlementProvisionConfiguration',
+                    'developmentRouteSceneReturnConfiguration',
+                    'developmentHotScoutSightingConfiguration',
+                    'developmentHotScoutInterceptConfiguration',
+                    'developmentOperationAssemblyConfiguration',
+                    'developmentHealthQuarantineConfiguration',
+                    'developmentResidentTransitConfiguration',
+                    'developmentMaterializedProductionInputTheftConfiguration',
+                    'developmentMaterializedProductionWorkerDeathConfiguration'
+            ]
+            jar.entries().each { entry ->
+                if (entry.name.endsWith('.class')) {
+                    String bytecode = new String(jar.getInputStream(entry).readAllBytes(), java.nio.charset.StandardCharsets.ISO_8859_1)
+                    fixtureSymbols.each { symbol ->
+                        if (bytecode.contains(symbol)) throw new GradleException("${jarFile} exposes Frontier v3 test fixture symbol ${symbol} from ${entry.name}")
+                    }
+                }
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.named('runGameTestServer') {
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    doFirst {
+        coreGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.named('runFrontierV3SceneGameTestServer') {
+    // ModDev resolves the Frontier project as a runtime JAR.  Classes alone are not enough:
+    // without this edge a source edit could leave native/GameTest v3 runs executing a stale
+    // dependency artifact.
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    doFirst {
+        frontierV3SceneGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.named('runFrontierV3EconomyGameTestServer') {
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    doFirst {
+        frontierV3EconomyGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.register('verifyCrimsonSandboxPackaging') {
+    group = 'verification'
+    description = 'Fails if the final JAR omits the always-active Crimson sandbox datapack, tier policy, or base actor initializers.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def requiredEntries = [
+                'crimson_sandbox/pack.mcmeta',
+                'crimson_sandbox/data/crimson_curse/function/load.mcfunction',
+                'crimson_sandbox/data/crimson_curse/function/tick.mcfunction',
+                'data/pale_mirror/pale_mirror/threat_tiers/default.json',
+                'data/pale_mirror/function/crimson/v1431/initialize_human.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_villager.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_husk.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_drowned.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bogged.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_wither_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_human.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_villager.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_husk.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_drowned.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_bogged.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_decayed_wither_skeleton.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_rusher.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_raptor.mcfunction',
+                'data/pale_mirror/pale_mirror/sieges/crimson_apex.json',
+                'data/pale_mirror/function/crimson/v1431/initialize_juggernaut.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_knight.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_mangler.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_pummeler.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_kraken.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_osiris.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_i.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_ii.mcfunction',
+                'data/pale_mirror/function/crimson/v1431/initialize_bloodlink_iii.mcfunction'
+        ]
+        def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Crimson sandbox entry is missing from final JAR: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('verifyCrimsonVisualContract') {
+    group = 'verification'
+    description = 'Verifies that the pinned Crimson client pack still exposes every PM actor CEM and display-model contract.'
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    inputs.file(crimsonIntegrationJar)
+    doLast {
+        def expected = [
+                'assets/minecraft/optifine/cem/zombie.properties'          : ['name.1="Osiris"', 'name.3="Crimsonified Human"', 'name.4="Decayed Human"', 'name.5="Knight"', 'name.6="Juggernaut"'],
+                'assets/minecraft/optifine/cem/zombie_villager.properties' : ['name.1="Crimsonified Villager"', 'name.2="Decayed Villager"'],
+                'assets/minecraft/optifine/cem/husk.properties'            : ['name.1="Crimsonified Husk"', 'name.2="Decayed Husk"'],
+                'assets/minecraft/optifine/cem/skeleton.properties'        : ['name.1="Crimsonified Skeleton"', 'name.2="Decayed Skeleton"'],
+                'assets/minecraft/optifine/cem/drowned.properties'         : ['name.1="Crimsonified Drowned"', 'name.3="Decayed Drowned"'],
+                'assets/minecraft/optifine/cem/bogged.properties'          : ['name.1="Crimsonified Bogged"', 'name.2="Decayed Bogged"'],
+                'assets/minecraft/optifine/cem/wither_skeleton.properties' : ['name.1="Crimsonified Wither Skeleton"', 'name.2="Decayed Wither Skeleton"', 'name.3="Stage I Bloodlink"', 'name.4="Stage II Bloodlink"', 'name.5="Stage III Bloodlink"'],
+                'assets/minecraft/optifine/cem/ravager.properties'         : ['name.2="Rusher"', 'name.3="Mangler"'],
+                'assets/minecraft/optifine/cem/phantom.properties'         : ['name.4="Kraken"'],
+                'assets/minecraft/optifine/cem/magma_cube.properties'      : ['name.1="Osiris Brain"'],
+                'assets/minecraft/models/item/book.json'                   : ['custom_model_data":5450100', 'custom_model_data":5450106',
+                                                                             'custom_model_data":5450013', 'custom_model_data":5450015',
+                                                                             'custom_model_data":5450170', 'custom_model_data":5450192',
+                                                                             'custom_model_data":5450230', 'crimson_curse/stage1_bloodlink_open0',
+                                                                             'crimson_curse/stage3_bloodlink_open0', 'crimson_curse/raptor_limbs_front',
+                                                                             'crimson_curse/raptor_body', 'crimson_curse/pummeler']
+        ]
+        def jar = new java.util.jar.JarFile(crimsonIntegrationJar.get().asFile)
+        try {
+            expected.each { entry, fragments ->
+                def resource = jar.getJarEntry(entry)
+                if (resource == null) throw new GradleException("Pinned Crimson visual resource is missing: ${entry}")
+                String text = jar.getInputStream(resource).getText('UTF-8')
+                fragments.each { fragment ->
+                    if (!text.contains(fragment)) throw new GradleException("Pinned Crimson visual contract changed: ${entry} lacks ${fragment}")
+                }
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('dedicatedRestartHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final JAR in a clean NeoForge runtime, crashes it, and verifies restart.'
+    dependsOn tasks.named('jar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/dedicated-restart-harness.sh', distributableJar.get().asFile.absolutePath
+}
+
+tasks.register('downloadCrimsonIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Crimson runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(crimsonIntegrationJar)
+    inputs.property('url', crimsonIntegrationUrl)
+    inputs.property('sha512', crimsonIntegrationSha512)
+    doLast {
+        def target = crimsonIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(crimsonIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(crimsonIntegrationSha512)) {
+            throw new GradleException("Pinned Crimson SHA-512 mismatch: expected ${crimsonIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+def prepareCrimsonGameTestMods = tasks.register('prepareCrimsonGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    from(crimsonIntegrationJar)
+    into(layout.buildDirectory.dir('runs/crimson-game-test/mods'))
+}
+
+tasks.named('runCrimsonGameTestServer') {
+    dependsOn prepareCrimsonGameTestMods
+    doFirst { crimsonGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.register('downloadSporeIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Spore runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(sporeIntegrationJar)
+    inputs.property('url', sporeIntegrationUrl)
+    inputs.property('sha512', sporeIntegrationSha512)
+    doLast {
+        def target = sporeIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(sporeIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(sporeIntegrationSha512)) {
+            throw new GradleException("Pinned Spore SHA-512 mismatch: expected ${sporeIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+def prepareSporeGameTestMods = tasks.register('prepareSporeGameTestMods', Sync) {
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    from(sporeIntegrationJar)
+    into(layout.buildDirectory.dir('runs/spore-game-test/mods'))
+}
+
+tasks.named('runSporeGameTestServer') {
+    dependsOn prepareSporeGameTestMods
+    doFirst { sporeGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.register('downloadCreateIntegrationJar') {
+    group = 'verification'
+    description = 'Downloads the pinned Create runtime JAR and verifies SHA-512; normal builds never invoke it.'
+    outputs.file(createIntegrationJar)
+    inputs.property('url', createIntegrationUrl)
+    inputs.property('sha512', createIntegrationSha512)
+    doLast {
+        def target = createIntegrationJar.get().asFile
+        target.parentFile.mkdirs()
+        byte[] bytes = new URL(createIntegrationUrl).bytes
+        String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+        if (!actual.equalsIgnoreCase(createIntegrationSha512)) {
+            throw new GradleException("Pinned Create SHA-512 mismatch: expected ${createIntegrationSha512}, got ${actual}")
+        }
+        target.bytes = bytes
+    }
+}
+
+def prepareCreateGameTestMods = tasks.register('prepareCreateGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar)
+    into(layout.buildDirectory.dir('runs/create-game-test/mods'))
+}
+
+def prepareRailwayGameTestMods = tasks.register('prepareRailwayGameTestMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar, railwayUntoldIntegrationJar)
+    into(layout.buildDirectory.dir('runs/railway-game-test/mods'))
+    doLast {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException(
+                "PM Railway Untold fork is missing: ${railwayUntoldIntegrationJar}")
+        def config = railwayManagedConfig.get().asFile
+        config.parentFile.mkdirs()
+        config.text = '[features]\npaleMirrorManagedMode = true\n'
+    }
+}
+
+tasks.named('runCreateGameTestServer') {
+    dependsOn prepareCreateGameTestMods
+    doFirst { createGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.named('runRailwayGameTestServer') {
+    dependsOn prepareRailwayGameTestMods
+    doFirst { railwayGameTestWorldDirectory.deleteDir() }
+}
+
+tasks.register('createIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside pinned Create twice; the paired acceptance walkthrough proves real train traversal.'
+    dependsOn tasks.named('jar'), tasks.named('downloadCreateIntegrationJar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/create-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            createIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('managedRailwayIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots PM twice beside exact Create and the private managed Railway Untold fork.'
+    dependsOn tasks.named('jar'), tasks.named('downloadCreateIntegrationJar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/managed-railway-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            createIntegrationJar.get().asFile.absolutePath, railwayUntoldIntegrationJar.absolutePath
+    doFirst {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException("PM Railway Untold fork is missing")
+    }
+}
+
+def downloadVerifiedIntegrationJar = { String taskName, def targetFile, String sourceUrl, String expectedSha512, String label ->
+    tasks.register(taskName) {
+        group = 'verification'
+        description = "Downloads the pinned ${label} runtime JAR and verifies SHA-512; normal builds never invoke it."
+        outputs.file(targetFile)
+        inputs.property('url', sourceUrl)
+        inputs.property('sha512', expectedSha512)
+        doLast {
+            def target = targetFile.get().asFile
+            target.parentFile.mkdirs()
+            byte[] bytes = new URL(sourceUrl).bytes
+            String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+            if (!actual.equalsIgnoreCase(expectedSha512)) {
+                throw new GradleException("Pinned ${label} SHA-512 mismatch: expected ${expectedSha512}, got ${actual}")
+            }
+            target.bytes = bytes
+        }
+    }
+}
+
+def downloadFtbQuestsIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbQuestsIntegrationJar', ftbQuestsIntegrationJar,
+        ftbQuestsIntegrationUrl, ftbQuestsIntegrationSha512, 'FTB Quests')
+def downloadFtbLibraryIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbLibraryIntegrationJar', ftbLibraryIntegrationJar,
+        ftbLibraryIntegrationUrl, ftbLibraryIntegrationSha512, 'FTB Library')
+def downloadFtbTeamsIntegrationJar = downloadVerifiedIntegrationJar('downloadFtbTeamsIntegrationJar', ftbTeamsIntegrationJar,
+        ftbTeamsIntegrationUrl, ftbTeamsIntegrationSha512, 'FTB Teams')
+def downloadArchitecturyIntegrationJar = downloadVerifiedIntegrationJar('downloadArchitecturyIntegrationJar', architecturyIntegrationJar,
+        architecturyIntegrationUrl, architecturyIntegrationSha512, 'Architectury API')
+def downloadMillenaireIntegrationJar = downloadVerifiedIntegrationJar('downloadMillenaireIntegrationJar', millenaireIntegrationJar,
+        millenaireIntegrationUrl, millenaireIntegrationSha512, 'Millenaire 9.0.0-beta.2')
+def prepareMillenaireGameTestMods = tasks.register('prepareMillenaireGameTestMods', Sync) {
+    dependsOn downloadMillenaireIntegrationJar
+    from(millenaireIntegrationJar)
+    into(layout.buildDirectory.dir('runs/millenaire-game-test/mods'))
+}
+
+tasks.named('runMillenaireGameTestServer') {
+    dependsOn prepareMillenaireGameTestMods
+    doFirst { millenaireGameTestWorldDirectory.deleteDir() }
+}
+def prepareFtbGameTestMods = tasks.register('prepareFtbGameTestMods', Sync) {
+    dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
+            downloadArchitecturyIntegrationJar
+    from(ftbQuestsIntegrationJar, ftbLibraryIntegrationJar, ftbTeamsIntegrationJar, architecturyIntegrationJar)
+    into(layout.buildDirectory.dir('runs/ftb-game-test/mods'))
+}
+
+tasks.named('runFtbGameTestServer') {
+    dependsOn prepareFtbGameTestMods
+    doFirst {
+        ftbGameTestWorldDirectory.deleteDir()
+        ftbGameTestConfigDirectory.deleteDir()
+    }
+}
+
+def prepareSporeClientMods = tasks.register('prepareSporeClientMods', Sync) {
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    from(sporeIntegrationJar)
+    into(layout.buildDirectory.dir('runs/spore-client/mods'))
+}
+
+tasks.named('runSporeClient') {
+    dependsOn prepareSporeClientMods
+}
+
+def prepareCoreClientMods = tasks.register('prepareCoreClientMods', Sync) {
+    into(layout.buildDirectory.dir('runs/core-client/mods'))
+}
+def prepareCrimsonClientMods = tasks.register('prepareCrimsonClientMods', Sync) {
+    dependsOn tasks.named('downloadCrimsonIntegrationJar')
+    from(crimsonIntegrationJar)
+    into(layout.buildDirectory.dir('runs/crimson-client/mods'))
+}
+def prepareCreateClientMods = tasks.register('prepareCreateClientMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar)
+    into(layout.buildDirectory.dir('runs/create-client/mods'))
+}
+def prepareRailwayClientMods = tasks.register('prepareRailwayClientMods', Sync) {
+    dependsOn tasks.named('downloadCreateIntegrationJar')
+    from(createIntegrationJar, railwayUntoldIntegrationJar)
+    into(layout.buildDirectory.dir('runs/railway-client/mods'))
+    doLast {
+        if (!railwayUntoldIntegrationJar.exists()) throw new GradleException(
+                "PM Railway Untold fork is missing: ${railwayUntoldIntegrationJar}")
+        def config = railwayClientManagedConfig.get().asFile
+        config.parentFile.mkdirs()
+        config.text = '[features]\npaleMirrorManagedMode = true\n'
+    }
+}
+def prepareFtbClientMods = tasks.register('prepareFtbClientMods', Sync) {
+    dependsOn downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar, downloadFtbTeamsIntegrationJar,
+            downloadArchitecturyIntegrationJar
+    from(ftbQuestsIntegrationJar, ftbLibraryIntegrationJar, ftbTeamsIntegrationJar, architecturyIntegrationJar)
+    into(layout.buildDirectory.dir('runs/ftb-client/mods'))
+}
+def prepareMillenaireClientMods = tasks.register('prepareMillenaireClientMods', Sync) {
+    dependsOn downloadMillenaireIntegrationJar
+    from(millenaireIntegrationJar)
+    into(layout.buildDirectory.dir('runs/millenaire-client/mods'))
+}
+
+tasks.named('runCoreClient') { dependsOn prepareCoreClientMods }
+tasks.named('runCrimsonClient') { dependsOn prepareCrimsonClientMods }
+tasks.named('runCreateClient') { dependsOn prepareCreateClientMods }
+tasks.named('runRailwayClient') { dependsOn prepareRailwayClientMods }
+tasks.named('runFtbClient') { dependsOn prepareFtbClientMods }
+tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
+
+def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClient', Sync) {
+    dependsOn tasks.named('classes')
+    def installedClient = layout.buildDirectory.dir('runs/railway-client')
+    from(installedClient) {
+        // NeoForge ModDev contributes the current Pale Mirror source set to the
+        // run. Leaving this pack artifact beside it silently wins class lookup.
+        exclude 'mods/pale_mirror-hosted.jar'
+        // The visible pack-backed pilot must match the live source-graybox
+        // server's gameplay exclusions. This shared catalog is the sole owner;
+        // do not let an enabled client-side infection/mob mod create a second
+        // visual/runtime authority or reject the ordinary server connection.
+        frontierV3GrayboxDisabledMods.each { exclude "mods/${it}" }
+    }
+    into(frontierV3PilotPackClientDirectory)
+    doFirst {
+        if (!new File(installedClient.get().asFile, 'mods').isDirectory()) {
+            throw new GradleException('Frontier v3 pilot requires the installed railway-client pack; run scripts/install-client.sh first')
+        }
+    }
+    doLast {
+        if (new File(frontierV3PilotPackClientDirectory.get().asFile, 'mods/pale_mirror-hosted.jar').isFile()) {
+            throw new GradleException('Frontier v3 pilot profile must not contain the hosted Pale Mirror jar')
+        }
+        def leakedDisabledMod = frontierV3GrayboxDisabledMods.find {
+            new File(frontierV3PilotPackClientDirectory.get().asFile, "mods/${it}").isFile()
+        }
+        if (leakedDisabledMod != null) {
+            throw new GradleException("Frontier v3 pack-pilot retained graybox-disabled mod ${leakedDisabledMod}")
+        }
+    }
+}
+tasks.named('prepareFrontierV3PilotPackClientRun') { dependsOn syncFrontierV3PilotPackClient }
+
+// The old pilot profile copied a full modpack into this exact generated directory.
+// Always clear it before a lite launch so stale optional jars can never silently
+// defeat the profile boundary or pollute its logs.
+def resetFrontierV3PilotLiteClient = tasks.register('resetFrontierV3PilotLiteClient', Delete) {
+    delete frontierV3PilotClientDirectory
+}
+tasks.named('prepareFrontierV3PilotClientRun') {
+    dependsOn resetFrontierV3PilotLiteClient
+    // `resetFrontierV3PilotLiteClient` deliberately removes this exact disposable
+    // directory before every native run.  The generated RunGame preparation task
+    // does not declare the two client-local bootstrap files as outputs, so Gradle
+    // could otherwise call reset and then skip this doLast as UP-TO-DATE.  Keep the
+    // bootstrap attached to the reset transaction: it is tiny, deterministic and
+    // must run once for every fresh pilot directory.
+    outputs.upToDateWhen { false }
+    doLast {
+        // A brand-new Minecraft game directory normally opens the first-run
+        // accessibility screen.  The native test pilot has no business logic
+        // until Quick Play connects, so acknowledge that client-local prompt
+        // deterministically here rather than relying on a manual X11 click.
+        // This is deliberately scoped to the disposable lite profile.
+        def options = new File(frontierV3PilotClientDirectory.get().asFile, 'options.txt')
+        options.parentFile.mkdirs()
+        options.text = 'onboardAccessibility:b:true\n' +
+                // Quick Play is an ordinary client connection, but vanilla puts a newly
+                // created profile behind its third-party-multiplayer acknowledgement.
+                // The disposable test pilot has no interactive setup phase before it can
+                // exercise its declared ordinary player actions, so acknowledge that
+                // client-local informational screen alongside accessibility.  This changes
+                // neither the server, canonical state, nor any normal-player profile.
+                'skipMultiplayerWarning:b:true\n' +
+                'narrator:0\n'
+        // NeoForge's early loading screen is not game-facing evidence and is
+        // known to fail intermittently in the disposable XWayland profile
+        // before Minecraft creates its real client window.  Disable only that
+        // pre-game screen for the pilot; the actual fullscreen Minecraft
+        // window, renderer and ordinary connection remain unchanged.
+        def fmlConfig = new File(frontierV3PilotClientDirectory.get().asFile, 'config/fml.toml')
+        fmlConfig.parentFile.mkdirs()
+        fmlConfig.text = 'earlyWindowControl = false\n' +
+                'disableConfigWatcher = false\n' +
+                'maxThreads = -1\n' +
+                'versionCheck = true\n' +
+                'defaultConfigPath = "defaultconfigs"\n' +
+                'disableOptimizedDFU = true\n' +
+                'earlyWindowProvider = "fmlearlywindow"\n' +
+                'earlyWindowWidth = 854\n' +
+                'earlyWindowHeight = 480\n' +
+                'earlyWindowFBScale = 1\n' +
+                'earlyWindowMaximized = false\n' +
+                'earlyWindowSkipGLVersions = []\n' +
+                'earlyWindowSquir = false\n'
+    }
+}
+
+def resetFrontierV3PilotServerWorld = tasks.register('resetFrontierV3PilotServerWorld') {
+    doLast {
+        def worldDirectory = new File(frontierV3PilotServerRunDirectory, frontierV3PilotWorldName)
+        if (frontierV3PilotReset == 'true' && worldDirectory.exists() && !worldDirectory.deleteDir()) {
+            throw new GradleException("Could not reset disposable Frontier v3 pilot world ${worldDirectory}")
+        }
+    }
+}
+// The pilot uses only current source plus NeoForge. A stale full-pack JAR in this generated
+// directory would create noisy, misleading diagnostics and invalidate that profile boundary.
+// Preserve worlds and evidence; only the disposable runtime's external-mod directory is reset.
+def resetFrontierV3PilotLiteServerMods = tasks.register('resetFrontierV3PilotLiteServerMods', Delete) {
+    delete new File(frontierV3PilotServerRunDirectory, 'mods')
+}
+def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3PilotGrayboxDatapack', Sync) {
+    dependsOn resetFrontierV3PilotServerWorld
+    from(frontierV3PilotGrayboxDatapackDirectory)
+    into(new File(frontierV3PilotServerRunDirectory, "${frontierV3PilotWorldName}/datapacks/pale-mirror-graybox"))
+    doFirst {
+        if (!new File(frontierV3PilotGrayboxDatapackDirectory, 'data/pale_mirror/dimension/frontier_graybox.json').isFile()) {
+            throw new GradleException("Frontier v3 lite profile requires the canonical workspace datapack at ${frontierV3PilotGrayboxDatapackDirectory}")
+        }
+    }
+}
+
+// The native F0.V runner prepares the disposable world first and then starts the exact prepared
+// Java launch directly.  Separating world setup from the RunGame task prevents either restart
+// segment from recompiling or resolving a different classpath after its identity was hashed.
+def prepareFrontierV3PilotServerWorld = tasks.register('prepareFrontierV3PilotServerWorld') {
+    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods,
+            project(':pale-mirror-frontier').tasks.named('jar')
+    doLast {
+        def directory = frontierV3PilotServerRunDirectory
+        def world = frontierV3PilotWorldName
+        def seed = frontierV3PilotSeed
+        def port = frontierV3PilotPort
+        def rconPort = frontierV3PilotRconPort
+        def rconPassword = frontierV3PilotRconPassword
+        def username = frontierV3PilotOperator
+        if (!(world ==~ /[a-z0-9][a-z0-9_-]{0,63}/) || !(username ==~ /[A-Za-z0-9_]{3,16}/) || !(port ==~ /[0-9]{2,5}/)
+                || !(rconPort ==~ /[0-9]{2,5}/) || port == rconPort || !(rconPassword ==~ /[0-9a-f-]{36}/)
+                || !(frontierV3PilotViewDistance ==~ /[2-9]|[12][0-9]|3[0-2]/)
+                || !(frontierV3PilotProfile in frontierV3PilotProfiles)
+                || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
+            throw new GradleException('Frontier v3 pilot world, username, port, RCON endpoint, view distance, profile or run id is invalid')
+        }
+        def crashValues = [frontierV3PilotCrashBoundary, frontierV3PilotCrashOwner, frontierV3PilotCrashRevision, frontierV3PilotCrashPayload]
+        if (crashValues.any { !it.isEmpty() }) {
+            if (!(frontierV3PilotRunId ==~ /[0-9a-f-]{36}/) || !(frontierV3PilotCrashBoundary in [
+                    'lease_recorded_before_physical_materialization',
+                    'physical_effect_visible_before_typed_observation',
+                    'typed_observation_durable_before_next_process_checkpoint',
+                    'hot_checkpoint_durable_before_drain_release',
+                    'release_durable_before_cold_resumption'])
+                    || !(frontierV3PilotCrashOwner ==~ /[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}/)
+                    || !(frontierV3PilotCrashRevision ==~ /(?:[0-9]+|observed_at_boundary)/)
+                    || !(frontierV3PilotCrashPayload ==~ /[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}/)) {
+                throw new GradleException('Frontier v3 pilot crash rendezvous must name one exact run, boundary, owner, revision and payload')
+            }
+        }
+        directory.mkdirs()
+        new File(directory, 'eula.txt').text = 'eula=true\n'
+        new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nenable-rcon=true\nrcon.port=${rconPort}\nrcon.password=${rconPassword}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=${frontierV3PilotViewDistance}\nsimulation-distance=${frontierV3PilotViewDistance}\n"
+        def uuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        new File(directory, 'ops.json').text = '[\n  {"uuid":"' + uuid + '","name":"' + username + '","level":4,"bypassesPlayerLimit":false}\n]\n'
+    }
+}
+
+tasks.named('runFrontierV3PilotServer') {
+    dependsOn prepareFrontierV3PilotServerWorld
+}
+
+/** Exact Java/tooling paths for the one-build direct F0.V native launcher. */
+def frontierV3PilotPreparedJava = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+def frontierV3PilotRootDirectory = rootProject.projectDir
+def frontierV3PilotModId = rootProject.providers.gradleProperty('mod_id').get()
+def frontierV3PilotModdevDirectory = layout.buildDirectory.dir('moddev').get().asFile
+def frontierV3PilotPreparedLaunchFile = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotPreparedLaunch.json')
+def frontierV3PilotServerVmArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerRunVmArgs.txt')
+def frontierV3PilotServerProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerRunProgramArgs.txt')
+def frontierV3PilotServerClasspath = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerLegacyClasspath.txt')
+def frontierV3PilotClientVmArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientRunVmArgs.txt')
+def frontierV3PilotClientProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientRunProgramArgs.txt')
+// The normal Gradle run type carries the pilot username/endpoint from Gradle properties.  A
+// prepared F0.V client must retain the same launch target but receive those two ordinary client
+// arguments exactly once at runtime, so its immutable argument file deliberately omits them.
+// This is an invocation template, not a second launcher or a mutable classpath.
+def frontierV3PilotPreparedClientProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotPreparedClientRunProgramArgs.txt')
+def frontierV3PilotClientClasspath = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientLegacyClasspath.txt')
+def frontierV3PilotSourceFolders = [sourceSets.main.output.classesDirs.singleFile, sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-api').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-api').sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-domain').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-domain').sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-frontier').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-frontier').sourceSets.main.output.resourcesDir,
+        sourceSets.pilot.output.classesDirs.singleFile, sourceSets.pilot.output.resourcesDir]
+def frontierV3PilotNeoForgeVersion = rootProject.providers.gradleProperty('neo_version').get()
+def frontierV3PilotNeoForgeArtifact = new File(frontierV3PilotModdevDirectory, "artifacts/neoforge-${frontierV3PilotNeoForgeVersion}.jar")
+def frontierV3PilotDevLaunchDirectory = new File(gradle.gradleUserHomeDir, 'caches/modules-2/files-2.1/net.neoforged/DevLaunch/1.0.2')
+def frontierV3PilotModuleJars = [
+        new File(project(':pale-mirror-api').buildDir, "libs/pale-mirror-api-${project(':pale-mirror-api').version}.jar"),
+        new File(project(':pale-mirror-domain').buildDir, "libs/pale-mirror-domain-${project(':pale-mirror-domain').version}.jar"),
+        new File(project(':pale-mirror-frontier').buildDir, "libs/pale-mirror-frontier-${project(':pale-mirror-frontier').version}.jar")]
+def writeFrontierV3PilotPreparedLaunchManifest = tasks.register('writeFrontierV3PilotPreparedLaunchManifest') {
+    dependsOn tasks.named('classes'), tasks.named('pilotClasses'),
+            project(':pale-mirror-api').tasks.named('jar'), project(':pale-mirror-domain').tasks.named('jar'),
+            project(':pale-mirror-frontier').tasks.named('jar'),
+            tasks.named('writeFrontierV3PilotServerLegacyClasspath'), tasks.named('writeFrontierV3PilotClientLegacyClasspath')
+    doLast {
+        def launcher = frontierV3PilotPreparedJava.get().executablePath.asFile.absolutePath
+        def relative = { file -> frontierV3PilotRootDirectory.toPath().relativize(file.toPath()).toString() }
+        if (frontierV3PilotSourceFolders.any { it == null }) throw new GradleException('F0.V prepared launch has an unresolved pilot source folder')
+        // A Java-only module legitimately has no resources output directory.  Omit only those
+        // absent empty directories; every existing compiled/main and pilot output remains part
+        // of the exact launch identity and is fingerprinted by the runner.
+        def materializedSourceFolders = frontierV3PilotSourceFolders.findAll { it.exists() }
+        if (materializedSourceFolders.size() < 7) throw new GradleException('F0.V prepared launch requires compiled main and pilot source folders')
+        def modFolders = materializedSourceFolders.collect { "${frontierV3PilotModId}%%${it.absolutePath}" }.join(File.pathSeparator)
+        def devLaunches = []
+        if (frontierV3PilotDevLaunchDirectory.isDirectory()) {
+            frontierV3PilotDevLaunchDirectory.eachFileRecurse(groovy.io.FileType.FILES) {
+                if (it.name == 'DevLaunch-1.0.2.jar') devLaunches.add(it)
+            }
+        }
+        def requiredLaunchFiles = materializedSourceFolders + [frontierV3PilotNeoForgeArtifact] + frontierV3PilotModuleJars + devLaunches
+        if (devLaunches.size() != 1 || requiredLaunchFiles.any { !it.exists() }) {
+            throw new GradleException('F0.V prepared direct launch is missing one exact launcher artifact')
+        }
+        def launchClasspath = { legacy, role ->
+            def entries = (requiredLaunchFiles.collect { it.absolutePath } + legacy.readLines().collect { it.trim() }.findAll { !it.isEmpty() }).unique()
+            if (entries.isEmpty()) throw new GradleException("F0.V prepared ${role} launch classpath is empty")
+            entries
+        }
+        if (!frontierV3PilotClientProgramArgs.exists()) {
+            throw new GradleException('F0.V prepared direct launch is missing client program arguments')
+        }
+        def clientArguments = frontierV3PilotClientProgramArgs.readLines()
+        def preparedClientArguments = []
+        for (int index = 0; index < clientArguments.size(); index++) {
+            def argument = clientArguments[index].trim()
+            if (argument in ['--username', '--quickPlayMultiplayer']) {
+                if (index + 1 >= clientArguments.size() || clientArguments[index + 1].trim().startsWith('--')) {
+                    throw new GradleException("F0.V prepared client argument ${argument} is missing its exact value")
+                }
+                index++
+                continue
+            }
+            preparedClientArguments.add(clientArguments[index])
+        }
+        if (clientArguments.count { it.trim() == '--username' } != 1
+                || clientArguments.count { it.trim() == '--quickPlayMultiplayer' } != 1
+                || preparedClientArguments.any { it.trim() in ['--username', '--quickPlayMultiplayer'] }) {
+            throw new GradleException('F0.V prepared client launch requires exactly one removable username and endpoint pair')
+        }
+        frontierV3PilotPreparedClientProgramArgs.text = preparedClientArguments.join(System.lineSeparator()) + System.lineSeparator()
+        def value = [schema: 1, java: launcher, modFolders: modFolders,
+                server: [vmArgs: relative(frontierV3PilotServerVmArgs),
+                         programArgs: relative(frontierV3PilotServerProgramArgs),
+                         classpath: relative(frontierV3PilotServerClasspath),
+                         launchClasspath: launchClasspath(frontierV3PilotServerClasspath, 'server'),
+                         gameDirectory: relative(frontierV3PilotServerRunDirectory)],
+                client: [vmArgs: relative(frontierV3PilotClientVmArgs),
+                         programArgs: relative(frontierV3PilotPreparedClientProgramArgs),
+                         classpath: relative(frontierV3PilotClientClasspath),
+                         launchClasspath: launchClasspath(frontierV3PilotClientClasspath, 'client'),
+                         gameDirectory: relative(frontierV3PilotClientDirectory.get().asFile)]]
+        frontierV3PilotPreparedLaunchFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(value)) + '\n'
+    }
+}
+
+// F0.VA fingerprints launch inputs only after the disposable client directory has reached its
+// deterministic baseline. Running the reset after fingerprinting would make a correct
+// hash-drift guard reject its own runner setup.
+tasks.register('prepareFrontierV3PilotNativeEnvironment') {
+    group = 'verification'
+    description = 'Prepares the disposable pilot server and client before writing their one-build native launch identity.'
+    dependsOn tasks.named('prepareFrontierV3PilotClientRun'), tasks.named('prepareFrontierV3PilotServerRun'),
+            writeFrontierV3PilotPreparedLaunchManifest, tasks.named('jar')
+}
+writeFrontierV3PilotPreparedLaunchManifest.configure {
+    mustRunAfter tasks.named('prepareFrontierV3PilotClientRun')
+    mustRunAfter tasks.named('prepareFrontierV3PilotServerRun')
+}
+
+tasks.register('clientSmoke', Exec) {
+    group = 'verification'
+    description = 'Runs graphical client render/bootstrap smoke profiles; requires Xvfb or PALE_MIRROR_XVFB.'
+    dependsOn tasks.named('classes'), prepareCrimsonClientMods, prepareSporeClientMods, prepareCreateClientMods,
+            prepareRailwayClientMods,
+            prepareFtbClientMods, prepareMillenaireClientMods
+    workingDir rootProject.projectDir
+    environment 'PALE_MIRROR_XVFB', System.getenv('PALE_MIRROR_XVFB') ?: ''
+    commandLine 'bash', 'scripts/client-smoke-harness.sh', rootProject.projectDir.absolutePath
+}
+
+tasks.register('ftbIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified FTB Quests stack twice and verifies journal provisioning.'
+    dependsOn tasks.named('jar'), downloadFtbQuestsIntegrationJar, downloadFtbLibraryIntegrationJar,
+            downloadFtbTeamsIntegrationJar, downloadArchitecturyIntegrationJar
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/ftb-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            ftbQuestsIntegrationJar.get().asFile.absolutePath, ftbLibraryIntegrationJar.get().asFile.absolutePath,
+            ftbTeamsIntegrationJar.get().asFile.absolutePath, architecturyIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('millenaireIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside checksum-verified Millenaire twice and verifies read-only adapter startup.'
+    dependsOn tasks.named('jar'), downloadMillenaireIntegrationJar
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/millenaire-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            millenaireIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('fullSmoke') {
+    group = 'verification'
+    description = 'Runs all server, optional-integration, packaged-JAR restart, and graphical client smoke gates.'
+    dependsOn tasks.named('runGameTestServer'), tasks.named('runCrimsonGameTestServer'), tasks.named('runSporeGameTestServer'),
+            tasks.named('runCreateGameTestServer'), tasks.named('runFtbGameTestServer'),
+            tasks.named('runMillenaireGameTestServer'), tasks.named('dedicatedRestartHarness'),
+            tasks.named('crimsonIntegrationHarness'), tasks.named('sporeIntegrationHarness'), tasks.named('createIntegrationHarness'),
+            tasks.named('managedRailwayIntegrationHarness'),
+            tasks.named('ftbIntegrationHarness'), tasks.named('millenaireIntegrationHarness'), tasks.named('clientSmoke')
+}
+
+tasks.register('verifySporeSandboxPackaging') {
+    group = 'verification'
+    description = 'Fails if the final JAR omits the Spore isolation mixins, no-spawn datapack, or PM tier composition.'
+    dependsOn tasks.named('jar')
+    inputs.file(distributableJar)
+    doLast {
+        def requiredEntries = [
+                'pale_mirror.spore.mixins.json',
+                'spore_sandbox/pack.mcmeta',
+                'spore_sandbox/data/spore/neoforge/biome_modifier/ground_fungal_foliage_modifier.json',
+                'spore_sandbox/data/spore/neoforge/biome_modifier/inf_spawns.json',
+                'spore_sandbox/data/spore/neoforge/structure_modifier/spore_structure_spawns.json',
+                'data/pale_mirror/pale_mirror/encounters/spore_mine_guard.json',
+                'io/farfrontier/palemirror/internal/integration/spore/SporeRuntimeFirewall.class',
+                'io/farfrontier/palemirror/internal/integration/spore/SporeMovementRuntime.class',
+                'io/farfrontier/palemirror/internal/integration/spore/SporeProjectileRuntime.class',
+                'io/farfrontier/palemirror/internal/integration/spore/mixin/SporeProjectileSafetyMixin.class'
+        ]
+        def jar = new java.util.jar.JarFile(distributableJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Spore sandbox entry is missing from final JAR: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('verifySporeVisualContract') {
+    group = 'verification'
+    description = 'Verifies that the pinned Spore client JAR still supplies the resources used by PM-owned actor forms.'
+    dependsOn tasks.named('downloadSporeIntegrationJar')
+    inputs.file(sporeIntegrationJar)
+    doLast {
+        def requiredEntries = [
+                'assets/spore/textures/entity/infected.png',
+                'assets/spore/textures/entity/inf_husk.png',
+                'assets/spore/textures/entity/baio.png',
+                'assets/spore/textures/entity/spitter.png',
+                'assets/spore/textures/entity/acid_round.png',
+                'assets/spore/particles/acid_bullet.json',
+                'assets/spore/sounds/slash.ogg',
+                'assets/spore/sounds/braiomil_attack.ogg',
+                'assets/spore/sounds/spitter_spit1.ogg'
+        ]
+        def jar = new java.util.jar.JarFile(sporeIntegrationJar.get().asFile)
+        try {
+            requiredEntries.each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Pinned Spore visual resource is missing: ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.register('sporeIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified pinned Spore JAR twice in a clean dedicated runtime.'
+    dependsOn tasks.named('verifySporeSandboxPackaging'), tasks.named('verifySporeVisualContract')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/spore-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            sporeIntegrationJar.get().asFile.absolutePath
+}
+
+tasks.register('crimsonIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots the final PM JAR beside the checksum-verified pinned Crimson JAR in a clean dedicated runtime.'
+    dependsOn tasks.named('verifyCrimsonSandboxPackaging'), tasks.named('verifyCrimsonVisualContract')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    environment 'PALE_MIRROR_JAVA', harnessLauncher.get().executablePath.asFile.absolutePath
+    commandLine 'bash', 'scripts/crimson-integration-harness.sh', distributableJar.get().asFile.absolutePath,
+            crimsonIntegrationJar.get().asFile.absolutePath
+}
+
+// These process-level gates each install and boot a clean dedicated runtime.
+// Serial execution keeps fullSmoke within predictable disk and memory bounds;
+// failed harnesses still retain their own isolated runtime for diagnosis.
+tasks.named('crimsonIntegrationHarness') { mustRunAfter tasks.named('dedicatedRestartHarness') }
+tasks.named('sporeIntegrationHarness') { mustRunAfter tasks.named('crimsonIntegrationHarness') }
+tasks.named('createIntegrationHarness') { mustRunAfter tasks.named('sporeIntegrationHarness') }
+tasks.named('ftbIntegrationHarness') { mustRunAfter tasks.named('createIntegrationHarness') }
+tasks.named('millenaireIntegrationHarness') { mustRunAfter tasks.named('ftbIntegrationHarness') }
+tasks.named('clientSmoke') { mustRunAfter tasks.named('millenaireIntegrationHarness') }
+
+tasks.named('check') {
+    dependsOn rootProject.tasks.named('verifyJava21'), tasks.named('verifyPackagedJar')
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+}

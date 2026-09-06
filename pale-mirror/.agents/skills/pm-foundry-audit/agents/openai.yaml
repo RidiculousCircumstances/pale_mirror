@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Foundry Audit"
+  short_description: "Audit authored materialization and recovery"
+  default_prompt: "Use $pm-foundry-audit to diagnose this Pale Mirror materialization defect."
+policy:
+  allow_implicit_invocation: true

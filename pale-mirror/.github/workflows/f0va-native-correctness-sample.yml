@@ -1,0 +1,72 @@
+name: Frontier V3 F0.VA native correctness sample
+
+on:
+  workflow_call:
+    inputs:
+      measurement:
+        description: Exact immutable F0.VA timing-sample identity.
+        required: true
+        type: string
+      workers:
+        description: JSON strategy matrix with exactly four private worker/port pairs.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  native-correctness:
+    name: F0.VA ${{ inputs.measurement }} ${{ matrix.worker }}
+    runs-on: [self-hosted, pm-native]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(inputs.workers) }}
+    env:
+      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-${{ inputs.measurement }}-${{ matrix.worker }}-gradle
+      FRONTIER_V3_CI_MEASUREMENT: ${{ inputs.measurement }}
+      FRONTIER_V3_CI_WORKERS_JSON: ${{ inputs.workers }}
+      FRONTIER_V3_PILOT_PORT: ${{ matrix.port }}
+      FRONTIER_V3_PILOT_WORKER_ID: ${{ matrix.worker }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download immutable preparation identity
+        uses: actions/download-artifact@v4
+        with:
+          name: f0va-preparation
+          path: build/f0va-ci
+      - name: Admit exact four-worker correctness matrix before Gradle
+        run: node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs
+      - name: Bootstrap isolated native Gradle home online
+        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon
+      - name: Recreate and verify exact worker classpaths
+        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --offline --no-daemon
+      - name: Run one isolated native shard on its private display
+        run: >-
+          xvfb-run -a -s '-screen 0 1920x1080x24'
+          node tools/frontier-v3-test-pilot/src/run-ci-matrix-shard.mjs
+          --plan=build/f0va-ci/plan.json
+          --prepared=build/f0va-ci/prepared-build.json
+          --worker=${{ matrix.worker }}
+          --measurement=${{ inputs.measurement }}
+          --output=build/f0va-ci/results/${{ inputs.measurement }}/${{ matrix.worker }}.json
+      - name: Upload bounded shard evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f0va-${{ inputs.measurement }}-${{ matrix.worker }}
+          if-no-files-found: warn
+          path: |
+            build/f0va-ci/results/${{ inputs.measurement }}/${{ matrix.worker }}.json
+            build/frontier-v3-ci-shards
+            build/frontier-v3-scenarios

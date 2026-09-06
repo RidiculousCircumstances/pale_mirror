@@ -1,0 +1,229 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.api.AdvanceResult;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierProjection;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
+
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Server-thread lifecycle owner for one v3 world.
+ *
+ * <p>It is intentionally independent from the frozen V2 runtime. A real NeoForge event bridge
+ * will call {@link #tick(WorkBudget)} once per running server tick; this host owns fresh creation,
+ * verified recovery, bounded checkpointing and orderly shutdown.</p>
+ */
+final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
+    private final FrontierEngineConfiguration<S, P> configuration;
+    private final FrontierStore store;
+    private final int checkpointIntervalTicks;
+    private FrontierCanonicalStateAccess<S, P> engine;
+    private FrontierV3RuntimeStatus status;
+    private SimInstant instant;
+    private int ticksSinceCheckpoint;
+    /**
+     * One immutable defensive image for the current canonical tick/revision.  Physical adapters
+     * routinely inspect it several times in one server tick; rebuilding it would clone the full
+     * canonical byte snapshot for every read without creating any new canonical evidence.
+     */
+    private CheckpointImage cachedCheckpoint;
+
+    private FrontierV3ServerRuntime(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
+            RuntimeException startupFailure
+    ) {
+        this.configuration = Objects.requireNonNull(configuration, "configuration")
+                .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
+        this.store = Objects.requireNonNull(store, "store");
+        if (checkpointIntervalTicks < 1) throw new IllegalArgumentException("checkpoint interval must be positive");
+        this.checkpointIntervalTicks = checkpointIntervalTicks;
+        if (startupFailure != null) {
+            status = FrontierV3RuntimeStatus.quarantined(startupFailure);
+            return;
+        }
+        try {
+            RecoveryImage image = recovered == null ? store.recover(configuration.worldId()) : recovered;
+            if (!configuration.worldId().equals(image.worldId())) throw new IllegalArgumentException("recovery image belongs to a different Frontier world");
+            engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
+                    ? FrontierEngines.createCanonicalStateAccess(this.configuration)
+                    : FrontierEngines.recoverCanonicalStateAccess(this.configuration, image);
+            cachedCheckpoint = engine.checkpoint();
+            instant = cachedCheckpoint.instant();
+            status = FrontierV3RuntimeStatus.active();
+        } catch (RuntimeException error) {
+            status = FrontierV3RuntimeStatus.quarantined(error);
+        }
+    }
+
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> start(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, null);
+    }
+
+    /** Starts from one already-verified recovery image, avoiding a second store read after profile selection. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered, int checkpointIntervalTicks
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks,
+                Objects.requireNonNull(recovered, "recovered image"), null);
+    }
+
+    /** Preserves visible fail-closed lifecycle state when recovery selection itself is invalid. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, Objects.requireNonNull(failure, "startup failure"));
+    }
+
+    FrontierV3RuntimeStatus status() { return status; }
+
+    FrontierExecutionMetrics executionMetrics() { return configuration.executionMetrics(); }
+
+    /**
+     * Returns an immutable image of the current canonical revision for a server-thread adapter.
+     *
+     * <p>The image deliberately exposes bytes rather than mutable domain state. Adapters must
+     * decode only the data they need and route every resulting mutation back through
+     * {@link #submit(FrontierCommand)}.</p>
+     */
+    Optional<CheckpointImage> checkpointImage() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        if (cachedCheckpoint == null) cachedCheckpoint = engine.checkpoint();
+        return Optional.of(cachedCheckpoint);
+    }
+
+    /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
+    Optional<FrontierCanonicalState<S>> canonicalState() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.canonicalState());
+    }
+
+    /**
+     * Compatibility name for physical executors that need only the immutable current state.
+     * It is intentionally not decoded from a checkpoint: snapshots are persistence boundaries,
+     * not the ordinary materialization read path.
+     */
+    Optional<S> decodedState() {
+        return canonicalState().map(FrontierCanonicalState::state);
+    }
+
+    Optional<CommandResult> submit(FrontierCommand command) {
+        Objects.requireNonNull(command, "command");
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        CommandResult result = engine.submit(command);
+        // Even a rejected command may have quarantined the engine.  Discarding a read-only
+        // image is harmless; successful commands must never leave a stale snapshot visible to a
+        // later physical executor in the same server tick.
+        cachedCheckpoint = null;
+        if (engine.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
+            status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, engine.status().failureDetail());
+        }
+        return Optional.of(result);
+    }
+
+    Optional<P> projection(io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery query) {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        return Optional.of(engine.projection(query));
+    }
+
+    Optional<AdvanceResult> tick(WorkBudget budget) {
+        return advanceOne(budget, true);
+    }
+
+    /**
+     * Advances the ordinary ordered due-action engine by a bounded operator-requested interval.
+     * Every unit retains its normal WAL-backed transition. Checkpoints remain periodic within
+     * a long request so bounded retained history cannot turn an operator fast-forward into a
+     * different, self-quarantining execution path.
+     */
+    Optional<AdvanceResult> advance(int ticks, WorkBudget budget) {
+        if (ticks < 1) throw new IllegalArgumentException("advance ticks must be positive");
+        Objects.requireNonNull(budget, "budget");
+        AdvanceResult latest = null;
+        for (int index = 0; index < ticks; index++) {
+            Optional<AdvanceResult> result = advanceOne(budget, true);
+            if (result.isEmpty()) return Optional.empty();
+            latest = result.orElseThrow();
+            if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.of(latest);
+        }
+        return Optional.of(Objects.requireNonNull(latest, "advanced result"));
+    }
+
+    private Optional<AdvanceResult> advanceOne(WorkBudget budget, boolean checkpointWhenDue) {
+        Objects.requireNonNull(budget, "budget");
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        try {
+            AdvanceResult result = engine.advanceTo(instant.plus(1L), budget);
+            // SimInstant advances even when no due action mutates the aggregate, so each server
+            // tick has a distinct immutable checkpoint image for adapter observation.
+            cachedCheckpoint = null;
+            instant = result.instant();
+            ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, 1);
+            if (result.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
+                status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
+                return Optional.of(result);
+            }
+            if (checkpointWhenDue && ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
+            return Optional.of(result);
+        } catch (RuntimeException error) {
+            quarantine(error);
+            return Optional.empty();
+        }
+    }
+
+    Optional<SnapshotReceipt> checkpoint() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        try {
+            CheckpointImage checkpoint = checkpointImage().orElseThrow();
+            RecoveryImage durable = store.recover(configuration.worldId());
+            Revision persistedRevision = durable.walTail().isEmpty()
+                    ? durable.checkpoint().map(value -> value.checkpoint().revision()).orElse(Revision.ZERO)
+                    : durable.walTail().getLast().revision();
+            if (!checkpoint.revision().equals(persistedRevision)) {
+                throw new IllegalStateException("v3 checkpoint revision is not fully represented in WAL");
+            }
+            long coveredSequence = durable.checkpoint().map(SnapshotRecord::coveredWalSequence).orElse(0L)
+                    + durable.walTail().size();
+            SnapshotReceipt receipt = store.installSnapshot(new SnapshotRecord(checkpoint, coveredSequence));
+            if (!checkpoint.revision().equals(receipt.revision()) || coveredSequence != receipt.snapshotSequence()) {
+                throw new IllegalStateException("v3 store returned a mismatched snapshot receipt");
+            }
+            store.compact(configuration.worldId(), checkpoint.revision());
+            // The checksum-bound snapshot and its WAL compaction have succeeded. Only now may
+            // the running engine release the same retained transaction history.
+            engine.compact(checkpoint.revision());
+            ticksSinceCheckpoint = 0;
+            return Optional.of(receipt);
+        } catch (RuntimeException error) {
+            quarantine(error);
+            return Optional.empty();
+        }
+    }
+
+    void shutdown() {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        checkpoint();
+        if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
+    }
+
+    void quarantine(RuntimeException error) {
+        status = FrontierV3RuntimeStatus.quarantined(error);
+    }
+}

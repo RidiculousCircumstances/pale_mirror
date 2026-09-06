@@ -1,0 +1,4 @@
+# The upstream Ghast projectiles are deliberately replaced by PM's local, non-griefing attack loop.
+data merge entity @s[type=minecraft:ghast] {CustomName:'[{"text":"Pummeler"}]',Tags:["PM_Crimson_Siege","Pummeler","Primal"],Silent:true,PersistenceRequired:true,NoAI:true,Health:55f,attributes:[{id:"minecraft:generic.knockback_resistance",base:1f},{id:"minecraft:generic.max_health",base:55f},{id:"minecraft:generic.follow_range",base:32f},{id:"minecraft:generic.scale",base:1.3f}],CanPickUpLoot:false,DeathLootTable:"crimson_curse:entities/infected_flesh"}
+summon minecraft:item_display ~ ~ ~ {Tags:["PM_Crimson_Visual","PM_Pummeler_Visual"],item:{id:"minecraft:book",count:1,components:{custom_model_data:5450230}},transformation:[2.500f,0.0000f,0.0000f,0.0000f,0.0000f,2.500f,0.0000f,-3.0f,0.0000f,0.0000f,2.500f,0.000f,0.0000f,0.0000f,0.0000f,1.0000f]}
+ride @e[type=minecraft:item_display,tag=PM_Pummeler_Visual,sort=nearest,limit=1,distance=..1] mount @s

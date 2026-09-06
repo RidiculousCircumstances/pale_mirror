@@ -1,0 +1,31 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_front_mantle_grounding.v1",
+  "asset_id": "biomass_collector",
+  "session_id": "collector_v05_direct_mesh_v02",
+  "pass_id": "front_mantle_grounding_v02",
+  "authority": "The literal source image makes the first left/front mass a broad attached drape that reaches the ground. This plan deforms only the existing primary-facing v05 continuation surface inside that semantic region. It never creates a plane, a replacement mesh, primitives, guides or a global silhouette fit.",
+  "reference": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "mantle": {
+    "outer_edge_px": [[300, 164], [246, 204], [192, 258], [142, 322], [90, 390], [45, 458], [24, 522]],
+    "merged_inner_edge_px": [[395, 212], [360, 278], [329, 350], [303, 422], [278, 482], [255, 526]],
+    "selection_margin_px": 120,
+    "maximum_lateral_pull": 3.4,
+    "front_depth_pull": 0.64,
+    "ground_z": 0.035,
+    "ground_blend_world": 3.8
+  },
+  "attachment": {
+    "center_px": [322, 220],
+    "radius_px": [124, 104],
+    "forward_push": 0.46,
+    "downward_pull": 0.18
+  },
+  "review_focus": [
+    "The previous open C-shaped front loop becomes a continuous broad drape, not a separate tube or camera-facing curtain.",
+    "The drape is visibly attached beneath the leading dorsal mass and meets the reference ground line without floating.",
+    "The primary contour's tail, lower belly, dorsal row and other supports remain outside this semantic pass."
+  ]
+}

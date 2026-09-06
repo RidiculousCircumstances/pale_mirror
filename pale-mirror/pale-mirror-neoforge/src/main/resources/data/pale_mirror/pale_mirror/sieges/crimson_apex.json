@@ -1,0 +1,12 @@
+{
+  "id": "pale_mirror:crimson_apex",
+  "version": 1,
+  "bosses": [
+    "pale_mirror:juggernaut",
+    "pale_mirror:knight",
+    "pale_mirror:mangler",
+    "pale_mirror:pummeler",
+    "pale_mirror:kraken",
+    "pale_mirror:osiris"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "pale_mirror:resettlement_opportunity",
+  "infection_source": "pale_mirror:crimson",
+  "version": 1,
+  "archetype": "resettlement_opportunity",
+  "cooldown_steps": 5,
+  "required_capabilities": ["PM_ANCHOR_MATERIALIZATION", "PM_ANCHOR_OBSERVATION"],
+  "stages": ["OFFERED", "ASSESS", "RESPOND", "RESOLVED"],
+  "policy": "pale_mirror:iron_frontier",
+  "encounter_profile": "pale_mirror:crimson_mine_guards"
+}

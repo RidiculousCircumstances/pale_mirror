@@ -1,0 +1,84 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_session.v1",
+  "session_id": "collector_v05_sculpt_v03_composition",
+  "asset_id": "biomass_collector",
+  "status": "composition_test_unaccepted",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "stage": "volume-proposal-unaccepted",
+    "file": "candidate.glb",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963",
+    "role": "immutable hidden-side volume and editable-topology starting point; never likeness authority"
+  },
+  "primary_trace": {
+    "id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7",
+    "role": "sole primary-view likeness and contour authority"
+  },
+  "source": {
+    "blend": "assets/harvester/biomass_collector_sculpt_v03_composition.blend",
+    "audit_root": "sculpt_sessions/collector_v05_sculpt_v03_composition/audits",
+    "raw_collection": "PM_COLLECTOR_SCULPT_RAW_V05",
+    "working_collection": "PM_COLLECTOR_LOD0",
+    "backup_collection": "PM_COLLECTOR_SCULPT_BACKUPS"
+  },
+  "topology_policy": {
+    "initial": "retain the dominant raw v05 component plus every non-trivial component intersecting the literal primary trace; no voxel remesh, quadriflow or automatic retopology",
+    "allowed": ["local vertex deformation", "local smoothing", "semantic vertex groups", "backup mesh snapshots"],
+    "forbidden": ["primitive construction", "global 2d silhouette fitting", "runtime export", "rigging", "infection registration"]
+  },
+  "source_landmarks": {
+    "front_drape_outer_strokes_pixels": [
+      [[6, 514], [28, 486], [50, 454], [72, 418], [94, 381], [116, 345]],
+      [[24, 520], [49, 490], [76, 452], [101, 412], [126, 370]]
+    ],
+    "dorsal_sac_peaks_pixels": [[260, 150], [420, 142], [560, 154], [660, 202], [810, 270], [950, 315]],
+    "support_axes_pixels": [[232, 486], [390, 504], [534, 508], [696, 514], [858, 521], [1018, 516]]
+  },
+  "passes": [
+    {
+      "id": "raw_baseline",
+      "kind": "audit_only",
+      "regions": [],
+      "acceptance": "captures the unchanged dominant v05 component in the locked reference camera set"
+    },
+    {
+      "id": "front_mantle_v03",
+      "kind": "direct_mesh_deformation",
+      "regions": ["front_mantle_outer_drape_v03"],
+      "primary_goal": "turn the existing leading skin into the broad, grounded asymmetric drape indicated by the two literal source strokes",
+      "diagnostic_goal": "retain the connected raw volume and ground contact while adding only local camera-facing depth",
+      "requires_previous": "raw_baseline"
+    },
+    {
+      "id": "dorsal_rhythm_v03",
+      "kind": "direct_mesh_deformation",
+      "regions": ["dorsal_sac_rhythm_v03"],
+      "primary_goal": "make the source-marked six descending dorsal sac crests read as distinct arcs rather than one shared roof",
+      "diagnostic_goal": "keep the existing sac volume continuous and never introduce a detached or planar back surface",
+      "requires_previous": "raw_baseline"
+    },
+    {
+      "id": "supports_v03",
+      "kind": "direct_mesh_deformation",
+      "regions": ["support_arches_v03"],
+      "primary_goal": "make six source-marked supports read as thick, tapered grounded arches with preserved negative spaces",
+      "diagnostic_goal": "preserve existing contact points and do not alter the tail or dorsal masses",
+      "requires_previous": "raw_baseline"
+    }
+  ],
+  "composition_rule": {
+    "execution": "Each local pass starts from the same raw-baseline evidence and gets an independent backup, semantic group and review. Passes are compatible but not acceptance dependencies: a failed local review does not prevent the other diagnostic passes.",
+    "acceptance": "The combined branch remains unaccepted and runtime-export forbidden until a final full-composition audit passes the primary overlay and every diagnostic view. A failed local pass is reverted or superseded only in a new immutable session."
+  },
+  "shape_gate": {
+    "required_views": ["primary", "silhouette_primary", "primary_trace", "opposite", "front", "side", "elevated_rear"],
+    "required_review": "independent visual review after every deforming pass and one whole-composition audit",
+    "rules": [
+      "primary silhouette must not materially regress",
+      "the named pass defect must be visibly reduced in the locked primary view",
+      "no diagnostic view may expose a new detached, floating or self-intersecting major form",
+      "the result remains unaccepted and non-exportable until the 85-point final contour gate"
+    ]
+  }
+}

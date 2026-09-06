@@ -1,0 +1,354 @@
+package io.farfrontier.palemirror.frontier.reference;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Pure spatial contract for the disposable {@code graybox_1_40} world.
+ *
+ * <p>The values deliberately describe Minecraft-space coordinates without
+ * importing Minecraft.  NeoForge is responsible for turning these immutable
+ * facts into blocks and entities; it must not choose a second scale or move a
+ * canonical object to a different logical cell.</p>
+ */
+public final class ReferenceGrayboxLayout {
+    public static final int BLOCKS_PER_CELL = 16;
+    public static final int WORLD_BLOCKS = 1_024;
+    public static final int ARENA_BLOCKS_X = 1_024;
+    public static final int ARENA_BLOCKS_Z = 704;
+    public static final int GROUND_Y = 64;
+    public static final int MIN_X = -WORLD_BLOCKS / 2;
+    public static final int MIN_Z = -ARENA_BLOCKS_Z / 2;
+    public static final int MAX_X_EXCLUSIVE = MIN_X + ARENA_BLOCKS_X;
+    public static final int MAX_Z_EXCLUSIVE = MIN_Z + ARENA_BLOCKS_Z;
+    public static final int SETTLEMENT_BLOCKS = 48;
+    /**
+     * A cell actor apron deliberately leaves its central 10x10 hive-organ and
+     * tissue area clear.  The source profile bounds one swarm well below this
+     * capacity; exceeding it is a source-layout error, not permission to stack
+     * multiple exact bioforms into one physical body.
+     */
+    private static final List<Point> CELL_ACTOR_APRON = cellActorApron();
+
+    private ReferenceGrayboxLayout() { }
+
+    /** Fail closed rather than silently projecting a source-scale or legacy world. */
+    public static void requireSupported(ReferenceWorld world) {
+        ReferenceWorld required = Objects.requireNonNull(world, "world");
+        ReferenceWorldConfig config = required.config();
+        if (!required.v2Enabled()
+                || !ReferenceSimulationProfile.GRAYBOX_1_40.equals(required.profile())
+                || config.width() != ReferenceWorldConfig.SOURCE_WIDTH
+                || config.height() != ReferenceWorldConfig.SOURCE_HEIGHT
+                || config.settlementCount() != ReferenceWorldConfig.SOURCE_SETTLEMENT_COUNT
+                || config.infectionSeeds() != ReferenceWorldConfig.SOURCE_INFECTION_SEEDS) {
+            throw new IllegalStateException("graybox materialization requires the complete graybox_1_40 V2 source profile");
+        }
+    }
+
+    public static Bounds bounds() {
+        return new Bounds(MIN_X, MIN_Z, ARENA_BLOCKS_X, ARENA_BLOCKS_Z, GROUND_Y, BLOCKS_PER_CELL);
+    }
+
+    public static Rectangle cell(int x, int y) {
+        requireCell(x, y);
+        return new Rectangle(MIN_X + x * BLOCKS_PER_CELL, MIN_Z + y * BLOCKS_PER_CELL,
+                BLOCKS_PER_CELL, BLOCKS_PER_CELL);
+    }
+
+    /** The source's settlement coordinate is the middle cell of a 48×48 readable settlement. */
+    public static Rectangle settlement(int x, int y) {
+        Rectangle cell = cell(x, y);
+        return new Rectangle(cell.x() - BLOCKS_PER_CELL, cell.z() - BLOCKS_PER_CELL,
+                SETTLEMENT_BLOCKS, SETTLEMENT_BLOCKS);
+    }
+
+    public static Rectangle site(int x, int y) {
+        Rectangle cell = cell(x, y);
+        return new Rectangle(cell.x() + 2, cell.z() + 2, 12, 12);
+    }
+
+    public static Rectangle organ(int x, int y) {
+        Rectangle cell = cell(x, y);
+        return new Rectangle(cell.x() + 3, cell.z() + 3, 10, 10);
+    }
+
+    public static Rectangle fieldPost(int x, int y) {
+        Rectangle cell = cell(x, y);
+        return new Rectangle(cell.x() + 2, cell.z() + 2, 12, 12);
+    }
+
+    /** A compact visibly separate cargo pallet near a source operation marker. */
+    public static Rectangle cargo(Point anchor, int ordinal) {
+        if (ordinal < 0 || ordinal >= 16) throw new IllegalArgumentException("cargo ordinal must be in [0, 16)");
+        int column = ordinal % 4;
+        int row = ordinal / 4;
+        // Keep every pallet clear of the cell's north-west terrain marker
+        // (centre - 7) while still fitting the full 4×4 resource vocabulary
+        // inside the same 16×16 logical cell.
+        return new Rectangle(anchor.x() - 6 + column * 3, anchor.z() - 6 + row * 3, 2, 2);
+    }
+
+    /** One readable stock pallet along a field post's reserved outer border. */
+    public static Rectangle fieldPostCargo(int x, int y, int ordinal) {
+        if (ordinal < 0 || ordinal >= 16) throw new IllegalArgumentException("field-post cargo ordinal must be in [0, 16)");
+        Rectangle cell = cell(x, y);
+        int column = ordinal % 8;
+        int row = ordinal / 8;
+        return new Rectangle(cell.x() + 1 + column * 2, cell.z() + (row == 0 ? 0 : BLOCKS_PER_CELL - 1), 1, 1);
+    }
+
+    public static Point centre(int x, int y) {
+        Rectangle cell = cell(x, y);
+        return new Point(cell.x() + BLOCKS_PER_CELL / 2, cell.z() + BLOCKS_PER_CELL / 2);
+    }
+
+    public static Point position(double x, double y) {
+        int cellX = clamp((int) Math.round(x), 0, ReferenceWorldConfig.SOURCE_WIDTH - 1);
+        int cellY = clamp((int) Math.round(y), 0, ReferenceWorldConfig.SOURCE_HEIGHT - 1);
+        return centre(cellX, cellY);
+    }
+
+    /**
+     * Compatibility entry point for actors based in one logical cell.
+     *
+     * <p>New projection code should name its semantic space explicitly.  A
+     * cell apron is suitable for hive swarms and small operation/post parties,
+     * but settlement residents use {@link #settlementActorSlot(Rectangle, int)}
+     * so they do not stand on functional buildings.</p>
+     */
+    public static Point actorSlot(Point anchor, int ordinal) {
+        return cellActorSlot(anchor, ordinal);
+    }
+
+    /**
+     * Deterministic two-block-spaced actor positions around a cell's outer
+     * apron.  This stays clear of the cell-centred infection tissue and a
+     * possible 10x10 hive organ, while retaining one Minecraft body per source
+     * bioform rather than a cohort marker.
+     */
+    public static Point cellActorSlot(Point anchor, int ordinal) {
+        Objects.requireNonNull(anchor, "anchor");
+        if (ordinal < 0) throw new IllegalArgumentException("actor ordinal must be non-negative");
+        if (ordinal >= CELL_ACTOR_APRON.size()) {
+            throw new IllegalStateException("source cell actor apron is exhausted: " + ordinal);
+        }
+        Point offset = CELL_ACTOR_APRON.get(ordinal);
+        return new Point(anchor.x() + offset.x(), anchor.z() + offset.z());
+    }
+
+    /**
+     * Deterministic pedestrian slots in the explicitly open parts of a 48x48
+     * settlement.  Functional rectangles and the fortification perimeter are
+     * not an actor staging area: a source resident may walk there later, but a
+     * newly COLD-to-HOT body must never be born inside its own graybox building.
+     */
+    public static Point settlementActorSlot(Rectangle settlement, int ordinal) {
+        Objects.requireNonNull(settlement, "settlement");
+        if (ordinal < 0) throw new IllegalArgumentException("settlement actor ordinal must be non-negative");
+        List<Rectangle> buildings = List.of(
+                facility(settlement, "civic_hall"), facility(settlement, "workshop"), facility(settlement, "armory"),
+                facility(settlement, "clinic"), facility(settlement, "warehouse"), facility(settlement, "housing"));
+        List<Point> open = new ArrayList<>();
+        for (int z = settlement.z() + 2; z <= settlement.z() + settlement.depth() - 3; z += 2) {
+            for (int x = settlement.x() + 2; x <= settlement.x() + settlement.width() - 3; x += 2) {
+                boolean clear = true;
+                for (Rectangle building : buildings) if (actorClearanceIntersects(building, x, z)) {
+                    clear = false;
+                    break;
+                }
+                if (clear) {
+                    open.add(new Point(x, z));
+                }
+            }
+        }
+        if (ordinal >= open.size()) {
+            throw new IllegalStateException("source settlement actor apron is exhausted: " + ordinal);
+        }
+        return open.get(ordinal);
+    }
+
+    /**
+     * A bounded, deterministic presentation slot for concurrent processes in
+     * one logical cell.  The semantic activity remains in {@code anchor}'s
+     * cell; only its readable marker is separated from its peers.
+     */
+    public static Point activitySlot(Point anchor, int ordinal) {
+        Objects.requireNonNull(anchor, "anchor");
+        if (ordinal < 0 || ordinal >= 49) throw new IllegalArgumentException("activity ordinal must be in [0, 49)");
+        if (ordinal == 0) return anchor;
+
+        // Preserve the exact semantic point for the first visible process.
+        // Further concurrent processes occupy deterministic rings around it,
+        // still inside this source cell's 16x16 presentation budget.
+        int seen = 1;
+        for (int radius = 1; radius <= 3; radius++) {
+            for (int z = -radius; z <= radius; z++) {
+                for (int x = -radius; x <= radius; x++) {
+                    if (Math.max(Math.abs(x), Math.abs(z)) != radius) continue;
+                    if (seen++ == ordinal) return new Point(anchor.x() + x * 2, anchor.z() + z * 2);
+                }
+            }
+        }
+        throw new IllegalStateException("activity presentation slot allocation was incomplete");
+    }
+
+    /** A compact board slot inside a settlement; labels stay legible without relocating its logical identity. */
+    public static Point settlementReadout(Rectangle settlement, int ordinal) {
+        Objects.requireNonNull(settlement, "settlement");
+        if (ordinal < 0 || ordinal >= 64) throw new IllegalArgumentException("settlement readout ordinal must be in [0, 64)");
+        return new Point(settlement.x() + 4 + ordinal % 8 * 5, settlement.z() + 4 + ordinal / 8 * 5);
+    }
+
+    /**
+     * Deterministic physical interaction slots for one visible source object.
+     *
+     * <p>These points belong to the source projection rather than Minecraft.
+     * The NeoForge layer merely turns each one into a coloured cube carrying a
+     * fixed share of the observation's total weight.</p>
+     */
+    public static List<Point> interactionSlots(Rectangle area, int count) {
+        if (count < 1 || count > 64) throw new IllegalArgumentException("interaction slot count is invalid");
+        int columns = (int) Math.ceil(Math.sqrt(count));
+        int rows = (int) Math.ceil((double) count / columns);
+        List<Point> result = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            int column = index % columns;
+            int row = index / columns;
+            int x = area.x() + distributed(column, columns, area.width());
+            int z = area.z() + distributed(row, rows, area.depth());
+            result.add(new Point(x, z));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalArgumentException("interaction slots do not fit their source rectangle");
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * Contiguous raster line for a materialized trade corridor.  It is a
+     * presentation coordinate helper only: route existence, capacity and
+     * infection continue to belong exclusively to the source snapshot.
+     */
+    public static List<Point> routeLine(Point start, Point end) {
+        Objects.requireNonNull(start, "start");
+        Objects.requireNonNull(end, "end");
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        int steps = Math.max(Math.abs(dx), Math.abs(dz));
+        List<Point> result = new ArrayList<>(steps + 1);
+        for (int index = 0; index <= steps; index++) {
+            double fraction = steps == 0 ? 0.0d : (double) index / steps;
+            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalStateException("route raster must advance by at least one block per step");
+        }
+        return List.copyOf(result);
+    }
+
+    /** Readable damage slots chosen directly from the continuous visible route corridor. */
+    public static List<Point> routeSlots(Point start, Point end) {
+        List<Point> corridor = routeLine(start, end);
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        int steps = Math.max(1, (int) Math.ceil(Math.hypot(dx, dz) / 32.0d));
+        List<Point> result = new ArrayList<>(steps);
+        for (int index = 1; index <= steps; index++) {
+            int corridorIndex = (int) Math.round((double) index / (steps + 1) * (corridor.size() - 1));
+            result.add(corridor.get(corridorIndex));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalStateException("route interaction slots must be distinct");
+        }
+        return List.copyOf(result);
+    }
+
+    /** One visible point every four blocks of a bounded field line, outside both post footprints. */
+    public static List<Point> fieldLinkSlots(Point start, Point end) {
+        Objects.requireNonNull(start, "start");
+        Objects.requireNonNull(end, "end");
+        int dx = end.x() - start.x();
+        int dz = end.z() - start.z();
+        double distance = Math.hypot(dx, dz);
+        double perimeterClearance = 8.0d;
+        if (distance <= perimeterClearance * 2.0d) {
+            throw new IllegalArgumentException("field-link endpoints do not leave a visible corridor");
+        }
+        int steps = Math.min(64, (int) Math.floor((distance - perimeterClearance * 2.0d) / 4.0d) + 1);
+        List<Point> result = new ArrayList<>(steps);
+        for (int index = 0; index < steps; index++) {
+            double travelled = perimeterClearance + index * 4.0d;
+            double fraction = travelled / distance;
+            result.add(new Point((int) Math.round(start.x() + dx * fraction), (int) Math.round(start.z() + dz * fraction)));
+        }
+        if (result.stream().distinct().count() != result.size()) {
+            throw new IllegalArgumentException("field-link slots must be distinct");
+        }
+        return List.copyOf(result);
+    }
+
+    public static Rectangle facility(Rectangle settlement, String kind) {
+        return switch (Objects.requireNonNull(kind, "kind")) {
+            case "civic_hall" -> local(settlement, 20, 20, 8, 8);
+            case "workshop" -> local(settlement, 2, 2, 9, 8);
+            case "armory" -> local(settlement, 37, 2, 9, 8);
+            case "clinic" -> local(settlement, 2, 38, 9, 8);
+            case "warehouse" -> local(settlement, 35, 37, 11, 9);
+            case "housing" -> local(settlement, 13, 2, 10, 8);
+            case "fortification" -> settlement;
+            default -> throw new IllegalArgumentException("unknown graybox facility kind: " + kind);
+        };
+    }
+
+    private static Rectangle local(Rectangle outer, int x, int z, int width, int depth) {
+        return new Rectangle(outer.x() + x, outer.z() + z, width, depth);
+    }
+
+    private static boolean actorClearanceIntersects(Rectangle building, int x, int z) {
+        return x >= building.x() - 1 && x <= building.x() + building.width()
+                && z >= building.z() - 1 && z <= building.z() + building.depth();
+    }
+
+    private static List<Point> cellActorApron() {
+        List<Point> result = new ArrayList<>();
+        for (int z = -7; z <= 7; z += 2) {
+            for (int x = -7; x <= 7; x += 2) {
+                if (Math.abs(x) == 7 || Math.abs(z) == 7) result.add(new Point(x, z));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static void requireCell(int x, int y) {
+        if (x < 0 || x >= ReferenceWorldConfig.SOURCE_WIDTH || y < 0 || y >= ReferenceWorldConfig.SOURCE_HEIGHT) {
+            throw new IllegalArgumentException("logical coordinate is outside graybox_1_40: " + x + "," + y);
+        }
+    }
+
+    private static int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static int distributed(int index, int total, int dimension) {
+        if (total == 1) return dimension / 2;
+        return (int) Math.round((double) index * (dimension - 1) / (total - 1));
+    }
+
+    public record Bounds(int minX, int minZ, int width, int depth, int groundY, int blocksPerCell) {
+        public Bounds {
+            if (width < 1 || depth < 1 || blocksPerCell < 1) throw new IllegalArgumentException("graybox bounds must be positive");
+        }
+    }
+
+    public record Rectangle(int x, int z, int width, int depth) {
+        public Rectangle {
+            if (width < 1 || depth < 1) throw new IllegalArgumentException("graybox rectangle must be positive");
+        }
+        public int centreX() { return x + width / 2; }
+        public int centreZ() { return z + depth / 2; }
+    }
+
+    public record Point(int x, int z) { }
+}

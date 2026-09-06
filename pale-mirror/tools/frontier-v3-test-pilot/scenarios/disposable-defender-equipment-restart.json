@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "disposable_defender_equipment_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "defender-equipment" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "itemKind": "minecraft:iron_sword", "count": 1, "custody": { "kind": "CONTAINER_SLOT", "container": "container:1-depot" } } },
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "UNMATERIALIZED" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "itemKind": "minecraft:iron_sword", "count": 1, "custody": { "kind": "ACTOR" } }, "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "defender-equipment:item:development-defender-sword", "expect": { "status": "ok", "eventKind": "defender_equipment_issued", "subject": "assault:development-settlement-assault" }, "timeoutMs": 30000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "ARMED DEFENDER", "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "UNIT READY", "maxDistance": 64, "maxAngleDeg": 80, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "item", "id": "item:development-defender-sword" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "itemKind": "minecraft:iron_sword", "count": 1, "custody": { "kind": "ACTOR" } } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 1, "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "itemKind": "minecraft:iron_sword", "count": 1, "custody": { "kind": "ACTOR" } } },
+    { "after": 2, "view": "trace", "id": "defender-equipment:item:development-defender-sword", "expect": { "status": "ok", "eventKind": "defender_equipment_issued", "subject": "assault:development-settlement-assault" } },
+    { "after": 5, "view": "item", "id": "item:development-defender-sword", "expect": { "status": "ok", "custody": { "kind": "ACTOR" } } }
+  ],
+  "frames": [
+    { "after": 4, "name": "armed-defender-after-restart" }
+  ]
+}

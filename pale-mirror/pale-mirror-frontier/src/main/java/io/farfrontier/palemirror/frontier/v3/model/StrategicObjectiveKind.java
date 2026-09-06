@@ -1,0 +1,18 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+/** Bounded strategic decisions presently available to the human and hive planners. */
+public enum StrategicObjectiveKind {
+    SETTLEMENT_CONTAIN_LOCAL_INFECTION,
+    HIVE_EXPAND_INFECTION,
+    HIVE_GROW_ORGANISM,
+    HIVE_INTERCEPT_ROUTE_OPERATION,
+    HIVE_ASSAULT_SETTLEMENT,
+    SETTLEMENT_PRODUCE_BREAD,
+    SETTLEMENT_DELIVER_BREAD_TO_HIVE,
+    SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
+    SETTLEMENT_CONSTRUCT_ROUTE_BYPASS,
+    SETTLEMENT_HARVEST_RESOURCE_SITE
+;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
+}

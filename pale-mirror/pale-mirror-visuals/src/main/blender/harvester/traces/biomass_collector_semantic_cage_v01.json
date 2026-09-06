@@ -1,0 +1,138 @@
+{
+  "schema": "pale_mirror_visuals.harvester_semantic_cage.v1",
+  "asset_id": "biomass_collector",
+  "semantic_id": "biomass_collector_semantic_cage_v01",
+  "authority": "Each primary rail is a hand transcription from the pinned supplied 0-degree image. The reviewed generated cycle may constrain only each feature's depth and hidden attachment.",
+  "primary_trace": {
+    "trace_id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7"
+  },
+  "hidden_depth_reference": {
+    "provenance": "references/biomass_collector_turntable_v02.provenance.json",
+    "panels": [
+      "tail_end_on_90",
+      "opposite_broadside_180",
+      "head_end_on_270",
+      "elevated_near_dorsal",
+      "low_opposite_front"
+    ],
+    "forbidden_uses": [
+      "primary silhouette",
+      "primary landmark placement",
+      "runtime export acceptance"
+    ]
+  },
+  "primary_front_y": 0.16,
+  "body_sections": [
+    [260, 280, 404, 2.45],
+    [320, 294, 420, 2.95],
+    [390, 310, 430, 3.25],
+    [470, 326, 436, 3.45],
+    [550, 340, 440, 3.50],
+    [630, 352, 442, 3.48],
+    [710, 370, 444, 3.22],
+    [790, 390, 448, 2.82],
+    [860, 410, 456, 2.34],
+    [920, 430, 466, 1.82]
+  ],
+  "dorsal_lobes": [
+    {
+      "id": "leading_cap",
+      "rails": [[178, 182, 360], [214, 132, 380], [266, 102, 386], [318, 116, 374], [358, 162, 348]],
+      "hidden_depth": 2.84,
+      "lean": -0.12,
+      "asymmetry": -0.10
+    },
+    {
+      "id": "sac_02",
+      "rails": [[326, 180, 382], [370, 134, 390], [426, 108, 390], [480, 122, 378], [524, 170, 356]],
+      "hidden_depth": 2.92,
+      "lean": -0.10,
+      "asymmetry": 0.06
+    },
+    {
+      "id": "sac_03",
+      "rails": [[486, 198, 390], [536, 150, 394], [592, 128, 390], [646, 146, 376], [688, 192, 358]],
+      "hidden_depth": 2.72,
+      "lean": -0.15,
+      "asymmetry": -0.03
+    },
+    {
+      "id": "sac_04",
+      "rails": [[650, 232, 392], [696, 188, 390], [744, 170, 382], [790, 188, 368], [830, 230, 352]],
+      "hidden_depth": 2.42,
+      "lean": -0.18,
+      "asymmetry": 0.05
+    },
+    {
+      "id": "sac_05",
+      "rails": [[792, 274, 394], [832, 236, 390], [872, 218, 380], [908, 236, 366], [938, 270, 352]],
+      "hidden_depth": 2.05,
+      "lean": -0.20,
+      "asymmetry": 0.02
+    },
+    {
+      "id": "tail_cap",
+      "rails": [[906, 314, 394], [938, 282, 388], [968, 270, 378], [994, 286, 366], [1018, 320, 354]],
+      "hidden_depth": 1.62,
+      "lean": -0.22,
+      "asymmetry": -0.02
+    }
+  ],
+  "supports": [
+    {
+      "id": "near_01",
+      "primary_centerline": [[330, 356], [318, 408], [330, 474], [350, 536]],
+      "depth_y": [1.96, 2.06, 2.18, 2.34],
+      "radii": [1.22, 1.12, 0.94, 0.72]
+    },
+    {
+      "id": "near_02",
+      "primary_centerline": [[470, 370], [458, 420], [474, 482], [494, 540]],
+      "depth_y": [2.04, 2.16, 2.28, 2.42],
+      "radii": [1.18, 1.08, 0.88, 0.68]
+    },
+    {
+      "id": "near_03",
+      "primary_centerline": [[620, 384], [610, 430], [626, 492], [646, 542]],
+      "depth_y": [2.08, 2.22, 2.34, 2.46],
+      "radii": [1.10, 1.00, 0.82, 0.64]
+    },
+    {
+      "id": "near_04",
+      "primary_centerline": [[754, 396], [748, 438], [766, 496], [786, 544]],
+      "depth_y": [2.02, 2.16, 2.28, 2.38],
+      "radii": [0.98, 0.88, 0.72, 0.56]
+    },
+    {
+      "id": "near_05",
+      "primary_centerline": [[874, 414], [870, 452], [888, 502], [908, 546]],
+      "depth_y": [1.92, 2.06, 2.18, 2.28],
+      "radii": [0.82, 0.74, 0.60, 0.46]
+    },
+    {
+      "id": "far_rear_06",
+      "primary_centerline": [[958, 430], [956, 464], [970, 510], [986, 548]],
+      "depth_y": [2.98, 3.08, 3.18, 3.24],
+      "radii": [0.68, 0.60, 0.48, 0.38]
+    }
+  ],
+  "mantle": {
+    "outer_primary_rail": [[194, 170], [150, 242], [108, 350], [82, 454], [104, 540]],
+    "inner_primary_rail": [[336, 190], [306, 278], [270, 372], [238, 462], [226, 540]],
+    "hidden_half_width": 2.55,
+    "folds": [
+      {"points": [[208, 184], [164, 276], [128, 378], [118, 472], [132, 538]], "depth_y": [0.72, 1.24, 1.78, 2.04, 2.16], "radii": [0.56, 0.46, 0.34, 0.24, 0.12]},
+      {"points": [[248, 202], [210, 288], [178, 382], [158, 474], [164, 540]], "depth_y": [0.70, 1.18, 1.64, 1.92, 2.04], "radii": [0.48, 0.40, 0.30, 0.20, 0.10]},
+      {"points": [[286, 218], [256, 302], [228, 394], [208, 480], [204, 540]], "depth_y": [0.68, 1.12, 1.52, 1.78, 1.88], "radii": [0.40, 0.33, 0.24, 0.16, 0.08]}
+    ]
+  },
+  "tail": {
+    "core": {"points": [[924, 392], [988, 408], [1054, 430], [1120, 458], [1190, 486]], "depth_y": [1.54, 1.40, 1.24, 1.04, 0.84], "radii": [1.04, 0.86, 0.62, 0.36, 0.10]},
+    "fibres": [
+      {"points": [[1006, 418], [1078, 428], [1150, 448], [1222, 476]], "depth_y": [0.42, 0.36, 0.30, 0.24]},
+      {"points": [[1018, 438], [1090, 472], [1160, 512], [1228, 548]], "depth_y": [0.50, 0.42, 0.34, 0.26]},
+      {"points": [[998, 402], [1074, 390], [1144, 406], [1206, 432]], "depth_y": [0.58, 0.50, 0.42, 0.32]}
+    ]
+  }
+}

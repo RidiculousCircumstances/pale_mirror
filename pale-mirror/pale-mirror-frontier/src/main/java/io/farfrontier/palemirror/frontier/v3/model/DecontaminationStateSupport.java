@@ -1,0 +1,85 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** Pure validation and state reduction for one exact physical decontamination result. */
+public final class DecontaminationStateSupport {
+    private DecontaminationStateSupport() { }
+
+    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
+        Settlement settlement = owner(state.bootstrap(), intent.causeSubjectId());
+        if (intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) throw new IllegalArgumentException("decontamination intent subjects are invalid");
+        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElseThrow();
+        ExactItemStack material = state.inventory().items().get(itemId);
+        if (material == null || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || !(material.custody() instanceof InventoryCustody.ContainerSlot slot)) {
+            throw new IllegalArgumentException("decontamination intent lacks its exact reagent");
+        }
+        ContainerRecord container = state.inventory().containers().get(slot.containerId()); ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
+        if (container == null || !container.ownerId().equals(settlement.id()) || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) {
+            throw new IllegalArgumentException("decontamination reagent is not in an active local container");
+        }
+        if (!state.infection().containsKey(cell(intent))) throw new IllegalArgumentException("decontamination target is no longer infected");
+    }
+
+    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, DecontaminationObservation observation,
+                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        validateIntent(state, intent);
+        InfectionCell cell = cell(intent); FixedRatio current = state.infection().get(cell);
+        if (!intent.subjectIds().contains(observation.itemId()) || !observation.cell().equals(cell) || observation.priorRaw() != current.value().raw()) {
+            throw new IllegalArgumentException("decontamination receipt does not match its exact target");
+        }
+        long remaining = Math.max(0L, Math.subtractExact(observation.priorRaw(), state.bootstrap().ruleset().rates().decontaminationReduction().raw()));
+        if (observation.remainingRaw() != remaining) throw new IllegalArgumentException("decontamination receipt has an invalid intensity reduction");
+        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(observation.id(), observation);
+        Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>(state.infection());
+        if (remaining == 0L) infection.remove(cell); else infection.put(cell, new FixedRatio(new FixedScalar(remaining)));
+        return state.withChanges(FrontierWorldStateUpdate.begin().infection(infection).inventory(state.inventory().consumeOne(observation.itemId()))
+                .physicalIntents(intents).physicalObservations(observations));
+    }
+
+    static void validateReceipt(FrontierBootstrap bootstrap, Map<InfectionCell, FixedRatio> infection, PhysicalIntent intent,
+                                DecontaminationObservation observation) {
+        if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION
+                || intent.postcondition() != io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.DECONTAMINATION_OBSERVED) {
+            throw new IllegalArgumentException("decontamination observation has a foreign physical intent");
+        }
+        owner(bootstrap, intent.causeSubjectId());
+        InfectionCell cell = cell(intent); long expected = Math.max(0L, Math.subtractExact(observation.priorRaw(),
+                bootstrap.ruleset().rates().decontaminationReduction().raw()));
+        // A confirmed observation is historical evidence. The atomic completion path above
+        // verifies the live field before it writes this receipt; a later ordinary hive pulse may
+        // legitimately reinfect the exact same cell. Requiring the present field to preserve an
+        // old receipt's remaining intensity would make that physical consequence impossible and
+        // turn valid autonomous re-infection into recovery corruption.
+        if (!observation.cell().equals(cell) || observation.remainingRaw() != expected || !intent.subjectIds().contains(observation.itemId())) {
+            throw new IllegalArgumentException("decontamination observation is invalid");
+        }
+    }
+
+    public static InfectionCell cell(PhysicalIntent intent) {
+        long scale = FixedScalar.SCALE;
+        if (intent.origin().x().raw() % scale != 0L || intent.origin().y().raw() != 0L || intent.origin().z().raw() % scale != 0L) {
+            throw new IllegalArgumentException("decontamination origin must be an infection-cell origin");
+        }
+        BlockPosition position = new BlockPosition(Math.toIntExact(intent.origin().x().raw() / scale), 0, Math.toIntExact(intent.origin().z().raw() / scale));
+        InfectionCell cell = InfectionCell.at(position);
+        if (!cell.originAtY(0).equals(position)) throw new IllegalArgumentException("decontamination origin is not cell-aligned");
+        return cell;
+    }
+
+    private static Settlement owner(FrontierBootstrap bootstrap, SubjectId facilityId) {
+        for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
+            if (structure.id().equals(facilityId) && structure.kind() == StructureKind.INFIRMARY) return settlement;
+        }
+        throw new IllegalArgumentException("decontamination facility is not a settlement infirmary: " + facilityId.value());
+    }
+}

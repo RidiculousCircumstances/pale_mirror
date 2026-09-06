@@ -1,0 +1,114 @@
+package io.farfrontier.palemirror.visuals.genesis;
+
+import io.farfrontier.palemirror.api.AuthoredMineRole;
+import io.farfrontier.palemirror.api.VisualBounds;
+import io.farfrontier.palemirror.api.VisualPoint;
+import java.util.List;
+import java.util.Set;
+
+/** Shared geometry for terrain surveying and the authored MineSite grammar. */
+final class MineSurfaceLayout {
+    static final int APRON = 2;
+    static final int MAXIMUM_RELIEF = 8;
+    static final int MAXIMUM_CUT = 4;
+    static final int MAXIMUM_FILL = 4;
+
+    private MineSurfaceLayout() { }
+
+    static List<Pad> pads(AuthoredMineRole role) {
+        if (role == AuthoredMineRole.PRIMARY) return List.of(
+                // Keep the winding/hoist house beside the adit axis. Placing
+                // this imported building directly in front of the mountain
+                // portal made its roof and interior compete with the actual
+                // underground entrance even when the final tunnel carve was
+                // technically clear.
+                pad("portal", 10, -8, "mine/portal_hoist"),
+                pad("crew", -22, -30, "mine/crew_outpost"),
+                pad("processing", 0, -51, "mine/processing_hall"),
+                pad("power", -22, -52, "mine/power_house"),
+                pad("loading", 22, -28, "mine/loading_yard"),
+                pad("maintenance", 22, -52, "workshop_1"));
+        return List.of(
+                pad("portal", 10, -8, "mine/portal_hoist"),
+                pad("crew", -22, -30, "mine/crew_outpost"),
+                pad("dispatch", 22, -28, "mine/dispatch_foundation"),
+                pad("processing", 0, -51, "mine/dispatch_shell"),
+                pad("power", -22, -52, "mine/dispatch_machinery"),
+                pad("freight", 22, -52, "mine/dispatch_commissioning"));
+    }
+
+    private static Pad pad(String id, int right, int inward, String moduleId) {
+        FrontierModuleCatalog.Definition definition = FrontierModuleCatalog.require(moduleId);
+        return new Pad(id, right, inward, definition.sizeX(), definition.sizeZ());
+    }
+
+    static Pad require(AuthoredMineRole role, String id) {
+        return pads(role).stream().filter(value -> value.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown MineSite surface pad " + role + ":" + id));
+    }
+
+    /** Pads that must read as complete in the pristine genesis snapshot. */
+    static Set<String> materializedFoundationIds(
+            io.farfrontier.palemirror.api.AuthoredMineSitePlan mine) {
+        java.util.LinkedHashSet<String> result = mine.initialModules().stream()
+                .map(value -> value.foundationId())
+                .filter(value -> !value.equals("underground"))
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        // Red Valley starts as a coherent prospecting post with a modest
+        // dispatch apron. The larger processing/power pads remain untouched
+        // terrain until their staged projects actually begin.
+        if (mine.role() == AuthoredMineRole.ALTERNATE) result.add("dispatch");
+        return Set.copyOf(result);
+    }
+
+    /** Whole-yard translations preserve the authored relationship between every building. */
+    static List<YardOffset> candidateYards() {
+        java.util.ArrayList<YardOffset> result = new java.util.ArrayList<>();
+        for (int outward : new int[]{0, -8, -16}) {
+            for (int right : new int[]{0, 8, -8}) result.add(new YardOffset(right, outward));
+        }
+        return List.copyOf(result);
+    }
+
+    static VisualPoint center(Pad pad, VisualPoint portal, int direction, YardOffset yard) {
+        return local(portal, pad.right() + yard.right(), pad.inward() + yard.outward(), 0, direction);
+    }
+
+    static VisualPoint local(VisualPoint portal, int right, int inward, int up, int direction) {
+        int dx = switch (Math.floorMod(direction, 4)) {
+            case 0 -> inward; case 1 -> -right; case 2 -> -inward; default -> right;
+        };
+        int dz = switch (Math.floorMod(direction, 4)) {
+            case 0 -> right; case 1 -> inward; case 2 -> -right; default -> -inward;
+        };
+        return new VisualPoint(portal.x() + dx, portal.y() + up, portal.z() + dz);
+    }
+
+    record Pad(String id, int right, int inward, int width, int depth) {
+        Pad {
+            if (id == null || id.isBlank() || width < 1 || depth < 1) {
+                throw new IllegalArgumentException("MineSite surface pad is invalid");
+            }
+        }
+
+        VisualPoint center(VisualPoint portal, int direction, int y) {
+            VisualPoint horizontal = local(portal, right, inward, 0, direction);
+            return new VisualPoint(horizontal.x(), y, horizontal.z());
+        }
+
+        VisualBounds bounds(VisualPoint portal, int direction, int y) {
+            return bounds(center(portal, direction, y), direction);
+        }
+
+        VisualBounds bounds(VisualPoint center, int direction) {
+            boolean swap = Math.floorMod(direction, 2) == 1;
+            int xSize = swap ? depth : width;
+            int zSize = swap ? width : depth;
+            return new VisualBounds(new VisualPoint(center.x() - xSize / 2, center.y(), center.z() - zSize / 2),
+                    new VisualPoint(center.x() + (xSize - 1) / 2, center.y(),
+                            center.z() + (zSize - 1) / 2));
+        }
+    }
+
+    record YardOffset(int right, int outward) { }
+}

@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "visible_hive_motion_west_nest",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run tp PMTestPilot -420 74 402" }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "look", "at": { "x": -420, "y": 64, "z": 420 } },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "wait", "ms": 250 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "inspect", "view": "actor", "id": "bioform:west-0" }
+  ],
+  "assertions": [
+    { "after": 2, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT" } },
+    { "after": 5, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } },
+    { "after": 7, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } },
+    { "after": 9, "view": "actor", "id": "bioform:west-0", "expect": { "status": "ok", "actorKind": "BIOFORM", "life": "ALIVE", "ambientLease": "HOT", "physicalAdmission": { "status": "INDEXED" } } }
+  ],
+  "frames": [
+    { "after": 3, "name": "hive-west-nest-before-motion" },
+    { "after": 11, "name": "hive-west-nest-after-motion" }
+  ]
+}

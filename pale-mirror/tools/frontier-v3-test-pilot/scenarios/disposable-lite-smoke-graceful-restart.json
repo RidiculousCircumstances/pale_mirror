@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "disposable_lite_smoke_graceful_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [],
+  "actions": [
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 1,
+    "resumeSetup": []
+  },
+  "assertions": [
+    { "after": 1, "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+    { "after": 2, "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+  ],
+  "frames": []
+}

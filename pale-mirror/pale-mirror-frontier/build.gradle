@@ -1,0 +1,76 @@
+plugins {
+    id 'java-library'
+    id 'java-test-fixtures'
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+sourceSets.named('test') {
+    compileClasspath += sourceSets.testFixtures.output
+    runtimeClasspath += sourceSets.testFixtures.output
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    if (name != 'wave1Benchmark' && name != 'frontierV3AnnualAudit' && name != 'frontierV3ScaleAudit') {
+        useJUnitPlatform {
+            excludeTags 'benchmark'
+            excludeTags 'annual-audit'
+            excludeTags 'scale-audit'
+        }
+    }
+}
+
+tasks.register('frontierV3WalTailDiagnostic', JavaExec) {
+    group = 'verification'
+    description = 'Prints at most sixteen decoded records from a retained Frontier v3 disposable WAL tail.'
+    classpath = sourceSets.testFixtures.runtimeClasspath
+    mainClass = 'io.farfrontier.palemirror.frontier.v3.persistence.FrontierV3WalTailDiagnostic'
+}
+
+tasks.register('wave1Benchmark', Test) {
+    group = 'verification'
+    description = 'Runs the reproducible Frontier v3 Wave 1 kernel benchmark fixture.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'benchmark' }
+    include '**/FrontierKernelBenchmarkTest.class'
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
+}
+
+tasks.register('frontierV3AnnualAudit', Test) {
+    group = 'verification'
+    description = 'Runs the deterministic four-seed Frontier v3 annual COLD-autonomy audit.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'annual-audit' }
+    include '**/FrontierV3AnnualAutonomyAuditTest.class'
+    def selectedSeeds = providers.systemProperty('pale_mirror.frontier_v3.annual_audit.seeds').orNull
+    if (selectedSeeds != null && !selectedSeeds.isBlank()) {
+        systemProperty 'pale_mirror.frontier_v3.annual_audit.seeds', selectedSeeds
+    }
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
+}
+
+tasks.register('frontierV3ScaleAudit', Test) {
+    group = 'verification'
+    description = 'Runs the same-seed twelve-settlement Frontier v3 pressure, fairness and WAL-replay audit.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'scale-audit' }
+    include '**/FrontierV3ScaleAuditTest.class'
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
+}

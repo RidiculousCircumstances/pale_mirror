@@ -1,0 +1,42 @@
+{
+  "schema": "pale_mirror_visuals.collector_sculpt_review.v1",
+  "session_id": "collector_v05_sculpt_v03_composition",
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963"
+  },
+  "pass_id": "supports_v03",
+  "verdict": "failed_declared_pass_goal",
+  "acceptance": "unaccepted_non_exportable",
+  "evidence": {
+    "mapping": "direct locked 1280x720 pixels; no fit, translation, scaling, score or acceptance automation",
+    "baseline_primary_overlay": {
+      "path": "build/blender-audits/dorsal_rhythm_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "4e5d62732b16c66923ceef91967fbec715abdba3567a3a6eeec9c8e20b5c61dc"
+    },
+    "after_primary_overlay": {
+      "path": "build/blender-audits/supports_v03-biomass_collector-collector_v05_sculpt_v03_composition/primary_model_overlay.png",
+      "sha256": "c2e221fc4f577ffe4a40c72166b9a2ebb6f57027847422ca826bf2315a460767",
+      "pixels": {
+        "model": 280158,
+        "overlap": 180583,
+        "trace_only": 107925,
+        "model_only": 99575
+      }
+    },
+    "diagnostic_elevated_rear": {
+      "path": "build/blender-audits/supports_v03-biomass_collector-collector_v05_sculpt_v03_composition/elevated_rear.png",
+      "sha256": "47db5980baf15db8d5bf65e2ddc8606e987a56e190f37df89fb7c8c869e47bef"
+    }
+  },
+  "independent_review": {
+    "scope": "only whether the v03 direct pass made six source-marked supports read as thick tapered grounded arches while preserving negative spaces; not an overall likeness score",
+    "findings": [
+      "The supports remain near-identical, weakly tapering legs rather than six heavy articulated arches with intentional negative spaces.",
+      "Ground contact remains present and the pass did not introduce a new major diagnostic-view defect.",
+      "The serrated dorsal seam from the failed dorsal_rhythm_v03 pass remains visible but is pre-existing composition debt, not attributed to this pass."
+    ],
+    "recommended_next_change": "In a new immutable session, construct and validate each support separately from a broad body attachment through a visible bend and taper to a wide grounded foot, inspecting each primary-view gap before progressing."
+  },
+  "runtime_export_forbidden": true
+}

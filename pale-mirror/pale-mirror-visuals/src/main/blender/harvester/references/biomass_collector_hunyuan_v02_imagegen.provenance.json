@@ -1,0 +1,31 @@
+{
+  "schema": "pale_mirror_visuals.secondary_reference.v1",
+  "asset_id": "biomass_collector",
+  "source_primary": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "generator": "OpenAI imagegen",
+  "purpose": "Secondary canonical-direction proxy set for a non-exportable Hunyuan2mv hidden-volume proposal.",
+  "files": {
+    "front": {
+      "file": "biomass_collector_hunyuan_v02_front_imagegen.png",
+      "sha256": "84565b37e476eed984b5975175c461205d92305ac8c239f34e5ab97050208a6e"
+    },
+    "back": {
+      "file": "biomass_collector_hunyuan_v02_back_imagegen.png",
+      "sha256": "e1b4a53ff0c667a5b2103c7260f892e83898a5bcc6ce63f7961d3b34f9543dce"
+    },
+    "right": {
+      "file": "biomass_collector_hunyuan_v02_right_imagegen.png",
+      "sha256": "d156c4e4c91bcc51fb64a3594f5fc610726f2161c13e3d5f1c22b6735619407b"
+    }
+  },
+  "review": {
+    "single_subject_per_file": true,
+    "front_head_faces_camera": true,
+    "back_tail_faces_camera": true,
+    "right_head_faces_image_right": true
+  },
+  "authority": "The user-supplied primary image remains the sole likeness authority. These generated images cannot alter primary contour, likeness scoring or model acceptance."
+}

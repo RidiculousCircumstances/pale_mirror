@@ -1,0 +1,121 @@
+{
+  "schema": "pale_mirror_visuals.harvester_reference_brief.v4",
+  "acceptance_authority": "The user-supplied base reference image is the sole likeness authority. The named image-faithful Blockbench mesh is the canonical editable realization and must not be simplified for Minecraft.",
+  "comparative_selection": {
+    "required": "Use blind_review_protocol_v01.json before selecting between two geometry candidates.",
+    "blind_package": "../../blender/harvester/blind_review_protocol_v01.json",
+    "rule": "At least two fresh-context reviewers make an ordinal primary-plus-diagnostic verdict before candidate IDs, score, overlay or provenance are revealed.",
+    "metric_policy": "Exact primary-contour metrics diagnose an individual candidate only. They cannot rank candidate classes, break a blind tie or override an ordinal visual verdict."
+  },
+  "contour_contract": {
+    "source": "The visible subject contour and major visible anatomical boundaries in the pinned base-reference pixels.",
+    "construction": "Trace the primary-camera envelope and major volumes directly into an organic mesh at image-appropriate precision; do not use a low-detail cuboid approximation or Minecraft-style simplification.",
+    "comparison": "Uniformly align the solid Blockbench projection to the pinned subject bounds and inspect the generated reference/model overlay.",
+    "hard_gate": "A material mismatch in aspect ratio, ground line, dorsal envelope, mass balance, dominant limb contour or silhouette negative space rejects the iteration."
+  },
+  "scorecard": {
+    "primary_silhouette_and_proportions": 35,
+    "primary_anatomical_landmarks": 30,
+    "diagnostic_view_volume": 15,
+    "limb_hierarchy_and_joints": 10,
+    "material_and_animation_readability": 10,
+    "acceptance_threshold": 85,
+    "excellent_threshold": 100
+  },
+  "required_neutral_views": [
+    "primary_reference",
+    "opposite_three_quarter",
+    "front",
+    "side",
+    "elevated_rear"
+  ],
+  "required_silhouette_frames": [
+    "silhouette_primary"
+  ],
+  "required_animation_frames": [
+    "idle_neutral",
+    "action_anticipation",
+    "action_peak",
+    "action_recovery"
+  ],
+  "creatures": {
+    "biomass_collector": {
+      "base_reference": "01_harvester_biomass_collector.jpg",
+      "authoring_model": "biomass_collector_reference_hifi.bbmodel",
+      "primary_view": "low front-left three-quarter; match the low, broad stance before adding detail",
+      "reference_subject_bounds_normalized": [0.105, 0.105, 0.995, 0.88],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "Low leading drape from the front head to the ground.",
+        "Six separately readable dorsal sac arcs forming one descending back envelope.",
+        "A long low underbody with thick leg arches and clear ground contacts.",
+        "A narrow trailing tail whose contour stays subordinate to the shell masses."
+      ],
+      "camera_target": [-2, 14, 0],
+      "camera_distance": 78,
+      "orthographic_zoom": 0.28,
+      "action": {
+        "clip": "animation.biomass_collector.harvest",
+        "frames": [0.12, 0.42, 0.74]
+      },
+      "landmarks": [
+        "Six large overlapping dorsal shell sacs that read as separate masses rather than as surface noise.",
+        "A very low, broad body carried by thick, tapered, articulated legs.",
+        "A heavy draped front head and hanging feelers distinct from the dorsal silhouette.",
+        "A thinner trailing rear tail that stays subordinate to the body masses."
+      ]
+    },
+    "crusher_stalker": {
+      "base_reference": "02_crusher_stalker.jpg",
+      "authoring_model": "crusher_stalker_reference_hifi.bbmodel",
+      "primary_view": "low front-left three-quarter; preserve the forward crushing weight",
+      "reference_subject_bounds_normalized": [0.035, 0.04, 0.985, 0.925],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "One steep armoured front wedge descending into the compact head.",
+        "A continuous hunched dorsal arc tapering toward the rear.",
+        "Two oversized crushing forelimbs dominating the lower-front contour.",
+        "Bent rear legs and thin trailing tendrils remaining secondary to the forequarters."
+      ],
+      "camera_target": [-2, 13, 0],
+      "camera_distance": 72,
+      "orthographic_zoom": 0.30,
+      "action": {
+        "clip": "animation.crusher_stalker.crush",
+        "frames": [0.10, 0.36, 0.70]
+      },
+      "landmarks": [
+        "A low, corded humped torso with a clear front-to-rear mass gradient.",
+        "Oversized, armour-like crushing forequarters that lead the silhouette.",
+        "A compact, downward-facing front head rather than a separate generic block.",
+        "Hunched rear legs and narrow trailing tendrils that do not compete with the crusher arms."
+      ]
+    },
+    "scythe_stalker": {
+      "base_reference": "03_scythe_stalker.jpg",
+      "authoring_model": "scythe_stalker_reference_hifi.bbmodel",
+      "primary_view": "crouched near-side profile with a slight front offset; the horizontal body axis and hooked foreground scythes must remain unmistakable",
+      "reference_subject_bounds_normalized": [0.27, 0.155, 0.985, 0.925],
+      "contour_alignment": "bottom_center",
+      "contour_landmarks": [
+        "A compact front-biased dorsal hump over a low horizontal thorax.",
+        "Two broad foreground scythes forming continuous downward and inward hooks.",
+        "Six separated angular walking legs with readable negative spaces.",
+        "A narrow rear body and fine trailing whips that do not enlarge the main mass."
+      ],
+      "camera_target": [-2, 13, 0],
+      "camera_distance": 74,
+      "orthographic_zoom": 0.38,
+      "action": {
+        "clip": "animation.scythe_stalker.slash",
+        "frames": [0.10, 0.42, 0.76]
+      },
+      "landmarks": [
+        "A compact crouched body under a distinct arched dorsal crest.",
+        "Two long, broad, downward-hooked scythe forelimbs with a readable inner curve.",
+        "Six spidery articulated legs that remain separate in the primary silhouette.",
+        "Fine trailing whips that frame the body without replacing the large silhouette."
+      ]
+    }
+  }
+}

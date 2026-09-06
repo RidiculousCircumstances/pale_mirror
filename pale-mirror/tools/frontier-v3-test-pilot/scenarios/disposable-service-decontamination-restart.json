@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "disposable_service_decontamination_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "service-decontamination", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:9-depot", "expect": { "status": "ok", "surface": "UNMATERIALIZED" } },
+      { "view": "item", "id": "item:development-service-decontamination-reagent", "expect": { "status": "ok", "itemKind": "minecraft:glowstone_dust", "count": 1, "custody": { "kind": "CONTAINER_SLOT" } } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": 340 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:9-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 30000 },
+    { "type": "fast_forward", "ticks": 1000, "timeoutMs": 180000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "HOT", "serviceWork": "service:decontamination-1" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "service-work:service:decontamination-1", "expect": { "status": "ok", "eventKind": "settlement_service_work_hot", "subject": "service:decontamination-1" }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -344, "y": 65, "z": 319 }, "settleMs": 1000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "MEDICAL WORKER", "maxDistance": 16, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "MEDICAL WORKER", "maxDistance": 16, "maxAngleDeg": 60, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "serviceWork": "service:decontamination-1" }, "timeoutMs": 30000 },
+    { "type": "wait", "ms": 2000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "HOT", "serviceWork": "service:decontamination-1" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:service-decontamination-1", "expect": { "status": "ok", "intentKind": "DECONTAMINATION", "intentStatus": "CONFIRMED", "causeSubject": "service:decontamination-1" }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-service-decontamination-reagent", "expect": { "status": "not_found" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "CLOSED", "servicePhase": "COMPLETED" }, "timeoutMs": 60000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 7,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": 340 }, "settleMs": 1500 },
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -344, "y": 65, "z": 319 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 3, "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "HOT", "serviceWork": "service:decontamination-1" } },
+    { "after": 4, "view": "trace", "id": "service-work:service:decontamination-1", "expect": { "status": "ok", "eventKind": "settlement_service_work_hot", "subject": "service:decontamination-1" } },
+    { "after": 11, "view": "intent", "id": "intent:service-decontamination-1", "expect": { "status": "ok", "intentKind": "DECONTAMINATION", "intentStatus": "CONFIRMED", "causeSubject": "service:decontamination-1" } },
+    { "after": 13, "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "CLOSED", "servicePhase": "COMPLETED" } }
+  ],
+  "frames": [
+    { "after": 7, "name": "service-medic-at-contamination-worksite" }
+  ]
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Test Server Ops"
+  short_description: "Safely rebuild and operate the test server"
+  default_prompt: "Use $pm-test-server-ops to rebuild and update the Pale Mirror test server."
+policy:
+  allow_implicit_invocation: true

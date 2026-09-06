@@ -1,0 +1,17 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_tail_cleanup.v1",
+  "asset_id": "biomass_collector",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "pass_id": "tail_cleanup_v01",
+  "authority": "The pinned primary trace protects all visible anatomy. This pass may delete only disconnected, small generated components whose projected vertices never occupy a source-trace cell. It does not reshape any connected primary body, tail or filament.",
+  "reference": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "maximum_detached_faces": 12000,
+  "review_focus": [
+    "No visible source-trace component may be deleted.",
+    "The primary body, leading mantle, six supports and reference-visible tail/fibres retain their exact previous geometry.",
+    "Only isolated off-trace generator debris may disappear."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "pale_mirror:ironhill_supply_crisis",
+  "infection_source": "pale_mirror:crimson",
+  "version": 2,
+  "archetype": "settlement_supply_crisis",
+  "cooldown_steps": 8,
+  "required_capabilities": ["PM_ANCHOR_MATERIALIZATION", "PM_ANCHOR_OBSERVATION"],
+  "stages": ["OFFERED", "ASSESS", "RESPOND", "RESOLVED"],
+  "policy": "pale_mirror:iron_frontier",
+  "encounter_profile": "pale_mirror:crimson_mine_guards"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "pale_mirror:spore_investigation_recovery",
+  "infection_source": "pale_mirror:spore",
+  "version": 1,
+  "cooldown_steps": 2,
+  "required_capabilities": ["PM_ANCHOR_MATERIALIZATION", "PM_ANCHOR_OBSERVATION"],
+  "stages": ["OFFERED", "INVESTIGATE", "RECOVER", "RESOLVED"],
+  "policy": "pale_mirror:pm_anchor",
+  "encounter_profile": "pale_mirror:spore_mine_guard"
+}

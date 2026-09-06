@@ -1,0 +1,81 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_mesh_session.v1",
+  "session_id": "collector_v05_direct_mesh_v03",
+  "asset_id": "biomass_collector",
+  "status": "planned_unaccepted",
+  "parent_session": {
+    "id": "collector_v05_direct_mesh_v02",
+    "reviewed_working_mesh_sha256": "5dd9a79fb21685f95467bc307a6381dbf5648f3a01c9cf696106220af12ff38b",
+    "reason": "v02's first broad interior mantle deformation was independently rejected and exactly rolled back. v03 begins from that recovered mesh as an artist-prepared, one-region leading-mantle repair."
+  },
+  "candidate": {
+    "id": "hunyuan2mv_v05_canonical_turntable",
+    "stage": "volume-proposal-unaccepted",
+    "file": "candidate.glb",
+    "sha256": "3bfcddfd428b30c94573d63a2fb4be01162402f8fce8375fb2e51139b2780963",
+    "role": "immutable raw topology retained beside the v01/v02 reviewed working surface; never likeness authority or runtime input"
+  },
+  "primary_trace": {
+    "id": "biomass_collector_primary_v03",
+    "sha256": "e3150d88594a8c712c22dfe60395c43f2da038c6dea7bc53601bff8c69692cf7",
+    "role": "sole primary-view likeness, silhouette and landmark authority"
+  },
+  "source": {
+    "blend": "assets/harvester/biomass_collector_v05_direct_mesh_v03.blend",
+    "audit_root": "direct_mesh_sessions/collector_v05_direct_mesh_v03/audits",
+    "raw_collection": "PM_COLLECTOR_DIRECT_RAW_V05",
+    "working_collection": "PM_COLLECTOR_LOD0",
+    "backup_collection": "PM_COLLECTOR_DIRECT_BACKUPS"
+  },
+  "baseline_receipt": "continuation_baseline_v03",
+  "artist_region": {
+    "id": "leading_mantle_v03",
+    "primary_polygon_px": [[142, 154], [332, 164], [340, 238], [302, 340], [262, 454], [232, 558], [96, 584], [18, 540], [44, 444], [83, 316]],
+    "front_skin_depth_world": 0.72,
+    "intent": "Replace the generated C-loop impression with one heavy, thick attached leading shell, descending from the first dorsal chamber into a grounded front drape. The silhouette may be corrected only by sculpting a coherent volume, never by pulling a broad field of interior vertices toward a curve.",
+    "primary_checks": [
+      "The leading shell has a broad diagonal outer contour and reaches the source ground line.",
+      "The attachment reads as a heavy overlap beneath the first dorsal sac, not as a cut ribbon.",
+      "The result preserves negative space beneath the body without becoming a detached curtain."
+    ],
+    "diagnostic_checks": [
+      "The mantle retains visible thickness in front and elevated-rear views.",
+      "No new opening, folded strip, detached component or hidden self-intersection appears."
+    ]
+  },
+  "topology_policy": {
+    "starting_mesh": "the exact v02 recovered working mesh, the original hidden immutable v05 raw mesh and all historical evidence",
+    "allowed": [
+      "direct vertex deformation",
+      "local face deletion, creation and merge on the existing working surface",
+      "local retopology of an existing semantic region",
+      "local smoothing and material reassignment",
+      "protected full-mesh backup snapshots"
+    ],
+    "forbidden": [
+      "primitive construction",
+      "trace or semantic cage construction",
+      "new disconnected body meshes",
+      "global two-dimensional silhouette fitting",
+      "runtime export",
+      "rigging",
+      "infection registration"
+    ]
+  },
+  "passes": [
+    {
+      "id": "leading_mantle_artist_v03",
+      "kind": "artist_direct_sculpt_and_local_retopology",
+      "region": "the existing leading-mantle surface and its dorsal attachment, prepared by the named leading_mantle_v03 vertex groups",
+      "primary_goal": "make the leading mantle read as one broad diagonal attached shell from the first dorsal mass to the source ground line, using a coherent volume rather than a field deformation",
+      "diagnostic_goal": "retain a thick coherent mantle surface and the existing body volume without new openings, torn strips or detached forms",
+      "authoring_requirement": "A visible Blender artist must inspect the prepared scene and use sculpt/edit tools on collector_v05_direct_working. The controlled bridge may prepare, audit and validate the pass but may not automate the dominant-mass deformation.",
+      "requires_review": "continuation_baseline_v03"
+    }
+  ],
+  "review_gate": {
+    "before_each_pass": "the declared predecessor must have a local audit receipt and a recorded independent continue decision; the continuation baseline is a reviewed audit-only receipt",
+    "after_each_pass": "capture primary, silhouette, trace, opposite, front, side and elevated-rear frames; an independent reviewer records continue or rollback before another session may begin",
+    "acceptance": "literal primary overlay and normal visual review are mandatory; scalar metrics diagnose only and cannot accept or rank the mesh"
+  }
+}

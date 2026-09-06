@@ -1,0 +1,31 @@
+{
+  "schema": "pale_mirror_visuals.collector_direct_diagnostic_solidity.v1",
+  "asset_id": "biomass_collector",
+  "session_id": "collector_v05_direct_mesh_v01",
+  "pass_id": "diagnostic_solidity_v01",
+  "authority": "The six visible dorsal chambers are placed from the pinned literal primary reference. This pass reshapes only the existing near-side dorsal surface into physically legible overlapping domes and shallow saddles; it does not create replacement anatomy.",
+  "reference": {
+    "file": "01_harvester_biomass_collector.jpg",
+    "sha256": "788cfe68f11e82a4e280de837090d3ebd2209cb598afbb8016946b1ea33a05fa"
+  },
+  "dorsal_chambers": [
+    {"id": "leading_shell", "center_px": [303, 218], "radius_px": [112, 104], "front_push": 0.74, "crest_lift": 0.32},
+    {"id": "second_shell", "center_px": [458, 221], "radius_px": [114, 108], "front_push": 0.82, "crest_lift": 0.38},
+    {"id": "third_shell", "center_px": [621, 257], "radius_px": [104, 96], "front_push": 0.70, "crest_lift": 0.29},
+    {"id": "fourth_shell", "center_px": [776, 303], "radius_px": [92, 84], "front_push": 0.58, "crest_lift": 0.22},
+    {"id": "fifth_shell", "center_px": [900, 346], "radius_px": [78, 70], "front_push": 0.48, "crest_lift": 0.16},
+    {"id": "sixth_shell", "center_px": [1000, 382], "radius_px": [64, 58], "front_push": 0.36, "crest_lift": 0.10}
+  ],
+  "saddles": [
+    {"center_px": [380, 212], "radius_px": [34, 64], "recede": 0.48, "drop": 0.22},
+    {"center_px": [540, 233], "radius_px": [32, 60], "recede": 0.46, "drop": 0.21},
+    {"center_px": [700, 281], "radius_px": [30, 56], "recede": 0.40, "drop": 0.18},
+    {"center_px": [839, 326], "radius_px": [28, 52], "recede": 0.34, "drop": 0.15},
+    {"center_px": [949, 365], "radius_px": [24, 46], "recede": 0.28, "drop": 0.11}
+  ],
+  "review_focus": [
+    "Each chamber remains rounded and overlaps its neighbour rather than becoming a row of detached balls.",
+    "Saddles are broad and shallow; no saw-tooth roof or crease strip is acceptable.",
+    "No movement occurs on the leading mantle, underbody, supports or rear tail in this pass."
+  ]
+}

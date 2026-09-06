@@ -1,0 +1,162 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import com.mojang.math.Transformation;
+import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierObjectBoard;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Brightness;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/** Bounded loaded-chunk materializer for the pure v3 object-local board plan. */
+final class FrontierV3ObjectBoardExecutor {
+    private static final int MAX_BOARDS_PER_TICK = 8;
+    private static final String OWNER_KEY = "pale_mirror.frontier_v3.board_owner";
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
+
+    enum ProjectionResult { APPLIED, CURRENT, UPDATED, CONFLICT, DEFERRED }
+
+    private FrontierV3ObjectBoardExecutor() { }
+
+    static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
+        if (checkpoint == null) return;
+        FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        FrontierReadabilityPlan.ReadabilityInput input = FrontierReadabilityPlan.input(state);
+        Cursor cursor = CURSORS.get(runtime);
+        if (cursor == null || !cursor.input().equals(input)) {
+            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state);
+            cursor = Cursor.from(input, plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList(), cursor);
+            CURSORS.put(runtime, cursor);
+        }
+        FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
+        for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) project(level, ledger, cursor.next());
+    }
+
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+
+    static ProjectionResult project(ServerLevel level, FrontierV3ObjectBoardLedger ledger, FrontierObjectBoard board) {
+        BlockPos position = position(board);
+        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        String owner = board.ownerId().value(); UUID uuid = uuid(owner); FrontierV3ObjectBoardLedger.Claim claim = ledger.claim(owner);
+        if (claim != null && (claim.conflicted() || claim.position() != position.asLong() || !claim.uuid().equals(uuid.toString()))) return ProjectionResult.CONFLICT;
+        Display.TextDisplay display = level.getEntity(uuid) instanceof Display.TextDisplay known ? known : null;
+        if (claim != null && display == null) { ledger.conflict(owner); return ProjectionResult.CONFLICT; }
+        if (display != null && (!owner.equals(display.getPersistentData().getString(OWNER_KEY)) || !display.blockPosition().equals(position))) {
+            if (claim != null) ledger.conflict(owner);
+            return ProjectionResult.CONFLICT;
+        }
+        if (display == null) {
+            display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level); display.setUUID(uuid); configure(display, board); display.setPos(Vec3.atBottomCenterOf(position));
+            // Claim before adding the presentation entity. A crash or failed admission therefore
+            // becomes an inspectable missing-board conflict rather than authority to retry over
+            // an unknown world entity.
+            ledger.applied(owner, position.asLong(), uuid.toString());
+            return level.addFreshEntity(display) ? ProjectionResult.APPLIED : ProjectionResult.DEFERRED;
+        }
+        String expected = board.text();
+        if (expected.equals(display.getCustomName() == null ? null : display.getCustomName().getString())) return ProjectionResult.CURRENT;
+        configure(display, board); return ProjectionResult.UPDATED;
+    }
+
+    /**
+     * Confirms that a clicked display is the currently claimed materialization of this exact
+     * canonical board.  A custom-named lookalike must never become a presentation authority.
+     */
+    static boolean isCurrentOwnedBoard(ServerLevel level, Entity entity, FrontierObjectBoard board) {
+        if (!(entity instanceof Display.TextDisplay display) || !level.hasChunkAt(display.blockPosition())) return false;
+        String owner = board.ownerId().value();
+        FrontierV3ObjectBoardLedger.Claim claim = FrontierV3ObjectBoardLedger.get(level).claim(owner);
+        return claim != null && !claim.conflicted() && claim.position() == position(board).asLong()
+                && claim.uuid().equals(uuid(owner).toString()) && display.getUUID().equals(uuid(owner))
+                && display.blockPosition().equals(position(board))
+                && owner.equals(display.getPersistentData().getString(OWNER_KEY));
+    }
+
+    private static BlockPos position(FrontierObjectBoard board) { return new BlockPos(board.position().x(), board.position().y(), board.position().z()); }
+    private static UUID uuid(String owner) { return UUID.nameUUIDFromBytes(("pale-mirror-frontier-v3-board:" + owner).getBytes(StandardCharsets.UTF_8)); }
+    private static void configure(Display.TextDisplay display, FrontierObjectBoard board) {
+        CompoundTag data = display.saveWithoutId(new CompoundTag());
+        Component text = Component.literal(board.text()).withStyle(colour(board.tone()), ChatFormatting.BOLD);
+        data.putString(Display.TextDisplay.TAG_TEXT, Component.Serializer.toJson(text, display.registryAccess()));
+        BoardRenderProfile profile = BoardRenderProfile.forScope(board.scope());
+        data.putInt("line_width", profile.lineWidth()); data.putByte("text_opacity", (byte) 0xFF); data.putInt("background", 0xB0000000);
+        // Object boards belong to an object in physical space. Rendering through its building
+        // makes remote local facts overlap and falsely look like a global HUD.
+        data.putBoolean("shadow", true); data.putBoolean("see_through", false); data.putString("alignment", "center"); data.putFloat("view_range", profile.viewRange());
+        data.putFloat("width", profile.width()); data.putFloat("height", profile.height()); data.putInt("glow_color_override", glow(board.tone())); data.putBoolean("Glowing", true);
+        Transformation.EXTENDED_CODEC.encodeStart(NbtOps.INSTANCE, new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(profile.scale()), new Quaternionf()))
+                .ifSuccess(value -> data.put("transformation", value));
+        Display.BillboardConstraints.CODEC.encodeStart(NbtOps.INSTANCE, Display.BillboardConstraints.CENTER).ifSuccess(value -> data.put("billboard", value));
+        Brightness.CODEC.encodeStart(NbtOps.INSTANCE, Brightness.FULL_BRIGHT).ifSuccess(value -> data.put("brightness", value));
+        display.load(data); display.setNoGravity(true); display.setCustomName(Component.literal(board.text())); display.setCustomNameVisible(false);
+        display.getPersistentData().putString(OWNER_KEY, board.ownerId().value());
+    }
+    private static ChatFormatting colour(FrontierObjectBoard.Tone tone) {
+        return switch (tone) { case SETTLEMENT -> ChatFormatting.GOLD; case HIVE -> ChatFormatting.LIGHT_PURPLE; case WARNING -> ChatFormatting.RED; };
+    }
+    private static int glow(FrontierObjectBoard.Tone tone) {
+        return switch (tone) { case SETTLEMENT -> 0xFFAA00; case HIVE -> 0xD77CFF; case WARNING -> 0xFF5555; };
+    }
+    /** Compact physical board grammar.  Display view range is expressed in 64-block units. */
+    private record BoardRenderProfile(int lineWidth, float viewRange, float width, float height, float scale) {
+        static BoardRenderProfile forScope(FrontierObjectBoard.Scope scope) {
+            return switch (scope) {
+                case LANDMARK -> new BoardRenderProfile(176, 1.50F, 8.0F, 3.0F, 0.95F);
+                case LOCAL -> new BoardRenderProfile(144, 0.70F, 6.0F, 2.5F, 0.70F);
+            };
+        }
+    }
+    /**
+     * A canonical revision is not a board epoch.  The simulation can advance a moving actor
+     * position more quickly than the loaded-world budget can inspect every board.  Keep the
+     * round-robin position whenever the exact board dependencies and stable slots are unchanged,
+     * otherwise remote settlement work could permanently starve an already-loaded later hive
+     * board.
+     */
+    static final class Cursor {
+        private final FrontierReadabilityPlan.ReadabilityInput input;
+        private final List<FrontierObjectBoard> boards;
+        private int index;
+        Cursor(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, int index) { this.input = input; this.boards = boards; this.index = index; }
+        static Cursor from(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, Cursor prior) {
+            int next = prior != null && sameSlots(prior.boards, boards) ? prior.index % Math.max(1, boards.size()) : 0;
+            return new Cursor(input, boards, next);
+        }
+        /** Test-only slot-order probe; production cursors always retain an exact readability input. */
+        static Cursor from(Revision ignored, List<FrontierObjectBoard> boards, Cursor prior) {
+            return from((FrontierReadabilityPlan.ReadabilityInput) null, boards, prior);
+        }
+        FrontierReadabilityPlan.ReadabilityInput input() { return input; }
+        boolean hasNext() { return !boards.isEmpty(); }
+        FrontierObjectBoard next() { FrontierObjectBoard value = boards.get(index); index = (index + 1) % boards.size(); return value; }
+        private static boolean sameSlots(List<FrontierObjectBoard> prior, List<FrontierObjectBoard> next) {
+            if (prior.size() != next.size()) return false;
+            for (int index = 0; index < prior.size(); index++) {
+                FrontierObjectBoard left = prior.get(index); FrontierObjectBoard right = next.get(index);
+                if (!left.ownerId().equals(right.ownerId()) || !left.position().equals(right.position())) return false;
+            }
+            return true;
+        }
+    }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_bomber_explosion",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hot-scene-strike" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+        "hiveEngagement": { "status": "COLD_COMBAT", "command": { "kind": "OVERSEER", "signal": "CONNECTED", "members": 4 } } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveEngagement": { "status": "COLD_COMBAT", "command": { "kind": "OVERSEER", "signal": "CONNECTED", "members": 4 } } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveEngagement": { "status": "COLD_COMBAT", "command": { "kind": "OVERSEER", "signal": "CONNECTED", "members": 4 } } }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "engagement:development-hot-strike", "expect": { "status": "ok", "explosionStatus": "CONFIRMED" }, "timeoutMs": 60000 },
+    { "type": "look", "position": { "x": -366, "y": 65, "z": -340 } },
+    { "type": "inspect", "view": "scene", "id": "engagement:development-hot-strike" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 1 },
+  "assertions": [
+    { "after": 1, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveEngagement": { "status": "COLD_COMBAT", "command": { "kind": "OVERSEER", "signal": "CONNECTED", "members": 4 } } } },
+    { "after": 2, "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok",
+      "hiveEngagement": { "status": "COLD_COMBAT", "command": { "kind": "OVERSEER", "signal": "CONNECTED", "members": 4 } } } },
+    { "after": 6, "view": "scene", "id": "engagement:development-hot-strike", "expect": { "status": "ok", "explosionStatus": "CONFIRMED" } }
+  ],
+  "frames": [
+    { "after": 5, "name": "hot-bomber-aftermath" }
+  ]
+}

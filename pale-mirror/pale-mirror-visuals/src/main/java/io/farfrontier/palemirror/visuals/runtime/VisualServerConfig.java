@@ -1,0 +1,50 @@
+package io.farfrontier.palemirror.visuals.runtime;
+
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+/** Visual-only budgets; canonical population is never reduced by these settings. */
+public final class VisualServerConfig {
+    public static final ModConfigSpec SPEC;
+    public static final ModConfigSpec.IntValue ACTIVE_RESIDENT_AI_LIMIT;
+    public static final ModConfigSpec.IntValue ACTIVE_RESIDENT_AI_RADIUS;
+    public static final ModConfigSpec.BooleanValue AUTHORED_GENESIS_ENABLED;
+    public static final ModConfigSpec.IntValue GENESIS_MINIMUM_REGIONS;
+    public static final ModConfigSpec.IntValue GENESIS_TARGET_REGIONS;
+    public static final ModConfigSpec.IntValue GENESIS_MAXIMUM_REGIONS;
+    public static final ModConfigSpec.IntValue GENESIS_MAP_RADIUS;
+    public static final ModConfigSpec.IntValue GENESIS_MINIMUM_SPACING;
+    public static final ModConfigSpec.IntValue GENESIS_PLANNER_WORKERS;
+
+    static {
+        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+        ACTIVE_RESIDENT_AI_LIMIT = builder.comment(
+                        "Maximum authored residents with ticking vanilla AI in one dimension. All residents stay visible.")
+                .defineInRange("residents.activeAiLimit", 16, 0, 256);
+        ACTIVE_RESIDENT_AI_RADIUS = builder.comment("Player distance in which authored resident AI may be activated.")
+                .defineInRange("residents.activeAiRadius", 96, 16, 256);
+        AUTHORED_GENESIS_ENABLED = builder.comment(
+                        "Plans authored regions and gates player admission until their catalog is ready. "
+                                + "Set false only for an explicit Frontier graybox world, whose projector owns materialization.")
+                .define("genesis.authoredEnabled", true);
+        GENESIS_MINIMUM_REGIONS = builder.comment(
+                        "Minimum complete authored regions required for a fresh world; fewer fails closed.")
+                .defineInRange("genesis.minimumRegions", 3, 1, 64);
+        GENESIS_TARGET_REGIONS = builder.comment(
+                        "Desired authored-region count. Missing the target is allowed after the minimum is met.")
+                .defineInRange("genesis.targetRegions", 5, 1, 64);
+        GENESIS_MAXIMUM_REGIONS = builder.comment(
+                        "Maximum authored regions accepted when additional fully valid sites are available.")
+                .defineInRange("genesis.maximumRegions", 6, 1, 64);
+        GENESIS_MAP_RADIUS = builder.comment(
+                        "Maximum authored-region center radius around world spawn. Static geometry stays inside it.")
+                .defineInRange("genesis.mapRadius", 20_000, 3_000, 100_000);
+        GENESIS_MINIMUM_SPACING = builder.comment("Minimum center-to-center spacing between authored regions.")
+                .defineInRange("genesis.minimumSpacing", 2_500, 1_024, 10_000);
+        GENESIS_PLANNER_WORKERS = builder.comment(
+                        "Bounded terrain-survey worker count. Final authored-region acceptance remains deterministic.")
+                .defineInRange("genesis.plannerWorkers", 6, 1, 16);
+        SPEC = builder.build();
+    }
+
+    private VisualServerConfig() { }
+}

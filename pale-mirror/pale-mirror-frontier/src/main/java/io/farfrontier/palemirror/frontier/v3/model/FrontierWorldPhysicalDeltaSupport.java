@@ -1,0 +1,205 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+
+import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/** Pure bounded validation and domain consequences for observed physical block deltas. */
+public final class FrontierWorldPhysicalDeltaSupport {
+    static final int MAX_PHYSICAL_DELTAS = 65_536;
+
+    private FrontierWorldPhysicalDeltaSupport() { }
+
+    /** Validates retained evidence; a superseded route loss stays historical even after rerouting. */
+    static void validate(FrontierBootstrap bootstrap, HiveColony colony, RouteTopology topology,
+                         Map<SubjectId, RouteConstruction> constructions, Map<BlockPosition, PhysicalDelta> deltas) {
+        if (deltas.size() > MAX_PHYSICAL_DELTAS) throw new IllegalArgumentException("physical delta retention limit exceeded");
+        for (Map.Entry<BlockPosition, PhysicalDelta> entry : deltas.entrySet()) {
+            BlockPosition position = entry.getKey(); PhysicalDelta delta = entry.getValue();
+            if (!position.equals(delta.position())) throw new IllegalArgumentException("physical delta key differs from position evidence");
+            FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
+            if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) continue;
+            if (FrontierRouteNetwork.OWNER.equals(delta.ownerId().orElseThrow())) {
+                GrayboxSemanticPart part = delta.semanticPart().orElseThrow();
+                if (part != GrayboxSemanticPart.ROUTE_SURFACE && part != GrayboxSemanticPart.ROUTE_FOUNDATION) {
+                    throw new IllegalArgumentException("route loss must name a route surface or foundation");
+                }
+                continue;
+            }
+            GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, topology, constructions, delta.ownerId().orElseThrow(), position);
+            if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
+                throw new IllegalArgumentException("known physical delta is not an exact semantic cell");
+            }
+        }
+    }
+
+    static FrontierWorldState record(FrontierWorldState state, PhysicalDelta delta) {
+        return recordAll(state, List.of(delta));
+    }
+
+    /** Validates every member against the same pre-effect state, then publishes the whole causal set. */
+    public static FrontierWorldState recordAll(FrontierWorldState state, List<PhysicalDelta> deltas) {
+        Objects.requireNonNull(state, "state");
+        deltas = List.copyOf(Objects.requireNonNull(deltas, "physical deltas"));
+        if (deltas.isEmpty() || deltas.size() > PhysicalDeltasObserved.MAX_ATOMIC_DELTAS) {
+            throw new IllegalArgumentException("physical observation must contain 1.." + PhysicalDeltasObserved.MAX_ATOMIC_DELTAS + " deltas");
+        }
+        if (state.physicalDeltas().size() > MAX_PHYSICAL_DELTAS - deltas.size()) {
+            throw new IllegalArgumentException("physical delta retention limit exceeded");
+        }
+        HashSet<BlockPosition> positions = new HashSet<>();
+        for (PhysicalDelta delta : deltas) {
+            Objects.requireNonNull(delta, "physical delta");
+            if (!positions.add(delta.position())) throw new IllegalArgumentException("physical observation contains a duplicate position");
+            if (state.physicalDeltas().containsKey(delta.position())) throw new IllegalArgumentException("physical delta is already recorded at this position");
+            validateCurrent(state, delta);
+        }
+        Map<BlockPosition, PhysicalDelta> next = new LinkedHashMap<>(state.physicalDeltas());
+        deltas.forEach(delta -> next.put(delta.position(), delta));
+        FrontierWorldState changed = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(next));
+        for (PhysicalDelta delta : deltas) {
+            if (!isKnownRouteLoss(delta)) continue;
+            RouteTopology topology = changed.routeTopology().blockAffectedSupplyEdges(changed.bootstrap(), delta.position());
+            Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
+            changed.operations().forEach((operationId, operation) -> operations.put(operationId, operation.blockTravelAt(delta.position())));
+            changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeTopology(topology).operations(operations));
+        }
+        for (PhysicalDelta delta : deltas) {
+            if (!isKnownWorksiteStagingLoss(delta)) continue;
+            SubjectId projectId = delta.ownerId().orElseThrow();
+            RouteConstruction project = changed.routeConstructions().get(projectId);
+            if (project != null && project.status() == RouteConstructionStatus.BUILDING) {
+                Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(changed.routeConstructions());
+                projects.put(projectId, project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
+                Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(changed.sceneLeases());
+                leases.replaceAll((id, lease) -> FrontierSceneBehaviors.isEngineeringWorksite(lease)
+                        && FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(projectId)
+                        && lease.status() == SceneLeaseStatus.HOT ? lease.withStatus(SceneLeaseStatus.DRAINING) : lease);
+                changed = changed.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects).sceneLeases(leases));
+            }
+        }
+        for (PhysicalDelta delta : deltas) {
+            if (delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().orElseThrow().value().startsWith("structure:")) {
+                changed = changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+            }
+        }
+        for (PhysicalDelta delta : deltas) {
+            if (isCocoonLoss(delta)) changed = releaseCocoonOccupant(changed, delta);
+        }
+        return changed;
+    }
+
+    private static boolean isKnownRouteLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+                && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
+    }
+
+    private static boolean isKnownWorksiteStagingLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticPart().filter(GrayboxSemanticPart.WORKSITE_STAGING::equals).isPresent();
+    }
+
+    private static boolean isCocoonLoss(PhysicalDelta delta) {
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent();
+    }
+
+    /**
+     * A cocoon loss is an immediately accounted physical threat: the same exact occupant is
+     * released to the organ floor and may then receive an ordinary ambient lease. If the
+     * occupant belongs to an in-flight task mobilisation, the external break is also an
+     * interruption of that exact operation: it cannot silently substitute the player's release
+     * for a durable executor receipt. No mob is created by this reducer; loaded-world
+     * materialization remains the executor's boundary.
+     */
+    private static FrontierWorldState releaseCocoonOccupant(FrontierWorldState state, PhysicalDelta loss) {
+        SubjectId bioformId = loss.ownerId().orElseThrow();
+        BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioformId);
+        if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
+            throw new IllegalArgumentException("cocoon loss does not retain an exact physical occupant");
+        }
+        HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
+        HiveOrgan hibernaculum = hiveOrgan(state, slot.hibernaculumId());
+        if (!loss.position().equals(HiveCocoonPlan.cocoonCell(hibernaculum, slot))) {
+            throw new IllegalArgumentException("cocoon loss is not the bioform's exact occupied slot");
+        }
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(state.hiveColony().bioformLifecycles());
+        lifecycles.put(bioformId, lifecycle.waking());
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        ActorLocation actor = actors.get(bioformId);
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("cocoon loss has no living exact occupant");
+        }
+        actors.put(bioformId, actor.withBody(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, slot))));
+        HiveColony colony = state.hiveColony().withBioformLifecycles(lifecycles);
+        HiveMobilization interrupted = colony.mobilizations().values().stream()
+                .filter(mobilization -> !mobilization.status().terminal() && mobilization.memberIds().contains(bioformId))
+                .findFirst().orElse(null);
+        if (interrupted != null) {
+            colony = colony.conflictMobilization(interrupted.id(), HiveMobilizationConflictReason.COCOON_CHANGED);
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).hiveColony(colony));
+    }
+
+    private static HiveOrgan hiveOrgan(FrontierWorldState state, SubjectId organId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(organ -> organ.id().equals(organId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("cocoon references an absent HIBERNACULUM"));
+    }
+
+    /**
+     * WAKING means a task has selected the identity, not that its block has disappeared.  Until
+     * the loaded executor records the matching release receipt, the same cocoon remains a real
+     * player-breakable object.  This also lets an external break win the race cleanly and put
+     * the task into its visible conflict path rather than discarding the player action.
+     */
+    private static boolean cocoonCanStillBePhysicallyPresent(BioformLifecycle lifecycle) {
+        return lifecycle.homeSlot().isPresent()
+                && (lifecycle.phase().occupiesCocoon() || lifecycle.phase() == BioformLifecyclePhase.WAKING);
+    }
+
+    private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
+        if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) return;
+        GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(),
+                state.routeConstructions(), delta.ownerId().orElseThrow(), delta.position());
+        if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
+            throw new IllegalArgumentException("known physical delta is not an exact current semantic cell");
+        }
+        if (expected.semanticPart() == GrayboxSemanticPart.COCOON) {
+            BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(expected.ownerId());
+            if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
+                throw new IllegalArgumentException("only an exact physically retained cocoon may become a new physical loss");
+            }
+        }
+    }
+
+    static FrontierWorldState recordStructureDamage(FrontierWorldState state, StructureDamaged damage) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(damage, "structure damage");
+        SettlementStructure structure = FrontierWorldStateSupport.structureById(state.bootstrap(), damage.structureId());
+        GrayboxCell expected = FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), structure, damage.position());
+        if (expected == null || expected.semanticPart() != damage.semanticPart()) throw new IllegalArgumentException("observed damage is not an exact cell of its named structure");
+        StructureDamage current = state.structureDamage().getOrDefault(damage.structureId(), StructureDamage.empty(damage.structureId()));
+        StructureDamage nextDamage = current.record(damage.position(), damage.semanticPart(), damage.cause());
+        Map<SubjectId, StructureDamage> nextDamageIndex = new LinkedHashMap<>(state.structureDamage()); nextDamageIndex.put(damage.structureId(), nextDamage);
+        int destructiveThreshold = (FrontierGrayboxPlan.intactStructureCellCount(state.bootstrap().terrain(), structure) + 2) / 3;
+        StructureCondition currentCondition = state.structureConditions().get(damage.structureId());
+        StructureCondition nextCondition = currentCondition == StructureCondition.DESTROYED || nextDamage.cells().size() >= destructiveThreshold
+                ? StructureCondition.DESTROYED : StructureCondition.DAMAGED;
+        Map<SubjectId, StructureCondition> nextConditions = new LinkedHashMap<>(state.structureConditions()); nextConditions.put(damage.structureId(), nextCondition);
+        return state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(nextConditions).structureDamage(nextDamageIndex)
+                .resourceSites(state.resourceSitesForCondition(damage.structureId(), nextCondition)));
+    }
+
+    static boolean organOperational(FrontierBootstrap bootstrap, HiveColony colony, Map<BlockPosition, PhysicalDelta> deltas, SubjectId organId) {
+        HiveOrgan organ = bootstrap.hive().organs().stream().filter(value -> value.id().equals(organId)).findFirst().orElse(colony.addedOrgans().get(organId));
+        if (organ == null) throw new IllegalArgumentException("unknown hive organ: " + organId.value());
+        long lost = deltas.values().stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.ownerId().orElseThrow().equals(organId)).count();
+        return lost < (FrontierGrayboxPlan.intactOrganCellCount(bootstrap.terrain(), organ) + 2L) / 3L;
+    }
+}

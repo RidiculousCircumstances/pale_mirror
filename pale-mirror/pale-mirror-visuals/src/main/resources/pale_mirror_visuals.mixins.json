@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.farfrontier.palemirror.visuals.integration.villageroverhaul.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "RecruitServiceMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

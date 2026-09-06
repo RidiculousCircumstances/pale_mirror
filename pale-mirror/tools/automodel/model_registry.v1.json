@@ -1,0 +1,180 @@
+{
+  "schema": "pale_mirror.automodel.model_registry.v1",
+  "policy": {
+    "runtime_promotion": "forbidden",
+    "remote_execution": "disabled",
+    "canonical_blender_access": "forbidden"
+  },
+  "models": [
+    {
+      "id": "sv3d_p_orbit",
+      "kind": "view_synthesis",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Stability AI Community License",
+      "notes": "Three fixed-seed 21-frame orbits only; the literal primary replaces generated 0 degrees."
+    },
+    {
+      "id": "sv3d_p_orbit_fast_fp16_20",
+      "kind": "view_synthesis",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Stability AI Community License",
+      "notes": "Qualification-only 21-frame SV3D_p orbit: FP16 denoiser from a CPU checkpoint cast, explicit FP32 VAE codec boundaries, CUDA FP16 autocast and exactly 20 sampler steps. It is distinct from the full 50-step profile."
+    },
+    {
+      "id": "edit360_dual_anchor_orbit",
+      "kind": "view_synthesis",
+      "status": "deferred_hardware",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 16,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT code plus Stability AI Community License checkpoint",
+      "notes": "Unmodified Edit360 dual-view sampler loads the 9.36 GB SV3D-U FP32 checkpoint directly into CUDA. It needs a separate >=16 GiB hardware preflight and emits visual-review-only sequence frames, never calibrated cameras or geometry evidence."
+    },
+    {
+      "id": "edit360_dual_anchor_orbit_fast_fp16_20",
+      "kind": "view_synthesis",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT code plus Stability AI Community License checkpoint",
+      "notes": "Bounded Edit360 dual-anchor visual experiment: CPU checkpoint cast, FP16 denoiser, FP32 image-codec boundaries, CPU safety-filter/conditioner offload, CUDA autocast and exactly 20 sampling steps. It emits only an uncalibrated visual sequence; no ViewSet, camera yaw, VGGT, geometry or canonical use is permitted."
+    },
+    {
+      "id": "da3_base",
+      "kind": "pose_depth",
+      "status": "local_preflight",
+      "executor": "windows_gpu_or_linux_cpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Apache-2.0",
+      "notes": "Exports pose, depth and confidence; it can reject a turntable but never calibrates generated views as fact."
+    },
+    {
+      "id": "spar3d_low_vram",
+      "kind": "shape_proposal",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 7,
+      "authority": "MODEL_DERIVED",
+      "licence": "Stability AI Community License",
+      "notes": "Single-image point-aware proposal; output is review-only and may not be fused automatically."
+    },
+    {
+      "id": "hunyuan_shape",
+      "kind": "shape_proposal",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Tencent Hunyuan Community License",
+      "notes": "Wraps the existing isolated shape runner only; never writes a canonical Blender source."
+    },
+    {
+      "id": "vggt_official",
+      "kind": "pose_depth",
+      "status": "local_preflight",
+      "executor": "windows_gpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Meta VGGT-Omega checkpoint terms",
+      "notes": "Official facebook/VGGT-Omega 1B-512 only; download, SHA-256 pin and qualification remain required. The quarantined third-party checkpoint is excluded."
+    },
+    {
+      "id": "stable_virtual_camera",
+      "kind": "view_synthesis",
+      "status": "deferred_hardware",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 24,
+      "authority": "MODEL_DERIVED",
+      "licence": "checkpoint terms required",
+      "notes": "Requires a future Linux GPU preflight; no native-Windows execution is configured."
+    },
+    {
+      "id": "mv_adapter",
+      "kind": "view_synthesis",
+      "status": "deferred_hardware",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 16,
+      "authority": "MODEL_DERIVED",
+      "licence": "upstream terms required",
+      "notes": "Future geometry-guided view generator, not an automatic camera authority."
+    },
+    {
+      "id": "sam3",
+      "kind": "segmentation",
+      "status": "deferred_qualification",
+      "executor": "windows_gpu_or_linux_cpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "SAM License",
+      "notes": "May propose secondary masks; source trace remains the primary mask authority."
+    },
+    {
+      "id": "sam3d_objects",
+      "kind": "shape_proposal",
+      "status": "deferred_qualification",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 16,
+      "authority": "MODEL_DERIVED",
+      "licence": "SAM License",
+      "notes": "Single-image shape and texture proposal only."
+    },
+    {
+      "id": "sam3d_body",
+      "kind": "rig_suggestion",
+      "status": "deferred_asset_class",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 16,
+      "authority": "MODEL_DERIVED",
+      "licence": "SAM License",
+      "notes": "Reserved for future humanoid assets; it is not valid for the Collector."
+    },
+    {
+      "id": "trellis2",
+      "kind": "shape_proposal",
+      "status": "deferred_hardware",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 24,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT code; checkpoint terms required",
+      "notes": "High-detail hypothesis only; no topology or PBR authority."
+    },
+    {
+      "id": "marigold",
+      "kind": "material_analysis",
+      "status": "deferred_runtime",
+      "executor": "windows_gpu_or_linux_cpu",
+      "minimum_vram_gib": 8,
+      "authority": "MODEL_DERIVED",
+      "licence": "Apache-2.0",
+      "notes": "PBR maps remain diagnostic while PMMesh v1 supports albedo only."
+    },
+    {
+      "id": "hunyuan_paint",
+      "kind": "texture_proposal",
+      "status": "deferred_runtime",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 21,
+      "authority": "MODEL_DERIVED",
+      "licence": "Tencent Hunyuan Community License",
+      "notes": "Deferred until a PBR runtime contract exists."
+    },
+    {
+      "id": "skin_tokens",
+      "kind": "rig_suggestion",
+      "status": "deferred_hardware",
+      "executor": "linux_gpu",
+      "minimum_vram_gib": 14,
+      "authority": "MODEL_DERIVED",
+      "licence": "MIT",
+      "notes": "Requires future hardware and pose-deformation qualification."
+    }
+  ]
+}

@@ -1,0 +1,7856 @@
+{
+  "meta": {
+    "format_version": "5.0",
+    "model_format": "bedrock",
+    "box_uv": true
+  },
+  "name": "crusher_stalker",
+  "model_identifier": "crusher_stalker",
+  "resolution": {
+    "width": 256,
+    "height": 256
+  },
+  "elements": [
+    {
+      "name": "crusher_low_belly",
+      "from": [
+        -9.45,
+        9.149999999999999,
+        -5
+      ],
+      "to": [
+        13.05,
+        13.249999999999998,
+        5
+      ],
+      "origin": [
+        1.8,
+        11.2,
+        0
+      ],
+      "uv_offset": [
+        20,
+        31
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.3,
+      "faces": {
+        "north": {
+          "uv": [
+            20,
+            31,
+            43,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            51,
+            31,
+            74,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            82,
+            31,
+            92,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            108,
+            31,
+            118,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            134,
+            31,
+            157,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            165,
+            31,
+            188,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "35ab2d7e-34ab-33ab-3aab-39ab33ca38ab3237",
+      "rotation": [
+        0,
+        0,
+        2
+      ]
+    },
+    {
+      "name": "crusher_shoulder_cap",
+      "from": [
+        -9.108004477935776,
+        10.025,
+        -7.3
+      ],
+      "to": [
+        0.40800447793577277,
+        15.825,
+        7.3
+      ],
+      "origin": [
+        -4.3500000000000005,
+        12.925,
+        0
+      ],
+      "uv_offset": [
+        27,
+        21
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.64,
+      "faces": {
+        "north": {
+          "uv": [
+            27,
+            21,
+            37,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            58,
+            21,
+            68,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            89,
+            21,
+            104,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            115,
+            21,
+            130,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            141,
+            21,
+            151,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            172,
+            21,
+            182,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "bdcd1919-bacd-bbcd-c0cd-c1cd1f65becd1aac",
+      "rotation": [
+        0,
+        0,
+        -13.580922354935081
+      ]
+    },
+    {
+      "name": "crusher_shoulder_cap_rear_taper",
+      "from": [
+        -0.37614668508656735,
+        9.84,
+        -4.05
+      ],
+      "to": [
+        8.226146685086567,
+        12.49,
+        4.05
+      ],
+      "origin": [
+        3.925,
+        11.165,
+        0
+      ],
+      "uv_offset": [
+        26,
+        28
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.38,
+      "faces": {
+        "north": {
+          "uv": [
+            26,
+            28,
+            35,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            57,
+            28,
+            66,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            88,
+            28,
+            97,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            114,
+            28,
+            123,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            140,
+            28,
+            149,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            171,
+            28,
+            180,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "69eef066-68ee-67ee-6eee-6deef6b26ceef51f",
+      "rotation": [
+        0,
+        0,
+        -8.582324579335214
+      ]
+    },
+    {
+      "name": "crusher_shoulder_cap_hip_transition",
+      "from": [
+        -1.320378760708395,
+        9.465,
+        -5.7
+      ],
+      "to": [
+        4.320378760708395,
+        13.615,
+        5.7
+      ],
+      "origin": [
+        1.4999999999999998,
+        11.54,
+        0
+      ],
+      "uv_offset": [
+        93,
+        29
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.48,
+      "faces": {
+        "north": {
+          "uv": [
+            93,
+            29,
+            99,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            124,
+            29,
+            130,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            155,
+            29,
+            167,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            181,
+            29,
+            193,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            207,
+            29,
+            213,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            10,
+            29,
+            16,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "053e7bcf-063e-073e-003e-013e7583023e7716",
+      "rotation": [
+        0,
+        0,
+        -10.033120554331168
+      ]
+    },
+    {
+      "name": "crusher_shoulder_crown_front",
+      "from": [
+        -15.1,
+        13,
+        -7.2
+      ],
+      "to": [
+        -5.1,
+        15.8,
+        7.2
+      ],
+      "origin": [
+        -10.1,
+        14.4,
+        0
+      ],
+      "uv_offset": [
+        96,
+        37
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.58,
+      "faces": {
+        "north": {
+          "uv": [
+            96,
+            37,
+            106,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            127,
+            37,
+            137,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            158,
+            37,
+            173,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            184,
+            37,
+            199,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            210,
+            37,
+            220,
+            52
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            13,
+            37,
+            23,
+            52
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "fcfca5a7-fdfc-fefc-f7fc-f8fc9f5bf9fca0ee",
+      "rotation": [
+        0,
+        0,
+        17
+      ]
+    },
+    {
+      "name": "crusher_shoulder_cap_near_fibre",
+      "from": [
+        -7.1000000000000005,
+        11.77,
+        4
+      ],
+      "to": [
+        6.3,
+        12.53,
+        7.6
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        142,
+        131
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.26,
+      "faces": {
+        "north": {
+          "uv": [
+            142,
+            131,
+            156,
+            133
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            173,
+            131,
+            187,
+            133
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            204,
+            131,
+            208,
+            133
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            2,
+            131,
+            6,
+            133
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            28,
+            131,
+            42,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            59,
+            131,
+            73,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "9f6ea291-9c6e-9d6e-a26e-a36ea8dda06ea424"
+    },
+    {
+      "name": "crusher_shoulder_cap_far_fibre",
+      "from": [
+        -7.1000000000000005,
+        11.77,
+        -7.6
+      ],
+      "to": [
+        6.3,
+        12.53,
+        -3.9999999999999996
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        106,
+        37
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.26,
+      "faces": {
+        "north": {
+          "uv": [
+            106,
+            37,
+            120,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            137,
+            37,
+            151,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            168,
+            37,
+            172,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            194,
+            37,
+            198,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            220,
+            37,
+            234,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            23,
+            37,
+            37,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "e3d4c1c3-e4d4-e5d4-e6d4-e7d4c80fe8d4c9a2"
+    },
+    {
+      "name": "crusher_head_wedge",
+      "from": [
+        -18.50669805615275,
+        7.425000000000001,
+        1.7999999999999998
+      ],
+      "to": [
+        -8.94330194384725,
+        12.875,
+        10.899999999999999
+      ],
+      "origin": [
+        -13.725,
+        10.15,
+        6.35
+      ],
+      "uv_offset": [
+        126,
+        126
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.45,
+      "faces": {
+        "north": {
+          "uv": [
+            126,
+            126,
+            136,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            157,
+            126,
+            167,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            188,
+            126,
+            198,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            214,
+            126,
+            224,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            12,
+            126,
+            22,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            43,
+            126,
+            53,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "bc51af65-b951-ba51-b751-b851a919b551a460",
+      "rotation": [
+        0,
+        0,
+        -119.62905440719284
+      ]
+    },
+    {
+      "name": "crusher_head_beak",
+      "from": [
+        -17.349999999999998,
+        6.225,
+        3.6
+      ],
+      "to": [
+        -12.049999999999997,
+        8.975,
+        9.8
+      ],
+      "origin": [
+        -14.7,
+        7.6,
+        6.7
+      ],
+      "uv_offset": [
+        22,
+        31
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.32,
+      "faces": {
+        "north": {
+          "uv": [
+            22,
+            31,
+            28,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            53,
+            31,
+            59,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            84,
+            31,
+            91,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            110,
+            31,
+            117,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            136,
+            31,
+            142,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            167,
+            31,
+            173,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "f60c9fa9-f30c-f40c-f90c-fa0ca5f5f70ca13c",
+      "rotation": [
+        0,
+        0,
+        -58
+      ]
+    },
+    {
+      "name": "crusher_head_visible_drop",
+      "from": [
+        -16.25,
+        7.574999999999999,
+        5.5249999999999995
+      ],
+      "to": [
+        -9.35,
+        11.325,
+        11.875
+      ],
+      "origin": [
+        -12.8,
+        9.45,
+        8.7
+      ],
+      "uv_offset": [
+        52,
+        143
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.38,
+      "faces": {
+        "north": {
+          "uv": [
+            52,
+            143,
+            59,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            83,
+            143,
+            90,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            114,
+            143,
+            121,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            140,
+            143,
+            147,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            166,
+            143,
+            173,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            197,
+            143,
+            204,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "93649d89-9064-9164-9664-9764a3d594649f1c",
+      "rotation": [
+        0,
+        0,
+        -51
+      ]
+    },
+    {
+      "name": "crusher_head_visible_nose",
+      "from": [
+        -17.65,
+        4.775,
+        6.675
+      ],
+      "to": [
+        -12.849999999999998,
+        7.2250000000000005,
+        11.524999999999999
+      ],
+      "origin": [
+        -15.25,
+        6,
+        9.1
+      ],
+      "uv_offset": [
+        50,
+        145
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.28,
+      "faces": {
+        "north": {
+          "uv": [
+            50,
+            145,
+            55,
+            148
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            81,
+            145,
+            86,
+            148
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            112,
+            145,
+            117,
+            148
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            138,
+            145,
+            143,
+            148
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            164,
+            145,
+            169,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            195,
+            145,
+            200,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "72aa45c3-73aa-74aa-75aa-76aa4c0f77aa4da2",
+      "rotation": [
+        0,
+        0,
+        -62
+      ]
+    },
+    {
+      "name": "crusher_head_pendant_tip",
+      "from": [
+        -18.3,
+        2.875,
+        7.725
+      ],
+      "to": [
+        -15.4,
+        4.225,
+        10.774999999999999
+      ],
+      "origin": [
+        -16.85,
+        3.55,
+        9.25
+      ],
+      "uv_offset": [
+        169,
+        42
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.16,
+      "faces": {
+        "north": {
+          "uv": [
+            169,
+            42,
+            172,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            200,
+            42,
+            203,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            3,
+            42,
+            7,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            29,
+            42,
+            33,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            55,
+            42,
+            58,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            86,
+            42,
+            89,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "8d54d0ae-8c54-8b54-9254-9154d6fa9054d567",
+      "rotation": [
+        0,
+        0,
+        -44
+      ]
+    },
+    {
+      "name": "crusher_head_near_plate",
+      "from": [
+        -15,
+        10.3,
+        4.675
+      ],
+      "to": [
+        -10.2,
+        14.200000000000001,
+        6.324999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        30,
+        31
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.24,
+      "faces": {
+        "north": {
+          "uv": [
+            30,
+            31,
+            35,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            61,
+            31,
+            66,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            92,
+            31,
+            94,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            118,
+            31,
+            120,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            144,
+            31,
+            149,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            175,
+            31,
+            180,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "9fb4b580-a2b4-a1b4-a4b4-a3b4bbcca6b4c085"
+    },
+    {
+      "name": "crusher_head_far_plate",
+      "from": [
+        -15,
+        10.3,
+        -5.125
+      ],
+      "to": [
+        -10.2,
+        14.200000000000001,
+        -3.475
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        165,
+        50
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.24,
+      "faces": {
+        "north": {
+          "uv": [
+            165,
+            50,
+            170,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            196,
+            50,
+            201,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            227,
+            50,
+            229,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            25,
+            50,
+            27,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            51,
+            50,
+            56,
+            52
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            82,
+            50,
+            87,
+            52
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "8e9f6736-8d9f-8c9f-939f-929f6d82919f6bef"
+    },
+    {
+      "name": "crusher_l_upper_mass",
+      "from": [
+        -9.447728022541684,
+        8.974999999999998,
+        4.3500000000000005
+      ],
+      "to": [
+        -3.8522719774583143,
+        13.824999999999998,
+        9
+      ],
+      "origin": [
+        -6.6499999999999995,
+        11.399999999999999,
+        6.675000000000001
+      ],
+      "uv_offset": [
+        26,
+        22
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.34,
+      "faces": {
+        "north": {
+          "uv": [
+            26,
+            22,
+            32,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            57,
+            22,
+            63,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            88,
+            22,
+            93,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            114,
+            22,
+            119,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            140,
+            22,
+            146,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            171,
+            22,
+            177,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "6e342796-6d34-6c34-7334-72342de271342c4f",
+      "rotation": [
+        0,
+        0,
+        -118.52311860631207
+      ]
+    },
+    {
+      "name": "crusher_l_upper_plate",
+      "from": [
+        -9.65,
+        10.4,
+        4.825
+      ],
+      "to": [
+        -3.75,
+        12.7,
+        10.075
+      ],
+      "origin": [
+        -6.7,
+        11.55,
+        7.45
+      ],
+      "uv_offset": [
+        153,
+        42
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.25,
+      "faces": {
+        "north": {
+          "uv": [
+            153,
+            42,
+            159,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            184,
+            42,
+            190,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            215,
+            42,
+            221,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            13,
+            42,
+            19,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            39,
+            42,
+            45,
+            48
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            70,
+            42,
+            76,
+            48
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "a21b4777-a31b-a41b-9d1b-9e1b412b9f1b42be",
+      "rotation": [
+        0,
+        0,
+        62
+      ]
+    },
+    {
+      "name": "crusher_l_upper_cord",
+      "from": [
+        -8.825,
+        12.26,
+        7.889999999999999
+      ],
+      "to": [
+        -4.174999999999999,
+        12.74,
+        9.009999999999998
+      ],
+      "origin": [
+        -6.499999999999999,
+        12.5,
+        8.45
+      ],
+      "uv_offset": [
+        107,
+        37
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            107,
+            37,
+            112,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            138,
+            37,
+            143,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            169,
+            37,
+            171,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            195,
+            37,
+            197,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            221,
+            37,
+            226,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            24,
+            37,
+            29,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "79a96288-7ca9-7ba9-7ea9-7da968d480a96d8d",
+      "rotation": [
+        0,
+        0,
+        62
+      ]
+    },
+    {
+      "name": "crusher_l_elbow_upper",
+      "from": [
+        -10.024999999999999,
+        9.19,
+        5.275
+      ],
+      "to": [
+        -5.774999999999999,
+        9.57,
+        9.625
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        99,
+        35
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            99,
+            35,
+            104,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            130,
+            35,
+            135,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            161,
+            35,
+            166,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            187,
+            35,
+            192,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            213,
+            35,
+            218,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            16,
+            35,
+            21,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "32ea183e-31ea-30ea-37ea-36ea1e8a35ea1cf7"
+    },
+    {
+      "name": "crusher_l_elbow_lower",
+      "from": [
+        -9.5575,
+        8.68,
+        5.753500000000001
+      ],
+      "to": [
+        -6.2425,
+        8.959999999999999,
+        9.1465
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        45,
+        143
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            45,
+            143,
+            49,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            76,
+            143,
+            80,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            107,
+            143,
+            111,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            133,
+            143,
+            137,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            159,
+            143,
+            163,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            190,
+            143,
+            194,
+            147
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "a3c69972-a2c6-a1c6-a0c6-9fc693269ec69193"
+    },
+    {
+      "name": "crusher_l_fore_mass",
+      "from": [
+        -12.960264014900353,
+        4.1499999999999995,
+        5.375
+      ],
+      "to": [
+        -6.539735985099648,
+        9.25,
+        10.325
+      ],
+      "origin": [
+        -9.75,
+        6.699999999999999,
+        7.85
+      ],
+      "uv_offset": [
+        49,
+        145
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.36,
+      "faces": {
+        "north": {
+          "uv": [
+            49,
+            145,
+            56,
+            151
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            80,
+            145,
+            87,
+            151
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            111,
+            145,
+            116,
+            151
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            137,
+            145,
+            142,
+            151
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            163,
+            145,
+            170,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            194,
+            145,
+            201,
+            150
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "095981b7-0a59-0b59-0459-05597b6b06597cfe",
+      "rotation": [
+        0,
+        0,
+        -127.6262336386698
+      ]
+    },
+    {
+      "name": "crusher_l_fore_plate",
+      "from": [
+        -12.950000000000001,
+        5.65,
+        5.575000000000001
+      ],
+      "to": [
+        -6.650000000000001,
+        7.75,
+        11.025000000000002
+      ],
+      "origin": [
+        -9.8,
+        6.7,
+        8.3
+      ],
+      "uv_offset": [
+        55,
+        139
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.22,
+      "faces": {
+        "north": {
+          "uv": [
+            55,
+            139,
+            62,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            86,
+            139,
+            93,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            117,
+            139,
+            123,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            143,
+            139,
+            149,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            169,
+            139,
+            176,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            200,
+            139,
+            207,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "79c584c7-7ac5-7bc5-74c5-75c57e7b76c5800e",
+      "rotation": [
+        0,
+        0,
+        52
+      ]
+    },
+    {
+      "name": "crusher_l_fore_cord",
+      "from": [
+        -12.175,
+        7.46,
+        8.71
+      ],
+      "to": [
+        -7.025,
+        7.9399999999999995,
+        9.790000000000001
+      ],
+      "origin": [
+        -9.600000000000001,
+        7.7,
+        9.25
+      ],
+      "uv_offset": [
+        27,
+        31
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            27,
+            31,
+            33,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            58,
+            31,
+            64,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            89,
+            31,
+            91,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            115,
+            31,
+            117,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            141,
+            31,
+            147,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            172,
+            31,
+            178,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "89897444-8c89-8b89-8689-85896df8888972b1",
+      "rotation": [
+        0,
+        0,
+        52
+      ]
+    },
+    {
+      "name": "crusher_l_pod_upper",
+      "from": [
+        -12.517764045228237,
+        1.0499999999999998,
+        7.699999999999999
+      ],
+      "to": [
+        -10.382235954771765,
+        5.8,
+        13.95
+      ],
+      "origin": [
+        -11.450000000000001,
+        3.425,
+        10.825
+      ],
+      "uv_offset": [
+        164,
+        50
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.36,
+      "faces": {
+        "north": {
+          "uv": [
+            164,
+            50,
+            167,
+            55
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            195,
+            50,
+            198,
+            55
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            226,
+            50,
+            233,
+            55
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            24,
+            50,
+            31,
+            55
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            50,
+            50,
+            53,
+            57
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            81,
+            50,
+            84,
+            57
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "a2d8a3b6-a1d8-a0d8-a7d8-a6d8aa02a5d8a86f",
+      "rotation": [
+        0,
+        0,
+        -80.27242144859838
+      ]
+    },
+    {
+      "name": "crusher_l_fist_block",
+      "from": [
+        -14.425,
+        0.7749999999999999,
+        10.05
+      ],
+      "to": [
+        -8.175,
+        4.324999999999999,
+        16.75
+      ],
+      "origin": [
+        -11.3,
+        2.55,
+        13.4
+      ],
+      "uv_offset": [
+        97,
+        30
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.48,
+      "faces": {
+        "north": {
+          "uv": [
+            97,
+            30,
+            104,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            128,
+            30,
+            135,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            159,
+            30,
+            166,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            185,
+            30,
+            192,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            211,
+            30,
+            218,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            14,
+            30,
+            21,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "7e427ea1-7b42-7c42-8142-824284ed7f428034",
+      "rotation": [
+        0,
+        0,
+        14
+      ]
+    },
+    {
+      "name": "crusher_l_pod_contact",
+      "from": [
+        -14.175,
+        -0.020000000000000018,
+        11.274999999999999
+      ],
+      "to": [
+        -9.525,
+        1.58,
+        16.424999999999997
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        49,
+        138
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.42,
+      "faces": {
+        "north": {
+          "uv": [
+            49,
+            138,
+            54,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            80,
+            138,
+            85,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            111,
+            138,
+            117,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            137,
+            138,
+            143,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            163,
+            138,
+            168,
+            144
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            194,
+            138,
+            199,
+            144
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "cc703680-cf70-ce70-d170-d0703cccd3704185"
+    },
+    {
+      "name": "crusher_l_pod_knuckle",
+      "from": [
+        -12.775000000000002,
+        3.425,
+        11.3
+      ],
+      "to": [
+        -8.925000000000002,
+        4.574999999999999,
+        15.5
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        163,
+        41
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.24,
+      "faces": {
+        "north": {
+          "uv": [
+            163,
+            41,
+            167,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            194,
+            41,
+            198,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            225,
+            41,
+            230,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            23,
+            41,
+            28,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            49,
+            41,
+            53,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            80,
+            41,
+            84,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "995bd732-985b-975b-965b-955bd0e6945bcf53"
+    },
+    {
+      "name": "crusher_r_upper_mass",
+      "from": [
+        -11.01238075793812,
+        8.774999999999999,
+        5.124999999999999
+      ],
+      "to": [
+        -5.9876192420618795,
+        13.624999999999998,
+        9.774999999999999
+      ],
+      "origin": [
+        -8.5,
+        11.2,
+        7.449999999999999
+      ],
+      "uv_offset": [
+        128,
+        133
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.34,
+      "faces": {
+        "north": {
+          "uv": [
+            128,
+            133,
+            134,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            159,
+            133,
+            165,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            190,
+            133,
+            195,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            216,
+            133,
+            221,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            14,
+            133,
+            20,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            45,
+            133,
+            51,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "dcacee57-ddac-deac-d7ac-d8ace80bd9ace99e",
+      "rotation": [
+        0,
+        0,
+        -120.96375653207352
+      ]
+    },
+    {
+      "name": "crusher_r_upper_plate",
+      "from": [
+        -11.45,
+        10.1,
+        5.175
+      ],
+      "to": [
+        -5.549999999999999,
+        12.399999999999999,
+        10.425
+      ],
+      "origin": [
+        -8.5,
+        11.25,
+        7.8
+      ],
+      "uv_offset": [
+        93,
+        28
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.25,
+      "faces": {
+        "north": {
+          "uv": [
+            93,
+            28,
+            99,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            124,
+            28,
+            130,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            155,
+            28,
+            161,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            181,
+            28,
+            187,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            207,
+            28,
+            213,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            10,
+            28,
+            16,
+            34
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "f1b76108-f4b7-f3b7-f6b7-f5b76754f8b76c0d",
+      "rotation": [
+        0,
+        0,
+        62
+      ]
+    },
+    {
+      "name": "crusher_r_upper_cord",
+      "from": [
+        -10.575,
+        11.86,
+        8.34
+      ],
+      "to": [
+        -5.924999999999999,
+        12.34,
+        9.46
+      ],
+      "origin": [
+        -8.25,
+        12.1,
+        8.9
+      ],
+      "uv_offset": [
+        24,
+        31
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            24,
+            31,
+            29,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            55,
+            31,
+            60,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            86,
+            31,
+            88,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            112,
+            31,
+            114,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            138,
+            31,
+            143,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            169,
+            31,
+            174,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "49913a81-4691-4791-4c91-4d9140cd4a913c14",
+      "rotation": [
+        0,
+        0,
+        62
+      ]
+    },
+    {
+      "name": "crusher_r_elbow_upper",
+      "from": [
+        -11.825,
+        9.29,
+        5.925
+      ],
+      "to": [
+        -7.574999999999999,
+        9.67,
+        10.274999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        158,
+        49
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            158,
+            49,
+            163,
+            51
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            189,
+            49,
+            194,
+            51
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            220,
+            49,
+            225,
+            51
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            18,
+            49,
+            23,
+            51
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            44,
+            49,
+            49,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            75,
+            49,
+            80,
+            54
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "619f45d1-5e9f-5f9f-649f-659f4c1d629f4764"
+    },
+    {
+      "name": "crusher_r_elbow_lower",
+      "from": [
+        -11.3575,
+        8.78,
+        6.403499999999999
+      ],
+      "to": [
+        -8.0425,
+        9.059999999999999,
+        9.796499999999998
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        20,
+        22
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            20,
+            22,
+            24,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            51,
+            22,
+            55,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            82,
+            22,
+            86,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            108,
+            22,
+            112,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            134,
+            22,
+            138,
+            26
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            165,
+            22,
+            169,
+            26
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "aa5081c6-a950-a850-af50-ae508812ad50867f"
+    },
+    {
+      "name": "crusher_r_fore_mass",
+      "from": [
+        -13.22635139326435,
+        4.45,
+        5.9
+      ],
+      "to": [
+        -8.073648606735647,
+        9.55,
+        10.850000000000001
+      ],
+      "origin": [
+        -10.649999999999999,
+        7,
+        8.375
+      ],
+      "uv_offset": [
+        130,
+        137
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.36,
+      "faces": {
+        "north": {
+          "uv": [
+            130,
+            137,
+            136,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            161,
+            137,
+            167,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            192,
+            137,
+            197,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            218,
+            137,
+            223,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            16,
+            137,
+            22,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            47,
+            137,
+            53,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "4805acc3-4905-4a05-4b05-4c05b30f4d05b4a2",
+      "rotation": [
+        0,
+        0,
+        -113.355564859286
+      ]
+    },
+    {
+      "name": "crusher_r_fore_plate",
+      "from": [
+        -13.9,
+        5.8500000000000005,
+        5.725
+      ],
+      "to": [
+        -7.6000000000000005,
+        7.950000000000001,
+        11.175
+      ],
+      "origin": [
+        -10.75,
+        6.9,
+        8.45
+      ],
+      "uv_offset": [
+        98,
+        33
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.22,
+      "faces": {
+        "north": {
+          "uv": [
+            98,
+            33,
+            105,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            129,
+            33,
+            136,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            160,
+            33,
+            166,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            186,
+            33,
+            192,
+            36
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            212,
+            33,
+            219,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            15,
+            33,
+            22,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "20c390b8-23c3-22c3-25c3-24c3970427c39bbd",
+      "rotation": [
+        0,
+        0,
+        52
+      ]
+    },
+    {
+      "name": "crusher_r_fore_cord",
+      "from": [
+        -13.125,
+        7.609999999999999,
+        8.86
+      ],
+      "to": [
+        -7.975,
+        8.09,
+        9.94
+      ],
+      "origin": [
+        -10.55,
+        7.85,
+        9.4
+      ],
+      "uv_offset": [
+        48,
+        135
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            48,
+            135,
+            54,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            79,
+            135,
+            85,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            110,
+            135,
+            112,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            136,
+            135,
+            138,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            162,
+            135,
+            168,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            193,
+            135,
+            199,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "4ff08465-4cf0-4df0-4af0-4bf07e1948f07960",
+      "rotation": [
+        0,
+        0,
+        52
+      ]
+    },
+    {
+      "name": "crusher_r_pod_upper",
+      "from": [
+        -20.481755271800104,
+        1.8499999999999996,
+        7.800000000000001
+      ],
+      "to": [
+        -11.218244728199899,
+        5.1,
+        14.05
+      ],
+      "origin": [
+        -15.850000000000001,
+        3.4749999999999996,
+        10.925
+      ],
+      "uv_offset": [
+        103,
+        31
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.36,
+      "faces": {
+        "north": {
+          "uv": [
+            103,
+            31,
+            113,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            134,
+            31,
+            144,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            165,
+            31,
+            172,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            191,
+            31,
+            198,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            217,
+            31,
+            227,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            20,
+            31,
+            30,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "05a9e8ab-06a9-07a9-08a9-09a9eef70aa9f08a",
+      "rotation": [
+        0,
+        0,
+        -162.68436448999617
+      ]
+    },
+    {
+      "name": "crusher_r_pod_proximal_arm",
+      "from": [
+        -18.73342048048193,
+        4.949999999999999,
+        7.175
+      ],
+      "to": [
+        -9.416579519518068,
+        9.399999999999999,
+        13.524999999999999
+      ],
+      "origin": [
+        -14.075,
+        7.175,
+        10.35
+      ],
+      "uv_offset": [
+        137,
+        134
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.34,
+      "faces": {
+        "north": {
+          "uv": [
+            137,
+            134,
+            147,
+            139
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            168,
+            134,
+            178,
+            139
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            199,
+            134,
+            206,
+            139
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            225,
+            134,
+            232,
+            139
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            23,
+            134,
+            33,
+            141
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            54,
+            134,
+            64,
+            141
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "9d57563d-9a57-9b57-9857-99574ff196574b38",
+      "rotation": [
+        0,
+        0,
+        -140.8906264162041
+      ]
+    },
+    {
+      "name": "crusher_r_fist_block",
+      "from": [
+        -23.225,
+        0.375,
+        9.85
+      ],
+      "to": [
+        -16.975,
+        3.925,
+        16.55
+      ],
+      "origin": [
+        -20.1,
+        2.15,
+        13.2
+      ],
+      "uv_offset": [
+        20,
+        20
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.48,
+      "faces": {
+        "north": {
+          "uv": [
+            20,
+            20,
+            27,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            51,
+            20,
+            58,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            82,
+            20,
+            89,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            108,
+            20,
+            115,
+            24
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            134,
+            20,
+            141,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            165,
+            20,
+            172,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "1f3afba9-1c3a-1d3a-223b-233b01f5203afd3c",
+      "rotation": [
+        0,
+        0,
+        -22
+      ]
+    },
+    {
+      "name": "crusher_r_pod_contact",
+      "from": [
+        -23.275,
+        -0.18000000000000005,
+        10.975000000000001
+      ],
+      "to": [
+        -18.625,
+        1.42,
+        16.125
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        22,
+        31
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.42,
+      "faces": {
+        "north": {
+          "uv": [
+            22,
+            31,
+            27,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            53,
+            31,
+            58,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            84,
+            31,
+            90,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            110,
+            31,
+            116,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            136,
+            31,
+            141,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            167,
+            31,
+            172,
+            37
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "16c7b8f2-15c7-14c7-13c7-12c7b2a611c7b113"
+    },
+    {
+      "name": "crusher_r_pod_knuckle",
+      "from": [
+        -21.575000000000003,
+        3.0249999999999995,
+        11.1
+      ],
+      "to": [
+        -17.725,
+        4.174999999999999,
+        15.3
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        169,
+        40
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.24,
+      "faces": {
+        "north": {
+          "uv": [
+            169,
+            40,
+            173,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            200,
+            40,
+            204,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            3,
+            40,
+            8,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            29,
+            40,
+            34,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            55,
+            40,
+            59,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            86,
+            40,
+            90,
+            45
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "4a2198aa-4921-4821-4721-4621925e452190cb"
+    },
+    {
+      "name": "crusher_hind_1_thigh",
+      "from": [
+        3.6596013553019255,
+        9.4,
+        -7.199999999999999
+      ],
+      "to": [
+        10.040398644698074,
+        12.600000000000001,
+        -3.999999999999999
+      ],
+      "origin": [
+        6.85,
+        11,
+        -5.6
+      ],
+      "uv_offset": [
+        101,
+        37
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.18,
+      "faces": {
+        "north": {
+          "uv": [
+            101,
+            37,
+            108,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            132,
+            37,
+            139,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            163,
+            37,
+            167,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            189,
+            37,
+            193,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            215,
+            37,
+            222,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            18,
+            37,
+            25,
+            41
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "628ef26b-638e-648e-658e-668ef8b7678efa4a",
+      "rotation": [
+        0,
+        0,
+        -41.6335393365702
+      ]
+    },
+    {
+      "name": "crusher_hind_1_knee_upper",
+      "from": [
+        7.6,
+        9.09,
+        -8.1
+      ],
+      "to": [
+        10.6,
+        9.47,
+        -4.699999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        35,
+        25
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            35,
+            25,
+            38,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            66,
+            25,
+            69,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            97,
+            25,
+            101,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            123,
+            25,
+            127,
+            27
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            149,
+            25,
+            152,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            180,
+            25,
+            183,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "cac2409f-cbc2-ccc2-c5c2-c6c23a53c7c23be6"
+    },
+    {
+      "name": "crusher_hind_1_knee_lower",
+      "from": [
+        7.93,
+        8.58,
+        -7.726000000000001
+      ],
+      "to": [
+        10.27,
+        8.86,
+        -5.074000000000001
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        129,
+        128
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            129,
+            128,
+            132,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            160,
+            128,
+            163,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            191,
+            128,
+            194,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            217,
+            128,
+            220,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            15,
+            128,
+            18,
+            131
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            46,
+            128,
+            49,
+            131
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "db6f798d-d86f-d96f-d66f-d76f7341d46f6e88"
+    },
+    {
+      "name": "crusher_hind_1_shin",
+      "from": [
+        5.8358334134461325,
+        3.8,
+        -8.025
+      ],
+      "to": [
+        14.864166586553868,
+        5.9,
+        -5.575
+      ],
+      "origin": [
+        10.35,
+        4.85,
+        -6.800000000000001
+      ],
+      "uv_offset": [
+        100,
+        43
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.12,
+      "faces": {
+        "north": {
+          "uv": [
+            100,
+            43,
+            110,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            131,
+            43,
+            141,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            162,
+            43,
+            165,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            188,
+            43,
+            191,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            214,
+            43,
+            224,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            17,
+            43,
+            27,
+            46
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "0847561d-0547-0647-0347-04474fd101474b18",
+      "rotation": [
+        0,
+        0,
+        -73.23744553816725
+      ]
+    },
+    {
+      "name": "crusher_hind_1_foot",
+      "from": [
+        10.399999999999999,
+        -0.08000000000000002,
+        -8.7
+      ],
+      "to": [
+        13.999999999999998,
+        0.9199999999999999,
+        -5.699999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        21,
+        28
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.2,
+      "faces": {
+        "north": {
+          "uv": [
+            21,
+            28,
+            25,
+            30
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            52,
+            28,
+            56,
+            30
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            83,
+            28,
+            86,
+            30
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            109,
+            28,
+            112,
+            30
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            135,
+            28,
+            139,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            166,
+            28,
+            170,
+            31
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "843a8d7a-833a-823a-813a-803a872e7f3a859b"
+    },
+    {
+      "name": "crusher_hind_2_thigh",
+      "from": [
+        3.6596013553019255,
+        9.4,
+        3.9999999999999996
+      ],
+      "to": [
+        10.040398644698074,
+        12.600000000000001,
+        7.199999999999999
+      ],
+      "origin": [
+        6.85,
+        11,
+        5.6
+      ],
+      "uv_offset": [
+        49,
+        145
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.18,
+      "faces": {
+        "north": {
+          "uv": [
+            49,
+            145,
+            56,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            80,
+            145,
+            87,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            111,
+            145,
+            115,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            137,
+            145,
+            141,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            163,
+            145,
+            170,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            194,
+            145,
+            201,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "d35e57ce-d25e-d15e-d85e-d75e5e1ad65e5c87",
+      "rotation": [
+        0,
+        0,
+        -41.6335393365702
+      ]
+    },
+    {
+      "name": "crusher_hind_2_knee_upper",
+      "from": [
+        7.6,
+        9.09,
+        4.7
+      ],
+      "to": [
+        10.6,
+        9.47,
+        8.1
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        132,
+        128
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            132,
+            128,
+            135,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            163,
+            128,
+            166,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            194,
+            128,
+            198,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            220,
+            128,
+            224,
+            130
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            18,
+            128,
+            21,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            49,
+            128,
+            52,
+            132
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "ad565c07-ae56-af56-a856-a95655bbaa56574e"
+    },
+    {
+      "name": "crusher_hind_2_knee_lower",
+      "from": [
+        7.93,
+        8.58,
+        5.074
+      ],
+      "to": [
+        10.27,
+        8.86,
+        7.726
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        152,
+        45
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            152,
+            45,
+            155,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            183,
+            45,
+            186,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            214,
+            45,
+            217,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            12,
+            45,
+            15,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            38,
+            45,
+            41,
+            48
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            69,
+            45,
+            72,
+            48
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "405885c3-4158-4258-4358-44588c0f45588da2"
+    },
+    {
+      "name": "crusher_hind_2_shin",
+      "from": [
+        5.8358334134461325,
+        3.8,
+        5.575000000000001
+      ],
+      "to": [
+        14.864166586553868,
+        5.9,
+        8.025000000000002
+      ],
+      "origin": [
+        10.35,
+        4.85,
+        6.800000000000001
+      ],
+      "uv_offset": [
+        160,
+        37
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.12,
+      "faces": {
+        "north": {
+          "uv": [
+            160,
+            37,
+            170,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            191,
+            37,
+            201,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            222,
+            37,
+            225,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            20,
+            37,
+            23,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            46,
+            37,
+            56,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            77,
+            37,
+            87,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "871bfd99-841b-851b-8a1c-8b1c03e5881bff2c",
+      "rotation": [
+        0,
+        0,
+        -73.23744553816725
+      ]
+    },
+    {
+      "name": "crusher_hind_2_foot",
+      "from": [
+        10.399999999999999,
+        -0.08000000000000002,
+        5.7
+      ],
+      "to": [
+        13.999999999999998,
+        0.9199999999999999,
+        8.7
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        127,
+        140
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.2,
+      "faces": {
+        "north": {
+          "uv": [
+            127,
+            140,
+            131,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            158,
+            140,
+            162,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            189,
+            140,
+            192,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            215,
+            140,
+            218,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            13,
+            140,
+            17,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            44,
+            140,
+            48,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "23a094c8-26a0-25a0-28a0-27a09b142aa09fcd"
+    },
+    {
+      "name": "crusher_hind_3_thigh",
+      "from": [
+        9.759601355301925,
+        9.4,
+        -7.199999999999999
+      ],
+      "to": [
+        16.140398644698074,
+        12.600000000000001,
+        -3.999999999999999
+      ],
+      "origin": [
+        12.95,
+        11,
+        -5.6
+      ],
+      "uv_offset": [
+        50,
+        145
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.18,
+      "faces": {
+        "north": {
+          "uv": [
+            50,
+            145,
+            57,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            81,
+            145,
+            88,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            112,
+            145,
+            116,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            138,
+            145,
+            142,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            164,
+            145,
+            171,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            195,
+            145,
+            202,
+            149
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "f95675d8-fc56-fb56-fe56-fd567c24005680dd",
+      "rotation": [
+        0,
+        0,
+        -41.6335393365702
+      ]
+    },
+    {
+      "name": "crusher_hind_3_knee_upper",
+      "from": [
+        13.7,
+        9.09,
+        -8.1
+      ],
+      "to": [
+        16.7,
+        9.47,
+        -4.699999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        92,
+        31
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            92,
+            31,
+            95,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            123,
+            31,
+            126,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            154,
+            31,
+            158,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            180,
+            31,
+            184,
+            33
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            206,
+            31,
+            209,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            9,
+            31,
+            12,
+            35
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "870a73ec-8a0a-890a-840a-830a6da0860a7259"
+    },
+    {
+      "name": "crusher_hind_3_knee_lower",
+      "from": [
+        14.03,
+        8.58,
+        -7.726000000000001
+      ],
+      "to": [
+        16.369999999999997,
+        8.86,
+        -5.074000000000001
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        136,
+        135
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            136,
+            135,
+            139,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            167,
+            135,
+            170,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            198,
+            135,
+            201,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            224,
+            135,
+            227,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            22,
+            135,
+            25,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            53,
+            135,
+            56,
+            138
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "182d5c0e-172d-162d-1d2d-1c2d625a1b2d60c7"
+    },
+    {
+      "name": "crusher_hind_3_shin",
+      "from": [
+        11.935833413446133,
+        3.8,
+        -8.025
+      ],
+      "to": [
+        20.964166586553866,
+        5.9,
+        -5.575
+      ],
+      "origin": [
+        16.45,
+        4.85,
+        -6.800000000000001
+      ],
+      "uv_offset": [
+        163,
+        44
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.12,
+      "faces": {
+        "north": {
+          "uv": [
+            163,
+            44,
+            173,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            194,
+            44,
+            204,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            225,
+            44,
+            228,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            23,
+            44,
+            26,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            49,
+            44,
+            59,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            80,
+            44,
+            90,
+            47
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "49304466-4830-4730-4e30-4d304ab24c30491f",
+      "rotation": [
+        0,
+        0,
+        -73.23744553816725
+      ]
+    },
+    {
+      "name": "crusher_hind_3_foot",
+      "from": [
+        16.5,
+        -0.08000000000000002,
+        -8.7
+      ],
+      "to": [
+        20.1,
+        0.9199999999999999,
+        -5.699999999999999
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        54,
+        133
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.2,
+      "faces": {
+        "north": {
+          "uv": [
+            54,
+            133,
+            58,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            85,
+            133,
+            89,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            116,
+            133,
+            119,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            142,
+            133,
+            145,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            168,
+            133,
+            172,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            199,
+            133,
+            203,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "6e239f45-6b23-6c23-6923-6a2398f967239440"
+    },
+    {
+      "name": "crusher_hind_4_thigh",
+      "from": [
+        9.759601355301925,
+        9.4,
+        3.9999999999999996
+      ],
+      "to": [
+        16.140398644698074,
+        12.600000000000001,
+        7.199999999999999
+      ],
+      "origin": [
+        12.95,
+        11,
+        5.6
+      ],
+      "uv_offset": [
+        128,
+        139
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.18,
+      "faces": {
+        "north": {
+          "uv": [
+            128,
+            139,
+            135,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            159,
+            139,
+            166,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            190,
+            139,
+            194,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            216,
+            139,
+            220,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            14,
+            139,
+            21,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            45,
+            139,
+            52,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "3e8b3a97-3f8b-408b-398b-3a8b344b3b8b35de",
+      "rotation": [
+        0,
+        0,
+        -41.6335393365702
+      ]
+    },
+    {
+      "name": "crusher_hind_4_knee_upper",
+      "from": [
+        13.7,
+        9.09,
+        4.7
+      ],
+      "to": [
+        16.7,
+        9.47,
+        8.1
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        165,
+        40
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.06,
+      "faces": {
+        "north": {
+          "uv": [
+            165,
+            40,
+            168,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            196,
+            40,
+            199,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            227,
+            40,
+            231,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            25,
+            40,
+            29,
+            42
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            51,
+            40,
+            54,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            82,
+            40,
+            85,
+            44
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "b4a6befc-b7a6-b6a6-b1a6-b0a6b8b0b3a6bd69"
+    },
+    {
+      "name": "crusher_hind_4_knee_lower",
+      "from": [
+        14.03,
+        8.58,
+        5.074
+      ],
+      "to": [
+        16.369999999999997,
+        8.86,
+        7.726
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        57,
+        134
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.05,
+      "faces": {
+        "north": {
+          "uv": [
+            57,
+            134,
+            60,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            88,
+            134,
+            91,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            119,
+            134,
+            122,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            145,
+            134,
+            148,
+            136
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            171,
+            134,
+            174,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            202,
+            134,
+            205,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "e582bd44-e882-e782-e282-e182b6f8e482bbb1"
+    },
+    {
+      "name": "crusher_hind_4_shin",
+      "from": [
+        11.935833413446133,
+        3.8,
+        5.575000000000001
+      ],
+      "to": [
+        20.964166586553866,
+        5.9,
+        8.025000000000002
+      ],
+      "origin": [
+        16.45,
+        4.85,
+        6.800000000000001
+      ],
+      "uv_offset": [
+        58,
+        139
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.12,
+      "faces": {
+        "north": {
+          "uv": [
+            58,
+            139,
+            68,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            89,
+            139,
+            99,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            120,
+            139,
+            123,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            146,
+            139,
+            149,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            172,
+            139,
+            182,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            203,
+            139,
+            213,
+            142
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "f5d7f832-f4d7-f3d7-f2d7-f1d7f1e6f0d7f053",
+      "rotation": [
+        0,
+        0,
+        -73.23744553816725
+      ]
+    },
+    {
+      "name": "crusher_hind_4_foot",
+      "from": [
+        16.5,
+        -0.08000000000000002,
+        5.7
+      ],
+      "to": [
+        20.1,
+        0.9199999999999999,
+        8.7
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "uv_offset": [
+        133,
+        141
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.2,
+      "faces": {
+        "north": {
+          "uv": [
+            133,
+            141,
+            137,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            164,
+            141,
+            168,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            195,
+            141,
+            198,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            221,
+            141,
+            224,
+            143
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            19,
+            141,
+            23,
+            144
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            50,
+            141,
+            54,
+            144
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "e53d5993-e63d-e73d-e83d-e93d5fdfea3d6172"
+    },
+    {
+      "name": "crusher_tendril_l_1",
+      "from": [
+        8.701966011250105,
+        16.15,
+        -2.9099999999999997
+      ],
+      "to": [
+        11.298033988749895,
+        16.849999999999998,
+        -2.1899999999999995
+      ],
+      "origin": [
+        10,
+        16.5,
+        -2.55
+      ],
+      "uv_offset": [
+        23,
+        27
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            23,
+            27,
+            26,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            54,
+            27,
+            57,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            85,
+            27,
+            87,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            111,
+            27,
+            113,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            137,
+            27,
+            140,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            168,
+            27,
+            171,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "6b18f534-6e18-6d18-6818-6718eee86a18f3a1",
+      "rotation": [
+        0,
+        0,
+        26.56505117707799
+      ]
+    },
+    {
+      "name": "crusher_tendril_l_2",
+      "from": [
+        10.713625666410364,
+        17.39,
+        -3.3699999999999997
+      ],
+      "to": [
+        15.786374333589634,
+        18.01,
+        -2.7299999999999995
+      ],
+      "origin": [
+        13.25,
+        17.7,
+        -3.05
+      ],
+      "uv_offset": [
+        45,
+        143
+      ],
+      "color": 2,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            45,
+            143,
+            51,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            76,
+            143,
+            82,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            107,
+            143,
+            109,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            133,
+            143,
+            135,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            159,
+            143,
+            165,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            190,
+            143,
+            196,
+            145
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "3b2aff59-382a-392a-3e2b-3f2b05a53c2b00ec",
+      "rotation": [
+        0,
+        0,
+        17.281498371816628
+      ]
+    },
+    {
+      "name": "crusher_tendril_l_3",
+      "from": [
+        15.275441218883246,
+        17.68,
+        -3.93
+      ],
+      "to": [
+        20.22455878111675,
+        18.22,
+        -3.37
+      ],
+      "origin": [
+        17.75,
+        17.95,
+        -3.6500000000000004
+      ],
+      "uv_offset": [
+        44,
+        133
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            44,
+            133,
+            49,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            75,
+            133,
+            80,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            106,
+            133,
+            108,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            132,
+            133,
+            134,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            158,
+            133,
+            163,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            189,
+            133,
+            194,
+            135
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "74bfd445-71bf-72bf-6fbf-70bfcdf96dbfc940",
+      "rotation": [
+        0,
+        0,
+        -11.309932474020195
+      ]
+    },
+    {
+      "name": "crusher_tendril_l_4",
+      "from": [
+        19.69567214016611,
+        18.02,
+        -4.49
+      ],
+      "to": [
+        24.704327859833892,
+        18.48,
+        -4.01
+      ],
+      "origin": [
+        22.2,
+        18.25,
+        -4.25
+      ],
+      "uv_offset": [
+        153,
+        38
+      ],
+      "color": 0,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            153,
+            38,
+            159,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            184,
+            38,
+            190,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            215,
+            38,
+            217,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            13,
+            38,
+            15,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            39,
+            38,
+            45,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            70,
+            38,
+            76,
+            40
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "bb648fb9-b864-b964-be64-bf649605bc64914c",
+      "rotation": [
+        0,
+        0,
+        18.824710018240076
+      ]
+    },
+    {
+      "name": "crusher_tendril_l_5",
+      "from": [
+        24.067960032952154,
+        17.959999999999997,
+        -5.050000000000001
+      ],
+      "to": [
+        29.332039967047848,
+        18.339999999999996,
+        -4.65
+      ],
+      "origin": [
+        26.7,
+        18.15,
+        -4.8500000000000005
+      ],
+      "uv_offset": [
+        153,
+        36
+      ],
+      "color": 3,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            153,
+            36,
+            159,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            184,
+            36,
+            190,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            215,
+            36,
+            217,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            13,
+            36,
+            15,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            39,
+            36,
+            45,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            70,
+            36,
+            76,
+            38
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "b45fdcfd-b15f-b25f-af5f-b05fd6b1ad5fd1f8",
+      "rotation": [
+        0,
+        0,
+        -20.282559088916592
+      ]
+    },
+    {
+      "name": "crusher_tendril_r_1",
+      "from": [
+        8.701966011250105,
+        16.15,
+        2.19
+      ],
+      "to": [
+        11.298033988749895,
+        16.849999999999998,
+        2.91
+      ],
+      "origin": [
+        10,
+        16.5,
+        2.55
+      ],
+      "uv_offset": [
+        27,
+        37
+      ],
+      "color": 5,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            27,
+            37,
+            30,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            58,
+            37,
+            61,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            89,
+            37,
+            91,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            115,
+            37,
+            117,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            141,
+            37,
+            144,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            172,
+            37,
+            175,
+            39
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "01fc0e56-00fc-fffc-06fc-05fc14a204fc130f",
+      "rotation": [
+        0,
+        0,
+        26.56505117707799
+      ]
+    },
+    {
+      "name": "crusher_tendril_r_2",
+      "from": [
+        10.713625666410364,
+        17.39,
+        2.73
+      ],
+      "to": [
+        15.786374333589634,
+        18.01,
+        3.37
+      ],
+      "origin": [
+        13.25,
+        17.7,
+        3.05
+      ],
+      "uv_offset": [
+        56,
+        135
+      ],
+      "color": 4,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            56,
+            135,
+            62,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            87,
+            135,
+            93,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            118,
+            135,
+            120,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            144,
+            135,
+            146,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            170,
+            135,
+            176,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            201,
+            135,
+            207,
+            137
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "ab89df34-ae89-ad89-a889-a789d8e8aa89dda1",
+      "rotation": [
+        0,
+        0,
+        17.281498371816628
+      ]
+    },
+    {
+      "name": "crusher_tendril_r_3",
+      "from": [
+        15.275441218883246,
+        17.68,
+        3.3700000000000006
+      ],
+      "to": [
+        20.22455878111675,
+        18.22,
+        3.9300000000000006
+      ],
+      "origin": [
+        17.75,
+        17.95,
+        3.6500000000000004
+      ],
+      "uv_offset": [
+        48,
+        138
+      ],
+      "color": 7,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            48,
+            138,
+            53,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            79,
+            138,
+            84,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            110,
+            138,
+            112,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            136,
+            138,
+            138,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            162,
+            138,
+            167,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            193,
+            138,
+            198,
+            140
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "e1a654f2-e0a6-dfa6-dea6-dda64ea6dca64d13",
+      "rotation": [
+        0,
+        0,
+        -11.309932474020195
+      ]
+    },
+    {
+      "name": "crusher_tendril_r_4",
+      "from": [
+        19.69567214016611,
+        18.02,
+        4.01
+      ],
+      "to": [
+        24.704327859833892,
+        18.48,
+        4.49
+      ],
+      "origin": [
+        22.2,
+        18.25,
+        4.25
+      ],
+      "uv_offset": [
+        109,
+        27
+      ],
+      "color": 6,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            109,
+            27,
+            115,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            140,
+            27,
+            146,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            171,
+            27,
+            173,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            197,
+            27,
+            199,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            223,
+            27,
+            229,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            26,
+            27,
+            32,
+            29
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "0050aeac-0350-0250-fd50-fc50a860ff50ad19",
+      "rotation": [
+        0,
+        0,
+        18.824710018240076
+      ]
+    },
+    {
+      "name": "crusher_tendril_r_5",
+      "from": [
+        24.067960032952154,
+        17.959999999999997,
+        4.65
+      ],
+      "to": [
+        29.332039967047848,
+        18.339999999999996,
+        5.050000000000001
+      ],
+      "origin": [
+        26.7,
+        18.15,
+        4.8500000000000005
+      ],
+      "uv_offset": [
+        106,
+        41
+      ],
+      "color": 1,
+      "autouv": 0,
+      "inflate": 0.035,
+      "faces": {
+        "north": {
+          "uv": [
+            106,
+            41,
+            112,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "south": {
+          "uv": [
+            137,
+            41,
+            143,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "east": {
+          "uv": [
+            168,
+            41,
+            170,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "west": {
+          "uv": [
+            194,
+            41,
+            196,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "up": {
+          "uv": [
+            220,
+            41,
+            226,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        },
+        "down": {
+          "uv": [
+            23,
+            41,
+            29,
+            43
+          ],
+          "texture": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+        }
+      },
+      "type": "cube",
+      "uuid": "021e8f26-011e-001e-071e-061e9572051e93df",
+      "rotation": [
+        0,
+        0,
+        -20.282559088916592
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "root",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 5,
+      "uuid": "196653b5-6ee9-0134-71e9-05ed70e9045a"
+    },
+    {
+      "name": "torso",
+      "origin": [
+        1,
+        16,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 4,
+      "uuid": "c892dc34-6e37-8671-6b37-81b86c37834b"
+    },
+    {
+      "name": "head",
+      "origin": [
+        -10,
+        16,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 3,
+      "uuid": "8a0841f3-854e-2cbe-844e-2b2b834e2998"
+    },
+    {
+      "name": "crusher_arm_l",
+      "origin": [
+        -6,
+        18,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 5,
+      "uuid": "bb705c7d-8e9d-7b2c-919d-7fe5909d7e52"
+    },
+    {
+      "name": "crusher_arm_l_forearm",
+      "origin": [
+        -9,
+        12.5,
+        -6.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 2,
+      "uuid": "d6f632a2-5546-ff8b-5647-011e574702b1"
+    },
+    {
+      "name": "crusher_arm_l_fist",
+      "origin": [
+        -13,
+        8,
+        -6.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 4,
+      "uuid": "3a04bbf4-fa0d-02b1-f70c-fdf8f80cff8b"
+    },
+    {
+      "name": "crusher_arm_r",
+      "origin": [
+        -6,
+        18,
+        6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 3,
+      "uuid": "bd705fa3-94d7-ebce-93d7-ea3b92d7e8a8"
+    },
+    {
+      "name": "crusher_arm_r_forearm",
+      "origin": [
+        -9,
+        12.5,
+        6.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 4,
+      "uuid": "e9a19efc-9b80-af29-9880-aa709980ac03"
+    },
+    {
+      "name": "crusher_arm_r_fist",
+      "origin": [
+        -13,
+        8,
+        6.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 2,
+      "uuid": "87a747ca-6cc4-b0a3-6dc4-b2366ec4b3c9"
+    },
+    {
+      "name": "hind_leg_1_upper",
+      "origin": [
+        5,
+        15,
+        -5.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 0,
+      "uuid": "90bfaee0-92a6-cf5d-8fa6-caa490a6cc37"
+    },
+    {
+      "name": "hind_leg_1_lower",
+      "origin": [
+        7.5,
+        9.5,
+        -5.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 1,
+      "uuid": "065c7d59-3b76-67a8-3e76-6c613d766ace"
+    },
+    {
+      "name": "hind_leg_2_upper",
+      "origin": [
+        5,
+        15,
+        5.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 5,
+      "uuid": "4497a495-490b-5914-4c0b-5dcd4b0b5c3a"
+    },
+    {
+      "name": "hind_leg_2_lower",
+      "origin": [
+        7.5,
+        9.5,
+        5.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 0,
+      "uuid": "16012fc0-744e-6a3d-714e-6584724e6717"
+    },
+    {
+      "name": "hind_leg_3_upper",
+      "origin": [
+        11,
+        15,
+        -5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 6,
+      "uuid": "0021e1e6-8040-4a6f-8140-4c0282404d95"
+    },
+    {
+      "name": "hind_leg_3_lower",
+      "origin": [
+        13.5,
+        9.5,
+        -5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 7,
+      "uuid": "5216fa67-0076-6972-ff76-67dffe76664c"
+    },
+    {
+      "name": "hind_leg_4_upper",
+      "origin": [
+        11,
+        15,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 3,
+      "uuid": "d9910e8b-dfe1-9166-dee1-8fd3dde18e40"
+    },
+    {
+      "name": "hind_leg_4_lower",
+      "origin": [
+        13.5,
+        9.5,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 6,
+      "uuid": "6922481e-7eb8-f2b7-7fb8-f44a80b8f5dd"
+    },
+    {
+      "name": "rear_tendril_1",
+      "origin": [
+        9,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 4,
+      "uuid": "67fb939c-36d8-7a49-33d8-759034d87723"
+    },
+    {
+      "name": "rear_tendril_2",
+      "origin": [
+        13,
+        19,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 5,
+      "uuid": "6afb9855-91b4-9c54-94b4-a10d93b49f7a"
+    },
+    {
+      "name": "rear_tendril_3",
+      "origin": [
+        17,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 2,
+      "uuid": "69fb96c2-fd12-862b-fe12-87beff128951"
+    },
+    {
+      "name": "rear_tendril_4",
+      "origin": [
+        21,
+        19,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 3,
+      "uuid": "64fb8ee3-fff3-968e-fef3-94fbfdf39368"
+    },
+    {
+      "name": "rear_tendril_5",
+      "origin": [
+        25,
+        18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": 0,
+      "uuid": "63fb8d50-9b65-53ad-9865-4ef499655087"
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "196653b5-6ee9-0134-71e9-05ed70e9045a",
+      "isOpen": false,
+      "children": [
+        {
+          "uuid": "c892dc34-6e37-8671-6b37-81b86c37834b",
+          "isOpen": false,
+          "children": [
+            "35ab2d7e-34ab-33ab-3aab-39ab33ca38ab3237",
+            "bdcd1919-bacd-bbcd-c0cd-c1cd1f65becd1aac",
+            "69eef066-68ee-67ee-6eee-6deef6b26ceef51f",
+            "053e7bcf-063e-073e-003e-013e7583023e7716",
+            "fcfca5a7-fdfc-fefc-f7fc-f8fc9f5bf9fca0ee",
+            "9f6ea291-9c6e-9d6e-a26e-a36ea8dda06ea424",
+            "e3d4c1c3-e4d4-e5d4-e6d4-e7d4c80fe8d4c9a2",
+            {
+              "uuid": "67fb939c-36d8-7a49-33d8-759034d87723",
+              "isOpen": false,
+              "children": [
+                "6b18f534-6e18-6d18-6818-6718eee86a18f3a1",
+                "01fc0e56-00fc-fffc-06fc-05fc14a204fc130f",
+                {
+                  "uuid": "6afb9855-91b4-9c54-94b4-a10d93b49f7a",
+                  "isOpen": false,
+                  "children": [
+                    "3b2aff59-382a-392a-3e2b-3f2b05a53c2b00ec",
+                    "ab89df34-ae89-ad89-a889-a789d8e8aa89dda1",
+                    {
+                      "uuid": "69fb96c2-fd12-862b-fe12-87beff128951",
+                      "isOpen": false,
+                      "children": [
+                        "74bfd445-71bf-72bf-6fbf-70bfcdf96dbfc940",
+                        "e1a654f2-e0a6-dfa6-dea6-dda64ea6dca64d13",
+                        {
+                          "uuid": "64fb8ee3-fff3-968e-fef3-94fbfdf39368",
+                          "isOpen": false,
+                          "children": [
+                            "bb648fb9-b864-b964-be64-bf649605bc64914c",
+                            "0050aeac-0350-0250-fd50-fc50a860ff50ad19",
+                            {
+                              "uuid": "63fb8d50-9b65-53ad-9865-4ef499655087",
+                              "isOpen": false,
+                              "children": [
+                                "b45fdcfd-b15f-b25f-af5f-b05fd6b1ad5fd1f8",
+                                "021e8f26-011e-001e-071e-061e9572051e93df"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "8a0841f3-854e-2cbe-844e-2b2b834e2998",
+          "isOpen": false,
+          "children": [
+            "bc51af65-b951-ba51-b751-b851a919b551a460",
+            "f60c9fa9-f30c-f40c-f90c-fa0ca5f5f70ca13c",
+            "93649d89-9064-9164-9664-9764a3d594649f1c",
+            "72aa45c3-73aa-74aa-75aa-76aa4c0f77aa4da2",
+            "8d54d0ae-8c54-8b54-9254-9154d6fa9054d567",
+            "9fb4b580-a2b4-a1b4-a4b4-a3b4bbcca6b4c085",
+            "8e9f6736-8d9f-8c9f-939f-929f6d82919f6bef"
+          ]
+        },
+        {
+          "uuid": "bb705c7d-8e9d-7b2c-919d-7fe5909d7e52",
+          "isOpen": false,
+          "children": [
+            "6e342796-6d34-6c34-7334-72342de271342c4f",
+            "a21b4777-a31b-a41b-9d1b-9e1b412b9f1b42be",
+            "79a96288-7ca9-7ba9-7ea9-7da968d480a96d8d",
+            "32ea183e-31ea-30ea-37ea-36ea1e8a35ea1cf7",
+            "a3c69972-a2c6-a1c6-a0c6-9fc693269ec69193",
+            {
+              "uuid": "d6f632a2-5546-ff8b-5647-011e574702b1",
+              "isOpen": false,
+              "children": [
+                "095981b7-0a59-0b59-0459-05597b6b06597cfe",
+                "79c584c7-7ac5-7bc5-74c5-75c57e7b76c5800e",
+                "89897444-8c89-8b89-8689-85896df8888972b1",
+                {
+                  "uuid": "3a04bbf4-fa0d-02b1-f70c-fdf8f80cff8b",
+                  "isOpen": false,
+                  "children": [
+                    "a2d8a3b6-a1d8-a0d8-a7d8-a6d8aa02a5d8a86f",
+                    "7e427ea1-7b42-7c42-8142-824284ed7f428034",
+                    "cc703680-cf70-ce70-d170-d0703cccd3704185",
+                    "995bd732-985b-975b-965b-955bd0e6945bcf53"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "bd705fa3-94d7-ebce-93d7-ea3b92d7e8a8",
+          "isOpen": false,
+          "children": [
+            "dcacee57-ddac-deac-d7ac-d8ace80bd9ace99e",
+            "f1b76108-f4b7-f3b7-f6b7-f5b76754f8b76c0d",
+            "49913a81-4691-4791-4c91-4d9140cd4a913c14",
+            "619f45d1-5e9f-5f9f-649f-659f4c1d629f4764",
+            "aa5081c6-a950-a850-af50-ae508812ad50867f",
+            {
+              "uuid": "e9a19efc-9b80-af29-9880-aa709980ac03",
+              "isOpen": false,
+              "children": [
+                "4805acc3-4905-4a05-4b05-4c05b30f4d05b4a2",
+                "20c390b8-23c3-22c3-25c3-24c3970427c39bbd",
+                "4ff08465-4cf0-4df0-4af0-4bf07e1948f07960",
+                "9d57563d-9a57-9b57-9857-99574ff196574b38",
+                {
+                  "uuid": "87a747ca-6cc4-b0a3-6dc4-b2366ec4b3c9",
+                  "isOpen": false,
+                  "children": [
+                    "05a9e8ab-06a9-07a9-08a9-09a9eef70aa9f08a",
+                    "1f3afba9-1c3a-1d3a-223b-233b01f5203afd3c",
+                    "16c7b8f2-15c7-14c7-13c7-12c7b2a611c7b113",
+                    "4a2198aa-4921-4821-4721-4621925e452190cb"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "90bfaee0-92a6-cf5d-8fa6-caa490a6cc37",
+          "isOpen": false,
+          "children": [
+            "628ef26b-638e-648e-658e-668ef8b7678efa4a",
+            "cac2409f-cbc2-ccc2-c5c2-c6c23a53c7c23be6",
+            "db6f798d-d86f-d96f-d66f-d76f7341d46f6e88",
+            {
+              "uuid": "065c7d59-3b76-67a8-3e76-6c613d766ace",
+              "isOpen": false,
+              "children": [
+                "0847561d-0547-0647-0347-04474fd101474b18",
+                "843a8d7a-833a-823a-813a-803a872e7f3a859b"
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "4497a495-490b-5914-4c0b-5dcd4b0b5c3a",
+          "isOpen": false,
+          "children": [
+            "d35e57ce-d25e-d15e-d85e-d75e5e1ad65e5c87",
+            "ad565c07-ae56-af56-a856-a95655bbaa56574e",
+            "405885c3-4158-4258-4358-44588c0f45588da2",
+            {
+              "uuid": "16012fc0-744e-6a3d-714e-6584724e6717",
+              "isOpen": false,
+              "children": [
+                "871bfd99-841b-851b-8a1c-8b1c03e5881bff2c",
+                "23a094c8-26a0-25a0-28a0-27a09b142aa09fcd"
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "0021e1e6-8040-4a6f-8140-4c0282404d95",
+          "isOpen": false,
+          "children": [
+            "f95675d8-fc56-fb56-fe56-fd567c24005680dd",
+            "870a73ec-8a0a-890a-840a-830a6da0860a7259",
+            "182d5c0e-172d-162d-1d2d-1c2d625a1b2d60c7",
+            {
+              "uuid": "5216fa67-0076-6972-ff76-67dffe76664c",
+              "isOpen": false,
+              "children": [
+                "49304466-4830-4730-4e30-4d304ab24c30491f",
+                "6e239f45-6b23-6c23-6923-6a2398f967239440"
+              ]
+            }
+          ]
+        },
+        {
+          "uuid": "d9910e8b-dfe1-9166-dee1-8fd3dde18e40",
+          "isOpen": false,
+          "children": [
+            "3e8b3a97-3f8b-408b-398b-3a8b344b3b8b35de",
+            "b4a6befc-b7a6-b6a6-b1a6-b0a6b8b0b3a6bd69",
+            "e582bd44-e882-e782-e282-e182b6f8e482bbb1",
+            {
+              "uuid": "6922481e-7eb8-f2b7-7fb8-f44a80b8f5dd",
+              "isOpen": false,
+              "children": [
+                "f5d7f832-f4d7-f3d7-f2d7-f1d7f1e6f0d7f053",
+                "e53d5993-e63d-e73d-e83d-e93d5fdfea3d6172"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "name": "crusher_stalker.png",
+      "folder": "",
+      "namespace": "",
+      "id": "0",
+      "particle": false,
+      "render_mode": "normal",
+      "visible": true,
+      "mode": "link",
+      "relative_path": "textures/crusher_stalker.png",
+      "uv_width": 64,
+      "uv_height": 64,
+      "uuid": "6c55552d-4cbb-0d3c-4fbb-11f54ebb1062"
+    }
+  ],
+  "animations": [
+    {
+      "uuid": "8a760b2e-8976-8876-8f76-8e76117a8d760fe7",
+      "name": "animation.crusher_stalker.walk",
+      "loop": "loop",
+      "override": false,
+      "length": 1.6,
+      "snapping": 20,
+      "animators": {
+        "196653b5-6ee9-0134-71e9-05ed70e9045a": {
+          "name": "root",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "position",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "3d019117-3e01-3f01-3801-39018acb3a018c5e"
+            },
+            {
+              "channel": "position",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "-0.6",
+                  "z": "0"
+                }
+              ],
+              "uuid": "c6ad1165-c3ad-c4ad-c1ad-c2ad0b19bfad0660"
+            },
+            {
+              "channel": "position",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "2384f780-2684-2584-2884-2784fdcc2a850285"
+            }
+          ]
+        },
+        "8a0841f3-854e-2cbe-844e-2b2b834e2998": {
+          "name": "head",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-7"
+                }
+              ],
+              "uuid": "135a4f30-165a-155a-185a-175a557c1a5a5a35"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "7"
+                }
+              ],
+              "uuid": "aec3c4ca-adc3-acc3-abc3-aac3be7ea9c3bceb"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-7"
+                }
+              ],
+              "uuid": "0d36953b-0e36-0f36-1036-11369b8712369d1a"
+            }
+          ]
+        },
+        "90bfaee0-92a6-cf5d-8fa6-caa490a6cc37": {
+          "name": "hind_leg_1_upper",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.252"
+                }
+              ],
+              "uuid": "bcf2788d-b9f2-baf2-b7f2-b8f27241b5f26d88"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.375"
+                }
+              ],
+              "uuid": "497067e3-4a70-4b70-4c70-4d706e2f4e706fc2"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-11.252"
+                }
+              ],
+              "uuid": "36290caf-3729-3829-3129-32290663332907f6"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-11.375"
+                }
+              ],
+              "uuid": "d7cc629a-d6cc-d5cc-d4cc-d3cc5c4ed2cc5abb"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.252"
+                }
+              ],
+              "uuid": "fc58d73e-fb58-fa58-0158-0058dd8aff58dbf7"
+            }
+          ]
+        },
+        "4497a495-490b-5914-4c0b-5dcd4b0b5c3a": {
+          "name": "hind_leg_2_upper",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.999"
+                }
+              ],
+              "uuid": "20d3bb1e-1fd3-1ed3-25d3-24d3c16a23d3bfd7"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.173"
+                }
+              ],
+              "uuid": "9280c778-9580-9480-9780-9680cdc49980d27d"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.999"
+                }
+              ],
+              "uuid": "c4b22ffc-c7b2-c6b2-c1b2-c0b229b0c3b22e69"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.173"
+                }
+              ],
+              "uuid": "12aaae35-0faa-10aa-0daa-0eaaa7e90baaa330"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.999"
+                }
+              ],
+              "uuid": "ae1dd4d1-ab1d-ac1d-b11d-b21ddb1daf1dd664"
+            }
+          ]
+        },
+        "0021e1e6-8040-4a6f-8140-4c0282404d95": {
+          "name": "hind_leg_3_upper",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.495"
+                }
+              ],
+              "uuid": "6ea9e44f-6fa9-70a9-69a9-6aa9de036ba9df96"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-11.129"
+                }
+              ],
+              "uuid": "6b31fb81-6831-6931-6e32-6f3201cd6c31fd14"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-11.495"
+                }
+              ],
+              "uuid": "390092fd-3600-3700-3400-35008cb1320087f8"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.129"
+                }
+              ],
+              "uuid": "eb0814c4-ee08-ed08-e808-e7080e78ea081331"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "11.495"
+                }
+              ],
+              "uuid": "4f94ee28-5294-5194-5494-5394f4745694f92d"
+            }
+          ]
+        },
+        "d9910e8b-dfe1-9166-dee1-8fd3dde18e40": {
+          "name": "hind_leg_4_upper",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.345"
+                }
+              ],
+              "uuid": "a311bd80-a611-a511-a811-a711c3ccaa11c885"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.996"
+                }
+              ],
+              "uuid": "a0d06fc6-9fd0-9ed0-a5d0-a4d07612a3d0747f"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.345"
+                }
+              ],
+              "uuid": "25848afa-2484-2384-2284-218484ae2084831b"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.996"
+                }
+              ],
+              "uuid": "fc05e59f-fd05-fe05-f705-f805df53f905e0e6"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.345"
+                }
+              ],
+              "uuid": "b88dd0ab-b98d-ba8d-bb8d-bc8dd6f7bd8dd88a"
+            }
+          ]
+        },
+        "065c7d59-3b76-67a8-3e76-6c613d766ace": {
+          "name": "hind_leg_1_lower",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-21.999"
+                }
+              ],
+              "uuid": "e8fcbebe-e7fc-e6fc-edfc-ecfcc50aebfcc377"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.238"
+                }
+              ],
+              "uuid": "3dae8518-40ae-3fae-42ae-41ae8b6444ae901d"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "21.999"
+                }
+              ],
+              "uuid": "711eb51c-741e-731e-6e1e-6d1eaed0701eb389"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.238"
+                }
+              ],
+              "uuid": "3133a455-2e33-2f33-2c33-2d339e092a339950"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-21.999"
+                }
+              ],
+              "uuid": "cca6caf1-c9a6-caa6-cfa6-d0a6d13dcda6cc84"
+            }
+          ]
+        },
+        "16012fc0-744e-6a3d-714e-6584724e6717": {
+          "name": "hind_leg_2_lower",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.806"
+                }
+              ],
+              "uuid": "b1f776c1-aef7-aff7-b4f7-b5f77d0db2f77854"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.302"
+                }
+              ],
+              "uuid": "9efb4d57-9ffb-a0fb-99fb-9afb470b9bfb489e"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.806"
+                }
+              ],
+              "uuid": "038826bb-0488-0588-0688-07882d0708882e9a"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.302"
+                }
+              ],
+              "uuid": "db5951a6-da59-d959-e059-df5957f2de59565f"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.806"
+                }
+              ],
+              "uuid": "b6ccdd02-b5cc-b4cc-b3cc-b2ccd6b6b1ccd523"
+            }
+          ]
+        },
+        "5216fa67-0076-6972-ff76-67dffe76664c": {
+          "name": "hind_leg_3_lower",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.475"
+                }
+              ],
+              "uuid": "ad083030-b008-af08-b208-b108367cb4083b35"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "21.995"
+                }
+              ],
+              "uuid": "1199c456-1099-0f99-1699-1599caa21499c90f"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.475"
+                }
+              ],
+              "uuid": "564f0dca-554f-544f-534f-524f077e514f05eb"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-21.995"
+                }
+              ],
+              "uuid": "f97727af-fa77-fb77-f477-f5772163f67722f6"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.475"
+                }
+              ],
+              "uuid": "b4c1de3b-b5c1-b6c1-b7c1-b8c1e487b9c1e61a"
+            }
+          ]
+        },
+        "6922481e-7eb8-f2b7-7fb8-f44a80b8f5dd": {
+          "name": "hind_leg_4_lower",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.131"
+                }
+              ],
+              "uuid": "caf5f683-cbf5-ccf5-cdf5-cef5fccfcff5fe62"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.971"
+                }
+              ],
+              "uuid": "e4035cd5-e103-e203-df03-e0035689dd0351d0"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.131"
+                }
+              ],
+              "uuid": "28b71349-25b7-26b7-2bb7-2cb7199529b714dc"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "15.971"
+                }
+              ],
+              "uuid": "487ae240-4b7a-4a7a-4d7a-4c7ae88c4f7aed45"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-15.131"
+                }
+              ],
+              "uuid": "23ee6d9c-26ee-25ee-20ee-1fee675022ee6c09"
+            }
+          ]
+        },
+        "67fb939c-36d8-7a49-33d8-759034d87723": {
+          "name": "rear_tendril_1",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "2.954"
+                }
+              ],
+              "uuid": "b0b72881-adb7-aeb7-b3b7-b4b72ecdb1b72a14"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "2.986"
+                }
+              ],
+              "uuid": "4d2b2417-4e2b-4f2b-482b-492b1dcb4a2b1f5e"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-2.954"
+                }
+              ],
+              "uuid": "b1b7fd7b-b2b7-b3b8-b4b8-b5b803c7b6b8055a"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-2.986"
+                }
+              ],
+              "uuid": "89892866-8889-8789-8e89-8d892eb28c892d1f"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "2.954"
+                }
+              ],
+              "uuid": "64fcb3c2-63fc-62fc-61fc-60fcad765ffcabe3"
+            }
+          ]
+        },
+        "6afb9855-91b4-9c54-94b4-a10d93b49f7a": {
+          "name": "rear_tendril_2",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-5.4"
+                }
+              ],
+              "uuid": "4db74b9e-4cb7-4bb7-52b7-51b751ea50b75057"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.058"
+                }
+              ],
+              "uuid": "8fb40bf8-92b4-91b4-94b4-93b4124496b416fd"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "5.4"
+                }
+              ],
+              "uuid": "c1e5747c-c4e5-c3e5-bee5-bde56e30c0e572e9"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.058"
+                }
+              ],
+              "uuid": "0fddf2b5-0cdd-0ddd-0add-0bddec6908dde7b0"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-5.4"
+                }
+              ],
+              "uuid": "ab511951-a851-a951-ae51-af511f9dac511ae4"
+            }
+          ]
+        },
+        "69fb96c2-fd12-862b-fe12-87beff128951": {
+          "name": "rear_tendril_3",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "4.742"
+                }
+              ],
+              "uuid": "ddae5833-deae-dfae-e0ae-e1ae5e7fe2ae6012"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-4.591"
+                }
+              ],
+              "uuid": "4937a4e5-4637-4737-4437-45379e99423799e0"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-4.742"
+                }
+              ],
+              "uuid": "8decee59-8aec-8bec-90ec-91ecf4a58eecefec"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "4.591"
+                }
+              ],
+              "uuid": "eadc8dd0-eddc-ecdc-efdc-eedc941cf1dc98d5"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "4.742"
+                }
+              ],
+              "uuid": "864fb46c-894f-884f-834f-824fae20854fb2d9"
+            }
+          ]
+        },
+        "64fb8ee3-fff3-968e-fef3-94fbfdf39368": {
+          "name": "rear_tendril_4",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.168"
+                }
+              ],
+              "uuid": "54384118-5738-5638-5938-583847645b384c1d"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "7.798"
+                }
+              ],
+              "uuid": "b22cf24e-b12c-b02c-b72c-b62cf89ab52cf707"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0.168"
+                }
+              ],
+              "uuid": "a59cbd92-a49c-a39c-a29c-a19cb746a09cb5b3"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-7.798"
+                }
+              ],
+              "uuid": "58da8d67-59da-5ada-53da-54da871b55da88ae"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-0.168"
+                }
+              ],
+              "uuid": "d4267233-d526-d626-d726-d826787fd9267a12"
+            }
+          ]
+        },
+        "63fb8d50-9b65-53ad-9865-4ef499655087": {
+          "name": "rear_tendril_5",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-6.19"
+                }
+              ],
+              "uuid": "97784f35-9478-9578-9278-937848e990784430"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-6.533"
+                }
+              ],
+              "uuid": "d7480d9b-d848-d948-da48-db4813e7dc48157a"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "6.19"
+                }
+              ],
+              "uuid": "72bb3437-73bb-74bb-6dbb-6ebb2deb6fbb2f7e"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "6.533"
+                }
+              ],
+              "uuid": "c4b06bb2-c3b0-c2b0-c1b0-c0b06566bfb063d3"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-6.19"
+                }
+              ],
+              "uuid": "293d4516-283d-273d-2e3d-2d3d4b622c3d49cf"
+            }
+          ]
+        },
+        "bb705c7d-8e9d-7b2c-919d-7fe5909d7e52": {
+          "name": "crusher_arm_l",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "0e4bd0ea-0d4b-0c4b-0b4b-0a4bca9e094bc90b"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "2.8"
+                }
+              ],
+              "uuid": "19bb52c4-1cbb-1bbb-16bb-15bb4c7818bb5131"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "d5079c50-d807-d707-da07-d907a29cdc07a755"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-2.8"
+                }
+              ],
+              "uuid": "8e378559-8b37-8c37-9137-92378ba58f3786ec"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "f2c45ebd-efc4-f0c4-edc4-eec45871ebc453b8"
+            }
+          ]
+        },
+        "bd705fa3-94d7-ebce-93d7-ea3b92d7e8a8": {
+          "name": "crusher_arm_r",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-1.969"
+                }
+              ],
+              "uuid": "a96730e4-ac67-ab67-a667-a5672a98a8672f51"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.4,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-1.991"
+                }
+              ],
+              "uuid": "a7c4f5fa-a6c4-a5c4-a4c4-a3c4efaea2c4ee1b"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.8,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "1.969"
+                }
+              ],
+              "uuid": "2310dac6-2210-2110-2810-2710e1122610df7f"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.2,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "1.991"
+                }
+              ],
+              "uuid": "34c5fc1b-35c5-36c5-37c6-38c6026739c603fa"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.6,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-1.969"
+                }
+              ],
+              "uuid": "7979b28f-7a79-7b79-7479-7579ac437679add6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "uuid": "82ab5d80-85ab-84ab-87ab-86ab63cc89ab6885",
+      "name": "animation.crusher_stalker.crush",
+      "loop": "hold",
+      "override": false,
+      "length": 1.1,
+      "snapping": 20,
+      "animators": {
+        "196653b5-6ee9-0134-71e9-05ed70e9045a": {
+          "name": "root",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "position",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "1bc85f29-18c8-19c8-1ec8-1fc865751cc860bc"
+            },
+            {
+              "channel": "position",
+              "time": 0.35,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "-0.72",
+                  "z": "0"
+                }
+              ],
+              "uuid": "967b6ed7-977b-987b-917b-927b688b937b6a1e"
+            },
+            {
+              "channel": "position",
+              "time": 1.1,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "c8f52f6f-c9f5-caf5-c3f5-c4f52923c5f52ab6"
+            }
+          ]
+        },
+        "bb705c7d-8e9d-7b2c-919d-7fe5909d7e52": {
+          "name": "crusher_arm_l",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "56d31c18-59d3-58d3-5bd3-5ad322645dd3271d"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.18,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-10"
+                }
+              ],
+              "uuid": "37189f39-3418-3518-3a18-3b18a5853818a0cc"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.35,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "20"
+                }
+              ],
+              "uuid": "04759214-0775-0675-0175-00758bc803759081"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.1,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "6c24f716-6b24-6a24-7124-7024fd626f24fbcf"
+            }
+          ]
+        },
+        "bd705fa3-94d7-ebce-93d7-ea3b92d7e8a8": {
+          "name": "crusher_arm_r",
+          "type": "bone",
+          "keyframes": [
+            {
+              "channel": "rotation",
+              "time": 0,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "3f486686-3e48-3d48-4448-43486cd242486b3f"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.18,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "10"
+                }
+              ],
+              "uuid": "32547fff-3354-3454-2d54-2e5479b32f547b46"
+            },
+            {
+              "channel": "rotation",
+              "time": 0.35,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "-20"
+                }
+              ],
+              "uuid": "43da3b4e-42da-41da-48da-47da419a46da4007"
+            },
+            {
+              "channel": "rotation",
+              "time": 1.1,
+              "interpolation": "linear",
+              "data_points": [
+                {
+                  "x": "0",
+                  "y": "0",
+                  "z": "0"
+                }
+              ],
+              "uuid": "2aee85b8-2dee-2cee-2fee-2eee8c0431ee90bd"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

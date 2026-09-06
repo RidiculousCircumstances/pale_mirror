@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "disposable_resident_ingress_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "medical-treatment", "viewDistance": 2 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 72, "ports": 36, "errors": 0, "blockers": 0 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "traversal_foundry", "id": "compiled" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 66, "z": -340 }, "settleMs": 1500 },
+    { "type": "wait_until_block", "position": { "x": -390, "y": 64, "z": -370 }, "block": "minecraft:gray_carpet", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "traversal_foundry", "id": "settled@topology:resident-ingress-1", "expect": { "status": "ok", "phase": "SETTLED", "scope": "topology:resident-ingress-1", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "unverifiedEdges": 0 }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -385, "y": 66, "z": -365 }, "settleMs": 750 },
+    { "type": "look", "at": { "x": -390, "y": 64, "z": -370 } },
+    { "type": "assert_visible_block", "position": { "x": -390, "y": 64, "z": -370 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "traversal_foundry", "id": "settled@topology:resident-ingress-1" },
+    { "type": "wait_until_diagnostic", "view": "traversal_foundry", "id": "reloaded@topology:resident-ingress-1", "expect": { "status": "ok", "phase": "RELOADED", "scope": "topology:resident-ingress-1", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "unverifiedEdges": 0 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "traversal_foundry", "id": "reloaded@topology:resident-ingress-1" }
+  ],
+  "assertions": [
+    { "after": 1, "view": "traversal_foundry", "id": "compiled", "expect": { "status": "ok", "phase": "COMPILED", "passed": true, "topologies": 72, "ports": 36, "errors": 0, "blockers": 0 } },
+    { "after": 4, "view": "traversal_foundry", "id": "settled@topology:resident-ingress-1", "expect": { "status": "ok", "phase": "SETTLED", "scope": "topology:resident-ingress-1", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0, "unverifiedEdges": 0 } },
+    { "after": 10, "view": "traversal_foundry", "id": "reloaded@topology:resident-ingress-1", "expect": { "status": "ok", "phase": "RELOADED", "scope": "topology:resident-ingress-1", "passed": true, "errors": 0, "blockers": 0, "runtimePending": 0, "runtimeMismatch": 0 } }
+  ],
+  "frames": [
+    { "after": 7, "name": "northwatch-resident-apron" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 8,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 66, "z": -340 }, "settleMs": 1500 }
+    ]
+  }
+}

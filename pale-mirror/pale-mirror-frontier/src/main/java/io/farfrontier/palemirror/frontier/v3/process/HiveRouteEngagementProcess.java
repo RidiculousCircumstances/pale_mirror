@@ -1,0 +1,340 @@
+package io.farfrontier.palemirror.frontier.v3.process;
+
+import io.farfrontier.palemirror.frontier.v3.model.*;
+
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+
+/** Starts one exact hive route interception and advances its COLD bodies along retained routes. */
+public final class HiveRouteEngagementProcess {
+    private HiveRouteEngagementProcess() { }
+
+    /**
+     * The strategic lane may be reconsidered often while a caravan remains en route.
+     * A pending start is already a durable claim on that lane; scheduling another start
+     * for it would fork one exact operation before either start can run.
+     */
+    public static boolean hasPendingOrActiveInterception(FrontierWorldState state) {
+        return state.strategicPlans().tasks().values().stream()
+                .anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
+                        && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE))
+                || state.strategicPlans().routeEngagements().values().stream()
+                .anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED);
+    }
+
+    public static ScheduledAction start(StrategicTask task, long due) {
+        if (task.kind() != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION) throw new IllegalArgumentException("invalid hive interception task schedule");
+        return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-start-" + task.id().value().replace(':', '-')), new SimInstant(due), 0,
+                task.id(), "frontier.hive_route_engagement.start", 1);
+    }
+
+    public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
+        StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
+        RouteOperation operation = task.operationTarget().map(state.operations()::get).orElse(null);
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || activeForOperation(state, operation.id())) {
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
+        BlockPosition intercept = task.operationObservationPosition().orElse(null);
+        if (intercept == null) {
+            return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        }
+        if (!FrontierSceneAdmission.coldInterceptionAvailable(state, operation.id())) {
+            return List.of(schedule(start(task, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        }
+        // The task retains the exact Scout-observed location.  The operation lookup above
+        // is only a liveness precondition, never a hidden targeting query.
+        List<EngagementAttacker> attackers = attackers(state, intercept);
+        Optional<HiveOperationCommandAuthority> authority = HiveRouteEngagementCommandSupport.admit(state, attackers, action.dueAt().ticks());
+        if (attackers.isEmpty() || authority.isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+        RouteEngagement engagement = new RouteEngagement(engagementId(task), task.id(), operation.id(), task.ownerId(), attackers,
+                intercept, authority.orElseThrow(), RouteEngagementStatus.APPROACHING, 0, Optional.empty());
+        List<ProposedEvent> events = new ArrayList<>(List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(task.ownerId(), new RouteEngagementStarted(engagement))));
+        events.add(schedule(control(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        if (engagement.allAttackersAtIntercept()) events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
+        else events.add(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        return List.copyOf(events);
+    }
+
+    public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.APPROACHING) return List.of();
+        StrategicTask task = task(state, engagement.taskId(), StrategicTaskStatus.ACTIVE);
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
+            return abort(engagement);
+        }
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
+            return List.of(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        }
+        if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
+            return List.of(schedule(control(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().hiveCommand().instinctReclaimInterval())));
+        }
+        if (engagement.attackerIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE)) {
+            return abort(engagement);
+        }
+        List<ProposedEvent> events = new ArrayList<>();
+        for (EngagementAttacker attacker : engagement.attackers()) {
+            if (!attacker.atDestination()) events.add(new ProposedEvent(engagement.hiveId(),
+                    new RouteEngagementAttackerAdvanced(engagement.id(), attacker.actorId(), attacker.routeIndex() + 1)));
+        }
+        if (engagement.attackers().stream().allMatch(attacker -> attacker.routeIndex() + 1 >= attacker.route().size() - 1)) {
+            events.addAll(beginOrWait(state, engagement, action.dueAt().ticks()));
+        } else events.add(schedule(progress(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        return List.copyOf(events);
+    }
+
+    public static List<ProposedEvent> planReadiness(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.WAITING_FOR_INTERCEPT) return List.of();
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
+            return abort(engagement);
+        }
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
+            return List.of(schedule(readiness(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        }
+        if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
+            return List.of(schedule(control(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().hiveCommand().instinctReclaimInterval())));
+        }
+        if (!engagement.allAttackersAtIntercept() || engagement.attackerIds().stream().anyMatch(actor -> !RouteEngagementCombatRules.alive(state, actor))) {
+            return abort(engagement);
+        }
+        if (!cargoAtIntercept(operation, engagement)) return List.of(schedule(readiness(engagement, action.dueAt().ticks()
+                + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
+                schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
+    }
+
+    /** Advances the one persisted authority state machine; it never mutates actor/lease ownership. */
+    public static List<ProposedEvent> planCommandControl(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() == RouteEngagementStatus.RESOLVED) return List.of();
+        HiveOperationCommandAuthority current = engagement.commandAuthority(); long now = action.dueAt().ticks();
+        if (HiveRouteEngagementCommandSupport.connected(state, engagement)) {
+            return List.of(schedule(control(engagement, now + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+        }
+        HiveOperationCommandAuthority next = null;
+        if (current.signalPhase() == HiveCommandSignalPhase.CONNECTED || current.signalPhase() == HiveCommandSignalPhase.RECLAIMED) {
+            next = current.withSignal(HiveCommandSignalPhase.SIGNAL_MEMORY, now);
+        } else if (current.signalPhase() == HiveCommandSignalPhase.SIGNAL_MEMORY
+                && now >= Math.addExact(current.signalSince(), state.bootstrap().ruleset().hiveCommand().signalMemoryTicks())) {
+            next = current.withSignal(HiveCommandSignalPhase.INSTINCT, now);
+        } else if (current.signalPhase() == HiveCommandSignalPhase.INSTINCT) {
+            SubjectId reclaimer = HiveRouteEngagementCommandSupport.reclaimingOverseer(state, engagement).orElse(null);
+            if (reclaimer != null) next = current.reclaim(reclaimer, now);
+        }
+        long retry = next == null && current.signalPhase() == HiveCommandSignalPhase.SIGNAL_MEMORY
+                ? Math.addExact(current.signalSince(), state.bootstrap().ruleset().hiveCommand().signalMemoryTicks())
+                : Math.addExact(now, state.bootstrap().ruleset().hiveCommand().instinctReclaimInterval());
+        List<ProposedEvent> events = new ArrayList<>();
+        if (next != null) events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementCommandAuthorityChanged(engagement.id(), current, next)));
+        events.add(schedule(control(engagement, retry)));
+        return List.copyOf(events);
+    }
+
+    public static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(action.subject());
+        if (engagement == null || engagement.status() != RouteEngagementStatus.COLD_COMBAT) return List.of();
+        // COLD combat is still coordinated simulation work.  INSTINCT survivors may be
+        // represented by a local HOT actor later, but this strategic striker may neither
+        // keep selecting targets nor manufacture casualties without the retained command.
+        if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
+            return List.of(schedule(control(engagement, action.dueAt().ticks()
+                    + state.bootstrap().ruleset().hiveCommand().instinctReclaimInterval())));
+        }
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) {
+            return List.of(schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
+        }
+        List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
+        List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
+        if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, engagement);
+        boolean hiveTurn = (engagement.nextStrikeEpoch() & 1) == 0;
+        SubjectId attacker = RouteEngagementCombatRules.choose(hiveTurn ? attackers : defenders, engagement.nextStrikeEpoch());
+        SubjectId target = RouteEngagementCombatRules.choose(hiveTurn ? defenders : attackers, engagement.nextStrikeEpoch());
+        RouteEngagementStrike strike = new RouteEngagementStrike(engagement.id(), attacker, target, engagement.nextStrikeEpoch(),
+                RouteEngagementCombatRules.damage(state, attacker));
+        FixedScalar after = state.actorLocations().get(target).condition().health().minus(strike.damage());
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(engagement.hiveId(), strike)));
+        if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
+            RouteEngagementOutcome outcome = hiveTurn ? RouteEngagementOutcome.HIVE_VICTORY : RouteEngagementOutcome.SETTLEMENT_VICTORY;
+            events.add(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome)));
+            if (outcome == RouteEngagementOutcome.HIVE_VICTORY) {
+                events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
+            }
+        } else events.add(schedule(combat(engagement, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
+        return List.copyOf(events);
+    }
+
+    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, RouteEngagementStarted started) {
+        RouteEngagement engagement = started.engagement(); StrategicTask task = task(state, engagement.taskId(), StrategicTaskStatus.ACTIVE);
+        if (!subject.equals(engagement.hiveId()) || !task.ownerId().equals(subject) || state.strategicPlans().routeEngagements().containsKey(engagement.id())) {
+            throw new IllegalArgumentException("route engagement start has a foreign owner or duplicate identity");
+        }
+        if (engagement.status() != RouteEngagementStatus.APPROACHING || engagement.nextStrikeEpoch() != 0 || engagement.outcome().isPresent()) {
+            throw new IllegalArgumentException("route engagement start must retain its initial approaching state");
+        }
+        if (!HiveRouteEngagementCommandSupport.admitsStartedEngagement(state, engagement)) {
+            throw new IllegalArgumentException("route engagement start has no exact admitted command authority");
+        }
+        return state.withStrategicPlans(state.strategicPlans().startEngagement(engagement));
+    }
+
+    public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RouteEngagementAttackerAdvanced advanced) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(advanced.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement advancement has a foreign owner");
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) throw new IllegalArgumentException("COLD engagement cannot advance an ambient-leased actor");
+        if (!engagement.commandAuthority().permitsCoordinatedAdvance()) throw new IllegalArgumentException("COLD engagement cannot advance without retained command authority");
+        RouteEngagement next = engagement.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
+        EngagementAttacker attacker = next.attackers().stream().filter(value -> value.actorId().equals(advanced.attackerId())).findFirst().orElseThrow();
+        return state.withActorBody(attacker.actorId(), BodyPosition.above(new SurfaceAnchor(attacker.position())), state.strategicPlans().replaceEngagement(next));
+    }
+
+    public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, RouteEngagementTransition transition) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(transition.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement transition has a foreign owner");
+        if ((transition.status() == RouteEngagementStatus.WAITING_FOR_INTERCEPT || transition.status() == RouteEngagementStatus.COLD_COMBAT)
+                && !engagement.allAttackersAtIntercept()) {
+            throw new IllegalArgumentException("route engagement cannot wait or fight before all attackers arrive");
+        }
+        if (transition.status() == RouteEngagementStatus.COLD_COMBAT
+                && (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement) || !engagement.commandAuthority().permitsCoordinatedAdvance())) {
+            throw new IllegalArgumentException("COLD engagement cannot take authority without free actors and retained command");
+        }
+        return state.withStrategicPlans(state.strategicPlans().transitionEngagement(engagement.id(), transition.status()));
+    }
+
+    public static FrontierWorldState reduceStrike(FrontierWorldState state, SubjectId subject, RouteEngagementStrike strike) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(strike.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("COLD strike has a foreign owner");
+        if (!FrontierSceneAdmission.coldEngagementAvailable(state, engagement)) throw new IllegalArgumentException("COLD strike cannot target an ambient-leased actor");
+        if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
+            throw new IllegalArgumentException("COLD strike cannot continue without retained command authority");
+        }
+        return FrontierRouteEngagementStateSupport.strike(state, strike);
+    }
+
+    public static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, RouteEngagementResolved resolved) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resolved.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId())) throw new IllegalArgumentException("route engagement resolution has a foreign owner");
+        if (engagement.status() != RouteEngagementStatus.HOT && !FrontierSceneAdmission.coldEngagementActorsAvailable(state, engagement)) {
+            throw new IllegalArgumentException("COLD engagement cannot resolve while an exact actor has ambient authority");
+        }
+        return FrontierRouteEngagementStateSupport.resolve(state, resolved);
+    }
+
+    public static FrontierWorldState reduceCommandAuthorityChanged(FrontierWorldState state, SubjectId subject, RouteEngagementCommandAuthorityChanged changed) {
+        RouteEngagement engagement = state.strategicPlans().routeEngagements().get(changed.engagementId());
+        if (engagement == null || !subject.equals(engagement.hiveId()) || !engagement.commandAuthority().equals(changed.expected())) {
+            throw new IllegalArgumentException("route engagement command authority compare-and-set failed");
+        }
+        HiveOperationCommandAuthority expected = changed.expected(), next = changed.next();
+        boolean valid = ((expected.signalPhase() == HiveCommandSignalPhase.CONNECTED || expected.signalPhase() == HiveCommandSignalPhase.RECLAIMED)
+                && unchangedAuthority(expected, next) && next.signalPhase() == HiveCommandSignalPhase.SIGNAL_MEMORY
+                && next.signalSince() >= expected.signalSince() && !HiveRouteEngagementCommandSupport.connected(state, engagement))
+                || (expected.signalPhase() == HiveCommandSignalPhase.SIGNAL_MEMORY && unchangedAuthority(expected, next)
+                && next.signalPhase() == HiveCommandSignalPhase.INSTINCT
+                && next.signalSince() >= Math.addExact(expected.signalSince(), state.bootstrap().ruleset().hiveCommand().signalMemoryTicks()))
+                || (expected.signalPhase() == HiveCommandSignalPhase.INSTINCT && reclaimedAuthority(expected, next)
+                && next.signalPhase() == HiveCommandSignalPhase.RECLAIMED
+                && HiveRouteEngagementCommandSupport.canReclaim(state, engagement, next.currentAuthorityId()));
+        if (!valid) throw new IllegalArgumentException("route engagement command authority transition is not admissible");
+        return state.withStrategicPlans(state.strategicPlans().replaceEngagement(engagement.withCommandAuthority(next)));
+    }
+
+    private static boolean activeForOperation(FrontierWorldState state, SubjectId operationId) {
+        return state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.operationId().equals(operationId)
+                && engagement.status() != RouteEngagementStatus.RESOLVED);
+    }
+    /** Signal transitions never get permission to rewrite the exact roster, coverage or capacity. */
+    private static boolean unchangedAuthority(HiveOperationCommandAuthority expected, HiveOperationCommandAuthority next) {
+        return expected.kind() == next.kind() && expected.originalAuthorityId().equals(next.originalAuthorityId())
+                && expected.currentAuthorityId().equals(next.currentAuthorityId()) && expected.rosterIds().equals(next.rosterIds())
+                && expected.subordinateWeight() == next.subordinateWeight() && expected.relayCoverage().equals(next.relayCoverage());
+    }
+    /** Reclaim changes only the live controller, while the original operation membership remains immutable. */
+    private static boolean reclaimedAuthority(HiveOperationCommandAuthority expected, HiveOperationCommandAuthority next) {
+        return expected.kind() == next.kind() && expected.originalAuthorityId().equals(next.originalAuthorityId())
+                && expected.rosterIds().equals(next.rosterIds()) && expected.subordinateWeight() == next.subordinateWeight()
+                && expected.relayCoverage().equals(next.relayCoverage()) && next.signalSince() >= expected.signalSince();
+    }
+    private static List<EngagementAttacker> attackers(FrontierWorldState state, BlockPosition intercept) {
+        java.util.Comparator<Bioform> nearest = Comparator.comparingLong((Bioform bioform) -> distanceSquared(state.actorLocations().get(bioform.id()).supportingSurface().support(), intercept))
+                .thenComparing(Bioform::id);
+        List<Bioform> eligible = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
+                .filter(bioform -> state.actorLocations().get(bioform.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(bioform -> HiveRouteEngagementCommandSupport.availableForNewRouteEngagement(state, bioform.id()))
+                .sorted(nearest).toList();
+        return java.util.stream.Stream.concat(eligible.stream().filter(Bioform::isOverseer).limit(1), java.util.stream.Stream.concat(
+                        eligible.stream().filter(Bioform::isExplosiveAssaulter).limit(1), eligible.stream().filter(Bioform::isDefender).limit(2)))
+                .map(bioform -> new EngagementAttacker(bioform.id(), approach(state, state.actorLocations().get(bioform.id()).supportingSurface().support(), intercept), 0)).toList();
+    }
+    private static List<BlockPosition> approach(FrontierWorldState state, BlockPosition start, BlockPosition end) {
+        if (start.equals(end)) return List.of(start);
+        long dx = (long) end.x() - start.x(), dy = (long) end.y() - start.y(), dz = (long) end.z() - start.z();
+        int step = state.bootstrap().ruleset().spatial().hiveRouteEngagementColdStepBlocks();
+        long distance = Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz)); int steps = Math.max(1, Math.toIntExact((distance + step - 1) / step));
+        List<BlockPosition> route = new ArrayList<>(steps + 1);
+        for (int index = 0; index <= steps; index++) route.add(new BlockPosition(interpolate(start.x(), dx, index, steps),
+                interpolate(start.y(), dy, index, steps), interpolate(start.z(), dz, index, steps)));
+        return List.copyOf(route);
+    }
+    private static int interpolate(int start, long delta, int index, int steps) {
+        return Math.toIntExact(Math.addExact(start, Math.floorDiv(Math.multiplyExact(delta, index), steps)));
+    }
+    private static long distanceSquared(BlockPosition left, BlockPosition right) { long dx = (long) left.x() - right.x(), dy = (long) left.y() - right.y(), dz = (long) left.z() - right.z(); return dx * dx + dy * dy + dz * dz; }
+    private static ScheduledAction progress(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-progress-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.progress", 1); }
+    private static ScheduledAction readiness(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-readiness-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.readiness", 1); }
+    public static ScheduledAction combat(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-combat-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.combat", 1); }
+    private static ScheduledAction control(RouteEngagement engagement, long due) { return new ScheduledAction(new ScheduleId("schedule:hive-route-engagement-control-" + engagement.id().value().substring("engagement:".length())),
+            new SimInstant(due), 0, engagement.id(), "frontier.hive_route_engagement.control", 1); }
+    private static List<ProposedEvent> beginOrWait(FrontierWorldState state, RouteEngagement engagement, long now) {
+        RouteOperation operation = state.operations().get(engagement.operationId());
+        if (cargoAtIntercept(operation, engagement)) {
+            return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.COLD_COMBAT)),
+                    schedule(combat(engagement, now + state.bootstrap().ruleset().cadence().hiveRouteEngagementCombatInterval())));
+        }
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementTransition(engagement.id(), RouteEngagementStatus.WAITING_FOR_INTERCEPT)),
+                schedule(readiness(engagement, now + state.bootstrap().ruleset().cadence().hiveRouteEngagementStepInterval())));
+    }
+    /** The Scout pins the exact carrier it saw; people and cargo may occupy adjacent route cells. */
+    private static boolean cargoAtIntercept(RouteOperation operation, RouteEngagement engagement) {
+        return operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(engagement.intercept()))
+                .orElseGet(() -> operation.currentPosition().equals(engagement.intercept()));
+    }
+    private static List<ProposedEvent> terminal(FrontierWorldState state, RouteEngagement engagement) {
+        List<SubjectId> attackers = RouteEngagementCombatRules.livingAttackers(state, engagement);
+        List<SubjectId> defenders = RouteEngagementCombatRules.livingDefenders(state, engagement);
+        RouteEngagementOutcome outcome = attackers.isEmpty() && defenders.isEmpty() ? RouteEngagementOutcome.ABORTED
+                : attackers.isEmpty() ? RouteEngagementOutcome.SETTLEMENT_VICTORY : RouteEngagementOutcome.HIVE_VICTORY;
+        List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), outcome))));
+        if (outcome == RouteEngagementOutcome.HIVE_VICTORY) events.add(cancelOperationProgress(state.operations().get(engagement.operationId())));
+        return List.copyOf(events);
+    }
+    private static List<ProposedEvent> abort(RouteEngagement engagement) {
+        return List.of(new ProposedEvent(engagement.hiveId(), new RouteEngagementResolved(engagement.id(), RouteEngagementOutcome.ABORTED)));
+    }
+    private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    private static ProposedEvent cancelOperationProgress(RouteOperation operation) {
+        return new ProposedEvent(operation.settlementId(), new ScheduleEffect.Cancelled(SupplyOperationProcess.operationProgress(operation, 0L).id()));
+    }
+    private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
+    private static SubjectId engagementId(StrategicTask task) { return new SubjectId("engagement:" + task.id().value().substring("task:".length())); }
+    private static StrategicTask task(FrontierWorldState state, SubjectId id, StrategicTaskStatus status) {
+        StrategicTask task = state.strategicPlans().tasks().get(id);
+        if (task == null || task.kind() != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION || task.status() != status) throw new IllegalStateException("hive route engagement has no matching strategic task");
+        return task;
+    }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "disposable_settlement_provision",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "settlement-provision" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IN_PROGRESS", "available": 64, "required": 37, "fulfilled": 0, "nourished": 0, "hungry": 37, "starving": 0, "intent": "intent:settlement-provision-1-2-0" } } },
+      { "view": "intent", "id": "intent:settlement-provision-1-2-0", "expect": { "status": "ok", "intentKind": "EXACT_ITEM_CONSUMPTION", "intentStatus": "PREPARED" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -336 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "SECURE", "available": 27, "required": 37, "fulfilled": 37, "nourished": 37, "hungry": 0, "starving": 0, "intent": "" } }, "timeoutMs": 30000 },
+    { "type": "wait_until_container_item", "containerId": "container:1-depot", "item": "minecraft:bread", "count": 27, "slot": 1, "timeoutMs": 30000 },
+    { "type": "look", "at": { "x": -340, "y": 67, "z": -330 } },
+    { "type": "assert_visible_board", "text": "FOOD SECURE", "position": { "x": -340, "y": 67, "z": -330 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "settlement", "id": "settlement:1" },
+    { "type": "inspect", "view": "intent", "id": "intent:settlement-provision-1-2-0" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -336 }, "settleMs": 1500 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "SECURE", "available": 27, "required": 37, "fulfilled": 37, "nourished": 37, "hungry": 0, "starving": 0, "intent": "" } } },
+        { "view": "intent", "id": "intent:settlement-provision-1-2-0", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 5, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "SECURE", "available": 27, "required": 37, "fulfilled": 37, "nourished": 37, "hungry": 0, "starving": 0, "intent": "" } } },
+    { "after": 6, "view": "intent", "id": "intent:settlement-provision-1-2-0", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } }
+  ],
+  "frames": [
+    { "after": 4, "name": "northwatch-food-secure" }
+  ]
+}

@@ -1,0 +1,139 @@
+version: 1
+audit: docs/frontier-v3-architecture-audit.md
+
+# This file is a debt ceiling, not an allowance. Ordinary changes may only keep
+# or reduce these values. Raising a value requires an accepted architecture
+# amendment with a new finding and exit gate.
+hotspot_line_ceiling:
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 960
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/runtime/FrontierWorldRuntimeDefinition.java: 80
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldCommandPlanner.java: 48
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldEventReducer.java: 32
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldPayloadCodecs.java: 833
+  pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldStateCodec.java: 808
+
+max_manual_executor_ticks: 0
+max_runtime_scheduled_string_cases: 0
+max_runtime_command_payload_type_tests: 0
+max_command_planner_payload_type_tests: 0
+max_runtime_reducer_cases: 0
+max_event_reducer_cases: 0
+max_domain_emission_fallbacks: 0
+process_unhashed_tuning_constants:
+  max_total: 0
+  allowed_files: {}
+# F0.0 legacy baseline. This is a shrinking inventory, not a permitted
+# pattern: F0.2 must remove entries as replica realization and custody leases
+# replace ContainerSurfaceStatus.ACTIVE. New files or references fail.
+historical_surface_active_references:
+  max_total: 39
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EngineeringEquipmentStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EquipmentIssueStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/EquipmentReturnStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ExactItemConsumptionStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSettlementWorkDiagnostic.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWireTags.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/MedicalEvacuationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ProductionTransformationStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteConstructionStateSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/RouteMaintenanceStateSupport.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/SettlementServiceInputIssueStateSupport.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/ContainerSurfaceProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DecontaminationProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DefenderEquipmentProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DefenderEquipmentReturnProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/EngineeringEquipmentProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldPhysicalObservationProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/HiveGrowthProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/MedicalTreatmentProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/PopulationBirthProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/ProductionProcess.java: 3
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteConstructionProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteMaintenanceProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementProvisionProcess.java: 2
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementServiceWorkProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/StructuralRepairProcess.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SupplyOperationProcess.java: 2
+max_production_development_configurations: 0
+max_lifecycle_fixture_profile_branches: 0
+max_process_classes_in_model: 0
+max_codec_classes_in_model: 0
+
+direct_world_state_construction:
+  max_total: 14
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldInitialState.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java: 12
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldStateCodec.java: 1
+
+persisted_enum_position_tags:
+  max_total: 0
+  allowed_files: {}
+
+wire_tag_position_derivations:
+  max_total: 0
+  allowed_files: {}
+
+scene_cause_type_branches:
+  max_total: 15
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/EngineeringWorkScenePayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/FrontierWorldPayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/MedicalTreatmentScenePayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/ProductionWorkScenePayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/ResourceSiteHarvestScenePayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/RoutePatrolPayloadCodecs.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/SceneCauseStateCodec.java: 8
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/SettlementServiceWorkPayloadCodecs.java: 1
+
+# The closed SceneBehavior registry is the only production dispatch boundary.
+# Direct `FrontierSceneBehaviors.isX(...)` predicates inside generic scene
+# infrastructure are a cause-specific branch leak. The retained baseline is
+# explicit and shrinking; in particular, adding harvest policy back to
+# FrontierV3SceneExecutor breaks this guard before runtime.
+forbidden_scene_cause_predicates:
+  max_total: 6
+  allowed_files:
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneAdmission.java: 1
+    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneOwnerSupport.java: 1
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java: 1
+    pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneReadiness.java: 3
+
+v3_gametest_forced_chunk_loads:
+  max_total: 0
+  allowed_files: {}
+
+# F0.V.1a: all Frontier v3 scene executors consume FrontierV3SceneDemand's
+# read-only aggregate.  A local players().stream() recurrence would fork the
+# observer radius/spectator policy and can incorrectly turn one shared front
+# into independent per-player authorities.
+scene_executor_raw_player_scans:
+  max_total: 0
+  allowed_files: {}
+
+# Every scene family exposes its complete bounded stable candidate inventory.
+# The shared adapter selector chooses the first naturally demanded member.
+# A family executor may never call nextCandidate before it observes demand:
+# that would make an unloaded lexicographically early process suppress an
+# observed later process elsewhere in the world.
+scene_executor_global_first_candidates:
+  max_total: 0
+  allowed_files: {}
+
+# All scene-lease command payloads must implement the marker consumed by the
+# generic Process/Scene SDK admission guard.  This is a closed zero baseline:
+# a future family cannot accidentally bypass composition and budget admission.
+unfenced_scene_lease_admission_payloads:
+  max_total: 0
+  allowed_files: {}
+
+model_forbidden_package_dependencies:
+  max_total: 0
+  allowed_files: {}
+
+unbounded_scheduled_queue_paths:
+  max_total: 0
+  allowed_files: {}

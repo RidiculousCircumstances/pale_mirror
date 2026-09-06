@@ -1,0 +1,96 @@
+package io.farfrontier.palemirror.internal.world;
+
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
+import net.minecraft.core.BlockPos;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Stable information-board placement over local projected geometry.
+ *
+ * <p>This is strictly a presentation layout: it reads the materializer ledger
+ * to avoid embedding a label in owned blocks, without adding or changing a
+ * source fact.</p>
+ */
+final class SourceGrayboxLabelPositions {
+    // One extra block clears a player's eye line over low one-block claims,
+    // while keeping the label tied to its local object rather than a sky plane.
+    private static final int CLEARANCE = 3;
+    /** Inspect enough nearby board slots to step around a mast or metric tower. */
+    private static final int SLOT_LOOKAHEAD = 64;
+    /** One board per bounded source entity reservation; exhaustion must fail visibly, never spin a server tick. */
+    private static final int MAX_SLOT_ORDINAL = 4_096;
+    private final SourceGrayboxLabelHeightIndex heights;
+    private final Map<Column, Integer> nextSlotByAnchor = new LinkedHashMap<>();
+    private final Set<Column> occupiedBoardColumns = new LinkedHashSet<>();
+    private final SourceGrayboxLabelReservations reservations = new SourceGrayboxLabelReservations();
+
+    SourceGrayboxLabelPositions(SourceGrayboxPresentationLedger ledger) {
+        heights = SourceGrayboxLabelHeightIndex.from(ledger.claims().stream().map(claim ->
+                new SourceGrayboxLabelHeightIndex.Footprint(claim.x(), claim.y(), claim.z(), claim.width(), claim.depth(), claim.height()))
+                .toList());
+    }
+
+    BlockPos next(String id, int x, int z) {
+        return next(id, x, z, ReferenceGrayboxLayout.GROUND_Y + CLEARANCE);
+    }
+
+    /** Keeps a local board above a physical substructure that the block ledger does not own. */
+    BlockPos next(String id, int x, int z, int minimumY) {
+        if (minimumY < ReferenceGrayboxLayout.GROUND_Y + CLEARANCE) {
+            throw new IllegalArgumentException("source graybox label floor is invalid");
+        }
+        // An operation board is a live field marker.  Unlike a static
+        // infrastructure board, it must remain directly above the activity
+        // cube so the player can unambiguously associate the event with the
+        // nearby one-to-one participants.
+        if (id.startsWith("effect:")) {
+            Column anchor = new Column(x, z);
+            // A current source effect is an immediate local event, not a map
+            // landmark.  It owns the exact effect anchor when free so the
+            // player can connect the board to its materialized consequence.
+            // If another higher-priority event already occupies that column,
+            // the bounded ordinary search below keeps both boards legible.
+            if (!occupiedBoardColumns.contains(anchor) && reservations.available(id, x, z)) {
+                occupiedBoardColumns.add(anchor);
+                reservations.reserve(id, x, z);
+                return new BlockPos(x, Math.max(minimumY, baseline(x, z)), z);
+            }
+        }
+        if (id.startsWith("activity:")) return new BlockPos(x, Math.max(minimumY, baseline(x, z)), z);
+        Column anchor = new Column(x, z);
+        int firstOrdinal = nextSlotByAnchor.getOrDefault(anchor, 0);
+        while (firstOrdinal < MAX_SLOT_ORDINAL) {
+            Candidate best = null;
+            int limit = Math.min(MAX_SLOT_ORDINAL, firstOrdinal + SLOT_LOOKAHEAD);
+            for (int ordinal = firstOrdinal; ordinal < limit; ordinal++) {
+                SourceGrayboxLabelSlots.Offset offset = SourceGrayboxLabelSlots.offset(ordinal);
+                Column candidate = new Column(x + offset.x(), z + offset.z());
+                if (occupiedBoardColumns.contains(candidate) || !reservations.available(id, candidate.x(), candidate.z())) continue;
+                Candidate proposed = new Candidate(candidate, ordinal, Math.max(minimumY, baseline(candidate.x(), candidate.z())));
+                if (best == null || proposed.y() < best.y()) best = proposed;
+                // Ground plus clearance is the lowest legal board position,
+                // so later slots cannot produce a better local reading height.
+                if (best.y() == ReferenceGrayboxLayout.GROUND_Y + CLEARANCE) break;
+            }
+            if (best != null) {
+                occupiedBoardColumns.add(best.column());
+                reservations.reserve(id, best.column().x(), best.column().z());
+                nextSlotByAnchor.put(anchor, best.ordinal() + 1);
+                return new BlockPos(best.column().x(), best.y(), best.column().z());
+            }
+            firstOrdinal += SLOT_LOOKAHEAD;
+        }
+        throw new IllegalStateException("source graybox label slots exhausted for " + id);
+    }
+
+    private int baseline(int x, int z) {
+        return heights.baseline(x, z, CLEARANCE);
+    }
+
+    private record Column(int x, int z) { }
+
+    private record Candidate(Column column, int ordinal, int y) { }
+}

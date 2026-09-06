@@ -1,0 +1,83 @@
+package io.farfrontier.palemirror.frontier.reference;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Canonical market-facing slice of the later complete reference world.
+ *
+ * <p>It owns insertion order, day, physical sites and event receipts. Ecology,
+ * V2 rationing and site placement enter only when their source owners are
+ * ported; no NeoForge type is allowed across this boundary.</p>
+ */
+public final class ReferenceMarketWorld {
+    private final LinkedHashMap<Integer, ReferenceSettlement> settlements = new LinkedHashMap<>();
+    private final LinkedHashMap<Integer, ReferenceResourceSite> resourceSites = new LinkedHashMap<>();
+    private final Map<Integer, Double> siteOutputFactors = new LinkedHashMap<>();
+    private final Map<Integer, Double> siteHaulInfections = new LinkedHashMap<>();
+    private final List<String> events = new ArrayList<>();
+    private final ReferenceTradeNetwork trade;
+    private ReferenceSiteSurveyor siteSurveyor = ReferenceSiteSurveyor.unavailable();
+    private ReferenceMarketEcology ecology;
+    private ReferenceRationAuthority rationAuthority;
+    private int day;
+
+    public ReferenceMarketWorld(ReferenceTradeNetwork trade) {
+        this.trade = Objects.requireNonNull(trade, "trade");
+    }
+
+    ReferenceMarketWorld(ReferenceTradeNetwork trade, ReferenceMarketEcology ecology) {
+        this.trade = Objects.requireNonNull(trade, "trade");
+        this.ecology = Objects.requireNonNull(ecology, "ecology");
+    }
+
+    public int day() { return day; }
+    public void day(int value) { day = value; }
+    public ReferenceTradeNetwork trade() { return trade; }
+    public ReferenceSiteSurveyor siteSurveyor() { return siteSurveyor; }
+    public void siteSurveyor(ReferenceSiteSurveyor value) { siteSurveyor = Objects.requireNonNull(value, "siteSurveyor"); }
+    public ReferenceRationAuthority rationAuthority() { return rationAuthority; }
+    public void rationAuthority(ReferenceRationAuthority value) { rationAuthority = value; }
+    public Map<Integer, ReferenceSettlement> settlements() { return settlements; }
+    public Map<Integer, ReferenceResourceSite> resourceSites() { return resourceSites; }
+    public List<String> events() { return List.copyOf(events); }
+    public void event(String value) { events.add(Objects.requireNonNull(value, "value")); }
+    void restoreEvents(List<String> restored) {
+        List<String> required = List.copyOf(Objects.requireNonNull(restored, "restored"));
+        events.clear();
+        events.addAll(required);
+    }
+    /**
+     * Source-free market tests can set a fixed projection through this legacy
+     * fixture surface.  A live {@link ReferenceWorld} supplies its owning
+     * ecology during construction instead.
+     */
+    public double siteOutputFactor(int siteId) { return siteOutputFactors.getOrDefault(siteId, 1.0d); }
+    public void siteOutputFactor(int siteId, double value) { siteOutputFactors.put(siteId, value); }
+    /** See {@link #siteOutputFactor(int)}. */
+    public double siteHaulInfection(int siteId) { return siteHaulInfections.getOrDefault(siteId, 0.0d); }
+    public void siteHaulInfection(int siteId, double value) { siteHaulInfections.put(siteId, value); }
+    double humanOutputFactor(ReferenceResourceSite site) {
+        return ecology == null ? siteOutputFactor(site.id()) : ecology.humanOutputFactor(site);
+    }
+    double haulInfection(ReferenceResourceSite site, ReferenceSettlement owner) {
+        return ecology == null ? siteHaulInfection(site.id()) : ecology.haulInfection(site, owner);
+    }
+    void humanExtract(ReferenceResourceSite site, double amount) {
+        if (amount <= 0.0d || ecology == null) return;
+        ecology.humanExtract(site, amount);
+    }
+
+    public void addSettlement(ReferenceSettlement settlement) {
+        ReferenceSettlement required = Objects.requireNonNull(settlement, "settlement");
+        if (settlements.putIfAbsent(required.id(), required) != null) throw new IllegalArgumentException("duplicate settlement " + required.id());
+    }
+
+    public void addResourceSite(ReferenceResourceSite site) {
+        ReferenceResourceSite required = Objects.requireNonNull(site, "site");
+        if (resourceSites.putIfAbsent(required.id(), required) != null) throw new IllegalArgumentException("duplicate site " + required.id());
+    }
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "disposable_redwillow_player_ingress",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:glowstone_dust 1" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -329 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12 } },
+      { "view": "container", "id": "container:4-depot", "expect": { "status": "ok", "occupiedCount": 0 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_block", "position": { "x": 380, "y": 65, "z": -326 }, "block": "minecraft:chest", "timeoutMs": 30000 },
+    { "type": "open_container", "position": { "x": 380, "y": 65, "z": -326 }, "timeoutMs": 10000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:glowstone_dust", "count": 1, "timeoutMs": 10000 },
+    { "type": "wait_until_container_item", "containerId": "container:4-depot", "item": "minecraft:glowstone_dust", "count": 1, "slot": 0, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "container", "id": "container:4-depot" }
+  ],
+  "assertions": [
+    { "after": 5, "view": "container", "id": "container:4-depot", "expect": { "status": "ok", "surface": "ACTIVE", "occupiedCount": 1 } }
+  ],
+  "frames": [
+    { "after": 2, "name": "opened-depot", "presentation": "player" }
+  ]
+}

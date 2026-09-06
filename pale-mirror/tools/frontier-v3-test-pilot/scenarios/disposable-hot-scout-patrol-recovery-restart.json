@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "disposable_hot_scout_patrol_recovery_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hot-scout-patrol-recovery" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "actor", "id": "bioform:west-1", "expect": { "status": "ok", "role": "SCOUT", "life": "ALIVE",
+        "ambientLease": "PREPARED", "ambientGoal": "SCOUT_PATROL" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -423, "y": 65, "z": 414 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "scout-patrol:bioform:west-1", "expect": { "status": "ok",
+      "eventKind": "scout_patrol_lease_recovered", "subject": "bioform:west-1" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "bioform:west-1", "expect": { "status": "ok", "role": "SCOUT",
+      "life": "ALIVE", "ambientLease": "HOT", "ambientGoal": "SCOUT_PATROL", "goalPosition": { "x": -407, "y": 64, "z": 414 } }, "timeoutMs": 30000 }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 1 },
+  "assertions": [
+    { "after": 1, "view": "trace", "id": "scout-patrol:bioform:west-1", "expect": { "status": "ok",
+      "eventKind": "scout_patrol_lease_recovered", "subject": "bioform:west-1" } },
+    { "after": 2, "view": "actor", "id": "bioform:west-1", "expect": { "status": "ok", "role": "SCOUT",
+      "life": "ALIVE", "ambientLease": "HOT", "ambientGoal": "SCOUT_PATROL", "goalPosition": { "x": -407, "y": 64, "z": 414 } } }
+  ],
+  "frames": []
+}

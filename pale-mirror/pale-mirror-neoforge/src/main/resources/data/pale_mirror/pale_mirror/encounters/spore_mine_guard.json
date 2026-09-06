@@ -1,0 +1,44 @@
+{
+  "id": "pale_mirror:spore_mine_guard",
+  "version": 2,
+  "compositions": [
+    {
+      "id": "foothold_patrol",
+      "tier": "FOOTHOLD",
+      "actors": [
+        { "slot": "dormant_infected_human", "actor_profile": "pale_mirror:spore_infected_human" },
+        { "slot": "dormant_infected_husk", "actor_profile": "pale_mirror:spore_infected_husk" }
+      ]
+    },
+    {
+      "id": "infested_hunt",
+      "tier": "INFESTED",
+      "actors": [
+        { "slot": "dormant_infected_human", "actor_profile": "pale_mirror:spore_infected_human" },
+        { "slot": "dormant_infected_husk", "actor_profile": "pale_mirror:spore_infected_husk" },
+        { "slot": "dormant_braiomil", "actor_profile": "pale_mirror:spore_braiomil" }
+      ]
+    },
+    {
+      "id": "siege_pressure",
+      "tier": "SIEGE",
+      "actors": [
+        { "slot": "dormant_infected_human", "actor_profile": "pale_mirror:spore_infected_human" },
+        { "slot": "dormant_infected_husk", "actor_profile": "pale_mirror:spore_infected_husk" },
+        { "slot": "dormant_braiomil", "actor_profile": "pale_mirror:spore_braiomil" },
+        { "slot": "dormant_spitter", "actor_profile": "pale_mirror:spore_spitter" }
+      ]
+    },
+    {
+      "id": "apex_pressure",
+      "tier": "APEX",
+      "actors": [
+        { "slot": "dormant_infected_human", "actor_profile": "pale_mirror:spore_infected_human" },
+        { "slot": "dormant_infected_husk", "actor_profile": "pale_mirror:spore_infected_husk" },
+        { "slot": "dormant_braiomil", "actor_profile": "pale_mirror:spore_braiomil" },
+        { "slot": "dormant_spitter", "actor_profile": "pale_mirror:spore_spitter" },
+        { "slot": "apex_spitter", "actor_profile": "pale_mirror:spore_spitter" }
+      ]
+    }
+  ]
+}

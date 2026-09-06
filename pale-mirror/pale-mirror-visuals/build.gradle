@@ -1,0 +1,163 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.143'
+}
+
+base {
+    archivesName = 'pale_mirror_visuals'
+}
+
+def runtimeModDirectory = file(System.getenv('PALE_MIRROR_RUNTIME_MOD_DIR')
+        ?: new File(System.getProperty('user.home'), 'far-frontier-server/mods'))
+
+dependencies {
+    implementation project(':pale-mirror-api')
+    compileOnly files(rootProject.findProperty('villager_overhaul_integration_jar')
+            ?: new File(runtimeModDirectory, 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar'))
+    compileOnly files(rootProject.findProperty('geckolib_integration_jar')
+            ?: new File(runtimeModDirectory, 'geckolib-neoforge-1.21.1-4.9.2.jar'))
+    compileOnly files(rootProject.findProperty('create_integration_jar')
+            ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar'))
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'com.google.code.gson:gson:2.11.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+neoForge {
+    version = rootProject.providers.gradleProperty('neo_version').get()
+    runs {
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('runs/visuals-game-test')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'pale_mirror_visuals'
+        }
+    }
+    mods {
+        pale_mirror_visuals {
+            sourceSet sourceSets.main
+        }
+        pale_mirror {
+            sourceSet project(':pale-mirror-api').sourceSets.main
+            sourceSet project(':pale-mirror-neoforge').sourceSets.main
+            sourceSet project(':pale-mirror-domain').sourceSets.main
+        }
+    }
+}
+
+def visualsRuntimeJars = [
+        file(rootProject.findProperty('geckolib_integration_jar')
+                ?: new File(runtimeModDirectory, 'geckolib-neoforge-1.21.1-4.9.2.jar')),
+        file(rootProject.findProperty('villager_overhaul_integration_jar')
+                ?: new File(runtimeModDirectory, 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar')),
+        file(rootProject.findProperty('supplementaries_integration_jar')
+                ?: new File(runtimeModDirectory, 'supplementaries-1.21.1-3.8.8-neoforge.jar')),
+        file(rootProject.findProperty('moonlight_integration_jar')
+                ?: new File(runtimeModDirectory, 'moonlight-1.21.1-3.3.2-neoforge.jar')),
+        file(rootProject.findProperty('create_integration_jar')
+                ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar')),
+        file(rootProject.findProperty('farmers_delight_integration_jar')
+                ?: new File(runtimeModDirectory, 'FarmersDelight-1.21.1-1.3.2.jar')),
+        file(rootProject.findProperty('zeta_integration_jar')
+                ?: new File(runtimeModDirectory, 'Zeta-1.1-40.jar')),
+        file(rootProject.findProperty('quark_integration_jar')
+                ?: new File(runtimeModDirectory, 'Quark-4.1-482.jar'))
+]
+
+def prepareVisualsGameTestMods = tasks.register('prepareVisualsGameTestMods', Sync) {
+    from visualsRuntimeJars
+    into layout.buildDirectory.dir('runs/visuals-game-test/mods')
+    doFirst {
+        def missing = visualsRuntimeJars.findAll { !it.exists() }
+        if (!missing.isEmpty()) throw new GradleException("Pinned visual runtime JARs are missing: ${missing}")
+    }
+}
+
+def visualsGameTestWorld = layout.buildDirectory.dir('runs/visuals-game-test/world').get().asFile
+tasks.named('runGameTestServer') {
+    dependsOn prepareVisualsGameTestMods
+    doFirst { visualsGameTestWorld.deleteDir() }
+}
+
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def properties = [
+            minecraft_version_range: rootProject.providers.gradleProperty('minecraft_version_range').get(),
+            neo_version            : rootProject.providers.gradleProperty('neo_version').get(),
+            loader_version_range   : rootProject.providers.gradleProperty('loader_version_range').get(),
+            mod_version            : rootProject.providers.gradleProperty('mod_version').get()
+    ]
+    inputs.properties(properties)
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+    expand(properties)
+}
+
+sourceSets.main.resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
+
+tasks.register('verifyVisualsJar') {
+    group = 'verification'
+    dependsOn tasks.named('jar')
+    def archive = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    inputs.file(archive)
+    doLast {
+        def jar = new java.util.jar.JarFile(archive.get().asFile)
+        try {
+            [
+                    'io/farfrontier/palemirror/visuals/PaleMirrorVisualsMod.class',
+                    'io/farfrontier/palemirror/visuals/genesis/FrontierRegionPlanner.class',
+                    'META-INF/neoforge.mods.toml',
+                    'pale_mirror_visuals.mixins.json',
+                    'pale_mirror_visuals.worldgen.mixins.json',
+                    'assets/pale_mirror_visuals/textures/entity/threat_heart.png',
+                    'assets/pale_mirror_visuals/geo/threat_heart.geo.json',
+                    'assets/pale_mirror_visuals/geo/harvester/biomass_collector.geo.json',
+                    'assets/pale_mirror_visuals/geo/harvester/crusher_stalker.geo.json',
+                    'assets/pale_mirror_visuals/geo/harvester/scythe_stalker.geo.json',
+                    'assets/pale_mirror_visuals/animations/harvester/biomass_collector.animation.json',
+                    'assets/pale_mirror_visuals/animations/harvester/crusher_stalker.animation.json',
+                    'assets/pale_mirror_visuals/animations/harvester/scythe_stalker.animation.json',
+                    'assets/pale_mirror_visuals/textures/entity/harvester/biomass_collector.png',
+                    'assets/pale_mirror_visuals/textures/entity/harvester/crusher_stalker.png',
+                    'assets/pale_mirror_visuals/textures/entity/harvester/scythe_stalker.png',
+                    'data/pale_mirror_visuals/settlement_archetype/iron_frontier.json',
+                    'data/pale_mirror_visuals/structure/temperate/residence_1.nbt',
+                    'data/pale_mirror_visuals/structure/temperate/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/temperate/mine/dispatch_commissioning.nbt',
+                    'data/pale_mirror_visuals/structure/cold_taiga/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/cold_taiga/mine/dispatch_commissioning.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/civic_hall.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/mine/portal_hoist.nbt',
+                    'data/pale_mirror_visuals/structure/dry_arid/mine/dispatch_commissioning.nbt'
+            ].each { entry ->
+                if (jar.getEntry(entry) == null) throw new GradleException("Visuals JAR is missing ${entry}")
+            }
+        } finally {
+            jar.close()
+        }
+    }
+}
+
+tasks.named('check') { dependsOn tasks.named('verifyVisualsJar') }
+
+tasks.register('visualsIntegrationHarness', Exec) {
+    group = 'verification'
+    description = 'Boots final Core and Visuals JARs with pinned dependencies in a clean server twice.'
+    dependsOn tasks.named('jar'), project(':pale-mirror-neoforge').tasks.named('jar')
+    workingDir rootProject.projectDir
+    def harnessLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    def privateRuntimeJava = file(System.getenv('PALE_MIRROR_RUNTIME_JAVA')
+            ?: new File(System.getProperty('user.home'),
+                    '.local/share/far-frontier/java/temurin-22.0.2+9/bin/java'))
+    environment 'PALE_MIRROR_JAVA', privateRuntimeJava.exists()
+            ? privateRuntimeJava.absolutePath
+            : harnessLauncher.get().executablePath.asFile.absolutePath
+    def coreJar = project(':pale-mirror-neoforge').tasks.named('jar', Jar).flatMap { it.archiveFile }
+    commandLine 'bash', 'scripts/visuals-integration-harness.sh', coreJar.get().asFile.absolutePath,
+            tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath,
+            runtimeModDirectory.absolutePath
+}

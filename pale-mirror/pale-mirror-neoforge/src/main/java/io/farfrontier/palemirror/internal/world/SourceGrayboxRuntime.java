@@ -1,0 +1,451 @@
+package io.farfrontier.palemirror.internal.world;
+
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
+import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxObservationOutcome;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxBioformObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxResidentObservation;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxSnapshot;
+import io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxStructureObservation;
+import java.util.LinkedHashMap;
+import java.nio.file.Path;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+
+/** Server-thread scheduler and SavedData owner for the source-parity graybox. */
+public final class SourceGrayboxRuntime {
+    private static final int MAXIMUM_CATCH_UP_DAYS = 24;
+    private static final long ACTOR_EXECUTION_INTERVAL_TICKS = 10L;
+    private static final Map<MinecraftServer, SourceGrayboxRuntime> INSTANCES = new IdentityHashMap<>();
+    private final MinecraftServer server;
+    private final SourceGrayboxSavedData data;
+    private final SourceGrayboxMaterializer materializer = new SourceGrayboxMaterializer();
+    private final SourceGrayboxActorExecutionRuntime actorExecution = new SourceGrayboxActorExecutionRuntime();
+    private final SourceGrayboxActorBehaviorRuntime actorBehavior = new SourceGrayboxActorBehaviorRuntime();
+    private final SourceGrayboxActorCombatRuntime actorCombat = new SourceGrayboxActorCombatRuntime();
+    private final SourceGrayboxWarehouseRuntime warehouses = new SourceGrayboxWarehouseRuntime();
+    private final SourceGrayboxCargoRuntime cargoes = new SourceGrayboxCargoRuntime();
+    private final SourceGrayboxOperationCargoCarrierRuntime operationCarriers = new SourceGrayboxOperationCargoCarrierRuntime();
+    private final SourceGrayboxEffectRuntime effects = new SourceGrayboxEffectRuntime();
+    private final Map<String, Entity> admittedEntities = new LinkedHashMap<>();
+    /** Last bounded, read-only camera plan given to an operator; never canonical state. */
+    private List<SourceGrayboxAuditViews.View> advertisedAuditViews = List.of();
+    /** A naturally loaded graybox chunk needs one claim-checked projection pass. */
+    private boolean presentationRequested;
+    /** One actionable invariant trace per server lifetime; never turn a recurring breach into log spam. */
+    private boolean unexpectedActorDepartureTraceCaptured;
+
+    private SourceGrayboxRuntime(MinecraftServer server) {
+        this.server = server;
+        data = SourceGrayboxSavedData.get(server.overworld());
+        // A saved HOT/PREPARING actor is unknown after JVM restart.  Do not let
+        // a later materializer blindly create a second body for that lease.
+        long recoveryTick = data.actorExecutionGameTime(server.overworld().getGameTime());
+        data.enterActorRecovery(recoveryTick);
+        data.recoverEffectLeases(recoveryTick);
+        presentationRequested = data.activated();
+    }
+
+    public static SourceGrayboxRuntime forServer(MinecraftServer server) {
+        if (!availableForSelectedLaunch()) {
+            throw new IllegalStateException("Frozen source graybox is unavailable while Frontier v3 owns the physical world");
+        }
+        return INSTANCES.computeIfAbsent(server, SourceGrayboxRuntime::new);
+    }
+
+    /**
+     * True only when the frozen source-parity runtime is the selected launch owner.
+     *
+     * <p>This gate deliberately precedes SavedData construction. A broad NeoForge callback in a
+     * v3 launch must not deserialize or refresh the old simulation just because a player loaded
+     * a graybox chunk.</p>
+     */
+    public static boolean availableForSelectedLaunch() {
+        return !FrontierV3ServerLifecycle.freezesLegacySourceRuntime();
+    }
+
+    public static void stop(MinecraftServer server) {
+        INSTANCES.remove(server);
+    }
+
+    /** Avoid constructing source SavedData for ordinary entity admissions in unrelated dimensions. */
+    public static boolean recognizesManagedEntity(Entity entity) {
+        return SourceGrayboxMaterializer.recognizesManagedEntity(entity);
+    }
+
+    /** Lets broad NeoForge chunk hooks avoid creating graybox state for unrelated dimensions. */
+    public static boolean isGrayboxLevel(ServerLevel level) {
+        return level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION);
+    }
+
+    /** Verify durable source state before Minecraft can substitute a fresh SavedData instance. */
+    public static void assertCompatibleData(Path worldRoot) {
+        SourceGrayboxSavedData.assertCompatibleData(worldRoot);
+        SourceGrayboxPresentationLedger.assertCompatibleData(worldRoot);
+    }
+
+    /** Returns true only after the source graybox has become the active campaign clock. */
+    public boolean tick() {
+        if (FrontierV3ServerLifecycle.ownsPhysicalWorld(server)) return false;
+        if (!data.activated()) return false;
+        ServerLevel graybox = grayboxLevel();
+        // An external explosion was captured from the non-cancellable
+        // Detonate event. Its Minecraft block changes now exist, so reconcile
+        // them before this tick can advance the source day or republish a
+        // replacement presentation.
+        reconcileExternalExplosions(graybox);
+        long gameTime = graybox.getGameTime();
+        ReferenceGrayboxSnapshot before = data.snapshot();
+        if (gameTime % 5L == 0L) data.maintainEffectLeases(data.actorExecutionGameTime(gameTime));
+        warehouses.reconcileInbound(graybox, data, materializer);
+        operationCarriers.tick(graybox, data, materializer);
+        cargoes.reconcileInbound(graybox, data, materializer);
+        boolean actorDue = gameTime % ACTOR_EXECUTION_INTERVAL_TICKS == 0L;
+        boolean actorAdmissionRequested = actorDue
+                && actorExecution.prepareForLoadedExecution(graybox, data, materializer, admittedEntities);
+        List<ReferenceGrayboxSnapshot> dueBoundaries = data.advanceDueDaySnapshots(gameTime, MAXIMUM_CATCH_UP_DAYS);
+        int advanced = dueBoundaries.size();
+        ReferenceGrayboxSnapshot current = data.snapshot();
+        boolean sourceChanged = current != before;
+        boolean published = presentationRequested || sourceChanged || actorAdmissionRequested;
+        if (published) {
+            publish(graybox, current);
+        }
+        // Exact physical positions and demand leases remain durable at the
+        // actor cadence, but do not by themselves justify rebuilding the
+        // complete static arena. A just-published frame may also have moved an
+        // embedded HOT body, so consume its recovery capture immediately.
+        if (actorDue || published && materializer.actorRecoveries().hasAny()) {
+            actorExecution.reconcileLoadedActors(graybox, data, materializer, admittedEntities);
+        }
+        // The just-published plan is the observed world against which a real
+        // source-day consequence lands.  The executor decides HOT/COLD only
+        // once at this boundary, so an off-screen event cannot explode late
+        // merely because a player later returns to its chunk.
+        if (advanced > 0) {
+            boolean effectsSettled;
+            if (dueBoundaries.size() == 1) {
+                effectsSettled = effects.settleSourceDay(graybox, data, materializer, dueBoundaries.getFirst(), effect -> {
+                    BlockPos target = new BlockPos(effect.position().x(), ReferenceGrayboxLayout.GROUND_Y + 3, effect.position().z());
+                    return SourceGrayboxHotZone.from(graybox).hot(target) && graybox.hasChunkAt(target);
+                });
+            } else {
+                // A capped catch-up compressed several source boundaries into
+                // one server tick. They did not have individual live Minecraft
+                // frames, so conservatively retain each as COLD rather than
+                // showing a burst of late explosions in the final frame.
+                effectsSettled = false;
+                for (ReferenceGrayboxSnapshot frame : dueBoundaries) {
+                    effectsSettled |= effects.settleSourceDay(graybox, data, materializer, frame, ignored -> false);
+                }
+            }
+            if (effectsSettled) {
+                ReferenceGrayboxSnapshot afterEffects = data.snapshot();
+                if (afterEffects != current) {
+                    publish(graybox, afterEffects);
+                    current = afterEffects;
+                }
+            }
+        }
+        actorBehavior.tick(graybox, current, data.actorExecution(), materializer, admittedEntities, gameTime);
+        actorCombat.tick(graybox, data, materializer, admittedEntities, gameTime);
+        return true;
+    }
+
+    /** Explicit activation prevents a legacy campaign clock and source clock from running together. */
+    public ReferenceGrayboxSnapshot activate() {
+        requireExclusivePhysicalWorld();
+        ServerLevel graybox = grayboxLevel();
+        SourceGrayboxWorldBoundary.enforce(graybox);
+        data.activate(graybox.getGameTime());
+        publish(graybox, data.snapshot());
+        return data.snapshot();
+    }
+
+    public void advance(int days) {
+        requireExclusivePhysicalWorld();
+        data.advance(days);
+        if (data.activated()) {
+            ServerLevel graybox = grayboxLevel();
+            ReferenceGrayboxSnapshot current = data.snapshot();
+            publish(graybox, current);
+            // Explicit multi-day fast-forward has no physically elapsed day
+            // boundary.  Settle its final source receipt cold rather than
+            // fabricating a delayed detonation in the player's current scene.
+            if (effects.settleSourceDay(graybox, data, materializer, current, ignored -> false)) {
+                ReferenceGrayboxSnapshot afterEffects = data.snapshot();
+                if (afterEffects != current) publish(graybox, afterEffects);
+            }
+        }
+    }
+
+    public ReferenceGrayboxSnapshot snapshot() {
+        return data.snapshot();
+    }
+
+    public boolean activated() {
+        return data.activated();
+    }
+
+    private void requireExclusivePhysicalWorld() {
+        if (FrontierV3ServerLifecycle.ownsPhysicalWorld(server)) {
+            throw new IllegalStateException("Frontier v3 owns pale_mirror:frontier_graybox for this server launch");
+        }
+    }
+
+    /** Explicit operator-controlled pacing transition; it never changes source state itself. */
+    public boolean changeClockProfile(String profileId) {
+        requireExclusivePhysicalWorld();
+        SourceGrayboxClockProfile profile = SourceGrayboxClockProfile.fromId(profileId);
+        return data.changeClockProfile(profile, grayboxLevel().getGameTime());
+    }
+
+    /**
+     * Retains a restored PM entity before the level UUID index is guaranteed to expose it.
+     * The entry is transient; durable duplicate prevention is the presentation ledger claim.
+     */
+    public void observeEntityJoin(ServerLevel level, Entity entity) {
+        if (!level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION)) return;
+        SourceGrayboxMaterializer.rememberAdmittedEntity(admittedEntities, entity);
+    }
+
+    /**
+     * Separates an expected serialized unload from an unexpected loss of an
+     * exact HOT executor. The execution runtime owns the durable hand-off;
+     * this Minecraft callback only supplies the physical departure evidence.
+     */
+    public void observeEntityLeave(ServerLevel level, Entity entity) {
+        if (!data.activated() || level != grayboxLevel()) return;
+        SourceGrayboxMaterializer.ManagedEntity managed = SourceGrayboxMaterializer.managed(entity);
+        if (managed == null) return;
+        data.actorExecution().actor(managed.id()).ifPresent(actor -> {
+            if (actor.mode() != io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.PREPARING
+                    && actor.mode() != io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.HOT) return;
+            String key = SourceGrayboxMaterializer.entityKey(managed.id(), managed.kind());
+            admittedEntities.remove(key, entity);
+            net.minecraft.core.BlockPos position = new net.minecraft.core.BlockPos(
+                    Math.floorDiv(actor.actualXSixteenths(), io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.POSITION_SCALE),
+                    io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxLayout.GROUND_Y + 1,
+                    Math.floorDiv(actor.actualZSixteenths(), io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.POSITION_SCALE));
+            SourceGrayboxHotZone zone = SourceGrayboxHotZone.from(level);
+            if (actor.mode() == io.farfrontier.palemirror.frontier.reference.ReferenceGrayboxActorExecutionState.Mode.HOT
+                    && !zone.hot(position) && !level.hasChunkAt(position)
+                    && SourceGrayboxActorExecutionRuntime.beginUnloadedHotDrain(data, actor, entity,
+                    data.actorExecutionGameTime(level.getGameTime()))) return;
+            if (!unexpectedActorDepartureTraceCaptured) {
+                unexpectedActorDepartureTraceCaptured = true;
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
+                        "Unexpected source-graybox HOT body departure: actor={} kind={} mode={} lease={} uuid={} removalReason={} added={} removed={} tick={}",
+                        actor.id(), actor.kind(), actor.mode(), actor.leaseId(), entity.getUUID(), entity.getRemovalReason(),
+                        entity.isAddedToLevel(), entity.isRemoved(), level.getGameTime(),
+                        new IllegalStateException("source-graybox HOT body departure trace"));
+            }
+        });
+    }
+
+    /**
+     * A loaded chunk is the only admission signal for static source geometry.
+     * The next server tick performs one bounded reconciliation; no tickets or
+     * time-based whole-arena polling are needed.
+     */
+    public void observeChunkLoaded(ServerLevel level) {
+        if (data.activated() && level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION)) presentationRequested = true;
+    }
+
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxResidentObservation observation) {
+        ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
+        if (data.activated() && outcome.applied()) publish(grayboxLevel(), data.snapshot());
+        return outcome;
+    }
+
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxBioformObservation observation) {
+        ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
+        if (data.activated() && outcome.applied()) publish(grayboxLevel(), data.snapshot());
+        return outcome;
+    }
+
+    public ReferenceGrayboxObservationOutcome observe(ReferenceGrayboxStructureObservation observation) {
+        ReferenceGrayboxObservationOutcome outcome = data.observe(observation);
+        if (data.activated() && outcome.applied()) publish(grayboxLevel(), data.snapshot());
+        return outcome;
+    }
+
+    /** Reconciles one exact managed entity death in the same server event. */
+    public boolean observeEntityDeath(Entity entity, String causationId) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return false;
+        boolean applied = SourceGrayboxEntityObservation.observe(data, entity, causationId);
+        if (applied) publish(grayboxLevel(), data.snapshot());
+        return applied;
+    }
+
+    /**
+     * Applies a managed death and returns a transient player receipt only when
+     * the canonical source accepted it. The receipt is derived before/after
+     * immutable snapshots and is never retained as a second event log.
+     */
+    public Optional<String> observeEntityDeathWithReceipt(Entity entity, String causationId) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return Optional.empty();
+        ReferenceGrayboxSnapshot before = data.snapshot();
+        SourceGrayboxEntityObservation.Result result = SourceGrayboxEntityObservation.observeDetailed(data, entity, causationId);
+        if (!result.applied()) return Optional.empty();
+        publish(grayboxLevel(), data.snapshot());
+        return Optional.of(SourceGrayboxPlayerBriefing.acceptedEntityReceipt(before, data.snapshot(), result.entity()));
+    }
+
+    /**
+     * An accepted source effect is already legible as a physical consequence
+     * and durable board/Atlas state. Do not turn combat or harvesting into a
+     * scrolling HUD receipt stream.
+     */
+    public void presentTransientReceipt(ServerPlayer player, String receipt) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(receipt, "receipt");
+    }
+
+    /** Turns a declared physical interaction slot into the exact source fact it carries. */
+    public boolean observeBlockBreak(ServerLevel level, net.minecraft.core.BlockPos position, String causationId) {
+        if (!data.activated() || level != grayboxLevel()) return false;
+        boolean handled = SourceGrayboxBlockObservation.observe(data, materializer, level, position, causationId);
+        if (handled) publish(grayboxLevel(), data.snapshot());
+        return handled;
+    }
+
+    /** Applies one declared slot and supplies a receipt only for an accepted canonical change. */
+    public Optional<String> observeBlockBreakWithReceipt(ServerLevel level, BlockPos position, String causationId) {
+        if (!data.activated() || level != grayboxLevel()) return Optional.empty();
+        ReferenceGrayboxSnapshot before = data.snapshot();
+        SourceGrayboxBlockObservation.Result result = SourceGrayboxBlockObservation.observeDetailed(data, materializer, level, position, causationId);
+        if (!result.handled()) return Optional.empty();
+        publish(grayboxLevel(), data.snapshot());
+        if (!result.applied()) {
+            return Optional.of(result.claim().interactionKind().isEmpty()
+                    ? "World unchanged: this block only describes a source object. Break a marked ACTION block to make a real intervention."
+                    : "World unchanged: this action was stale, already used, or rejected by the source world.");
+        }
+        ReferenceGrayboxSnapshot.Interaction interaction = before.interactions().stream()
+                .filter(value -> value.id().equals(result.claim().id().substring("interaction:".length(), result.claim().id().lastIndexOf(':'))))
+                .findFirst().orElse(null);
+        return interaction == null ? Optional.empty()
+                : Optional.of(SourceGrayboxPlayerBriefing.acceptedReceipt(before, data.snapshot(), interaction));
+    }
+
+    /** Captures only PM-owned blocks selected by a real external explosion for post-impact reconciliation. */
+    public boolean captureExternalExplosion(ServerLevel level, List<BlockPos> affected) {
+        if (!data.activated() || level != grayboxLevel() || SourceGrayboxExplosionObservation.isSourceEffect()) return false;
+        List<BlockPos> claimed = affected.stream().distinct().sorted(java.util.Comparator.comparingLong(BlockPos::asLong))
+                .filter(position -> materializer.claimAt(level, position) != null)
+                .filter(position -> SourceGrayboxPalette.managed(level.getBlockState(position).getBlock())).toList();
+        boolean captured = data.pendingExplosions().capture(level.getGameTime(), claimed);
+        if (captured) data.markPendingExplosionsDirty();
+        return captured;
+    }
+
+    /** Reconciles the actual post-explosion block state before the next source-day update. */
+    public boolean reconcileExternalExplosions(ServerLevel level) {
+        if (!data.activated() || level != grayboxLevel()) return false;
+        boolean changed = SourceGrayboxExplosionReconciliation.reconcile(data, materializer, level);
+        if (changed) publish(grayboxLevel(), data.snapshot());
+        return changed;
+    }
+
+    /** Presents a source-derived briefing for a physical source object without changing any source or world state. */
+    public boolean presentBriefing(ServerPlayer player, BlockPos position) {
+        if (!data.activated() || player.level() != grayboxLevel()) return false;
+        ReferenceGrayboxSnapshot snapshot = data.snapshot();
+        SourceGrayboxPresentationLedger.Claim claim = materializer.claimAt(grayboxLevel(), position);
+        Optional<String> briefing = claim != null && !claim.interactionKind().isEmpty()
+                ? SourceGrayboxPlayerBriefing.forIdentity(snapshot, interactionLabelId(claim), SourceGrayboxMaterializer.LABEL_KIND)
+                : SourceGrayboxPlayerBriefing.at(snapshot, position.getX(), position.getZ());
+        return briefing.map(text -> {
+            PaleMirrorPlayerPresentation.inspect(player, "source-graybox:block-briefing:" + position.asLong(),
+                    SourceGrayboxPlayerCard.fromBriefing(text));
+            return true;
+        }).orElse(false);
+    }
+
+    /** Presents a source-derived briefing when a player clicks a board, resident or bioform. */
+    public boolean presentBriefing(ServerPlayer player, Entity entity) {
+        if (!data.activated() || entity.level() != grayboxLevel()) return false;
+        String id = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_ID);
+        String kind = entity.getPersistentData().getString(SourceGrayboxMaterializer.ENTITY_KIND);
+        if (id.isBlank() || kind.isBlank()) return false;
+        return SourceGrayboxPlayerBriefing.forIdentity(data.snapshot(), id, kind).map(text -> {
+            PaleMirrorPlayerPresentation.inspect(player, "source-graybox:entity-briefing:" + id,
+                    SourceGrayboxPlayerCard.fromBriefing(text));
+            return true;
+        }).orElse(false);
+    }
+
+    /** Explicit operator transport makes the disposable arena discoverable without touching the overworld. */
+    public void enter(ServerPlayer player) {
+        ServerLevel graybox = grayboxLevel();
+        net.minecraft.core.BlockPos entry = SourceGrayboxWorldBoundary.preparedEntry(graybox);
+        player.teleportTo(graybox, entry.getX() + 0.5d, entry.getY(), entry.getZ() + 0.5d, player.getYRot(), player.getXRot());
+        player.fallDistance = 0.0f;
+    }
+
+    public String status() {
+        ReferenceGrayboxSnapshot snapshot = data.snapshot();
+        return "profile=" + snapshot.profileId() + ", clock=" + data.clockProfile().id() + " (" + data.dayIntervalTicks() + " ticks/day), day=" + snapshot.day() + ", settlements=" + snapshot.settlements().size()
+                + ", residents=" + snapshot.residents().size() + ", organs=" + snapshot.hiveOrgans().size()
+                + ", bioforms=" + snapshot.bioforms().size() + ", dimension=" + SourceGrayboxWorldBoundary.DIMENSION.location()
+                + ", materialization=" + (data.activated() ? "ACTIVE" : "DISABLED");
+    }
+
+    /** Read-only exact source detail for the materialized location under an operator. */
+    public String inspect(int x, int z) { return SourceGrayboxInspector.at(data.snapshot(), x, z); }
+
+    /**
+     * Bounded semantic player-eye camera poses for the currently materialized source frame.
+     *
+     * <p>The returned lines are intentionally machine-readable for the visual-audit harness. They are
+     * projection data only: requesting them neither loads a chunk nor changes source state.</p>
+     */
+    public List<String> auditViewLines() {
+        advertisedAuditViews = SourceGrayboxAuditViews.from(data.snapshot());
+        return advertisedAuditViews.stream().map(view -> "PM_GRAYBOX_AUDIT_VIEW|"
+                + view.id() + "|" + view.kind() + "|" + view.targetId() + "|"
+                + SourceGrayboxWorldBoundary.DIMENSION.location() + "|" + view.x() + "|" + view.y() + "|"
+                + view.z() + "|" + view.yaw() + "|" + view.pitch()).toList();
+    }
+
+    /** Explicit operator travel to an advertised pose; normal player chunk demand remains the only loading path. */
+    public boolean enterAuditView(ServerPlayer player, String viewId) {
+        if (!data.activated()) return false;
+        SourceGrayboxAuditViews.View view = SourceGrayboxAuditViews
+                .resolve(viewId, advertisedAuditViews, data.snapshot()).orElse(null);
+        if (view == null) return false;
+        player.teleportTo(grayboxLevel(), view.x() + 0.5d, view.y(), view.z() + 0.5d, view.yaw(), view.pitch());
+        player.fallDistance = 0.0f;
+        return true;
+    }
+
+    private ServerLevel grayboxLevel() {
+        return SourceGrayboxWorldBoundary.level(server);
+    }
+
+    private static String interactionLabelId(SourceGrayboxPresentationLedger.Claim claim) {
+        String id = claim.id();
+        String prefix = "interaction:";
+        if (!id.startsWith(prefix) || id.lastIndexOf(':') <= prefix.length()) {
+            throw new IllegalStateException("interaction claim has no deterministic slot id: " + id);
+        }
+        return prefix + id.substring(prefix.length(), id.lastIndexOf(':'));
+    }
+
+    private void publish(ServerLevel level, ReferenceGrayboxSnapshot snapshot) {
+        materializer.apply(level, snapshot, data.actorExecution(), admittedEntities);
+        warehouses.materialize(level, data, materializer);
+        cargoes.materialize(level, data, materializer);
+        presentationRequested = false;
+    }
+}

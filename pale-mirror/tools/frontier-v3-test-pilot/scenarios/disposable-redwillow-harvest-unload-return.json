@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "disposable_redwillow_harvest_unload_return",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -340 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:4-31", "expect": { "status": "ok", "assignment": "FIELD_HARVEST", "ambientLease": "CLOSED" }, "timeoutMs": 90000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 10000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+    { "type": "wait", "ms": 12000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 65, "z": -340 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "activeWork": "job:site-harvest-4-wheat-field-1" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:4-31", "expect": { "status": "ok", "assignment": "FIELD_HARVEST" }, "timeoutMs": 10000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 10000 }
+  ],
+  "frames": [
+    { "after": 5, "name": "farmer-before-unload" },
+    { "after": 12, "name": "farmer-after-return" }
+  ]
+}

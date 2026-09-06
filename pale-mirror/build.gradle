@@ -1,0 +1,687 @@
+plugins {
+    id 'base'
+    id 'java'
+}
+
+group = providers.gradleProperty('mod_group_id').get()
+version = providers.gradleProperty('mod_version').get()
+
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'Modrinth'
+                    url = uri('https://api.modrinth.com/maven')
+                }
+            }
+            filter { includeGroup 'maven.modrinth' }
+        }
+        // Client-only JourneyMap API.  The optional integration never ships this
+        // dependency and must remain loadable on a dedicated server without it.
+        maven { url = uri('https://maven.blamejared.com') }
+    }
+
+    plugins.withId('java') {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.encoding = 'UTF-8'
+            options.release = 21
+        }
+
+        // The external F0.V verification runner supplies one opaque, validated nonce for a
+        // declared T1 command.  It makes that Test task execute rather than letting Gradle's
+        // generic up-to-date shortcut stand in for its terminal assertion.  Normal developer
+        // tests retain Gradle's ordinary incremental behaviour when no runner nonce exists.
+        def frontierV3VerificationExecutionNonce = providers.environmentVariable('FRONTIER_V3_VERIFICATION_EXECUTION_NONCE')
+        tasks.withType(Test).configureEach {
+            if (frontierV3VerificationExecutionNonce.isPresent()) {
+                inputs.property('frontierV3VerificationExecutionNonce', frontierV3VerificationExecutionNonce)
+            }
+        }
+    }
+}
+
+def java21Launcher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(21)
+}
+
+tasks.register('verifyJava21') {
+    group = 'verification'
+    description = 'Resolves and verifies the mandatory Java 21 toolchain before expensive tasks run.'
+    inputs.property('resolvedJavaVersion', java21Launcher.map { it.metadata.languageVersion.asInt() })
+    doLast {
+        def launcher = java21Launcher.get()
+        if (launcher.metadata.languageVersion.asInt() != 21) {
+            throw new GradleException("Pale Mirror requires Java 21; resolved ${launcher.metadata.languageVersion}.")
+        }
+        logger.lifecycle("Pale Mirror uses Java ${launcher.metadata.languageVersion} from ${launcher.metadata.installationPath}.")
+    }
+}
+
+def architectureFile = layout.projectDirectory.file('architecture.yml').asFile
+def domainJavaSources = fileTree('pale-mirror-domain/src/main/java') { include '**/*.java' }
+def frontierV3JavaSources = fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' }
+def apiJavaSources = fileTree('pale-mirror-api/src/main/java/io/farfrontier/palemirror/api') { include '**/*.java' }
+def playerNetworkSource = layout.projectDirectory.file('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/network/PaleMirrorNetwork.java').asFile
+def directPlayerUiAllowlist = [
+        '/internal/presentation/RegionalJournal.java',
+        '/internal/debug/RuntimeDebugNavigator.java'
+] as Set
+def visualJavaSources = fileTree('pale-mirror-visuals/src/main/java') { include '**/*.java' }
+def genericNeoForgeJavaSources = fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror') {
+    include '**/*.java'
+    exclude 'internal/integration/**', 'gametest/**', 'internal/adapter/AdapterRegistry.java'
+}
+def guardedJavaSources = fileTree('.') {
+    include 'pale-mirror-domain/src/**/*.java', 'pale-mirror-frontier/src/**/*.java',
+            'pale-mirror-neoforge/src/**/*.java', 'pale-mirror-visuals/src/**/*.java'
+    exclude '**/build/**'
+}
+def mandatoryProjectSkills = [
+        'pm-foundry-audit',
+        'pm-visual-audit',
+        'pm-automodel',
+        'pm-worldgen-performance',
+        'pm-release-verification',
+        'pm-test-server-ops',
+        'pm-product-review'
+]
+def agentRulesFile = layout.projectDirectory.file('AGENTS.md').asFile
+def continuityLedgerFile = layout.projectDirectory.file('CONTINUITY.md').asFile
+def continuityLedgerValidator = layout.projectDirectory.file('tools/engineering/continuity_ledger.py').asFile
+def continuityLedgerTests = layout.projectDirectory.file('tools/engineering/test_continuity_ledger.py').asFile
+def architectureContractValidator = layout.projectDirectory.file('tools/engineering/architecture_contract.py').asFile
+def architectureContractTests = layout.projectDirectory.file('tools/engineering/test_architecture_contract.py').asFile
+def frontierV3ArchitectureDebtPolicy = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.yml').asFile
+def frontierV3ArchitectureDebtValidator = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.py').asFile
+def frontierV3ArchitectureDebtTests = layout.projectDirectory.file('tools/engineering/test_frontier_v3_architecture_debt.py').asFile
+def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
+def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
+def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/rebuild_harvester_anatomical_models.mjs').asFile
+def harvesterAnatomicalModelTests = layout.projectDirectory.file('tools/engineering/test_harvester_anatomical_models.mjs').asFile
+def harvesterVolumeBakeoffTool = layout.projectDirectory.file('tools/harvester_volume_bakeoff.py').asFile
+def harvesterVolumeBakeoffTests = layout.projectDirectory.file('tools/engineering/test_harvester_volume_bakeoff.py').asFile
+def harvesterPrimaryModelOverlayTool = layout.projectDirectory.file('tools/harvester_primary_model_overlay.py').asFile
+def harvesterPrimaryModelOverlayTests = layout.projectDirectory.file('tools/engineering/test_harvester_primary_model_overlay.py').asFile
+def collectorDirectMeshProtocolTests = layout.projectDirectory.file('tools/engineering/test_collector_direct_mesh_protocol.py').asFile
+def harvesterBlindPairwiseTool = layout.projectDirectory.file('tools/harvester_blind_pairwise.py').asFile
+def harvesterBlindPairwiseTests = layout.projectDirectory.file('tools/engineering/test_harvester_blind_pairwise.py').asFile
+def harvesterBlindPairwiseProtocol = layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json').asFile
+def hunyuan2mvPreparationTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_collector_multiview.py').asFile
+def hunyuan2mvPreparationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_preparation.py').asFile
+def hunyuan2mvExternalSheetTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_external_reference_sheet.py').asFile
+def hunyuan2mvExternalSheetTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_external_sheet_preparation.py').asFile
+def historicalBlenderOperationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_review_contract.py').asFile
+def blenderWinAppControlsTests = layout.projectDirectory.file('tools/engineering/test_blender_winapp_controls.py').asFile
+def automodelContractsTests = layout.projectDirectory.file('tools/engineering/test_automodel_contracts.py').asFile
+def automodelMultiviewRingTests = layout.projectDirectory.file('tools/engineering/test_automodel_multiview_ring.py').asFile
+def automodelRingBenchmarkTests = layout.projectDirectory.file('tools/engineering/test_automodel_ring_benchmark.py').asFile
+def automodelPoseDepthRingTests = layout.projectDirectory.file('tools/engineering/test_automodel_pose_depth_ring.py').asFile
+def da3RingContractTests = layout.projectDirectory.file('tools/engineering/test_da3_ring_contract.py').asFile
+def vggtReviewedRingContractTests = layout.projectDirectory.file('tools/engineering/test_vggt_reviewed_ring_contract.py').asFile
+def sv3dOrbitContractTests = layout.projectDirectory.file('tools/engineering/test_sv3d_orbit_contract.py').asFile
+def edit360OrbitContractTests = layout.projectDirectory.file('tools/engineering/test_edit360_orbit_contract.py').asFile
+def sv3dMultiviewBenchmarkTests = layout.projectDirectory.file('tools/engineering/test_sv3d_multiview_benchmark.py').asFile
+def vggtOmegaCollectorPilotTests = layout.projectDirectory.file('tools/engineering/test_vggt_omega_collector_pilot.py').asFile
+def mandatoryProjectSkillFiles = mandatoryProjectSkills.collectEntries { name -> [(name): [
+        skill: layout.projectDirectory.file(".agents/skills/${name}/SKILL.md").asFile,
+        metadata: layout.projectDirectory.file(".agents/skills/${name}/agents/openai.yaml").asFile
+]] }
+def trackedFiles = providers.exec {
+    commandLine 'git', 'ls-files'
+}.standardOutput.asText.map { text -> text.readLines() }
+def requiredArchitectureStatements = [
+        'Pale Mirror is the only canonical owner of world progression, scenarios, and desired state; Minecraft and adapters are observed/materialized representations.',
+        'Production code mutates canonical WorldState only through a DomainCommandExecutor transaction; collection views are immutable, package-private mutation is reserved for the command processor, and persistence hydration is isolated to codecs.',
+        'Schema-v40 snapshots are accepted only after canonical aggregate and physical-projection validation; orphan references, duplicate active jobs and mismatched exact parcel bindings fail closed before save or after hydration.',
+        'Detailed domain history, terminal journeys and terminal materialization jobs have fixed upper bounds; deterministic summaries and receipts preserve aggregate causality without allowing server-lifetime growth.',
+        'Shared facility output is allocated deterministically across active routes by destination demand and explicit route weight; route identity is used only for stable remainder ordering and never as economic priority.',
+        'Domain code must not import Minecraft, NeoForge, persistence, adapters, wall-clock, or ambient random APIs.',
+        'Materialization is performed only by NeoForge executors with persisted jobs, explicit identity, preconditions, and postconditions.',
+        'Observers publish typed facts; reconciliation alone converts them into domain commands and events.',
+        'Recognized player/world actions are ordinary typed domain disruptions. Unclassified or ambiguous physical drift is isolated at the smallest owner and must not be overwritten by default; only canonical invariant or persistence corruption quarantines the frontier instance.',
+        'Source-specific identity, native mappings and source policy live only in isolated adapters; generic layers use source-neutral contracts.',
+        'The native Atlas and optional JourneyMap waypoints consume only a bounded server-authored read-only projection; client UI may submit intent but never owns canonical state, coordinates, scenario authority or map persistence.'
+        ,'Fresh-world visual genesis is distinct from reconciliation materialization; one dedicated coordinator uses a bounded configurable worker pool for independent terrain probes and candidate attempts, then deterministically reduces indexed results and compiles immutable manifests into chunk-addressed slices before players are admitted. A registered worldgen Feature may apply only the current slice while that chunk is naturally generating. Loaded-chunk events observe persisted generation stamps and never write static geometry; prospective chunks are never force-loaded and there is no retrofit or pre-v40 compatibility path.'
+        ,'Every authored settlement is an immutable terrain-led site plan selected from a bounded archetype catalog. Buildings have stable identity, categories, functions, local foundations, semantic slots, ports and state profiles; each curated NBT module declares its real local threshold and canonical outward facade, and module rotation, door, apron and obstacle-aware circulation derive from that one contract rather than a bounding-box midpoint. Open spaces, circulation, segmented defences, irregular managed-area unions and five parcels plus two annex easements are typed and validated, and no radial wall or global settlement terrace is synthesized as a hidden fallback.'
+        ,'The required Pale Mirror Visuals provider receives only immutable server-authored genesis facts and read-only canonical projections; it may own physical structures, resident carriers, animation, sound and particles, but never progression, economy, scenario or threat decisions.'
+        ,'Frontier v3 is a fresh-world pure-Java runtime in pale-mirror-frontier and must not import, invoke, fixture-gate or share canonical state with pale-mirror-domain, frontier.reference, SourceGraybox, Python, Minecraft or NeoForge.'
+        ,'One FrontierEngine mutation lane on the Minecraft server thread owns each v3 world\'s canonical revision; commands and due actions validate and emit immutable events before an atomic state transition, while workers, adapters, entities, renderers and persistence callbacks never mutate canonical state.'
+        ,'HOT and COLD are execution locations for the same canonical processes, actors, resources and checkpoints. Player demand may grant only bounded physical authority; it never creates work or changes its economic rules. Scene, ambient, replica and navigation leases use explicit typed causes and monotonic authority epochs to prevent duplicate execution. A current binding may be reclaimed and a safely checkpointed stale projection may be fenced so COLD autonomy never waits indefinitely for a visitor. Exact strategic ports/checkpoints remain canonical while the HOT provider may navigate locally inside their bounded envelope. Cross-chunk operations partition into exact disjoint fronts rather than one unbounded scene. Ambiguous non-replayable effects isolate only their smallest owner pending inspection; history is never replayed for presentation.'
+        ,'A persisted v3 physical intent may affect every physically reachable Minecraft block, entity or player-owned structure without a protected-zone filter; actual results are immutable typed evidence, known subjects receive semantic consequences and unknown results enter the bounded physical-delta index instead of being erased by desired-state materialization.'
+        ,'Frontier v3 persists versioned checksummed snapshots plus an ordered write-ahead log; player custody, physical leases and non-replayable effects are durable before acknowledgement or invocation, recovery never blindly replays a running effect, and compaction keeps events, schedules, receipts and physical deltas bounded.'
+        ,'Ordinary gameplay code has no direct Minecraft HUD/chat delivery: PlayerPresentation may emit only a bounded non-textual local rejection cue and an explicit inspection card; RegionalJournal is an explicit player-requested transcript and RuntimeDebugNavigator is an opt-in operator transcript. Successful gameplay changes are acknowledged by their physical result, item lore, owned boards or Atlas, while ordinary gameplay never writes the action bar, toast stream or system chat.'
+        ,'Automodel is an offline research boundary: source-pinned references and traces decide likeness, all model output remains provenance-pinned noncanonical evidence under ignored build artifacts, and no Automodel operation may write canonical Blender sources, PMMesh exports, runtime resources, server state or world state. External still staging remains MODEL_DERIVED; only an explicit complete-ring human receipt may promote secondary volume aids, while qualified DA3/VGGT disagreement is inspection-only and never mesh fusion.'
+]
+
+tasks.register('verifyArchitecture') {
+    group = 'verification'
+    description = 'Checks Pale Mirror layer boundaries and required architecture invariants.'
+    inputs.file(architectureFile)
+        inputs.file(playerNetworkSource)
+        inputs.files(domainJavaSources, frontierV3JavaSources, apiJavaSources, visualJavaSources)
+    doLast {
+        if (!architectureFile.exists()) {
+            throw new GradleException('architecture.yml is missing')
+        }
+        String architecture = architectureFile.getText('UTF-8')
+        requiredArchitectureStatements.each { statement ->
+            if (!architecture.contains(statement)) {
+                throw new GradleException("architecture.yml is missing required invariant: ${statement}")
+            }
+        }
+
+        if (playerNetworkSource.getText('UTF-8').contains('sendSystemMessage(')
+                || playerNetworkSource.getText('UTF-8').contains('displayClientMessage(')) {
+            throw new GradleException('Player network boundary violation: Atlas synchronization must not write directly to chat or HUD')
+        }
+
+        def forbiddenDomainReferences = [
+                'net.minecraft.', 'net.neoforged.', 'io.farfrontier.palemirror.internal.',
+                'System.currentTimeMillis', 'Instant.now', 'LocalDateTime.now', 'Math.random', 'new Random('
+        ]
+        domainJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenDomainReferences.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Domain boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        def forbiddenFrontierV3References = [
+                'net.minecraft.', 'net.neoforged.',
+                'io.farfrontier.palemirror.domain.',
+                'io.farfrontier.palemirror.frontier.reference.',
+                'SourceGraybox', 'pale_mirror_ai',
+                'System.currentTimeMillis', 'System.nanoTime', 'Instant.now',
+                'LocalDateTime.now', 'Clock.system', 'Math.random',
+                'new Random(', 'ThreadLocalRandom'
+        ]
+        frontierV3JavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenFrontierV3References.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Frontier v3 boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        apiJavaSources.files.each { source ->
+            if (source.getText('UTF-8').contains('io.farfrontier.palemirror.internal.')) {
+                throw new GradleException("API boundary violation: ${source} imports internal implementation")
+            }
+        }
+
+        visualJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            ['io.farfrontier.palemirror.internal.', 'io.farfrontier.palemirror.domain.'].each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Visuals boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+
+        genericNeoForgeJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            boolean directPlayerUi = text.contains('sendSystemMessage(') || text.contains('displayClientMessage(')
+            boolean permittedPlayerUi = directPlayerUiAllowlist.any { source.path.endsWith(it) }
+            if (directPlayerUi && !permittedPlayerUi) {
+                throw new GradleException("Player presentation boundary violation: ${source} writes directly to HUD/chat")
+            }
+            if (source.path.endsWith('/internal/debug/RuntimeDebugNavigator.java') && text.contains('displayClientMessage(')) {
+                throw new GradleException("Operator presentation boundary violation: RuntimeDebugNavigator must not emit periodic HUD text")
+            }
+            if (text.contains('WorldStateHydration')
+                    && !source.path.endsWith('/internal/world/PaleMirrorSavedData.java')
+                    && !source.path.endsWith('/internal/world/RegionalStateCodec.java')
+                    && !source.path.endsWith('/internal/world/JourneyStateCodec.java')) {
+                throw new GradleException("Hydration boundary violation: ${source} references WorldStateHydration")
+            }
+            def directMutation = (text =~ /\.worldState\(\)\.(put|set|clear|add)[A-Z]\w*\(/)
+            if (directMutation.find()) {
+                throw new GradleException("Canonical state mutation bypasses DomainCommandExecutor: ${source}")
+            }
+        }
+    }
+}
+
+tasks.register('verifyJavaStyle') {
+    group = 'verification'
+    description = 'Rejects tabs, trailing whitespace and oversized Java lines without rewriting user files.'
+    inputs.files(guardedJavaSources)
+    doLast {
+        guardedJavaSources.files.each { source ->
+            source.readLines().eachWithIndex { line, index ->
+                if (line.contains('\t')) throw new GradleException("Java style: tab in ${source}:${index + 1}")
+                if (line != line.stripTrailing()) throw new GradleException("Java style: trailing whitespace in ${source}:${index + 1}")
+                if (line.length() > 250 && !line.trim().startsWith('//')) {
+                    throw new GradleException("Java style: line exceeds 250 columns in ${source}:${index + 1}")
+                }
+            }
+        }
+    }
+}
+
+tasks.register('verifyPortableConfiguration') {
+    group = 'verification'
+    description = 'Rejects checked-in machine-specific absolute project paths.'
+    inputs.files(fileTree('.') {
+        include '**/*.gradle', '**/*.properties', '**/*.sh', '**/*.ps1', '**/*.cmd'
+        exclude '**/build/**', '.gradle/**'
+    })
+    doLast {
+        inputs.files.files.each { source ->
+            String text = source.getText('UTF-8')
+            String forbiddenUnixRoot = '/home/' + 'rd/'
+            if (text.contains(forbiddenUnixRoot) || text.contains(':\\Users\\')) {
+                throw new GradleException("Machine-specific path in ${source}; use a Gradle property or repository-relative path")
+            }
+        }
+    }
+}
+
+tasks.register('verifySourceIsolation') {
+    group = 'verification'
+    description = 'Rejects source-specific integrations leaking into domain or generic NeoForge layers.'
+    inputs.files(domainJavaSources, genericNeoForgeJavaSources)
+    doLast {
+        // Lower-case biological language belongs to the source-neutral Frontier
+        // model; only the proper source-adapter identity itself is forbidden.
+        def forbiddenDomainTokens = ['Crimson', 'Spore', 'Millenaire', 'Millénaire', 'crimson', 'millenaire']
+        domainJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenDomainTokens.each { token ->
+                if (text.contains(token)) {
+                    throw new GradleException("Domain source-identity leak: ${source} references ${token}")
+                }
+            }
+        }
+
+        def forbiddenGenericReferences = [
+                'internal.integration.crimson.', 'internal.integration.spore.',
+                'CrimsonSandboxAdapter', 'SporeSandboxAdapter', 'CreateLogisticsAdapter', 'internal.integration.create.',
+                'MillenaireSettlementAdapter', 'internal.integration.millenaire.',
+                'CrimsonGate', 'CrimsonSiege', 'SporeSandbox',
+                'InfectionSourceId.CRIMSON', 'InfectionSourceId.SPORE',
+                'ENSURE_CRIMSON_', 'REMOVE_CRIMSON_', 'ENSURE_SPORE_', 'REMOVE_SPORE_',
+                'JourneyMap', 'journeymap.'
+        ]
+        genericNeoForgeJavaSources.files.each { source ->
+            String text = source.getText('UTF-8')
+            forbiddenGenericReferences.each { reference ->
+                if (text.contains(reference)) {
+                    throw new GradleException("Source adapter boundary violation: ${source} references ${reference}")
+                }
+            }
+        }
+    }
+}
+
+tasks.register('verifyWorkspaceHygiene') {
+    group = 'verification'
+    description = 'Rejects tracked generated runtime state and real environment files.'
+    inputs.property('trackedFiles', trackedFiles)
+    doLast {
+        def tracked = trackedFiles.get()
+        def forbidden = tracked.findAll { path ->
+            path == '.env' || path.startsWith('.env.') || path.startsWith('.gradle/') ||
+                    path.startsWith('run/') || path.contains('/runs/') || path.startsWith('build/') ||
+                    path.contains('/build/') || path.startsWith('.idea/') ||
+                    (path.endsWith('.jar') && path != 'gradle/wrapper/gradle-wrapper.jar')
+        }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException("Generated/local workspace state must not be tracked: ${forbidden.join(', ')}")
+        }
+    }
+}
+
+tasks.register('verifyProjectSkills') {
+    group = 'verification'
+    description = 'Checks mandatory repo-local Pale Mirror skills and their AGENTS routing.'
+    inputs.file(agentRulesFile)
+    inputs.files(mandatoryProjectSkillFiles.values().collectMany { files -> [files.skill, files.metadata] })
+    doLast {
+        String agentRules = agentRulesFile.getText('UTF-8')
+        mandatoryProjectSkills.each { name ->
+            File skill = mandatoryProjectSkillFiles[name].skill
+            File metadata = mandatoryProjectSkillFiles[name].metadata
+            if (!skill.exists() || !metadata.exists()) {
+                throw new GradleException("Mandatory project skill is incomplete: ${name}")
+            }
+            String skillText = skill.getText('UTF-8')
+            String metadataText = metadata.getText('UTF-8')
+            if (!skillText.startsWith("---\nname: ${name}\ndescription: ") || skillText.contains('TODO')) {
+                throw new GradleException("Mandatory project skill has invalid frontmatter or TODOs: ${name}")
+            }
+            if (!metadataText.contains('allow_implicit_invocation: true')) {
+                throw new GradleException("Mandatory project skill must allow implicit invocation: ${name}")
+            }
+            String route = ".agents/skills/${name}/SKILL.md"
+            if (!agentRules.contains(route)) {
+                throw new GradleException("AGENTS.md is missing mandatory skill routing: ${route}")
+            }
+        }
+    }
+}
+
+tasks.register('testContinuityLedgerValidator', Exec) {
+    group = 'verification'
+    description = 'Runs the continuity-ledger contract tests.'
+    inputs.files(continuityLedgerValidator, continuityLedgerTests)
+    commandLine 'python3', continuityLedgerTests.absolutePath
+}
+
+tasks.register('verifyContinuityLedger', Exec) {
+    group = 'verification'
+    description = 'Validates the compact canonical continuity ledger.'
+    inputs.files(continuityLedgerFile, continuityLedgerValidator)
+    commandLine 'python3', continuityLedgerValidator.absolutePath
+}
+
+tasks.register('testArchitectureContract', Exec) {
+    group = 'verification'
+    description = 'Runs focused negative tests for the machine-readable architecture contract.'
+    inputs.files(architectureFile, architectureContractValidator, architectureContractTests)
+    commandLine 'python3', architectureContractTests.absolutePath
+}
+
+tasks.register('verifyArchitectureContract', Exec) {
+    group = 'verification'
+    description = 'Parses and validates architecture.yml component boundaries and transition state.'
+    inputs.files(architectureFile, architectureContractValidator)
+    commandLine 'python3', architectureContractValidator.absolutePath, architectureFile.absolutePath
+}
+
+tasks.register('testFrontierV3ArchitectureDebt', Exec) {
+    group = 'verification'
+    description = 'Checks negative cases for the Frontier v3 architecture debt ratchet.'
+    inputs.files(frontierV3ArchitectureDebtPolicy, frontierV3ArchitectureDebtValidator,
+            frontierV3ArchitectureDebtTests)
+    commandLine 'python3', frontierV3ArchitectureDebtTests.absolutePath
+}
+
+tasks.register('verifyFrontierV3ArchitectureDebt', Exec) {
+    group = 'verification'
+    description = 'Prevents known Frontier v3 architecture debt from spreading or growing.'
+    inputs.files(frontierV3ArchitectureDebtPolicy, frontierV3ArchitectureDebtValidator,
+            fileTree('pale-mirror-frontier/src/main/java') { include '**/*.java' },
+            fileTree('pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3') { include '**/*.java' })
+    commandLine 'python3', frontierV3ArchitectureDebtValidator.absolutePath,
+            frontierV3ArchitectureDebtPolicy.absolutePath, '--root', layout.projectDirectory.asFile.absolutePath
+}
+
+tasks.register('testHarvesterContourOverlay', Exec) {
+    group = 'verification'
+    description = 'Runs deterministic Harvester reference-contour evidence tests.'
+    inputs.files(harvesterContourTool, harvesterContourTests)
+    commandLine 'python3', harvesterContourTests.absolutePath
+}
+
+tasks.register('testHarvesterAnatomicalModels', Exec) {
+    group = 'verification'
+    description = 'Checks reproducible image-faithful Harvester meshes, skeleton continuity and legacy animation targets.'
+    inputs.files(harvesterAnatomicalModelTool, harvesterAnatomicalModelTests,
+            fileTree('pale-mirror-visuals/src/main') {
+                include 'blockbench/harvester/*.bbmodel'
+                include 'resources/assets/pale_mirror_visuals/geo/harvester/*.geo.json'
+                include 'resources/assets/pale_mirror_visuals/animations/harvester/*.animation.json'
+            })
+    commandLine 'node', harvesterAnatomicalModelTests.absolutePath
+}
+
+tasks.register('testHarvesterVolumeBakeoff', Exec) {
+    group = 'verification'
+    description = 'Checks trace-authoritative Harvester volume-bake-off inputs.'
+    inputs.files(harvesterVolumeBakeoffTool, harvesterVolumeBakeoffTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_volume_bakeoff_v02.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_primary_v03.json'))
+    commandLine 'python3', harvesterVolumeBakeoffTests.absolutePath
+}
+
+tasks.register('testHarvesterPrimaryModelOverlay', Exec) {
+    group = 'verification'
+    description = 'Checks direct locked-camera Harvester contour evidence without fitting.'
+    inputs.files(harvesterPrimaryModelOverlayTool, harvesterPrimaryModelOverlayTests)
+    commandLine 'python3', harvesterPrimaryModelOverlayTests.absolutePath
+}
+
+tasks.register('testCollectorDirectMeshProtocol', Exec) {
+    group = 'verification'
+    description = 'Checks the protected direct-v05 Collector authoring protocol.'
+    inputs.files(collectorDirectMeshProtocolTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/sculpt_protocol/collector_v05_direct_mesh_v01.json'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_primary_v03.json'),
+            layout.projectDirectory.file('tools/blender/ops/collector_direct_common.py'),
+            layout.projectDirectory.file('tools/blender/ops/create_collector_direct_session.py'),
+            layout.projectDirectory.file('tools/blender/ops/capture_collector_direct_baseline.py'),
+            layout.projectDirectory.file('tools/blender/ops/begin_collector_direct_mesh_pass.py'),
+            layout.projectDirectory.file('tools/blender/ops/complete_collector_direct_mesh_pass.py'),
+            layout.projectDirectory.file('tools/blender/ops/record_collector_direct_review.py'),
+            layout.projectDirectory.file('tools/blender/ops/rollback_collector_direct_mesh_pass.py'),
+            layout.projectDirectory.file('tools/blender/ops/render_collector_direct_audit.py'),
+            layout.projectDirectory.file('tools/blender/ops/validate_collector_direct_session.py'),
+            layout.projectDirectory.file('tools/blender/blender_operation_client.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_cli.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_mcp.py'),
+            layout.projectDirectory.file('tools/blender/sync_windows_blender_workspace.py'),
+            layout.projectDirectory.file('tools/blender/collect_windows_blender_outputs.py'),
+            harvesterPrimaryModelOverlayTool)
+    commandLine 'python3', collectorDirectMeshProtocolTests.absolutePath
+}
+
+tasks.register('testHarvesterBlindPairwise', Exec) {
+    group = 'verification'
+    description = 'Checks that Harvester comparison packages scrub provenance and enforce blind ordinal review.'
+    inputs.files(harvesterBlindPairwiseTool, harvesterBlindPairwiseTests, harvesterBlindPairwiseProtocol)
+    commandLine 'python3', harvesterBlindPairwiseTests.absolutePath
+}
+
+tasks.register('testHunyuan2mvPreparation', Exec) {
+    group = 'verification'
+    description = 'Checks the pinned four-view Hunyuan3D-2mv diagnostic input contract.'
+    inputs.files(hunyuan2mvPreparationTool, hunyuan2mvPreparationTests,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/references/biomass_collector_turntable_v01.png'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_multiview_bakeoff_v01.json'))
+    commandLine 'python3', hunyuan2mvPreparationTests.absolutePath
+}
+
+tasks.register('testHunyuan2mvExternalSheetPreparation', Exec) {
+    group = 'verification'
+    description = 'Checks the noncanonical external 2x4 Hunyuan3D-2mv input contract.'
+    inputs.files(hunyuan2mvExternalSheetTool, hunyuan2mvExternalSheetTests)
+    commandLine 'python3', hunyuan2mvExternalSheetTests.absolutePath
+}
+
+tasks.register('testHistoricalBlenderOperationIsolation', Exec) {
+    group = 'verification'
+    description = 'Checks that rejected SF3D and Hunyuan proposal operations remain historical-only.'
+    inputs.files(historicalBlenderOperationTests,
+            layout.projectDirectory.file('tools/blender/blender_operation_client.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_cli.py'),
+            layout.projectDirectory.file('tools/blender/pm_blender_mcp.py'),
+            layout.projectDirectory.file('tools/blender/collect_windows_blender_outputs.py'),
+            layout.projectDirectory.file('tools/blender/sync_windows_blender_workspace.py'),
+            layout.projectDirectory.dir('tools/blender/ops/historical'))
+    commandLine 'python3', historicalBlenderOperationTests.absolutePath
+}
+
+tasks.register('testBlenderWinAppControls', Exec) {
+    group = 'verification'
+    description = 'Checks that the Windows-native Blender bridge remains fixed-operation and loopback-safe.'
+    inputs.files(blenderWinAppControlsTests,
+            layout.projectDirectory.file('tools/blender/winapp_common.py'),
+            layout.projectDirectory.file('tools/blender/pm_winapp_gui.py'),
+            layout.projectDirectory.file('tools/blender/setup_windows_winapp.py'),
+            layout.projectDirectory.file('tools/blender/windows/pm_winapp_console.ps1'))
+    commandLine 'python3', blenderWinAppControlsTests.absolutePath
+}
+
+tasks.register('testAutomodelContracts', Exec) {
+    group = 'verification'
+    description = 'Checks that Automodel experiments remain provenance-pinned, noncanonical and local-only.'
+    inputs.files(automodelContractsTests,
+            layout.projectDirectory.file('tools/automodel/contracts.py'),
+            layout.projectDirectory.file('tools/automodel/registry.py'),
+            layout.projectDirectory.file('tools/automodel/orchestrator.py'),
+            layout.projectDirectory.file('tools/automodel/review.py'),
+            layout.projectDirectory.file('tools/automodel/prepare_vggt_pose_depth_input.py'),
+            layout.projectDirectory.file('tools/automodel/benchmark.py'),
+            layout.projectDirectory.file('tools/automodel/model_registry.v1.json'))
+    commandLine 'python3', automodelContractsTests.absolutePath
+}
+
+tasks.register('testAutomodelMultiviewRing', Exec) {
+    group = 'verification'
+    description = 'Checks the anatomy-aware external-still ring and its fail-closed review hand-off.'
+    inputs.files(automodelMultiviewRingTests,
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/anatomy/biomass_collector.v1.json'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'))
+    commandLine 'python3', automodelMultiviewRingTests.absolutePath
+}
+
+tasks.register('testAutomodelRingBenchmark', Exec) {
+    group = 'verification'
+    description = 'Checks the known synthetic 8-view qualification gate for DA3/VGGT.'
+    inputs.files(automodelRingBenchmarkTests,
+            layout.projectDirectory.file('tools/automodel/ring_benchmark.py'),
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'))
+    commandLine 'python3', automodelRingBenchmarkTests.absolutePath
+}
+
+tasks.register('testAutomodelPoseDepthRing', Exec) {
+    group = 'verification'
+    description = 'Checks DA3/VGGT reviewed-ring preparation and non-fused disagreement diagnostics.'
+    inputs.files(automodelPoseDepthRingTests,
+            layout.projectDirectory.file('tools/automodel/multiview_ring.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'),
+            layout.projectDirectory.file('tools/automodel/model_registry.v1.json'))
+    commandLine 'python3', automodelPoseDepthRingTests.absolutePath
+}
+
+tasks.register('testDa3RingContracts', Exec) {
+    group = 'verification'
+    description = 'Checks the DA3-Base reviewed-ring runner remains pinned and diagnostic-only.'
+    inputs.files(da3RingContractTests,
+            layout.projectDirectory.file('tools/da3/run_da3_ring.py'),
+            layout.projectDirectory.file('tools/automodel/checkpoint_receipt.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'))
+    commandLine 'python3', da3RingContractTests.absolutePath
+}
+
+tasks.register('testVggtReviewedRingContracts', Exec) {
+    group = 'verification'
+    description = 'Checks the VGGT reviewed-ring runner remains pinned and diagnostic-only.'
+    inputs.files(vggtReviewedRingContractTests,
+            layout.projectDirectory.file('tools/vggt_omega/run_reviewed_ring.py'),
+            layout.projectDirectory.file('tools/vggt_omega/run_collector_pilot.py'),
+            layout.projectDirectory.file('tools/automodel/pose_depth_ring.py'))
+    commandLine 'python3', vggtReviewedRingContractTests.absolutePath
+}
+
+tasks.register('testSv3dOrbitContracts', Exec) {
+    group = 'verification'
+    description = 'Checks that the SV3D_p Windows runner remains local, pinned and noncanonical.'
+    inputs.files(sv3dOrbitContractTests,
+            layout.projectDirectory.file('tools/sv3d_orbit/run_windows_sv3d_p.ps1'),
+            layout.projectDirectory.file('tools/sv3d_orbit/run_windows_sv3d_capture.ps1'),
+            layout.projectDirectory.file('tools/sv3d_orbit/extract_sv3d_orbit_frames.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/preflight_imports.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/low_vram_sample.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/low_vram_fp16_sample.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/prepare_synthetic_qualification.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/validate_synthetic_qualification.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/prepare_synthetic_multiview_benchmark.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/evaluate_synthetic_multiview_benchmark.py'))
+    commandLine 'python3', sv3dOrbitContractTests.absolutePath
+}
+
+tasks.register('testEdit360OrbitContracts', Exec) {
+    group = 'verification'
+    description = 'Checks that the Edit360 dual-anchor runner stays noncanonical and camera-uncalibrated.'
+    inputs.files(edit360OrbitContractTests,
+            layout.projectDirectory.dir('tools/edit360_orbit'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'),
+            layout.projectDirectory.file('tools/automodel/model_registry.v1.json'))
+    commandLine 'python3', edit360OrbitContractTests.absolutePath
+}
+
+tasks.register('testSv3dMultiviewBenchmark', Exec) {
+    group = 'verification'
+    description = 'Checks the three-scene noncanonical SV3D view-consistency benchmark.'
+    inputs.files(sv3dMultiviewBenchmarkTests,
+            layout.projectDirectory.file('tools/sv3d_orbit/prepare_synthetic_multiview_benchmark.py'),
+            layout.projectDirectory.file('tools/sv3d_orbit/evaluate_synthetic_multiview_benchmark.py'),
+            layout.projectDirectory.file('tools/automodel/stage_reference_bundle.py'),
+            layout.projectDirectory.file('tools/automodel/contracts.py'))
+    commandLine 'python3', sv3dMultiviewBenchmarkTests.absolutePath
+}
+
+tasks.register('testVggtOmegaCollectorPilot', Exec) {
+    group = 'verification'
+    description = 'Checks that the bounded VGGT Collector runner requires its pinned noncanonical inputs.'
+    inputs.files(vggtOmegaCollectorPilotTests,
+            layout.projectDirectory.file('tools/vggt_omega/run_collector_pilot.py'))
+    commandLine 'python3', vggtOmegaCollectorPilotTests.absolutePath
+}
+
+tasks.register('verifyLargeFiles') {
+    group = 'verification'
+    description = 'Applies the 1000-line Java-file debt ratchet.'
+    inputs.files(guardedJavaSources)
+    doLast {
+        def oversized = guardedJavaSources.files.findAll { source -> source.readLines().size() > 1000 }
+        if (!oversized.isEmpty()) {
+            throw new GradleException("Java files exceed the 1000-line guardrail: ${oversized.join(', ')}")
+        }
+    }
+}
+
+tasks.register('guardrails') {
+    group = 'verification'
+    description = 'Runs fast architecture and LLM-drift guardrails.'
+    dependsOn tasks.named('verifyJava21'), tasks.named('verifyArchitecture'),
+            tasks.named('verifyWorkspaceHygiene'), tasks.named('verifyLargeFiles'),
+            tasks.named('verifySourceIsolation'), tasks.named('verifyJavaStyle'),
+            tasks.named('verifyPortableConfiguration'), tasks.named('verifyProjectSkills'),
+            tasks.named('testContinuityLedgerValidator'), tasks.named('verifyContinuityLedger'),
+            tasks.named('testArchitectureContract'), tasks.named('verifyArchitectureContract'),
+            tasks.named('testFrontierV3ArchitectureDebt'), tasks.named('verifyFrontierV3ArchitectureDebt'),
+            tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
+            tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
+            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
+            tasks.named('testBlenderWinAppControls'), tasks.named('testAutomodelContracts'),
+            tasks.named('testAutomodelMultiviewRing'),
+            tasks.named('testAutomodelRingBenchmark'),
+            tasks.named('testAutomodelPoseDepthRing'),
+            tasks.named('testDa3RingContracts'),
+            tasks.named('testVggtReviewedRingContracts'),
+            tasks.named('testSv3dOrbitContracts'), tasks.named('testEdit360OrbitContracts'),
+            tasks.named('testSv3dMultiviewBenchmark'), tasks.named('testVggtOmegaCollectorPilot')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('guardrails')
+}
+
+tasks.register('verifyDistribution') {
+    group = 'verification'
+    description = 'Verifies both required private distribution JARs.'
+    dependsOn project(':pale-mirror-neoforge').tasks.named('verifyPackagedJar'),
+            project(':pale-mirror-visuals').tasks.named('verifyVisualsJar')
+}

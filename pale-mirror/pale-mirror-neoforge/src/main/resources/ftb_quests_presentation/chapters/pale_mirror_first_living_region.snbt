@@ -1,0 +1,36 @@
+{
+  pale_mirror_presentation_version: 1
+  default_hide_dependency_lines: false
+  default_quest_shape: "square"
+  filename: "pale_mirror_first_living_region"
+  id: "50A1E00000000001"
+  icon: "minecraft:bell"
+  order_index: 0
+  quest_links: [ ]
+  quests: [
+    {
+      description: ["A PM journal chapter. It mirrors no progress and grants no rewards.", "Use the village bell or bed to inspect the current regional state."]
+      id: "50A1E00000000002"
+      icon: "minecraft:bell"
+      title: "First Living Region"
+      x: 0.0d
+      y: 0.0d
+    }
+    {
+      description: ["A mine can stop supplying iron after an infection.", "Pale Mirror remains the source of truth for the mine, route, and settlement consequences."]
+      id: "50A1E00000000003"
+      icon: "minecraft:iron_ingot"
+      title: "Read the cause"
+      x: 3.0d
+      y: 0.0d
+    }
+    {
+      description: ["Resolve a supply crisis by clearing the mine or proving a real train route.", "These are explanations only: FTB Quests never decides PM scenario state."]
+      id: "50A1E00000000004"
+      icon: "minecraft:minecart"
+      title: "Choose a response"
+      x: 6.0d
+      y: 0.0d
+    }
+  ]
+}

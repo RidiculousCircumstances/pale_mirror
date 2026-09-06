@@ -1,0 +1,200 @@
+name: Build and Frontier V3 verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_f0va_native_matrix:
+        description: Run the expensive four-worker Frontier V3 native matrix and serialized timing proof.
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core build and package gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Verify core vertical slice
+        run: ./gradlew guardrails check :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar
+
+  f0va-prepare:
+    name: F0.VA immutable native preparation
+    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: core
+    runs-on: [self-hosted, pm-native]
+    env:
+      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-prepare-gradle
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bootstrap isolated native Gradle home online
+        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon
+      - name: Prepare one artifact and classpath identity
+        run: node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=build/f0va-ci/prepared-build.json
+      - name: Generate immutable four-worker plan
+        run: node tools/frontier-v3-test-pilot/src/write-ci-matrix-plan.mjs --prepared=build/f0va-ci/prepared-build.json --output=build/f0va-ci/plan.json
+      - name: Upload preparation identity and plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f0va-preparation
+          if-no-files-found: error
+          path: build/f0va-ci
+
+  f0va-correctness-1:
+    name: F0.VA native correctness sample 1
+    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: f0va-prepare
+    uses: ./.github/workflows/f0va-native-correctness-sample.yml
+    with:
+      measurement: correctness-1
+      workers: >-
+        {"include":[{"worker":"worker-0","port":"25575"},{"worker":"worker-1","port":"25577"},{"worker":"worker-2","port":"25579"},{"worker":"worker-3","port":"25581"}]}
+
+  f0va-correctness-2:
+    name: F0.VA native correctness sample 2
+    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: f0va-correctness-1
+    uses: ./.github/workflows/f0va-native-correctness-sample.yml
+    with:
+      measurement: correctness-2
+      workers: >-
+        {"include":[{"worker":"worker-0","port":"25583"},{"worker":"worker-1","port":"25585"},{"worker":"worker-2","port":"25587"},{"worker":"worker-3","port":"25589"}]}
+
+  f0va-correctness-3:
+    name: F0.VA native correctness sample 3
+    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: f0va-correctness-2
+    uses: ./.github/workflows/f0va-native-correctness-sample.yml
+    with:
+      measurement: correctness-3
+      workers: >-
+        {"include":[{"worker":"worker-0","port":"25591"},{"worker":"worker-1","port":"25593"},{"worker":"worker-2","port":"25595"},{"worker":"worker-3","port":"25597"}]}
+
+  f0va-sequential-timing:
+    name: F0.VA serialized same-host matrix timing
+    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: f0va-correctness-3
+    runs-on: [self-hosted, pm-native, pm-timing]
+    concurrency:
+      group: frontier-v3-f0va-timing-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-timing-gradle
+      FRONTIER_V3_PILOT_PORT: '25610'
+      FRONTIER_V3_PILOT_WORKER_ID: sequential-timing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: f0va-preparation
+          path: build/f0va-ci
+      - name: Bootstrap isolated native Gradle home online
+        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon
+      - name: Recreate and verify exact timing classpaths
+        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --offline --no-daemon
+      - name: Measure the same native lane plan without worker contention
+        run: >-
+          xvfb-run -a -s '-screen 0 1920x1080x24'
+          node tools/frontier-v3-test-pilot/src/run-ci-matrix-sequential.mjs
+          --plan=build/f0va-ci/plan.json
+          --prepared=build/f0va-ci/prepared-build.json
+          --results-root=build/f0va-ci/sequential-results
+          --samples=3
+          --output=build/f0va-ci/sequential-timing.json
+      - name: Upload serialized timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f0va-sequential-timing
+          if-no-files-found: warn
+          path: |
+            build/f0va-ci/sequential-timing.json
+            build/f0va-ci/sequential-results
+            build/frontier-v3-ci-shards
+            build/frontier-v3-scenarios
+
+  f0va-merge:
+    name: F0.VA fail-closed matrix merge
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
+    needs: [f0va-correctness-1, f0va-correctness-2, f0va-correctness-3, f0va-sequential-timing]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: f0va-preparation
+          path: build/f0va-ci
+      - name: Download every worker result
+        uses: actions/download-artifact@v4
+        with:
+          pattern: f0va-correctness-?-worker-?
+          path: build/f0va-ci/results
+      - uses: actions/download-artifact@v4
+        with:
+          name: f0va-sequential-timing
+          path: build/f0va-ci
+      - name: Merge only complete comparable worker evidence
+        run: >-
+          node tools/frontier-v3-test-pilot/src/merge-ci-matrix.mjs
+          --plan=build/f0va-ci/plan.json
+          --result=build/f0va-ci/results/f0va-correctness-1-worker-0/worker-0.json
+          --result=build/f0va-ci/results/f0va-correctness-1-worker-1/worker-1.json
+          --result=build/f0va-ci/results/f0va-correctness-1-worker-2/worker-2.json
+          --result=build/f0va-ci/results/f0va-correctness-1-worker-3/worker-3.json
+          --result=build/f0va-ci/results/f0va-correctness-2-worker-0/worker-0.json
+          --result=build/f0va-ci/results/f0va-correctness-2-worker-1/worker-1.json
+          --result=build/f0va-ci/results/f0va-correctness-2-worker-2/worker-2.json
+          --result=build/f0va-ci/results/f0va-correctness-2-worker-3/worker-3.json
+          --result=build/f0va-ci/results/f0va-correctness-3-worker-0/worker-0.json
+          --result=build/f0va-ci/results/f0va-correctness-3-worker-1/worker-1.json
+          --result=build/f0va-ci/results/f0va-correctness-3-worker-2/worker-2.json
+          --result=build/f0va-ci/results/f0va-correctness-3-worker-3/worker-3.json
+          --timing=build/f0va-ci/sequential-timing.json
+          --output=build/f0va-ci/merge.json
+      - name: Upload merged matrix report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f0va-merged-matrix
+          if-no-files-found: warn
+          path: build/f0va-ci

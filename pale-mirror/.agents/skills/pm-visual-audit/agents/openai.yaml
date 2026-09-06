@@ -1,0 +1,6 @@
+interface:
+  display_name: "PM Visual Audit"
+  short_description: "Review settlements, mines, rails, and terrain"
+  default_prompt: "Use $pm-visual-audit to perform a visual quality review of this Pale Mirror region."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "disposable_hive_nutrient_transfer_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "hive-nutrient-transfer", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "PREPARED", "occupiedCount": 1 } },
+      { "view": "container", "id": "container:hive-west-store", "expect": { "status": "ok", "surface": "PREPARED", "occupiedCount": 0 } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 400, "y": 65, "z": 420 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "IN_TRANSIT", "sourceStore": "container:hive-east-store", "targetStore": "container:hive-west-store" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "intent", "id": "intent:hive-nutrient-departure-task-development-hive-nutrient-transfer" },
+    { "type": "fast_forward", "ticks": 2400, "timeoutMs": 180000 },
+    { "type": "wait_until_diagnostic", "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "ARRIVAL_PENDING", "cursor": 105, "targetStore": "container:hive-west-store" }, "timeoutMs": 120000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -390, "y": 65, "z": 445 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:hive-nutrient-arrival-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "intentKind": "HIVE_NUTRIENT_ARRIVAL", "intentStatus": "CONFIRMED" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "COMPLETED", "receiptStatus": "CONSUMED" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1, "infectionCells": 18 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -400, "y": 67, "z": 432 } },
+    { "type": "assert_visible_block", "position": { "x": -400, "y": 67, "z": 432 }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "trace", "id": "hive-nutrient:transfer:hive-nutrient-task-development-hive-nutrient-transfer" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "IN_TRANSIT", "sourceStore": "container:hive-east-store", "targetStore": "container:hive-west-store" } },
+        { "view": "intent", "id": "intent:hive-nutrient-departure-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 1, "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "IN_TRANSIT", "sourceStore": "container:hive-east-store", "targetStore": "container:hive-west-store" } },
+    { "after": 2, "view": "intent", "id": "intent:hive-nutrient-departure-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "intentKind": "HIVE_NUTRIENT_DEPARTURE", "intentStatus": "CONFIRMED" } },
+    { "after": 4, "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "ARRIVAL_PENDING", "cursor": 105 } },
+    { "after": 6, "view": "intent", "id": "intent:hive-nutrient-arrival-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "intentKind": "HIVE_NUTRIENT_ARRIVAL", "intentStatus": "CONFIRMED" } },
+    { "after": 7, "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "COMPLETED", "receiptStatus": "CONSUMED" } },
+    { "after": 8, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1, "infectionCells": 18 } },
+    { "after": 11, "view": "trace", "id": "hive-nutrient:transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "eventKind": "hive_nutrient_arrived", "subject": "transfer:hive-nutrient-task-development-hive-nutrient-transfer" } }
+  ],
+  "frames": [
+    { "after": 10, "name": "west-grown-heart-after-nutrient-arrival" }
+  ]
+}

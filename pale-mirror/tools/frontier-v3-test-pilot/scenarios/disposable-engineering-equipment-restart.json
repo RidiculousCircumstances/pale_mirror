@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "disposable_engineering_equipment_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "engineering-equipment" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "item", "id": "item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "itemKind": "minecraft:iron_pickaxe", "count": 1, "custody": { "kind": "CONTAINER_SLOT", "container": "container:1-depot" } } },
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "UNMATERIALIZED" } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "itemKind": "minecraft:iron_pickaxe", "count": 1, "custody": { "kind": "ACTOR" } }, "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "human-equipment:construction:route-reroute-settlement-1--366-64--304:item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "eventKind": "human_equipment_issued", "subject": "construction:route-reroute-settlement-1--366-64--304" }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "item", "id": "item:bootstrap-1-engineering-tool-1" }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -352 }, "settleMs": 1500 },
+      { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+        { "view": "item", "id": "item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "itemKind": "minecraft:iron_pickaxe", "count": 1, "custody": { "kind": "ACTOR" } } }
+      ] }
+    ]
+  },
+  "assertions": [
+    { "after": 1, "view": "item", "id": "item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "itemKind": "minecraft:iron_pickaxe", "count": 1, "custody": { "kind": "ACTOR" } } },
+    { "after": 2, "view": "trace", "id": "human-equipment:construction:route-reroute-settlement-1--366-64--304:item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "eventKind": "human_equipment_issued", "subject": "construction:route-reroute-settlement-1--366-64--304" } },
+    { "after": 3, "view": "item", "id": "item:bootstrap-1-engineering-tool-1", "expect": { "status": "ok", "custody": { "kind": "ACTOR" } } }
+  ],
+  "frames": [
+    { "after": 3, "name": "engineering-tool-after-restart" }
+  ]
+}
