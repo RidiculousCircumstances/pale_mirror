@@ -108,6 +108,16 @@ if (frontierV3GrayboxDisabledMods.isEmpty()) {
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
+configurations {
+    // The prepared direct launcher is an explicit build input. Resolving it
+    // through this configuration keeps an isolated Gradle home complete;
+    // scanning a developer cache made provider preparation nonportable.
+    frontierV3PilotLauncher {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
 sourceSets {
     pilot {
         java.srcDir 'src/pilot/java'
@@ -141,6 +151,7 @@ dependencies {
     // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.
     testImplementation 'com.google.code.gson:gson:2.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    frontierV3PilotLauncher 'net.neoforged:DevLaunch:1.0.2'
 }
 
 configurations {
@@ -1034,7 +1045,7 @@ def frontierV3PilotSourceFolders = [sourceSets.main.output.classesDirs.singleFil
         sourceSets.pilot.output.classesDirs.singleFile, sourceSets.pilot.output.resourcesDir]
 def frontierV3PilotNeoForgeVersion = rootProject.providers.gradleProperty('neo_version').get()
 def frontierV3PilotNeoForgeArtifact = new File(frontierV3PilotModdevDirectory, "artifacts/neoforge-${frontierV3PilotNeoForgeVersion}.jar")
-def frontierV3PilotDevLaunchDirectory = new File(gradle.gradleUserHomeDir, 'caches/modules-2/files-2.1/net.neoforged/DevLaunch/1.0.2')
+def frontierV3PilotLauncher = configurations.frontierV3PilotLauncher
 def frontierV3PilotModuleJars = [
         new File(project(':pale-mirror-api').buildDir, "libs/pale-mirror-api-${project(':pale-mirror-api').version}.jar"),
         new File(project(':pale-mirror-domain').buildDir, "libs/pale-mirror-domain-${project(':pale-mirror-domain').version}.jar"),
@@ -1054,12 +1065,7 @@ def writeFrontierV3PilotPreparedLaunchManifest = tasks.register('writeFrontierV3
         def materializedSourceFolders = frontierV3PilotSourceFolders.findAll { it.exists() }
         if (materializedSourceFolders.size() < 7) throw new GradleException('F0.V prepared launch requires compiled main and pilot source folders')
         def modFolders = materializedSourceFolders.collect { "${frontierV3PilotModId}%%${it.absolutePath}" }.join(File.pathSeparator)
-        def devLaunches = []
-        if (frontierV3PilotDevLaunchDirectory.isDirectory()) {
-            frontierV3PilotDevLaunchDirectory.eachFileRecurse(groovy.io.FileType.FILES) {
-                if (it.name == 'DevLaunch-1.0.2.jar') devLaunches.add(it)
-            }
-        }
+        def devLaunches = frontierV3PilotLauncher.files.findAll { it.name == 'DevLaunch-1.0.2.jar' }
         def requiredLaunchFiles = materializedSourceFolders + [frontierV3PilotNeoForgeArtifact] + frontierV3PilotModuleJars + devLaunches
         if (devLaunches.size() != 1 || requiredLaunchFiles.any { !it.exists() }) {
             throw new GradleException('F0.V prepared direct launch is missing one exact launcher artifact')

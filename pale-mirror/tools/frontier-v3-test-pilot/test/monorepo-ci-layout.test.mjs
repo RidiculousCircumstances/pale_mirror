@@ -95,14 +95,26 @@ test('Visuals compile-only dependencies are resolved from exact verified pins ra
   assert.match(recurrence, /mutate\(artifact\.defaultPath\)/);
 });
 
+test('prepared native launch resolves DevLaunch as an explicit isolated Gradle input', async () => {
+  const build = await readFile(resolve(project, 'pale-mirror-neoforge', 'build.gradle'), 'utf8');
+  assert.match(build, /frontierV3PilotLauncher\s*\{/);
+  assert.match(build, /frontierV3PilotLauncher 'net\.neoforged:DevLaunch:1\.0\.2'/);
+  assert.match(build, /configurations\.frontierV3PilotLauncher/);
+  assert.doesNotMatch(build, /frontierV3PilotDevLaunchDirectory/);
+});
+
 test('all curated bunkhouses use the supported property-free rice bag provision without decoded collateral drift', async () => {
   const curator = resolve(project, 'tools', 'engineering', 'curate_bunkhouse_rice_bags.mjs');
+  // The retained-before bytes are the accepted publication parent, rather
+  // than HEAD: this recurrence must remain valid after the curator is itself
+  // committed and after later provider-only commits.
+  const curatedBeforeCommit = 'b3d04959b6c0c1d51164f92bd35ad4483e0d825c';
   const before = await mkdirTemp('pale-mirror-r3-bunkhouse-before-');
   try {
     for (const family of ['temperate', 'cold_taiga', 'dry_arid']) {
       const path = `pale-mirror/pale-mirror-visuals/src/main/resources/data/pale_mirror_visuals/structure/${family}/bunkhouse_2.nbt`;
       await writeFile(join(before, `${family}-bunkhouse_2.before.nbt`),
-        execFileSync('git', ['show', `HEAD:${path}`], { cwd: project }));
+        execFileSync('git', ['show', `${curatedBeforeCommit}:${path}`], { cwd: project }));
     }
     assert.doesNotThrow(() => execFileSync('node', [curator, '--check', '--before-root', before], { cwd: project, encoding: 'utf8' }));
     assert.throws(() => execFileSync('node', [curator, '--check'], { cwd: project, encoding: 'utf8', stdio: 'pipe' }),
