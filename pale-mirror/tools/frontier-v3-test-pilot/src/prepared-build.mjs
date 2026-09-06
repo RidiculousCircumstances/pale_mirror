@@ -15,8 +15,9 @@ const PILOT_CRASH_MIXIN_CONFIGURATION = 'pale_mirror.frontier_v3.pilot_crash.mix
 // process source cannot inherit a prepared identity made for older bytes.
 export const PREPARED_SOURCE_PREFIXES = Object.freeze([
   '.github/workflows/', 'architecture.yml', 'build.gradle', 'gradle/', 'gradle.properties',
-  'pale-mirror-frontier/', 'pale-mirror-neoforge/', 'settings.gradle',
-  'tools/frontier-v3-test-pilot/', 'docs/frontier-v3-'
+  'pale-mirror-frontier/', 'pale-mirror-neoforge/', 'pale-mirror-visuals/', 'settings.gradle',
+  'tools/frontier-v3-test-pilot/', 'tools/engineering/curate_bunkhouse_rice_bags.mjs',
+  'tools/engineering/verify_visual_compile_dependencies.mjs', 'docs/frontier-v3-'
 ]);
 
 /**

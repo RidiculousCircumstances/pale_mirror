@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fingerprintWorkingContent } from '../src/evidence-cache.mjs';
@@ -58,6 +59,63 @@ test('monorepo content inventory stays rooted in Pale Mirror rather than pack in
   assert(fingerprint.files.every((file) => !file.path.startsWith('../') && !file.path.split('/').includes('..')));
 });
 
+test('Visuals compile-only dependencies are resolved from exact verified pins rather than runtime server mods', async () => {
+  const [visualsBuild, properties, gecko, villager, create, recurrence] = await Promise.all([
+    readFile(resolve(project, 'pale-mirror-visuals', 'build.gradle'), 'utf8'),
+    readFile(resolve(project, 'gradle.properties'), 'utf8'),
+    readFile(resolve(monorepo, 'mods', 'geckolib.pw.toml'), 'utf8'),
+    readFile(resolve(monorepo, 'mods', 'villager-overhaul.pw.toml'), 'utf8'),
+    readFile(resolve(monorepo, 'mods', 'create.pw.toml'), 'utf8'),
+    readFile(resolve(project, 'tools', 'engineering', 'verify_visual_compile_dependencies.mjs'), 'utf8')
+  ]);
+  assert.match(visualsBuild, /resolveVisualCompileDependencies/);
+  assert.match(visualsBuild, /tasks\.named\('compileJava'\) \{ dependsOn resolveVisualCompileDependencies \}/);
+  assert.match(visualsBuild, /prepareVisualsGameTestMods.*?dependsOn resolveVisualCompileDependencies/s);
+  assert.match(visualsBuild, /outputs\.upToDateWhen \{ false \}/);
+  for (const property of ['geckolib_integration_jar', 'villager_overhaul_integration_jar', 'create_integration_jar']) {
+    assert.match(visualsBuild, new RegExp(`visualCompileArtifactsByProperty\\.${property}\\.candidate`));
+  }
+  assert.doesNotMatch(visualsBuild, /compileOnly files\(rootProject\.findProperty/);
+  for (const [name, pack] of [['geckolib', gecko], ['villager_overhaul', villager], ['create', create]]) {
+    const url = pack.match(/url = "([^"]+)"/)[1];
+    const sha512 = pack.match(/hash = "([a-f0-9]{128})"/)[1];
+    assert.match(properties, new RegExp(`^${name}_integration_url=${escapeRegExp(url)}$`, 'm'));
+    assert.match(properties, new RegExp(`^${name}_integration_sha512=${sha512}$`, 'm'));
+  }
+  assert.match(visualsBuild, /SHA-512 mismatch/);
+  assert.match(visualsBuild, /Pinned \$\{artifact\.label\} JAR is missing/);
+  assertVisualsModDevFrontierSourceSet(visualsBuild);
+  assert.throws(() => assertVisualsModDevFrontierSourceSet(visualsBuild.replace(
+    "            sourceSet project(':pale-mirror-frontier').sourceSets.main\n", '')),
+  /Frontier source set/);
+  assert.match(recurrence, /normal invocation without --rerun-tasks/);
+  assert.match(recurrence, /for \(const artifact of artifacts\)/);
+  assert.match(recurrence, /mutate\(artifact\.overridePath\)/);
+  assert.match(recurrence, /unlink\(artifact\.overridePath\)/);
+  assert.match(recurrence, /mutate\(artifact\.defaultPath\)/);
+});
+
+test('all curated bunkhouses use the supported property-free rice bag provision without decoded collateral drift', async () => {
+  const curator = resolve(project, 'tools', 'engineering', 'curate_bunkhouse_rice_bags.mjs');
+  const before = await mkdirTemp('pale-mirror-r3-bunkhouse-before-');
+  try {
+    for (const family of ['temperate', 'cold_taiga', 'dry_arid']) {
+      const path = `pale-mirror/pale-mirror-visuals/src/main/resources/data/pale_mirror_visuals/structure/${family}/bunkhouse_2.nbt`;
+      await writeFile(join(before, `${family}-bunkhouse_2.before.nbt`),
+        execFileSync('git', ['show', `HEAD:${path}`], { cwd: project }));
+    }
+    assert.doesNotThrow(() => execFileSync('node', [curator, '--check', '--before-root', before], { cwd: project, encoding: 'utf8' }));
+    assert.throws(() => execFileSync('node', [curator, '--check'], { cwd: project, encoding: 'utf8', stdio: 'pipe' }),
+      /requires --before-root/);
+    const source = execFileSync('node', ['--input-type=module', '--eval',
+      `import { readFile } from 'node:fs/promises'; const s=await readFile(${JSON.stringify(curator)},'utf8'); if (!s.includes('verifyPreservedBefore') || !s.includes('alexscaves:dinosaur_chop') || !s.includes('farmersdelight:rice_bag')) process.exit(1);`],
+      { cwd: project, encoding: 'utf8' });
+    assert.equal(source, '');
+  } finally {
+    await rm(before, { recursive: true, force: true });
+  }
+});
+
 function assertCoreRuntimeBootstrap(core) {
   const node = core.indexOf('      - name: Setup Node 22\n');
   const python = core.indexOf('      - name: Setup Python 3.11\n');
@@ -84,4 +142,25 @@ function assertCoreRuntimeBootstrap(core) {
   assert.match(initializerBlock, /\$frontier_v3_core_python_env\/bin\/python" -m pip install --disable-pip-version-check --requirement tools\/engineering\/requirements-ci\.txt/);
   assert.match(initializerBlock, /\$frontier_v3_core_python_env\/bin\/python" -c "import PIL, yaml"/);
   assert.match(initializerBlock, /printf '%s\\n' "\$frontier_v3_core_python_env\/bin" >> "\$GITHUB_PATH"/);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function assertVisualsModDevFrontierSourceSet(visualsBuild) {
+  const entry = '        pale_mirror {\n';
+  const start = visualsBuild.indexOf(entry);
+  const end = visualsBuild.indexOf('\n        }', start);
+  assert.notEqual(start, -1, 'Visuals ModDev pale_mirror entry is missing');
+  assert.notEqual(end, -1, 'Visuals ModDev pale_mirror entry is unterminated');
+  const sourceSets = visualsBuild.slice(start, end);
+  assert.ok(sourceSets.includes("sourceSet project(':pale-mirror-frontier').sourceSets.main"),
+    'Visuals ModDev pale_mirror entry must include the Frontier source set');
+}
+
+async function mkdirTemp(prefix) {
+  const root = join(tmpdir(), `${prefix}${process.pid}-${Date.now()}`);
+  await mkdir(root, { recursive: true });
+  return root;
 }

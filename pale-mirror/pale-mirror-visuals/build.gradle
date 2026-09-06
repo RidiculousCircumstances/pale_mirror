@@ -10,19 +10,75 @@ base {
 def runtimeModDirectory = file(System.getenv('PALE_MIRROR_RUNTIME_MOD_DIR')
         ?: new File(System.getProperty('user.home'), 'far-frontier-server/mods'))
 
+def visualCompileArtifactSpecs = [
+        [property: 'geckolib_integration_jar', filename: 'geckolib-neoforge-1.21.1-4.9.2.jar',
+         url: rootProject.providers.gradleProperty('geckolib_integration_url').get(),
+         sha512: rootProject.providers.gradleProperty('geckolib_integration_sha512').get(), label: 'GeckoLib'],
+        [property: 'villager_overhaul_integration_jar', filename: 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar',
+         url: rootProject.providers.gradleProperty('villager_overhaul_integration_url').get(),
+         sha512: rootProject.providers.gradleProperty('villager_overhaul_integration_sha512').get(), label: 'Villager Overhaul'],
+        [property: 'create_integration_jar', filename: 'create-1.21.1-6.0.10.jar',
+         url: rootProject.providers.gradleProperty('create_integration_url').get(),
+         sha512: rootProject.providers.gradleProperty('create_integration_sha512').get(), label: 'Create']
+]
+def visualCompileArtifacts = visualCompileArtifactSpecs.collect { spec ->
+    String override = rootProject.findProperty(spec.property)?.toString()
+    File cached = layout.buildDirectory.file("integration/${spec.filename}").get().asFile
+    [
+            property: spec.property,
+            url: spec.url,
+            sha512: spec.sha512,
+            label: spec.label,
+            override: override ?: '',
+            cached: cached,
+            candidate: override == null ? cached : file(override)
+    ]
+}
+def visualCompileArtifactsByProperty = visualCompileArtifacts.collectEntries { artifact -> [(artifact.property): artifact] }
+def resolveVisualCompileDependencies = tasks.register('resolveVisualCompileDependencies') {
+    group = 'verification'
+    description = 'Resolves and verifies the three exact Visuals compile-only integration JARs.'
+    inputs.properties(visualCompileArtifacts.collectEntries { artifact -> [
+            ("${artifact.property}.url".toString()): artifact.url,
+            ("${artifact.property}.sha512".toString()): artifact.sha512,
+            ("${artifact.property}.override".toString()): artifact.override
+    ] })
+    outputs.files(visualCompileArtifacts.collect { artifact -> artifact.cached })
+    // An explicit override can retain its path while its bytes change between
+    // invocations. Verify the candidate every time rather than trusting
+    // output-only up-to-date state as integrity evidence.
+    outputs.upToDateWhen { false }
+    doLast {
+        visualCompileArtifacts.each { artifact ->
+            File candidate = artifact.candidate
+            if (!candidate.exists() && artifact.override.isEmpty()) {
+                candidate.parentFile.mkdirs()
+                byte[] bytes = new URL(artifact.url).bytes
+                String actual = java.security.MessageDigest.getInstance('SHA-512').digest(bytes).encodeHex().toString()
+                if (!actual.equalsIgnoreCase(artifact.sha512)) {
+                    throw new GradleException("Pinned ${artifact.label} SHA-512 mismatch: expected ${artifact.sha512}, got ${actual}")
+                }
+                candidate.bytes = bytes
+            }
+            if (!candidate.isFile()) throw new GradleException("Pinned ${artifact.label} JAR is missing: ${candidate}")
+            String actual = java.security.MessageDigest.getInstance('SHA-512').digest(candidate.bytes).encodeHex().toString()
+            if (!actual.equalsIgnoreCase(artifact.sha512)) {
+                throw new GradleException("Pinned ${artifact.label} SHA-512 mismatch: expected ${artifact.sha512}, got ${actual}")
+            }
+        }
+    }
+}
+
 dependencies {
     implementation project(':pale-mirror-api')
-    compileOnly files(rootProject.findProperty('villager_overhaul_integration_jar')
-            ?: new File(runtimeModDirectory, 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar'))
-    compileOnly files(rootProject.findProperty('geckolib_integration_jar')
-            ?: new File(runtimeModDirectory, 'geckolib-neoforge-1.21.1-4.9.2.jar'))
-    compileOnly files(rootProject.findProperty('create_integration_jar')
-            ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar'))
+    compileOnly files(visualCompileArtifacts.collect { artifact -> artifact.candidate })
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'com.google.code.gson:gson:2.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+
+tasks.named('compileJava') { dependsOn resolveVisualCompileDependencies }
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
@@ -45,21 +101,19 @@ neoForge {
             sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-neoforge').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
+            sourceSet project(':pale-mirror-frontier').sourceSets.main
         }
     }
 }
 
 def visualsRuntimeJars = [
-        file(rootProject.findProperty('geckolib_integration_jar')
-                ?: new File(runtimeModDirectory, 'geckolib-neoforge-1.21.1-4.9.2.jar')),
-        file(rootProject.findProperty('villager_overhaul_integration_jar')
-                ?: new File(runtimeModDirectory, 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar')),
+        visualCompileArtifactsByProperty.geckolib_integration_jar.candidate,
+        visualCompileArtifactsByProperty.villager_overhaul_integration_jar.candidate,
         file(rootProject.findProperty('supplementaries_integration_jar')
                 ?: new File(runtimeModDirectory, 'supplementaries-1.21.1-3.8.8-neoforge.jar')),
         file(rootProject.findProperty('moonlight_integration_jar')
                 ?: new File(runtimeModDirectory, 'moonlight-1.21.1-3.3.2-neoforge.jar')),
-        file(rootProject.findProperty('create_integration_jar')
-                ?: new File(runtimeModDirectory, 'create-1.21.1-6.0.10.jar')),
+        visualCompileArtifactsByProperty.create_integration_jar.candidate,
         file(rootProject.findProperty('farmers_delight_integration_jar')
                 ?: new File(runtimeModDirectory, 'FarmersDelight-1.21.1-1.3.2.jar')),
         file(rootProject.findProperty('zeta_integration_jar')
@@ -69,6 +123,7 @@ def visualsRuntimeJars = [
 ]
 
 def prepareVisualsGameTestMods = tasks.register('prepareVisualsGameTestMods', Sync) {
+    dependsOn resolveVisualCompileDependencies
     from visualsRuntimeJars
     into layout.buildDirectory.dir('runs/visuals-game-test/mods')
     doFirst {

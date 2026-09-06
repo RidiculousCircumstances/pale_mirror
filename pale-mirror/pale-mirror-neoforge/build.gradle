@@ -359,6 +359,7 @@ neoForge {
             sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
             sourceSet project(':pale-mirror-frontier').sourceSets.main
+            sourceSet project(':pale-mirror-visuals').sourceSets.main
             sourceSet sourceSets.pilot
         }
     }

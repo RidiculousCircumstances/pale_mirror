@@ -45,7 +45,7 @@ public final class AuthoredAssetCatalog {
         values.put(family + "/apothecary", "8a42e130db195a3e4649531c6ca9e1405bdcd9f3b2e3136785b916e8d4779928");
         values.put(family + "/assay_office", "62eb34c83ca4500346d9bdc484882d211acab545fe64a77cffc0bd0cfcf5f139");
         values.put(family + "/bakery", "7c02eaaf412febfa92dbf0bfd4b9db20a8cabadd83af366e41d945d32ea33f5a");
-        values.put(family + "/bunkhouse_2", "432509540ef6b67083bc6a5361a74dfe07a823254ba5c3ea5761fd66e4fbecaa");
+        values.put(family + "/bunkhouse_2", "44592dbb3b6330341e03399531ef24292729ccf862fe3d8e3fb207008b1682fe");
         values.put(family + "/civic_hall", "259d1e48c6f999d0186495004b4e61c954698814ab3c88a4853b2cc2cbff5c30");
         values.put(family + "/clinic", "cc0b2bdfc4e8209bcdb1fb317fa5f8cd8eb4a6371211ebc49b6df23d15d487fd");
         values.put(family + "/engineer_shop", "ce1666d6d147d1a2c50fcc064d1fb16a483272e04e122336eba5bf2f9b7efe5c");
