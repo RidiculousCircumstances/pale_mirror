@@ -10,7 +10,7 @@
 
 - Root owns pack/deployment; ignored nested pale-mirror owns source/docs/tests/build. Preserve both histories/WIP. Java21/Minecraft1.21.1/NeoForge21.1.248; snapshot126/envelope41 fresh-v3 only, no v2 migration/fallback or recreation as hydration repair.
 - Main edits normative Markdown/declarative architecture only; never source/tests/scripts/build/CI/executable config. Sole writer `/root/terra_crash_completion`, gpt-5.6-terra high. Former executors must not resume.
-- Native r15 pair AND unchanged3world benchmark ACCEPTED; local audit/current Node175/175 and WIP inventory accepted in scope. User confirmed preserved-history intent. PM-PRESERVATION-PRECOMMIT-01 r2 accepted; sole Terra granted one exact240-path nested preservation commit after frozen-manifest/docs/identity checks. No implementation/outer commit/bundle/clone/remote/migration/deploy/service-change authority.
+- Preservation commit b82c0406 accepted; user-approved WIP retained without feature acceptance. PM-MONOREPO-RECOVERY-01 granted to sole Terra after acknowledgement: exact three-doc checkpoint then two local bundles/independent bare restore proofs. No implementation/outer commit/remote/merge/migration/deploy/service-change authority.
 - One heavy owner/one visible client DISPLAY=:0. Rediscover XAUTHORITY (last /run/user/1000/.mutter-Xwaylandauth.AZ4VT3). Qualification25631/32, benchmark25641/42; all verified closed after r12. Live far-frontier-v3-live.service/artifact hosts unrelated and untouched.
 - No force-loading, canonical test mutation API, arbitrary world edits, fabricated ack, timeout inflation, blind retry or module clean. Retain worlds/bundles. architecture.yml owns boundaries; source owns implementation; this is sole active ledger.
 
@@ -60,10 +60,11 @@
 - Preservation precommit ACCEPTED: Terra full content/diff safety review,175/175Node396.748ms/34guards18s/bothdiffPASS,240paths. Main independently ran actual requirePreparedF0vBuild:1539source entries61ba53d8 and JAR/classpath/launch exactr15 PASS. No retained precommit evidence directory; fresh results tool-session only. r2 grants sole Terra one explicit240-path nested preservation commit parent0ac6f97a, with refreshed docs guards/frozen exact staged-byte verification; no feature/provider acceptance. Main freezes docs until commit packet; no source writes or duplicate tests.
 - Commit r2 stopped correctly on staged diff whitespace check: RUNTIME-IDENTITY order:105 extra blank EOF;240-path index retained, no commit. Main removed only final blank line and recorded r3/order+ledger. Same commit grant renewed with only these three documents re-frozen/re-staged, all other frozen bytes invariant; docs guards/cached diff/prepared identity required. No heavy rerun or source change.
 - r3 stopped on raw source fingerprint drift, tree8929f8d1 retained. Main disproved docs attribution: sole manifest delta is disappearance of already-MISSING ResourceSiteHarvestTraversalAdvanced.java after staging its deletion;1539/61ba53d8 ->1538/87460b93. Main requirePreparedBuild and exact fingerprintPaths(all historical1539paths) PASS. r4 renews same commit using unchanged artifact/launch + historical-path equality + exact sole MISSING-removal delta, no old evidence rewrite/cache or source change. Only order/ledger re-frozen; remaining238blobs invariant. Docs/identity/staged checks owned by Terra; main frozen again.
+- Preservation commit ACCEPTED: b82c0406c50fd85dda08d8bd27114541bf8aec32, parent0ac6f97a, treef67ad99e4ed219cd2ddbd71f87ec506804279a26. Main mechanically verified all240committed paths/blobs/modes against frozen base+r3/r4docs, read WIP message and clean nested status; root onlybaseline. Terra final34guards18s/diffs/identityPASS. New RECOVERY-01 grants exact three-doc checkpoint and standalone bundles/restores outside originals, no merge/remote. Main freezes docs until recovery packet.
 
 ### Next
 
-- Review preservation commit parent/tree/content and both repo states, then specify verified recovery bundles and disposable history-preserving merge prerequisites. Migration/provider/originalF0.V remain ordered later; no intermediate polling.
+- Independently verify recovery bundle/restore packet and exact checkpoint refs, then grant bounded disposable history-preserving merge with CI path adaptation. Provider/originalF0.V remain later; no intermediate polling.
 - V3-AUD-052 arrival_checkpoint_one may need later correction; no new F0.1/MAT breadth yet.
 
 ## Open questions
@@ -74,7 +75,7 @@
 
 ## Working set
 
-- docs/work-orders/PM-PRESERVATION-PRECOMMIT-01.md active audit/verification; accepted PRE-MONOREPO-WIP/LOCAL-EXIT-AUDIT/NATIVE-QUAL/MATRIX-FINAL-COVERAGE/CRASH-RELEASE-CANONICAL/ASSIGNED-TERMINAL/NATIVE-RECONNECT-DEPARTURE orders; engineering-agent-protocol; architecture.yml.
+- docs/work-orders/PM-MONOREPO-RECOVERY-01.md active checkpoint/backup; accepted PRESERVATION-PRECOMMIT/PRE-MONOREPO-WIP/LOCAL-EXIT-AUDIT/NATIVE-QUAL and earlier corrective orders; engineering-agent-protocol; architecture.yml.
 - tools/frontier-v3-test-pilot/src persistent assigned compiler/runner/validator and matching test/. Java/scenario meaning/build/CI outside active correction.
 - Contract/execution-semantics/implementation-plan/seamless-foundation/accelerated-verification-loop/integration-feedback-foundation/Terra brief/architecture-audit normative.
 - Archives: CONTINUITY_2026-09-06_native_r12.md and native_r9.md; earlier2026-09-05_native_r7/engineer_handoff/crash_protocol_handoff retain history/product decisions. Historical grants never current authority.

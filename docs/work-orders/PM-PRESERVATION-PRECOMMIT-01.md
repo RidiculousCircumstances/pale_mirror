@@ -159,3 +159,15 @@ frozen blobs/modes stay exact. Refresh docs/cached diff checks, staged snapshot
 proof and these three identity checks, then the original preservation commit.
 Report both inventory hashes and the explicit equivalence proof. No heavy
 rebuild is required for a Git membership change without changed source bytes.
+
+## Preservation commit accepted
+
+2026-09-06: b82c0406c50fd85dda08d8bd27114541bf8aec32 created, exact parent
+0ac6f97a695d636ae928313de7a807d1f3ea05a1 and tree
+f67ad99e4ed219cd2ddbd71f87ec506804279a26. Main independently compared all240
+changed paths and final blob/mode values against frozen-paths.tsv with only
+approved r3/r4 document overrides: PASS. Main read commit message and confirmed
+clean nested status; outer only .f0v-baseline/, unchanged per Terra. Terra
+reports34guards18s, all diff checks and r4 identity equivalence PASS.
+This completes the preservation order, not paused functionality or F0.VA.
+All grants here closed. Next: PM-MONOREPO-RECOVERY-01, backup step only.
