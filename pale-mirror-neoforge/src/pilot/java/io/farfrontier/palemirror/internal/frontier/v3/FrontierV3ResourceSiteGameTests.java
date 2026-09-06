@@ -25,6 +25,44 @@ import java.util.List;
 public final class FrontierV3ResourceSiteGameTests {
     private FrontierV3ResourceSiteGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-resource-site-harvest-standing", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    public static void harvestStandingAdmitsOnlyItsOwnPassThroughCropCell(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos floor = fixtureOrigin(helper);
+        BlockPosition anchor = new BlockPosition(floor.getX(), floor.getY(), floor.getZ());
+        level.setBlock(floor.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(floor, Blocks.FARMLAND.defaultBlockState(), 3);
+        level.setBlock(floor.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
+        level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, anchor) == null,
+                "ordinary exact standing keeps a mature crop out of a generic feet column");
+        helper.assertTrue(FrontierV3StandingPosition.aboveExactFloor(level, floor.above()) == null,
+                "a pass-through crop is never reclassified as a supporting floor one cell above its farmland");
+        helper.assertFalse(FrontierV3StandingPosition.hasExactStandingColumn(level,
+                        new BlockPosition(floor.getX(), floor.getY() + 1, floor.getZ())),
+                "a retained COLD cursor cannot claim a crop block itself as physical support");
+        helper.assertTrue(FrontierV3StandingPosition.hasExactHarvestFieldStandingColumn(level, anchor),
+                "the registered field-worker rule retains the exact farmland support and clear headroom");
+        helper.assertValueEqual(FrontierV3StandingPosition.aboveExactHarvestFieldFloor(level, floor), floor.above(),
+                "only harvest resolves the real pass-through crop cell above its retained farmland floor");
+        helper.assertValueEqual(FrontierV3ResourceSiteHarvestSceneExecutor.harvestStandingPosition(level, floor), floor.above(),
+                "the registered harvest provider admits its exact crop-foot station without changing generic standing");
+        BlockPos approachFloor = floor.offset(3, 0, 0);
+        level.setBlock(approachFloor, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(approachFloor.above(), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(approachFloor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertValueEqual(FrontierV3ResourceSiteHarvestSceneExecutor.harvestStandingPosition(level, approachFloor), approachFloor.above(),
+                "the same registered provider admits an ordinary retained approach column before the field station");
+        level.setBlock(floor.above(), Blocks.OAK_FENCE.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3StandingPosition.hasExactHarvestFieldStandingColumn(level, anchor),
+                "a full collision obstruction is not disguised as field vegetation");
+        helper.assertTrue(FrontierV3StandingPosition.aboveExactHarvestFieldFloor(level, floor) == null,
+                "the harvest exception never climbs or passes through a fence at the exact feet cell");
+        helper.assertTrue(FrontierV3ResourceSiteHarvestSceneExecutor.harvestStandingPosition(level, floor) == null,
+                "the registered provider keeps a fence/full block as an obstruction rather than falling back to a different surface");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));

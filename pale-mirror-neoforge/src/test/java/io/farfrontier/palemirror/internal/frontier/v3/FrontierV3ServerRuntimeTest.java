@@ -405,7 +405,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState initial = worldState(runtime);
         io.farfrontier.palemirror.frontier.v3.model.ProductionJob job = initial.productionJobs().get(
                 new SubjectId("job:production-development-input-theft"));
-        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.nextCandidate(initial).orElseThrow();
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:production-work-restart");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = SceneLease.forCause(leaseId, world, new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause(job.id()),

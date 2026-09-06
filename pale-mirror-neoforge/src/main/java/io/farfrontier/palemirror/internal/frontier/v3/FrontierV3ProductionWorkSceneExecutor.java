@@ -25,8 +25,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT).min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierProductionWorkSceneSupport.nextCandidate(state)
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.demandPosition()));
+        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+                level, FrontierProductionWorkSceneSupport.candidates(state), FrontierProductionWorkSceneSupport.Candidate::demandPosition);
         if (candidate.isEmpty()) return false;
         FrontierProductionWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);
@@ -42,6 +42,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
                 checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
     }
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -82,9 +83,9 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT || !FrontierProductionWorkSceneSupport.hasExactMaterializedInput(state, job)) {
             drain(runtime, lease); return;
         }
-        boolean demand = FrontierV3SceneExecutor.demandExists(level, workshop.anchor());
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, workshop.anchor());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) { drain(runtime, lease); return; }
-        if (!demand) return;
+        if (!demand.active()) return;
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) { conflict(level, runtime, lease, "worker-unavailable"); return; }
         List<SurfaceAnchor> route = job.workTraversal().linearCorridorSurfaces(); SurfaceAnchor current = route.get(job.traversalCursor());

@@ -9,6 +9,18 @@
   "scripts": {
     "scenario": "node src/run-scenario.mjs",
     "scenario:isolated": "node src/run-isolated-scenario.mjs",
+    "verification:plan": "node src/run-verification-plan.mjs",
+    "f0va:prepare-native": "node src/prepare-native-build.mjs",
+    "f0va:fixture-bootstrap": "node src/run-development-fixture-bootstrap.mjs",
+    "f0va:fixture-consumer": "node src/run-development-fixture-consumer.mjs",
+    "f0va:feedback-timing": "node src/run-f0va-feedback-timing.mjs",
+    "f0va:persistent-matrix": "node src/run-f0va-persistent-matrix.mjs",
+    "f0va:write-ci-plan": "node src/write-ci-matrix-plan.mjs",
+    "f0va:run-ci-shard": "node src/run-ci-matrix-shard.mjs",
+    "f0va:run-ci-sequential": "node src/run-ci-matrix-sequential.mjs",
+    "f0va:merge-ci": "node src/merge-ci-matrix.mjs",
+    "f0v:matrix": "node src/run-f0v-matrix.mjs",
+    "f0v:timing": "node src/run-f0v-timing.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

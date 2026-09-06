@@ -34,8 +34,8 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .sorted(Comparator.comparing(SceneLease::id)).findFirst();
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<EngineeringWorkSceneCandidate> candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(state)
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.workCell()));
+        Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+                level, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell);
         if (candidate.isEmpty()) return false;
         EngineeringWorkSceneCandidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);
@@ -59,6 +59,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -81,13 +82,13 @@ final class FrontierV3EngineeringWorkSceneExecutor {
 
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                              FrontierWorldState state, SceneLease lease) {
-        boolean demand = FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition());
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
                 FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) {
             submit(runtime, "engineering-scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
-        if (!demand) return;
+        if (!demand.active()) return;
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob mob) || !FrontierV3SceneExecutor.recognizes(runtime, entity)) {

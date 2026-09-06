@@ -45,17 +45,15 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), prepared)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ResourceSiteHarvestTraversalAdvanced advanced) {
+        if (command.payload() instanceof ResourceSiteHarvestHotTraversalAdvanced advanced) {
             try {
-                ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
-                        new ResourceSiteHarvestSceneCause(advanced.jobId()));
-                boolean hot = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                        .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
-                                && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
-                if (!hot) return FrontierWorldCommandPlanner.rejected("resource-site field-work traversal requires its HOT scene");
-                if (advanced.nextCursor() != job.traversalCursor() + 1 || advanced.nextCursor() > job.cropCursor()) {
-                    return FrontierWorldCommandPlanner.rejected("resource-site field-work traversal advance is stale or outside its retained cursor");
-                }
+                ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, new ResourceSiteHarvestSceneCause(advanced.jobId()));
+                if (!advanced.workerId().equals(job.workerId())) return FrontierWorldCommandPlanner.rejected("resource-site HOT checkpoint has a foreign farmer");
+                // The reducer is also the complete causal validator: exact job, exact HOT
+                // lease, current retained recovery body, observed next body and one cursor.
+                // Validate it before admitting an event so an executor cannot persist a
+                // partial checkpoint merely because another harvest lease happens to be HOT.
+                ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, job.siteId(), advanced);
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), advanced)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -73,7 +71,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSitePrepared prepared -> ResourceSiteProcess.reducePrepared(state, event.subject(), prepared);
             case ResourceSiteHarvestStarted started -> ResourceSiteHarvestProcess.reduceStarted(state, event.subject(), started);
             case ResourceSiteHarvestCropPrepared prepared -> ResourceSiteHarvestProcess.reduceCropPrepared(state, event.subject(), prepared);
-            case ResourceSiteHarvestTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceTraversalAdvanced(state, event.subject(), advanced);
+            case ResourceSiteHarvestColdTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, event.subject(), advanced);
+            case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
             case ResourceSiteHarvestSceneLeasePrepared prepared -> reduceHarvestScenePrepared(state, event.subject(), event, prepared);
             case ResourceSiteHarvestSceneLeaseHandoff handoff -> reduceHarvestSceneHandoff(state, event.subject(), event, handoff);

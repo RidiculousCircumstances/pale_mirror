@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.Objects;
 
 /** Durable preparation of a cargo-free HOT scene owned by one settlement assault. */
-public record SettlementAssaultSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
+public record SettlementAssaultSceneLeasePrepared(SceneLease lease) implements FrontierPayload, SceneLeaseAdmission {
     public SettlementAssaultSceneLeasePrepared {
         Objects.requireNonNull(lease, "assault scene lease");
         if (!FrontierSceneBehaviors.isSettlementAssault(lease)) {

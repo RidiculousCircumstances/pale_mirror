@@ -13,7 +13,7 @@
     ] }
   ],
   "actions": [
-    { "type": "fast_forward", "ticks": 24000 },
+    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
     { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "block": "minecraft:wheat", "timeoutMs": 90000 },
     { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } } },
     { "type": "assert_visible_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "timeoutMs": 10000 },

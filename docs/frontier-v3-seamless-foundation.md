@@ -15,18 +15,35 @@ agent. Chat history is not an architecture source.
 
 Before changing source, read in this order:
 
-1. `AGENTS.md` and `CONTINUITY.md`;
+1. `AGENTS.md`, `CONTINUITY.md`, `engineering-agent-protocol.md` and the active
+   versioned order under `docs/work-orders/`;
 2. `frontier-v3-contract.md`;
-3. this document;
-4. `frontier-v3-implementation-plan.md`;
-5. `frontier-v3-architecture-audit.md` and
+3. this document and `frontier-v3-execution-semantics.md`;
+4. `frontier-v3-integration-feedback-foundation.md` when `F0.V` is current;
+5. `frontier-v3-implementation-plan.md`;
+6. `frontier-v3-architecture-audit.md` and
    `frontier-v3-materialization-completeness.md`;
-6. the process-specific contract for the active slice.
+7. the process-specific contract for the active slice.
 
 Work only on the current `F0.*` slice recorded in `CONTINUITY.md`. Do not resume
 `MAT-004` or add another scene, effect or inventory family until its required
 foundation slice has passed its exit gate. Existing uncommitted MAT-001 tests
 and scenario work are retained as evidence input; they are not discarded.
+
+The engineer decomposes that slice into bounded work orders and independently
+accepts each result. Terra high implements only the approved scope. Protocol
+Gate A/B/C grants supplement, never replace or weaken, the F0 exits below;
+the executor cannot advance the ledger or accept its own slice.
+
+The mandatory execution order is `F0.0 -> F0.V -> F0.1 -> F0.2 ... F0.6`.
+The accepted execution-semantics correction adds mandatory exit coverage to
+these same slices, not another wave. At the next safe F0.VA measurement boundary,
+perform its requirements/evidence alignment before starting the next slice.
+Preserve current WIP, acceleration work and the ordered monorepo gate.
+`F0.V` is the integration-feedback prerequisite defined in
+`frontier-v3-integration-feedback-foundation.md`. It temporarily pauses the
+preserved F0.1 work so fast process-contract, deterministic crash-window and
+one-build/one-client evidence exist before the remaining foundation is proved.
 
 ## Product invariant
 
@@ -121,13 +138,15 @@ commit at T and one bounded aftermath footprint is retained. Natural later
 loading materializes the current crater, damage and infection state; it does not
 spawn the old bomb or replay combat.
 
-Destructive aftermath has no protected-zone exception. Unknown blocks inside a
-retained blast footprint are inspected and affected when first available,
-unless a later durable event proves they were created after the blast. A
-constructive operation may use its last proven clear authored footprint in
-COLD; a later contradictory observation immediately removes or suspends the
-unverified capacity and creates ordinary obstruction/replan work. It is never
-silently overwritten.
+Destructive aftermath has no protected-zone exception, but unknown blocks are
+not automatically valid blast targets. Retain evidence provenance, event time,
+observation time and preconditions; inspect current geometry before writes.
+Unknown shielding cannot justify an exact earlier casualty. Constructive work
+may use retained evidence only within its declared validity policy; unverified
+capacity cannot feed irreversible dependent work. A contradiction isolates the
+affected footprint and creates obstruction/replan work, never silent overwrite
+or retroactive cancellation of confirmed unrelated history. Each family owns
+the bounded knowledge/approximation policy in `frontier-v3-execution-semantics.md`.
 
 Every aftermath record is bounded, chunk-indexed, idempotent, versioned and has
 an explicit compaction rule. A pending physical representation cannot block
@@ -193,6 +212,27 @@ The current safety limit of 32 scene members remains a ceiling until a same-seed
 JFR and causal proof justify changing it. Large assaults scale by fronts and
 spatial staging, not by raising that constant.
 
+Decision ownership follows the same hierarchy and is never delegated to a
+scene. Each settlement and the whole Hivemind have one canonical
+`DecisionAuthority` scope that retains perceived knowledge, doctrine, active
+commitments/objectives, reconsideration epoch, stable policy ID/version and
+bounded decision provenance.
+It references the existing canonical objective/task/resource owners rather
+than duplicating them. Each coordinated operation owns one `TacticalPlan` over
+its existing roster/fronts: phase, bounded objectives, roles, formation
+constraints, permitted behaviours, rendezvous and fallback/retreat rules.
+
+One closed decision protocol dispatches to separately registered settlement
+and hive policies. Closed tactical and individual-behaviour policy registries
+may derive bounded actor directives from the current plan and typed
+observations through stable descriptors, but a scene, Minecraft entity brain
+or movement provider may only execute such a
+directive and report its result. It may not invent a strategic objective,
+formation, reinforcement, retreat or semantic destination. Every durable
+objective/task/order retains exactly one decision-authority ID and epoch; every
+local directive retains exactly one tactical-plan/front ID and current actor
+lease. A stale or mismatched epoch is rejected rather than locally replanned.
+
 ### FND-05 — the canon owns route meaning, not every animation step
 
 An immutable adjacent-cell topology is valid evidence for strategic reachability
@@ -241,10 +281,13 @@ the current epoch and effect receipt are durable. After recovery:
   postcondition can be inspected, but it does not freeze unrelated actors,
   settlements or fronts.
 
-The WAL is the authority for crash atomicity. A physical change visible only
-between the last durable receipt and a process crash may be rolled back as an
-uncommitted effect; no architecture can atomically commit arbitrary chunk NBT
-and the canonical WAL without such an authority choice.
+The WAL orders canonical recovery; it is not atomic with arbitrary chunk NBT
+or player inventories. Separate prepared, observed, recoverably confirmed and
+ambiguous effects. Each family proves its physical/canonical save boundary and
+idempotent postcondition reconciliation. Only explicitly reversible unconfirmed
+pose/checkpoint state may roll back after a hard crash; never blindly replay an
+effect or overwrite external custody. See `frontier-v3-execution-semantics.md`
+for required partial-save and player/container crash windows.
 
 ### FND-07 — expected gameplay disruption is not invariant corruption
 
@@ -276,8 +319,12 @@ The equivalence contract is:
 - no systematic benefit or penalty from a neutral player merely observing;
 - player interventions and actual HOT physical outcomes are legitimate new
   inputs and may change the result;
-- non-intervened HOT/COLD outcomes meet persisted calibration tolerances across
-  fixed seed sets, rather than exact per-hit equality.
+- quiet production retains exact labor norms, inputs and outputs, with elapsed
+  differences attributable to declared bounded physical/scheduling causes;
+- combat outcomes meet predeclared calibration tolerances across fixed seed
+  sets, rather than exact per-hit equality; exact invariants never get tolerance;
+- repeated mode switches retain labor, stage timers, cooldowns, wounds,
+  commitments and keyed random opportunities without systematic advantage.
 
 Random choices use process/actor/event-keyed streams, never tick iteration or
 collection order. Verification compares invariants and outcome distributions,
@@ -320,6 +367,13 @@ observation against the current version/epoch. No pure process may query a
 loaded chunk, entity, block entity or Minecraft navigation result.
 
 ## Implementation programme
+
+Every slice below also carries its mandatory additional exit coverage from the
+implementation matrix in `frontier-v3-execution-semantics.md`. In particular,
+F0.2 separates presentation from physical activity and bounds COLD knowledge;
+F0.3 proves observer-free custody; F0.4 proves cross-front interactions; F0.5
+proves partial-save confirmation; F0.6 proves calibrated switching neutrality.
+An old green test covers only its originally asserted boundary.
 
 ### F0.0 — inventory and mechanical guardrails
 
@@ -367,6 +421,27 @@ projection exists. This inventory is not a statement that every listed family
 is already duration-bearing; it assigns the owner of every currently affected
 physical/custody branch so a later slice cannot claim an unlisted exception.
 
+### F0.V — integration-feedback prerequisite
+
+Complete `docs/frontier-v3-integration-feedback-foundation.md` before resuming
+F0.1. Deliver the measured phase baseline, reusable pure HOT/COLD contract
+matrix, deterministic test-only crash boundaries, generated semantic scenario
+matrix, one-build/one-client restart runner and bounded automatic failure
+bundle. Preserve the active harvest WIP throughout.
+
+Exit:
+
+- the reference harvest contract catches missing/duplicate ownership,
+  schedule, codec, stale-version and crash-window failures before native runs;
+- graceful and abrupt recovery remain real two-server-JVM evidence while one
+  prepared build and one persistent client remove redundant launch work;
+- the same reference restart demonstrates a measured benefit without retries,
+  weaker assertions or reused evidence state. Per the 2026-09-05 user amendment,
+  25 percent is advisory and retained 22.52 percent is sufficient for this
+  optimization; do not spend native runs chasing that difference;
+- test-only fault/fixture controls are absent from the production JAR;
+- the ledger explicitly resumes F0.1 only after the F0.V gate is recorded.
+
 ### F0.1 — process/execution ownership reference
 
 Complete V3-AUD-043 through MAT-001:
@@ -387,6 +462,7 @@ Required evidence:
 - pure never-loaded progression;
 - arrival during at least two distinct progress stages;
 - native unload/return with the same farmer identity;
+- repeated hand-offs retain partial work, stage timers and the exact next step;
 - worker death or physical obstruction;
 - graceful and abrupt filesystem restart;
 - composition negative test for a one-driver duration process.
@@ -396,6 +472,9 @@ Required evidence:
 Deliver:
 
 - split persistent replica state from temporary container/object custody;
+- separate presentation demand from observer-independent physical eligibility;
+- declare per-family knowledge validity, unknown-precondition and approximation
+  policies before allowing COLD geometry-dependent consequences;
 - remove canonical economy decisions based on historical `ACTIVE` state;
 - introduce versioned replica fingerprints and lease epochs;
 - introduce bounded chunk-indexed deferred aftermath;
@@ -409,9 +488,12 @@ Required evidence:
 - one visit cannot change later production or hive-growth eligibility;
 - unchanged serialized chest safely catches up on return;
 - changed chest becomes a typed observation before any projection write;
-- off-screen explosion advances canonical casualties/damage immediately and
-  later shows aftermath without replay;
-- constructive conflict suspends only the affected capacity;
+- off-screen explosion commits only justified casualties/damage and later shows
+  aftermath without replay; unknown shielding and existing player construction
+  cannot be silently contradicted;
+- unverified constructive capacity cannot feed irreversible dependent work;
+- unknown/stale terrain reaches bounded evidence/replan/abandonment without a
+  force-load, invented scout observation or universal wait for a visitor;
 - restart at every durable-before-effect boundary produces no duplicate effect.
 
 ### F0.3 — fungible resource lots
@@ -430,27 +512,75 @@ Required evidence:
 - player splits a stack, moves only part, merges it again and total/ownership
   remain exact;
 - hopper movement, world drop/pickup and partial recipe consumption work;
+- an observer-free ticking container/hopper retains exclusive physical custody,
+  including release and restart without concurrent COLD spending;
+- partial player/container transfers survive declared physical-save/canonical
+  confirmation crash windows without duplication or blanket inventory rollback;
 - theft of a reserved portion interrupts only its owning work;
 - duplicate quantity, mixed kind, over-consumption and stale binding are
   rejected without minting or deleting resources;
 - snapshot/WAL replay preserves totals and allocations.
 
-### F0.4 — semantic navigation and front partitioning
+### F0.4 — first-class decision ownership, semantic navigation and fronts
 
 Deliver:
 
+- introduce the first-class decision boundary before generalizing combat:
+  exactly one canonical `DecisionAuthority` scope per settlement and one for
+  the whole Hivemind, with perceived knowledge, doctrine, commitments,
+  reconsideration epoch, stable policy ID/version and bounded decision trace
+  but no duplicate
+  objective/task/resource state;
+- register a common decision protocol with distinct settlement and hive
+  policies, and reject missing, duplicate or incompatible policy ownership;
+- register tactical and individual-behaviour policies behind stable descriptors
+  so generic operation/scene code never branches on a concrete unit, tactic or
+  situation implementation;
+- retain one operation-owned `TacticalPlan` containing phase, local objectives,
+  roles, formation constraints, permitted behaviour and rendezvous/
+  fallback/retreat rules without duplicating roster or custody;
+- make every objective/task/order traceable to one decision authority/epoch and
+  every actor directive to one tactical plan/front/current lease; stale
+  authority or plan epochs fail closed;
 - introduce movement envelopes and HOT local navigation leases;
 - retain canonical ports/checkpoints while allowing bounded physical local path;
 - change operation-to-scene ownership to operation phases and disjoint fronts;
+- register bounded cross-front interaction ordering/deduplication by cause,
+  exact source/target and authority epoch, including mixed HOT/COLD targets;
+- define one versioned composite-operation contract: the parent owns purpose,
+  global phase, complete roster/resource reservations and terminal result;
+  typed children own only disjoint allocated actors/cargo/effects, local
+  topology, cursor, objective and at most one physical lease;
+- make child creation, join, cancellation, partial success/loss, rendezvous,
+  compensation/return and terminal aggregation deterministic canonical
+  transitions; the parent cannot complete while a child or allocation remains
+  live, ambiguous or unaccounted;
 - use the same model for patrol and hive expedition work; do not build a
   combat-only exception.
 
 Required evidence:
 
+- simultaneous settlement and hive reconsideration uses only each side's
+  perceived facts and produces deterministic, policy-specific decision traces;
+- a scene executor or movement provider cannot originate or silently replace a
+  strategic objective, tactical phase, formation, retreat or semantic target;
+- leader or Overseer/Relay loss degrades or changes the same retained tactical
+  plan through a canonical decision transition rather than scene-local logic;
+- restart retains decision/tactical epochs and rejects a late directive from an
+  earlier epoch without duplicating an order, actor or effect;
 - slopes, stairs, doors and a harmless local obstacle produce natural motion;
 - leaving the envelope, changing port or skipping a checkpoint is rejected;
 - persistent blockage creates canonical obstruction and bounded replan/abort;
 - two fronts of one operation progress independently without actor overlap;
+- projectile, blast, pursuit and cargo interactions cross scene boundaries once;
+  retries, reverse arrival order, stale epochs and restart neither shield targets
+  nor duplicate consequences; unknown targets use declared evidence policies;
+- one expedition crosses assembly, travel, local contact/work and return or
+  retreat with the same parent, roster, allocations and child identities across
+  COLD/HOT hand-offs and restart;
+- child failure and partial success cannot duplicate, strand or silently return
+  an actor/resource, and parent completion waits for every terminal child and
+  resolved allocation;
 - a same-seed JFR proves current budgets before any limit increase;
 - a native return scenario shows current survivors and positions, not a reset.
 
@@ -459,6 +589,8 @@ Required evidence:
 Deliver:
 
 - authority epochs for body, cargo, container and effect bindings;
+- explicit prepared/observed/confirmed/ambiguous boundaries and per-family
+  physical-save/canonical-confirmation protocols, not WAL-only atomicity;
 - stale-projection tombstone/rejection on later natural load;
 - explicit domain-disruption, reconciliation-ambiguity and corruption results;
 - bounded retry, recovery/abandonment and compaction policy per affected owner.
@@ -466,6 +598,8 @@ Deliver:
 Required evidence:
 
 - graceful and hard crash at PREPARED, HOT/RUNNING, DRAINING and effect windows;
+- partial physical/player saves and canonical confirmation in either order;
+  only declared reversible unconfirmed state rolls back, never external custody;
 - an unvisited stale projection cannot freeze COLD progress after recovery;
 - late stale bodies/cargo do not duplicate or emit false death/theft;
 - ordinary player damage does not quarantine the world;
@@ -485,6 +619,10 @@ Exit:
 
 - neutral observation does not systematically alter success, casualties,
   throughput or completion time outside accepted tolerances;
+- exact invariants pass every run; quiet-work norms remain exact and combat
+  metrics use predeclared versioned sampling/tolerances, not a shared fuzzy digest;
+- repeated mode switches preserve labor, cooldowns, wounds and keyed random
+  opportunities; player changes survive leave/return/restart on exact targets;
 - no static object visibly appears after its chunk is exposed to the player;
 - twelve settlements plus concurrent hive fronts meet queue, TPS, heap, WAL and
   physical-body budgets;
@@ -524,7 +662,8 @@ occur:
 
 ## Foundation completion gate
 
-The foundation correction is complete only when all F0 slices are implemented,
+The foundation correction is complete only when F0.V and all F0.0-F0.6 slices
+are implemented,
 the corresponding architecture-audit findings are closed, the machine-readable
 guards reject recurrence, and the following product statement is true in a
 fresh disposable world:

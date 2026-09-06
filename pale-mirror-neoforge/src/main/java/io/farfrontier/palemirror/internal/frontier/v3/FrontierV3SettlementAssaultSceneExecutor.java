@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -46,7 +45,6 @@ import java.util.Set;
  * the resulting canonical consequences.</p>
  */
 final class FrontierV3SettlementAssaultSceneExecutor {
-    private static final int DEMAND_RADIUS_BLOCKS = 96;
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final int MAX_OBSERVED_SCENES = 4_096;
     private static final long RECOVERY_INSPECTION_WINDOW_TICKS = 400L;
@@ -70,7 +68,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             return true;
         }
         Optional<SettlementAssaultSceneCandidate> candidate = state.coldSettlementAssaultSceneCandidates().stream()
-                .filter(value -> demandExists(level, value.handoffPosition())).findFirst();
+                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.handoffPosition())).findFirst();
         if (candidate.isEmpty()) return false;
         SettlementAssaultSceneCandidate battle = candidate.orElseThrow();
         SceneLease lease = lease(runtime, battle);
@@ -120,6 +118,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> executeHot(level, runtime, state, lease);
@@ -140,13 +139,13 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void executeHot(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                    FrontierWorldState state, SceneLease lease) {
-        boolean demand = demandExists(level, lease.handoffPosition());
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_draining", lease,
                     submit(runtime, "settlement-assault-draining", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
             return;
         }
-        if (!demand) return;
+        if (!demand.active()) return;
         List<Body> bodies = bodies(level, runtime, state, lease);
         if (bodies.size() != lease.members().size()) {
             conflict(level, runtime, lease, "hot-body-unavailable");
@@ -162,7 +161,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        if (!demandExists(level, lease.handoffPosition()) || lease.recoveryEvidence().isPresent()) return;
+        if (!FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition()) || lease.recoveryEvidence().isPresent()) return;
         if (completeOwnedBodySet(level, runtime, state, lease)) {
             forgetRecoveryInspection(runtime, lease.id());
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_reclaimed", lease,
@@ -230,20 +229,13 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 == io.farfrontier.palemirror.frontier.v3.model.ResidentRole.GUARD;
     }
 
-    private static boolean demandExists(ServerLevel level, BlockPosition anchor) {
-        BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(position) && level.players().stream().filter(player -> !player.isSpectator())
-                .anyMatch(player -> player.blockPosition().closerThan(position, DEMAND_RADIUS_BLOCKS));
-    }
-
     private static boolean playerWithinSafeRadius(ServerLevel level, SceneLease lease) {
         List<BlockPos> positions = new ArrayList<>(List.of(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z())));
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (entity != null) positions.add(entity.blockPosition());
         }
-        return level.players().stream().filter(player -> !player.isSpectator())
-                .anyMatch(player -> positions.stream().anyMatch(position -> player.blockPosition().closerThan(position, DRAIN_SAFE_RADIUS_BLOCKS)));
+        return FrontierV3SceneDemand.observerWithin(level, positions, DRAIN_SAFE_RADIUS_BLOCKS);
     }
 
     private static boolean owns(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, SceneMember member) {

@@ -15,7 +15,8 @@ import java.util.Objects;
 public sealed interface SceneContinuation permits SceneContinuation.None, SceneContinuation.ResumeOperation,
         SceneContinuation.FailOperation, SceneContinuation.ResumeEngagement, SceneContinuation.ResumeSettlementAssault,
         SceneContinuation.FinalizeProductionWork, SceneContinuation.ResumeProductionCompletion,
-        SceneContinuation.ResumeRoutePatrol, SceneContinuation.BlockRoutePatrol {
+        SceneContinuation.ResumeRoutePatrol, SceneContinuation.BlockRoutePatrol,
+        SceneContinuation.ResumeResourceSiteHarvest {
     Kind kind();
 
     enum Kind {
@@ -27,7 +28,8 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
         FINALIZE_PRODUCTION_WORK,
         RESUME_PRODUCTION_COMPLETION,
         RESUME_ROUTE_PATROL,
-        BLOCK_ROUTE_PATROL
+        BLOCK_ROUTE_PATROL,
+        RESUME_RESOURCE_SITE_HARVEST
     }
 
     record None() implements SceneContinuation {
@@ -83,5 +85,11 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
     record BlockRoutePatrol(SubjectId taskId) implements SceneContinuation {
         public BlockRoutePatrol { Objects.requireNonNull(taskId, "route-patrol task"); }
         @Override public Kind kind() { return Kind.BLOCK_ROUTE_PATROL; }
+    }
+
+    /** A released field worker resumes the same retained COLD cursor and schedule ID. */
+    record ResumeResourceSiteHarvest(SubjectId jobId, long dueAt) implements SceneContinuation {
+        public ResumeResourceSiteHarvest { Objects.requireNonNull(jobId, "resource-site harvest job"); }
+        @Override public Kind kind() { return Kind.RESUME_RESOURCE_SITE_HARVEST; }
     }
 }

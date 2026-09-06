@@ -2,6 +2,13 @@
 
 Status: normative execution brief for the GPT-5.6 Terra continuation agent.
 
+Delivery roles follow [`engineering-agent-protocol.md`](engineering-agent-protocol.md).
+Terra runs with reasoning `high` as the sole code executor, not a second
+architect or self-accepting project owner. The supervising engineer owns all
+normative docs, work orders, the ledger and acceptance. Read the active order
+under `docs/work-orders/`; no implementation or expensive run begins without
+its explicit Gate A or Gate B grant. Propose requirement changes to the engineer.
+
 This document turns the accepted Frontier v3 direction into an executable
 working contract. It does not replace the product contract, the architecture
 map, the audit register or the Continuity Ledger. When those sources differ,
@@ -15,13 +22,16 @@ Minecraft world. The player may enter, leave, return, die, break things, steal
 items or cause an explosion. Those actions must change the same world that was
 already running; they must not reveal a materialization switch.
 
-The distinction between `HOT` and `COLD` is therefore only *where the same
-process is executed*:
+`HOT` and `COLD` execute one process with shared rules/history but different
+physical detail. The mandatory `frontier-v3-execution-semantics.md` defines
+exact versus calibrated comparisons, knowledge limits, independent physical
+activity, cross-scene effects and recoverable confirmation:
 
 - `COLD` is canonical, deterministic, event-driven progression without a
   loaded physical scene;
 - `HOT` is temporary bounded Minecraft execution of that exact process when
-  natural player/chunk demand makes a scene possible;
+  natural physical availability makes execution possible; presentation demand
+  and observer-independent physical custody are separate inputs;
 - entering or observing a chunk never creates work, changes its rules, or
   becomes necessary for its future liveness;
 - leaving a chunk never deletes the process, invents a restart, rolls work
@@ -36,10 +46,15 @@ is only a short-lived physical executor for a bounded part of that instance.
 
 At the beginning of every continuation turn, before selecting a change:
 
-1. read `AGENTS.md` and `CONTINUITY.md` in full;
+1. read `AGENTS.md`, `CONTINUITY.md`, `engineering-agent-protocol.md` and the
+   active work order (documentation paths are relative to this brief);
 2. read the relevant portions of `architecture.yml` and the complete
    `docs/pale-mirror-foundry.md` for materialization work;
-3. read this brief, then
+3. read this brief and
+   [`frontier-v3-execution-semantics.md`](frontier-v3-execution-semantics.md);
+   when F0.V is active also read
+   [`frontier-v3-integration-feedback-foundation.md`](frontier-v3-integration-feedback-foundation.md),
+   followed by
    [`frontier-v3-seamless-foundation.md`](frontier-v3-seamless-foundation.md),
    [`frontier-v3-implementation-plan.md`](frontier-v3-implementation-plan.md)
    and [`frontier-v3-architecture-audit.md`](frontier-v3-architecture-audit.md);
@@ -55,6 +70,8 @@ following sources own their respective facts:
 | `architecture.yml` | component boundaries, invariants and critical flows |
 | `frontier-v3-contract.md` | product-level world and causality promises |
 | `frontier-v3-seamless-foundation.md` | FND-01…FND-09 and F0 exit gates |
+| `frontier-v3-integration-feedback-foundation.md` | current F0.V SDK/scenario scope and exit gate |
+| `frontier-v3-accelerated-verification-loop.md` | mandatory current F0.VA feedback-loop interruption and exit gate |
 | `frontier-v3-architecture-audit.md` | defect facts, remediation and closure evidence |
 | `frontier-v3-materialization-completeness.md` | M0–M3 classification; never overclaim a lower evidence level |
 | `CONTINUITY.md` | current slice, verified evidence, open questions and working set |
@@ -101,6 +118,24 @@ Atomic interaction, distributed environmental work, an ambient presence and a
 long operation are distinct classes. Use respectively a physical intent,
 retained spatial frontier, custody-only lease, or operation/front hierarchy;
 do not force all of them into a work scene.
+
+F0.V makes this a closed internal SDK contract. Every physical-capable owner
+declares exactly one stable archetype: `DURATION_WORK`,
+`COORDINATED_TRAVERSAL`, `COMPOSITE_OPERATION`, `ATOMIC_INTENT`,
+`SPATIAL_FRONTIER` or `AMBIENT_CUSTODY`. Its versioned descriptor owns the
+production vocabulary/provider bindings and hard actor, cargo/effect,
+local-space, observation, retention, cadence and work bounds. Reject a wrong,
+multiple, missing, incompatible or unbounded registration before execution.
+Generic SDK code may dispatch a registered descriptor but may not branch on a
+concrete process family.
+
+Player count is not process input. Aggregate natural demand to at most one
+lease per exact process/front; another observer cannot duplicate or accelerate
+it, and one departing observer cannot drain it while another remains. A
+composite operation remains the sole parent of its purpose, exact roster,
+resources and result; children receive disjoint bounded allocations and
+deterministic create/join/cancel/partial-result/return transitions. Do not
+complete the parent until every child and allocation is terminally accounted.
 
 ### 3.3 Replica custody is not process authority
 
@@ -220,9 +255,9 @@ hive combat feature or a Create integration while F0 remains open.
 For the active slice:
 
 1. **State the defect precisely.** Name the canonical owner, physical owner,
-   present illegal authority path and player-visible symptom. Add/update the
-   V3-AUD finding before a broad implementation change.
-2. **Write the target transition.** Specify command/due action → expected
+   present illegal authority path and player-visible symptom. Submit the
+   V3-AUD finding for the engineer to record before a broad change.
+2. **Confirm the approved target transition.** Specify command/due action → expected
    revision/epoch → event(s) → WAL boundary → canonical state → observable
    effect/observation → recovery path. Identify what remains COLD, what may be
    HOT and who owns postconditions.
@@ -240,26 +275,63 @@ For the active slice:
    matching named GameTest slice. Run the complete critical-code gate before the
    slice commit. Do not burn time launching unrelated full suites on every
    source edit.
-7. **Capture proof and update sources together.** Record a bounded correlation
-   trace and clean semantic frame for visible claims. Update audit,
-   architecture, materialization inventory and ledger in the same commit.
+7. **Capture proof for independent acceptance.** Record a bounded correlation
+   trace and clean semantic frame for visible claims. Submit audit,
+   architecture, materialization inventory and ledger facts to the engineer;
+   it owns these edits and Gate C acceptance before a scoped commit or next order.
 
 ### Required F0 order
+
+Every row also includes the additional mandatory slice exits in
+`frontier-v3-execution-semantics.md` and the foundation brief. Perform the
+requirements/evidence alignment at the next safe F0.VA measurement boundary;
+an old green endpoint test is not proof of the corrected contract.
 
 | Slice | Deliverable | Do not accept as completion |
 | --- | --- | --- |
 | F0.0 | inventory plus ratchets for paired driver/legacy authority growth | a prose list without a failing guard |
+| F0.V | measured fast contract/crash/scenario runner foundation, including mandatory F0.VA accelerated loop | fake Minecraft evidence, retries, weaker assertions, cached final proof, reused mutable worlds, or discarded F0.1 WIP |
 | F0.1 | one process whose COLD and HOT drivers share one cursor and exact worker | crop/output endpoint, scene-only progress, or a demand-created start |
 | F0.2 | replica/custody separation and deferred aftermath reference verticals | active-container branch, player-gated explosion, or desired-state repair |
 | F0.3 | fungible lots/claims/custody and ordinary vanilla inventory transformations | permanent UUID tags on interchangeable stacks |
-| F0.4 | bounded fronts and envelope-bound local navigation | a bigger monolithic scene or direct-vector pseudo-AI |
+| F0.4 | first-class polity decision authority, operation tactical plans, bounded fronts and envelope-bound local navigation | AI policy spread through scenes/providers, a bigger monolithic scene or direct-vector pseudo-AI |
 | F0.5 | epoch fencing plus actionable failure owners | permanent `UNKNOWN_AFTER_RESTART`/`CONFLICT` limbo |
 | F0.6 | calibrated observer neutrality, first visibility and scale proof | one pretty loaded scene or TPS observation alone |
 
-## 5. Current handoff: F0.1 resource-site harvest
+## 5. Current handoff: F0.V integration feedback
 
-F0.0 is mechanically guarded. F0.1 is the current reference slice until the
-ledger records all of its exit evidence. Do not declare it complete merely
+F0.0 is mechanically guarded. Stop feature and F0.1 implementation now,
+preserve its complete dirty worktree, and execute
+[`frontier-v3-integration-feedback-foundation.md`](frontier-v3-integration-feedback-foundation.md).
+Do not reset or rewrite the harvest work to manufacture a clean baseline.
+
+After the currently running command/process reaches a safe boundary, preserve
+its manifests and failure bundle and interrupt further full-matrix work to
+execute mandatory substage
+[`frontier-v3-accelerated-verification-loop.md`](frontier-v3-accelerated-verification-loop.md).
+Implement its exact lifecycle barriers first, then the persistent matrix
+client, evidence cache/dependency selector, enforced pyramid, four-worker CI
+matrix and development-only immutable fixture images. Resume the original F0.V
+matrix only after the F0.VA exit gate passes.
+
+F0.V must leave a reusable fast HOT/COLD contract harness, deterministic
+crash-window controller, generated semantic scenario matrix, one-build/
+one-client restart runner, phase-timing report and automatic failure bundle.
+Its exit gate includes unchanged correctness evidence and measured benefit for
+the same graceful reference restart. The user accepted 22.52 percent on
+2026-09-05; 25 percent is an advisory target, not a blocking floor or reason to
+repeat native runs. Current-source correctness/recovery remains required. F0.VA
+additionally requires at least 3x aggregate median feedback acceleration for
+the three representative edit classes and at least 2.5x wall-clock acceleration
+for the same correctness matrix on four isolated CI workers.
+
+After F0.V is independently accepted, the engineer updates the ledger and issues
+the next order for preserved F0.1. Do not begin F0.2 or any MAT breadth first.
+
+### 5.1 Paused resume target: F0.1 resource-site harvest
+
+F0.1 remains the next reference slice after F0.V until the ledger records all
+of its exit evidence. Do not declare it complete merely
 because the previously existing harvest endpoint/restart tests are green.
 
 The intended harvest model is:
@@ -269,7 +341,7 @@ ResourceSiteHarvestJob (canonical owner)
   owns farmer, field/depot identities, 3D traversal, current cursor,
   progress/output rules and its stable COLD schedule
        |
-       +-- no demand: COLD advances only legal retained worker/cursor state
+       +-- no physical custody: COLD advances legal retained worker/cursor state
        |              (never secretly removes a crop or mints output)
        |
        +-- natural demand: one harvest scene lease attaches at that exact cursor
@@ -395,7 +467,7 @@ test name:
 - Does the change require a fresh-world schema cut? If yes, delete old bytes
   and reset disposable/deployed worlds; do not add a migration.
 
-Stop, update the audit, and seek an explicit design decision if the only way
+Stop, submit the audit finding, and seek an explicit design decision if the only way
 forward is force-loading, a silent overwrite, synthetic teleport/replacement,
 unbounded entity scan, permanent waiting for a visit, a second process cursor,
 or a global quarantine for ordinary play.
@@ -415,20 +487,23 @@ Before every commit:
 - verify architecture, audit, materialization inventory and ledger agree;
 - state exact passed/failed evidence and remaining F0 gap.
 
+Commit and deployment require their own explicit engineer grants under existing
+user authority; this checklist is not a standing permission to stage all WIP.
+
 Deployment is a separate operation after a clean verified commit. It uses the
 root repository scripts, a fresh v3 world for state-format changes, pinned
 artifact checksum and server-operation preflight. Never call a service running
 or a stale log line a successful deployment. The user live server is a product
 observation surface, not an iterative test fixture.
 
-At handoff, leave `CONTINUITY.md` compact and factual: completed slice,
+At handoff, submit compact factual ledger updates to the engineer: completed slice,
 evidence paths/IDs, first incomplete slice, discovered defect and exact next
 command. Do not copy raw logs or long chat history into it.
 
 ## 9. Completion statement for the continuation agent
 
-The F0 programme may be declared complete only when its machine guards and all
-F0.0–F0.6 exit gates pass in a fresh disposable world, the audit findings are
+The F0 programme may be declared complete only when its machine guards, F0.V
+and all F0.0–F0.6 exit gates pass in a fresh disposable world, the audit findings are
 closed with evidence at the claimed M-level, and this sentence is true:
 
 > Watching, leaving, returning or restarting changes only how the same living
@@ -436,5 +511,5 @@ closed with evidence at the claimed M-level, and this sentence is true:
 > projection as authority, change its economic rules, freeze its history or
 > reveal a materialization switch.
 
-Only then may the agent resume MAT-004 and the remaining materialization
+Only then may the engineer authorize resuming MAT-004 and the remaining materialization
 breadth. Until then, correctness of this foundation outranks feature count.

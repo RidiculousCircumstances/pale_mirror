@@ -472,7 +472,7 @@ class RouteMaintenanceProcessTest {
             assembled = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(assembled, FrontierRouteNetwork.OWNER,
                     new RouteMaintenanceAssemblyAdvanced(maintenance.id(), current.advance(advancing)));
         }
-        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(assembled).orElseThrow();
+        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.candidates(assembled).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-hot-worksite");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,
@@ -512,7 +512,7 @@ class RouteMaintenanceProcessTest {
             assembled = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(assembled, FrontierRouteNetwork.OWNER,
                     new RouteMaintenanceAssemblyAdvanced(maintenance.id(), current.advance(current.nextSafeAdvance().orElseThrow())));
         }
-        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(assembled).orElseThrow();
+        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.candidates(assembled).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:maintenance-conflict-drain");
         SceneLease lease = SceneLease.forCause(leaseId, world, new EngineeringWorkSceneCause(candidate.projectId(), candidate.workCellIndex()),
                 candidate.workCell(), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED,

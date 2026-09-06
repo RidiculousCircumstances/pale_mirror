@@ -25,6 +25,13 @@ tasks.withType(Test).configureEach {
     }
 }
 
+tasks.register('frontierV3WalTailDiagnostic', JavaExec) {
+    group = 'verification'
+    description = 'Prints at most sixteen decoded records from a retained Frontier v3 disposable WAL tail.'
+    classpath = sourceSets.testFixtures.runtimeClasspath
+    mainClass = 'io.farfrontier.palemirror.frontier.v3.persistence.FrontierV3WalTailDiagnostic'
+}
+
 tasks.register('wave1Benchmark', Test) {
     group = 'verification'
     description = 'Runs the reproducible Frontier v3 Wave 1 kernel benchmark fixture.'

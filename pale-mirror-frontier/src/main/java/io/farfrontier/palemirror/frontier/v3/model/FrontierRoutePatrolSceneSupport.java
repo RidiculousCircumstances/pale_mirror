@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,10 +20,11 @@ import java.util.Set;
 public final class FrontierRoutePatrolSceneSupport {
     private FrontierRoutePatrolSceneSupport() { }
 
-    public static Optional<Candidate> nextCandidate(FrontierWorldState state) {
+    /** Stable canonical inventory; loaded demand cannot select or hide a patrol. */
+    public static List<Candidate> candidates(FrontierWorldState state) {
         return state.strategicPlans().routePatrols().values().stream()
                 .sorted(java.util.Comparator.comparing(RoutePatrol::taskId))
-                .map(patrol -> candidate(state, patrol)).flatMap(Optional::stream).findFirst();
+                .map(patrol -> candidate(state, patrol)).flatMap(Optional::stream).toList();
     }
 
     public static Optional<Candidate> candidate(FrontierWorldState state, RoutePatrol patrol) {

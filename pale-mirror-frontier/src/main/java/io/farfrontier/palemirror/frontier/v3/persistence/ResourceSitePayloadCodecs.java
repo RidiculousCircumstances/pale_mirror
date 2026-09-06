@@ -75,18 +75,41 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
-    static PayloadCodec harvestTraversalAdvanced() {
+    static PayloadCodec harvestColdTraversalAdvanced() {
         return new PayloadCodec() {
-            @Override public String type() { return "frontier.resource_site_harvest_traversal_advanced"; }
+            @Override public String type() { return "frontier.resource_site_harvest_cold_traversal_advanced"; }
             @Override public byte[] encode(FrontierPayload payload) {
-                ResourceSiteHarvestTraversalAdvanced advanced = (ResourceSiteHarvestTraversalAdvanced) payload;
+                ResourceSiteHarvestColdTraversalAdvanced advanced = (ResourceSiteHarvestColdTraversalAdvanced) payload;
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-                    FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId()); output.writeShort(advanced.nextCursor());
+                    FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId());
+                    FrontierWorldPayloadCodecs.writeSubject(output, advanced.workerId());
+                    output.writeShort(advanced.nextCursor());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
-                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestTraversalAdvanced(
-                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort()));
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestColdTraversalAdvanced(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort()));
+            }
+        };
+    }
+    static PayloadCodec harvestHotTraversalAdvanced() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_harvest_hot_traversal_advanced"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceSiteHarvestHotTraversalAdvanced advanced = (ResourceSiteHarvestHotTraversalAdvanced) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId());
+                    FrontierWorldPayloadCodecs.writeString(output, advanced.leaseId().value());
+                    FrontierWorldPayloadCodecs.writeSubject(output, advanced.workerId());
+                    FrontierWorldPayloadCodecs.writeBody(output, advanced.observedWorker());
+                    output.writeShort(advanced.nextCursor());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestHotTraversalAdvanced(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)),
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readBody(input), input.readUnsignedShort()));
             }
         };
     }

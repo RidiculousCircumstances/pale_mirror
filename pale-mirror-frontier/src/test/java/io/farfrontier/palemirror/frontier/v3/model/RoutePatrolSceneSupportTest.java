@@ -21,7 +21,7 @@ class RoutePatrolSceneSupportTest {
     @Test
     void observedArrivalAdvancesOnlyOneRetainedMemberAndLeaseFormation() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-scene"));
-        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-test");
         var world = state.bootstrap().worldId();
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
@@ -46,7 +46,7 @@ class RoutePatrolSceneSupportTest {
     @Test
     void forgedOrSkippedArrivalDoesNotAdvancePatrolOrLease() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-scene-negative"));
-        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-test-negative");
         var world = state.bootstrap().worldId();
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
@@ -78,7 +78,7 @@ class RoutePatrolSceneSupportTest {
     @Test
     void ownedPatrolMemberDeathAtomicallyBlocksTheSameTask() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-death"));
-        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-death");
         var world = state.bootstrap().worldId();
         SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),

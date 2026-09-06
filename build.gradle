@@ -39,6 +39,17 @@ subprojects {
             options.encoding = 'UTF-8'
             options.release = 21
         }
+
+        // The external F0.V verification runner supplies one opaque, validated nonce for a
+        // declared T1 command.  It makes that Test task execute rather than letting Gradle's
+        // generic up-to-date shortcut stand in for its terminal assertion.  Normal developer
+        // tests retain Gradle's ordinary incremental behaviour when no runner nonce exists.
+        def frontierV3VerificationExecutionNonce = providers.environmentVariable('FRONTIER_V3_VERIFICATION_EXECUTION_NONCE')
+        tasks.withType(Test).configureEach {
+            if (frontierV3VerificationExecutionNonce.isPresent()) {
+                inputs.property('frontierV3VerificationExecutionNonce', frontierV3VerificationExecutionNonce)
+            }
+        }
     }
 }
 

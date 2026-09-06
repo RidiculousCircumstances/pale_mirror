@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 
 import java.util.Objects;
-
 /** Server-owned adapter which turns the pure engine's write-ahead boundary into a v3 WAL append. */
 final class FrontierStoreTransactionCommitter implements TransactionCommitter {
     private final FrontierStore store;

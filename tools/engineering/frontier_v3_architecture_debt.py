@@ -19,8 +19,14 @@ STATE_CONSTRUCTOR = re.compile(r"new\s+FrontierWorldState\s*\(")
 ENUM_POSITION_TAG = re.compile(r"\.ordinal\s*\(\)|\.values\s*\(\)\s*\[")
 WIRE_TAG_POSITION_DERIVATION = re.compile(r"\bvalues\s*\[|\bvalues\s*\.\s*length\b")
 SCENE_CAUSE_BRANCH = re.compile(
-    r"instanceof\s+(?:[\w.]+\.)?(?:LogisticsSceneCause|SettlementAssaultSceneCause)\b"
+    r"instanceof\s+(?:[\w.]+\.)?(?:Logistics|SettlementAssault|EngineeringWorksite|MedicalTreatment|ProductionWork|SettlementServiceWork|ResourceSiteHarvest|RoutePatrol)SceneCause\b"
 )
+# A direct concrete-cause predicate in production code is a recurrence of the
+# generic-scene leak.  Registered behavior dispatch uses the closed registry;
+# codecs and read-only diagnostics use typed data without a production branch.
+# Keep this separately from the legacy instanceof inventory because the former
+# generic harvest violation was an `isResourceSiteHarvest(...)` call.
+SCENE_CAUSE_PREDICATE = re.compile(r"FrontierSceneBehaviors\.is[A-Z]\w*\s*\(")
 SCHEDULED_STRING_CASE = re.compile(r'case\s+"frontier\.[^"]+"\s*->')
 COMMAND_PAYLOAD_TYPE_TEST = re.compile(r"command\.payload\(\)\s+instanceof")
 RUNTIME_REDUCER_CASE = re.compile(r"^\s*case\s+\w+", re.MULTILINE)
@@ -48,6 +54,12 @@ SERVER_LIFECYCLE = NEOFORGE_MAIN / "FrontierV3ServerLifecycle.java"
 ENGINE_LIMITS = FRONTIER_MAIN / "kernel/EngineLimits.java"
 ENGINE = FRONTIER_MAIN / "kernel/InMemoryFrontierEngine.java"
 SCHEDULE_QUEUE = FRONTIER_MAIN / "kernel/ScheduledActionQueue.java"
+GENERIC_SCENE_PREDICATE_SOURCES = (
+    FRONTIER_MAIN / "model/FrontierSceneAdmission.java",
+    FRONTIER_MAIN / "model/FrontierSceneOwnerSupport.java",
+    NEOFORGE_MAIN / "FrontierV3SceneExecutor.java",
+    NEOFORGE_MAIN / "FrontierV3SceneReadiness.java",
+)
 FORCED_CHUNK_LOAD = re.compile(r"\.getChunkAt\s*\(")
 MODEL_FORBIDDEN_IMPORT = re.compile(
     r"^\s*import\s+io\.farfrontier\.palemirror\.frontier\.v3\.(?:process|persistence|runtime)\.",
@@ -63,6 +75,25 @@ PROCESS_UNHASHED_TUNING = re.compile(
 # a replica record plus epoch-fenced custody lease.  New production uses are a
 # regression even when their immediate caller happens to be a NeoForge adapter.
 HISTORICAL_SURFACE_ACTIVE = re.compile(r"\bContainerSurfaceStatus\.ACTIVE\b")
+# F0.V.1a: a scene executor may consume the one immutable aggregate demand input,
+# but may not add its own player scan.  Separate scans were the source of local
+# radius/spectator-policy drift and make two observers look like two independent
+# scene authorities.  FrontierV3SceneDemand is the sole read-only owner.
+SCENE_EXECUTOR_RAW_PLAYER_SCAN = re.compile(r"\b\w+\.players\(\)\.stream\s*\(")
+# A physical executor must evaluate its complete canonical inventory through the
+# shared demand selector.  Taking `nextCandidate` first makes an unloaded early
+# candidate head-of-line block every later naturally demanded process family.
+SCENE_EXECUTOR_GLOBAL_FIRST_CANDIDATE = re.compile(
+    r"\bFrontier\w+SceneSupport\.nextCandidate\s*\("
+)
+# Every command payload which carries a scene lease crosses the generic
+# Process/Scene SDK admission fence.  Naming the Java record is not enough:
+# without this marker a new payload could be handled by a model reducer while
+# bypassing the closed family/budget registry in the process layer.
+SCENE_LEASE_PAYLOAD = re.compile(
+    r"\b(?:public\s+)?record\s+\w*SceneLease(?:Prepared|Handoff)\b"
+)
+SCENE_LEASE_ADMISSION = re.compile(r"\bimplements\b[^\{]*\bSceneLeaseAdmission\b")
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -89,6 +120,15 @@ def _java_files(root: Path, relative: Path) -> list[Path]:
     if not path.is_dir():
         raise DebtError(f"required source root is missing: {relative}")
     return sorted(path.rglob("*.java"))
+
+
+def _scene_executor_files(root: Path) -> list[Path]:
+    source = root / NEOFORGE_MAIN
+    if not source.is_dir():
+        raise DebtError(f"required source root is missing: {NEOFORGE_MAIN}")
+    files = set(source.glob("FrontierV3*SceneExecutor.java"))
+    files.add(source / "FrontierV3AmbientActorExecutor.java")
+    return sorted(path for path in files if path.is_file())
 
 
 def _counts(
@@ -130,6 +170,17 @@ def collect(root: Path) -> dict[str, Any]:
         for path, count in scene_branches.items()
         if not Path(path).name.endswith("GameTests.java")
     }
+    # Registered behavior implementations legitimately discriminate their own
+    # sealed cause.  Generic admission/lifecycle/readiness infrastructure may
+    # not grow a cause-specific policy branch; this is where the former
+    # `isResourceSiteHarvest` materialization leak lived.  Count these exact
+    # shared boundaries rather than all type assertions throughout domain
+    # behavior code, which would make the guard both noisy and bypassable.
+    scene_predicates = {}
+    for source in GENERIC_SCENE_PREDICATE_SOURCES:
+        count = len(SCENE_CAUSE_PREDICATE.findall(_text(root, source)))
+        if count:
+            scene_predicates[source.as_posix()] = count
     runtime = _text(root, RUNTIME_DEFINITION)
     command_planner = _text(root, COMMAND_PLANNER)
     event_reducer = _text(root, EVENT_REDUCER)
@@ -165,6 +216,21 @@ def collect(root: Path) -> dict[str, Any]:
             count = len(FORCED_CHUNK_LOAD.findall(path.read_text(encoding="utf-8")))
             if count:
                 forced_chunk_loads[path.relative_to(root).as_posix()] = count
+    scene_executor_raw_player_scans: dict[str, int] = {}
+    scene_executor_global_first_candidates: dict[str, int] = {}
+    for path in _scene_executor_files(root):
+        source = path.read_text(encoding="utf-8")
+        count = len(SCENE_EXECUTOR_RAW_PLAYER_SCAN.findall(source))
+        if count:
+            scene_executor_raw_player_scans[path.relative_to(root).as_posix()] = count
+        count = len(SCENE_EXECUTOR_GLOBAL_FIRST_CANDIDATE.findall(source))
+        if count:
+            scene_executor_global_first_candidates[path.relative_to(root).as_posix()] = count
+    unfenced_scene_lease_admission_payloads: dict[str, int] = {}
+    for path in _java_files(root, FRONTIER_MAIN / "model"):
+        source = path.read_text(encoding="utf-8")
+        if SCENE_LEASE_PAYLOAD.search(source) and not SCENE_LEASE_ADMISSION.search(source):
+            unfenced_scene_lease_admission_payloads[path.relative_to(root).as_posix()] = 1
     return {
         "hotspot_lines": {},
         "manual_executor_ticks": len(MANUAL_EXECUTOR_TICK.findall(lifecycle)),
@@ -195,7 +261,11 @@ def collect(root: Path) -> dict[str, Any]:
         "persisted_enum_position_tags": enum_tags,
         "wire_tag_position_derivations": wire_tag_position_derivations,
         "scene_cause_type_branches": scene_branches,
+        "forbidden_scene_cause_predicates": scene_predicates,
         "v3_gametest_forced_chunk_loads": forced_chunk_loads,
+        "scene_executor_raw_player_scans": scene_executor_raw_player_scans,
+        "scene_executor_global_first_candidates": scene_executor_global_first_candidates,
+        "unfenced_scene_lease_admission_payloads": unfenced_scene_lease_admission_payloads,
         "model_forbidden_package_dependencies": model_forbidden_dependencies,
         "unbounded_scheduled_queue_paths": unbounded_scheduled_queue_paths,
     }
@@ -314,6 +384,11 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         policy.get("historical_surface_active_references"),
         "historical_surface_active_references",
     )
+    _validate_counted_files(
+        metrics["forbidden_scene_cause_predicates"],
+        policy.get("forbidden_scene_cause_predicates"),
+        "forbidden_scene_cause_predicates",
+    )
 
     fixture_configuration_limit = _positive_int(
         policy.get("max_production_development_configurations"),
@@ -357,6 +432,9 @@ def validate(root: Path, policy_document: Any, actual: dict[str, Any] | None = N
         "wire_tag_position_derivations",
         "scene_cause_type_branches",
         "v3_gametest_forced_chunk_loads",
+        "scene_executor_raw_player_scans",
+        "scene_executor_global_first_candidates",
+        "unfenced_scene_lease_admission_payloads",
         "model_forbidden_package_dependencies",
         "unbounded_scheduled_queue_paths",
     ):

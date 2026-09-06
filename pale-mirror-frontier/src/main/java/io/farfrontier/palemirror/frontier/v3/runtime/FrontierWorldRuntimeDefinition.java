@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRuleset;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldCommandPlanner;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldEventReducer;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldProcessCodecs;
@@ -32,6 +33,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateTransitionValidator;
 import java.util.List;
+import java.util.Set;
 /** Pure composition root for the fresh 1024x1024 Frontier v3 profile. */
 public final class FrontierWorldRuntimeDefinition {
     public static final SubjectId PHYSICAL_EXECUTOR = FrontierExecutionSubjects.PHYSICAL_EXECUTOR;
@@ -41,11 +43,9 @@ public final class FrontierWorldRuntimeDefinition {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
         return configuration(worldId, seed, FrontierRulesets.production(), true);
     }
-    /** Explicit ruleset entry point used by new-world creation and test-only declared overrides. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, FrontierRuleset ruleset) {
         return configuration(worldId, seed, ruleset, true);
     }
-    /** Shared internal composition used by the test-fixture catalog without creating a second runtime. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
         return configuration(worldId, seed, FrontierRulesets.production(), autonomousInterception);
     }
@@ -57,8 +57,12 @@ public final class FrontierWorldRuntimeDefinition {
                 new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static DeterministicProcessRegistry processRegistry() {
-        return new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), PAYLOAD_CODECS,
+        List<io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor> descriptors = FrontierWorldProcessCatalog.descriptors();
+        DeterministicProcessRegistry registry = new DeterministicProcessRegistry(descriptors, PAYLOAD_CODECS,
                 FrontierWorldProcessCodecs.typesByProcess());
+        FrontierDurationProcessDriverRegistry.requireCurrentComposition(descriptors, FrontierWorldProcessCatalog.scheduledKinds(),
+                Set.of(io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.values()), PAYLOAD_CODECS.types());
+        return registry;
     }
     public static CommandPlan planCommand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
         return FrontierWorldCommandPlanner.plan(state, command, PROCESS_REGISTRY, PHYSICAL_EXECUTOR);

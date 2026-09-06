@@ -78,6 +78,29 @@ implementation; release verification follows it.
 
 ## Sources of truth
 
+### Managed engineer / executor workflow
+
+- `docs/engineering-agent-protocol.md` is the accepted delivery protocol.
+  The supervising engineer owns specifications, normative docs, the ledger
+  and independent acceptance; it must not edit source, tests, scripts, build/CI
+  or executable configuration. Only the assigned `gpt-5.6-terra` executor with
+  reasoning `high` writes implementation within an approved work order.
+- Read the ledger's active order under `docs/work-orders/` before working.
+  A READ_ONLY assignment grants no writes or test launches. The executor
+  reports proposed ledger updates rather than editing the engineer's ledger.
+- Explicit engineer acceptance is required before the next order or F0 slice.
+  Preserve existing WIP and obtain previous-writer handoff before granting a
+  new writer; finish identity-bound measurements before changing their inputs.
+- Delegate bounded engineering outcomes: Terra owns diagnosis, local design,
+  helper/file choices and focused test iterations inside the approved boundary.
+  Expected files are guidance unless a specific safety constraint says otherwise.
+  Engineer reviews stable milestones and invariants, not every local choice;
+  do not routinely duplicate the executor's investigation or full test runs.
+  Public/persistent meaning, owner boundaries, requirements and external or
+  destructive authority still require explicit agreement.
+
+### Canonical sources
+
 - `architecture.yml` owns component boundaries, ownership, invariants, and
   critical flows.
 - `CONTINUITY.md` owns the current engineering state.
@@ -151,6 +174,17 @@ never add an ad-hoc HUD toggle to a scenario.
   large offset, and prove the affected full GameTest gate once.
 
 ## Frontier v3 materialization completeness discipline
+
+- `docs/frontier-v3-execution-semantics.md` is mandatory for HOT/COLD, scenes,
+  physical custody, movement knowledge, aftermath and recovery changes. It
+  defines exact versus calibrated guarantees and augments the existing F0 exit
+  gates. At the next safe F0.VA measurement boundary, align outstanding family
+  descriptors/tests before starting the next slice; preserve running evidence
+  and WIP. Documentation acceptance is not implementation completion.
+- Presentation demand is not physical interaction eligibility. No COLD writer
+  may compete with an observer-free live physical custodian. Unknown terrain
+  is not exact knowledge; scene boundaries do not shield effects; a flushed WAL
+  intent is not proof of an atomically saved player/container consequence.
 
 - Before extending a v3 process, scene, inventory surface, physical effect or
   movement family, read `docs/frontier-v3-seamless-foundation.md`. Its active

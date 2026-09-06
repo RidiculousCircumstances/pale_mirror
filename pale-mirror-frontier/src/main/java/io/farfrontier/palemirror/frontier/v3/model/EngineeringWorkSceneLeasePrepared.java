@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.Objects;
 
 /** Durable-before-effect preparation of the exact engineering work-site scene. */
-public record EngineeringWorkSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
+public record EngineeringWorkSceneLeasePrepared(SceneLease lease) implements FrontierPayload, SceneLeaseAdmission {
     public EngineeringWorkSceneLeasePrepared {
         Objects.requireNonNull(lease, "engineering scene lease");
         if (!FrontierSceneBehaviors.isEngineeringWorksite(lease)) {

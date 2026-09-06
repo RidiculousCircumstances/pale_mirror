@@ -99,7 +99,9 @@ public final class FrontierSceneBehaviors {
     public static boolean isRoutePatrol(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.ROUTE_PATROL; }
     public static boolean owns(SceneLease lease, SubjectId subjectId) { return behavior(lease).owns(lease, subjectId); }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
-    public static void validatePrepared(FrontierWorldState state, SceneLease lease) { behavior(lease).validatePrepared(state, lease); }
+    public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
+        behavior(lease).validatePrepared(state, lease);
+    }
     static Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                           Map<SubjectId, StructureCondition> structures, Map<SubjectId, RouteOperation> operations,
                                           Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
@@ -509,9 +511,19 @@ public final class FrontierSceneBehaviors {
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
-        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) { return observed; }
+        @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
+            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
+            if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("resource-site scene release has a foreign worker");
+            // Minecraft may unload while the Villager is between two retained surfaces.  The
+            // field-job cursor, not that transient sub-cell body, is the sole COLD/HOT hand-off
+            // authority; otherwise the next naturally loaded admission rejects its own worker
+            // as off-corridor and the visible harvest can never resume.
+            return job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+        }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
-            return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
+            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
+            return new SceneReleasePlan(owner(state, lease), released,
+                    new SceneContinuation.ResumeResourceSiteHarvest(job.id(), Math.addExact(submittedAt, 1L)));
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());

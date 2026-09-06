@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCropPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTraversalAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTraversalAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
@@ -34,8 +34,6 @@ import java.util.Set;
 
 /** Naturally loaded field work by the exact farmer retained by the harvest job. */
 final class FrontierV3ResourceSiteHarvestSceneExecutor {
-    private static final double READY_DISTANCE_SQUARED = 2.25D;
-
     private FrontierV3ResourceSiteHarvestSceneExecutor() { }
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -45,8 +43,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierResourceSiteHarvestSceneSupport.nextCandidate(state)
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.cropSlot()));
+        Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+                level, FrontierResourceSiteHarvestSceneSupport.candidates(state), FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot);
         if (candidate.isEmpty()) return false;
         FrontierResourceSiteHarvestSceneSupport.Candidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);
@@ -72,6 +70,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
@@ -135,13 +134,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return;
         }
         io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop = site.cropSlots().get(job.progress().nextCropSlotIndex());
-        boolean demand = FrontierV3SceneExecutor.demandExists(level, crop);
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, crop);
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
                 FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) {
             submit(runtime, "resource-site-harvest-scene-draining", lease.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
-        if (!demand) return;
+        if (!demand.active()) return;
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
@@ -154,13 +153,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 // position remains a player/world conflict and is never direct-line repaired.
                 if (atTraversalSurface(worker, target)) {
                     submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                            new ResourceSiteHarvestTraversalAdvanced(job.id(), job.traversalCursor() + 1));
+                            checkpoint(job, lease, worker));
                 } else conflict(level, runtime, lease, "field-work-cursor-body-mismatch");
                 return;
             }
             if (atTraversalSurface(worker, target)) {
                 submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                        new ResourceSiteHarvestTraversalAdvanced(job.id(), job.traversalCursor() + 1));
+                        checkpoint(job, lease, worker));
             } else {
                 moveToTraversalSurface(level, worker, target);
             }
@@ -189,8 +188,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     }
 
     private static boolean atTraversalSurface(Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        Vec3 target = new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D);
-        return worker.distanceToSqr(target) <= READY_DISTANCE_SQUARED;
+        // HOT causality is a grid checkpoint, not a near-enough movement hint.  The local
+        // navigator may approach continuously, but only the observed feet cell exactly above
+        // the retained support can advance the canonical cursor.
+        return worker.getBlockX() == surface.x() && worker.getBlockY() == surface.y() + 1 && worker.getBlockZ() == surface.z();
     }
 
     private static void moveToTraversalSurface(ServerLevel level, Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
@@ -198,10 +199,34 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D));
     }
 
+    /** Emits the complete observed causal checkpoint; the reducer rejects any stale or foreign tuple. */
+    private static ResourceSiteHarvestHotTraversalAdvanced checkpoint(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
+                                                                       SceneLease lease, Mob worker) {
+        return new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(),
+                new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()),
+                job.traversalCursor() + 1);
+    }
+
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_conflict:" + reason, lease,
                 submit(runtime, "resource-site-harvest-scene-conflict", lease.id().value(),
                         new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
+    }
+
+    /**
+     * Registered behavior policy for the whole retained field-work topology.
+     *
+     * <p>The approach corridor still consists mostly of ordinary floor columns.  At its field
+     * stations alone, a mature crop may occupy the exact feet cell.  Treating this as a
+     * crop-only provider would strand a newly prepared farmer before the first field station;
+     * treating it as a generic provider would silently admit crop feet.  The registered harvest
+     * policy therefore composes the two explicit physical predicates without asking generic
+     * materialization code to know the process cause.</p>
+     */
+    static BlockPos harvestStandingPosition(ServerLevel level, BlockPos floor) {
+        BlockPos ordinary = FrontierV3StandingPosition.aboveExactFloor(level, new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(
+                floor.getX(), floor.getY(), floor.getZ()));
+        return ordinary != null ? ordinary : FrontierV3StandingPosition.aboveExactHarvestFieldFloor(level, floor);
     }
 
     /** Reconciles exactly the durable pending crop. A crash after AIR is recoverable by this postcondition. */

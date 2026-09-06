@@ -64,7 +64,7 @@ public final class FrontierV3ProductionWorkGameTests {
             ProductionJob initialJob = initial.productionJobs().get(new SubjectId("job:production-development-input-theft"));
             helper.assertTrue(initialJob != null, "the fixture must retain one exact materialized production job");
             SubjectId jobId = initialJob.id();
-            FrontierProductionWorkSceneSupport.Candidate candidate = FrontierProductionWorkSceneSupport.nextCandidate(initial).orElseThrow();
+            FrontierProductionWorkSceneSupport.Candidate candidate = FrontierProductionWorkSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
             SceneLeaseId leaseId = new SceneLeaseId("lease:production-work-game-test-" + suffix);
             SceneMember member = new SceneMember(initialJob.workerId(), SceneLease.deterministicEntityId(world, initialJob.workerId()));
             SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(initialJob.id()), candidate.handoffPosition(),

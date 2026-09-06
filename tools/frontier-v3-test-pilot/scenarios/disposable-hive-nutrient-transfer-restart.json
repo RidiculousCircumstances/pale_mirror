@@ -16,7 +16,7 @@
   "actions": [
     { "type": "wait_until_diagnostic", "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "IN_TRANSIT", "sourceStore": "container:hive-east-store", "targetStore": "container:hive-west-store" }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "intent", "id": "intent:hive-nutrient-departure-task-development-hive-nutrient-transfer" },
-    { "type": "fast_forward", "ticks": 2400 },
+    { "type": "fast_forward", "ticks": 2400, "timeoutMs": 180000 },
     { "type": "wait_until_diagnostic", "view": "hive_transfer", "id": "transfer:hive-nutrient-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "phase": "ARRIVAL_PENDING", "cursor": 105, "targetStore": "container:hive-west-store" }, "timeoutMs": 120000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -390, "y": 65, "z": 445 }, "settleMs": 1500 },
     { "type": "wait_until_diagnostic", "view": "intent", "id": "intent:hive-nutrient-arrival-task-development-hive-nutrient-transfer", "expect": { "status": "ok", "intentKind": "HIVE_NUTRIENT_ARRIVAL", "intentStatus": "CONFIRMED" }, "timeoutMs": 60000 },

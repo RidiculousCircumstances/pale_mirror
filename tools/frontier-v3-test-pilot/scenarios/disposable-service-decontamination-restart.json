@@ -14,7 +14,7 @@
   ],
   "actions": [
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:9-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 30000 },
-    { "type": "fast_forward", "ticks": 1000 },
+    { "type": "fast_forward", "ticks": 1000, "timeoutMs": 180000 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "service:decontamination-1", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_SERVICE_WORK", "leaseStatus": "HOT", "serviceWork": "service:decontamination-1" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "service-work:service:decontamination-1", "expect": { "status": "ok", "eventKind": "settlement_service_work_hot", "subject": "service:decontamination-1" }, "timeoutMs": 30000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -344, "y": 65, "z": 319 }, "settleMs": 1000 },

@@ -2,8 +2,21 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
+import { CRASH_BOUNDARIES } from './crash-controller.mjs';
 
 const SCHEMA = 1;
+const MAX_FAST_FORWARD_TIMEOUT_MS = 180_000;
+// One hour is an explicit fail-closed ceiling for a declared full recovery scenario. It covers
+// the longest checked-in route-repair proof (3.1m) without truncating any of its action bounds.
+const MAX_SCENARIO_WALL_BUDGET_MS = 3_600_000;
+const SCENARIO_STARTUP_FLOOR_MS = 120_000;
+const SCENARIO_TERMINAL_GRACE_MS = 30_000;
+const SCENARIO_FRAME_CAPTURE_BUDGET_MS = 30_000;
+// These are client-side protocol bounds, not coordination sleeps. They mirror the
+// pilot's existing bounds so an outer watchdog cannot consume a later declared
+// action window while an earlier action is still legitimately pending.
+const VISIT_TIMEOUT_MS = 120_000;
+const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
 const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
@@ -42,12 +55,29 @@ export function pilotServerPid(output, runId) {
   return match === null ? undefined : Number(match[1]);
 }
 
+/** Parses only the exact durable crash rendezvous emitted by one disposable server nonce. */
+export function pilotCrashBoundary(output, runId) {
+  const expression = new RegExp(`PMV3_CRASH_BOUNDARY runId=${escapeRegExp(runId)} boundary=([^\\s]+) owner=([^\\s]+) revision=([0-9]+) payload=([^\\s]+)`);
+  const match = expression.exec(output);
+  return match === null ? undefined : Object.freeze({ runId, boundary: match[1], owner: match[2], revision: Number(match[3]), payloadType: match[4] });
+}
+
 /**
  * A disposable server is usable only after its own exact JVM marker is visible.
  * `Done` plus the generic v3 startup line can arrive one stdout chunk earlier.
  */
 export function pilotServerReady(output, runId) {
   return output.includes('Done') && output.includes('Frontier v3') && Number.isInteger(pilotServerPid(output, runId));
+}
+
+/**
+ * Startup quarantine is a terminal canonical condition, not an absence of output to wait out.
+ * Keep the diagnostic narrow so normal warnings and a stale unrelated log line cannot abort the
+ * nonce-owned server lifecycle.
+ */
+export function pilotServerQuarantineFailure(output) {
+  const match = /Frontier v3 development runtime quarantined(?: at startup)?: ([^\r\n]+)/.exec(output);
+  return match === null ? undefined : match[1];
 }
 
 export async function loadScenario(path) {
@@ -84,13 +114,21 @@ export function validateScenario(scenario) {
       || (scenario.restart.resumeSetup !== undefined && !Array.isArray(scenario.restart.resumeSetup)))) {
     throw new Error('restart needs mode graceful|abrupt and afterAction strictly inside the evidence action range');
   }
+  if (scenario.crash !== undefined && (!scenario.crash || scenario.restart?.mode !== 'abrupt'
+      || !['before_restart', 'after_restart'].includes(scenario.crash.phase)
+      || !CRASH_BOUNDARIES.has(scenario.crash.boundary) || !stableToken(scenario.crash.owner)
+      || !stableToken(scenario.crash.payloadType) || !validCrashRevision(scenario.crash.expectedRevision)
+      || (scenario.crash.expectedAuthorityEpoch !== undefined && (!Number.isSafeInteger(scenario.crash.expectedAuthorityEpoch)
+        || scenario.crash.expectedAuthorityEpoch < 0)))) {
+    throw new Error('crash needs an abrupt restart plus one exact phase/boundary/owner/revision/payload');
+  }
   for (const [phase, allowed] of [['setup', SETUP_ACTIONS], ['actions', EVIDENCE_ACTIONS]]) {
     const actions = scenario[phase] ?? [];
     if (!Array.isArray(actions)) throw new Error(`scenario ${phase} must be an array`);
     for (const action of actions) {
       if (!action || !allowed.has(action.type)) throw new Error(`unsupported ${phase} action: ${action?.type}`);
       if (action.type === 'command' && !String(action.command).startsWith('/')) throw new Error('setup command must start with /');
-      if (action.type === 'visit' && (!validDimension(action.dimension) || !validPosition(action.position)
+      if (action.type === 'visit' && (!validDimension(action.dimension) || !validResolvablePosition(action.position)
           || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000)) {
         throw new Error('visit needs a namespaced dimension, block position and settleMs 0..120000');
       }
@@ -110,7 +148,8 @@ export function validateScenario(scenario) {
           || action.checks.some((check) => !validDiagnosticIdentity(check) || !check.expect || typeof check.expect !== 'object' || Array.isArray(check.expect)))) {
         throw new Error('assert_fixture needs 1..16 read-only diagnostic checks and timeoutMs 0..120000');
       }
-      if (['walk', 'break'].includes(action.type)) validatePosition(action.position ?? action.at);
+      if (action.type === 'walk') validatePosition(action.position ?? action.at);
+      if (action.type === 'break' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'place' && !validPlacePosition(action.position)) validatePosition(action.position);
       if (action.type === 'open_container' && !validResolvablePosition(action.position)) validatePosition(action.position);
       if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
@@ -180,8 +219,9 @@ export function validateScenario(scenario) {
         throw new Error('wait_until_block needs block and timeoutMs 0..120000');
       }
       if (action.type === 'inspect' && !validDiagnosticIdentity(action)) throw new Error('inspect needs a read-only v3 view and id');
-      if (action.type === 'fast_forward' && (!Number.isInteger(action.ticks) || action.ticks < 1 || action.ticks > 24_000)) {
-        throw new Error('fast_forward needs ticks 1..24000');
+      if (action.type === 'fast_forward' && (!Number.isInteger(action.ticks) || action.ticks < 1 || action.ticks > 24_000
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 1 || action.timeoutMs > MAX_FAST_FORWARD_TIMEOUT_MS)) {
+        throw new Error(`fast_forward needs ticks 1..24000 and timeoutMs 1..${MAX_FAST_FORWARD_TIMEOUT_MS}`);
       }
       if (action.type === 'wait_until_diagnostic' && (!validDiagnosticIdentity(action) || !action.expect || typeof action.expect !== 'object'
           || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
@@ -199,7 +239,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
+        || !['summary', 'performance', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (!['summary', 'performance'].includes(assertion.view) && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -224,6 +264,32 @@ export function validateScenario(scenario) {
       validateScenario({ ...scenario, restart: undefined, setup: [action] });
     }
   }
+  scenarioDeadlineMs(scenario);
+}
+
+/**
+ * Gives every declared action its complete bounded wall-time window. This is deliberately
+ * not a best-effort performance cap: an aggregate that exceeds the runner's safe bound is
+ * rejected during composition, rather than silently shortening an action's own timeout.
+ */
+export function scenarioDeadlineMs(scenario) {
+  const actions = [...(scenario.setup ?? []), ...(scenario.actions ?? [])];
+  const actionBudget = actions.reduce((total, action) => total + actionBudgetMs(action), 0);
+  const captureBudget = (scenario.frames ?? []).length * SCENARIO_FRAME_CAPTURE_BUDGET_MS;
+  const requested = actionBudget + captureBudget + SCENARIO_TERMINAL_GRACE_MS;
+  if (!Number.isSafeInteger(requested) || requested > MAX_SCENARIO_WALL_BUDGET_MS) {
+    throw new Error(`scenario declared wall-time budget exceeds ${MAX_SCENARIO_WALL_BUDGET_MS}ms`);
+  }
+  return Math.max(SCENARIO_STARTUP_FLOOR_MS, requested);
+}
+
+function actionBudgetMs(action) {
+  if (action.type === 'wait') return action.ms;
+  if (action.type === 'fast_forward') return action.timeoutMs;
+  if (Number.isInteger(action.timeoutMs)) return action.timeoutMs;
+  if (action.type === 'visit') return VISIT_TIMEOUT_MS;
+  if (action.type === 'inspect') return INSPECT_TIMEOUT_MS;
+  return 0;
 }
 
 function loadPilotProfiles(path) {
@@ -272,7 +338,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
+  return ['summary', 'performance', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance'].includes(value.view) || Boolean(value.id));
 }
 
@@ -293,10 +359,12 @@ function validPosition(value) {
 }
 
 /**
- * A materialization scenario may follow one immutable plan anchor published
- * by its exact named diagnostic. Scene references disclose only an immutable
- * retained current/next edge; a normal player packet may still place or break
- * there, which is evidence rather than test authority.
+ * A materialization scenario may follow one retained anchor published by its
+ * exact named diagnostic.  A process cursor is permitted only as an ordinary
+ * observer-travel target; it does not select a server entity or grant mutation
+ * authority. Scene references disclose only a retained current/next edge; a
+ * normal player packet may still place or break there, which is evidence rather
+ * than test authority.
  */
 function validResolvablePosition(value) {
   if (validPosition(value)) return true;
@@ -305,6 +373,7 @@ function validResolvablePosition(value) {
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
+      || (reference.view === 'process' && requiredId(reference.id, 'job:') && reference.field === 'cursor.retainedBody')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent'));
@@ -320,15 +389,34 @@ function validPlacePosition(value) {
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }
 
+function stableToken(value) { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$/.test(value); }
+
+// A process event owns the authoritative revision.  The test-only probe may publish that
+// revision only while it is parked at an otherwise exact run/boundary/owner/payload rendezvous.
+function validCrashRevision(value) {
+  return (Number.isSafeInteger(value) && value >= 0) || value === 'observed_at_boundary';
+}
+
 function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 export function correlation(runId, step) {
   return `scenario:${runId}:${step}`;
 }
 
-/** A native client receives command replies on later render/network ticks. */
+/**
+ * A native client receives command replies on later render/network ticks.
+ *
+ * An assertion belongs to its declared evidence action, rather than to a
+ * matching diagnostic which happened to arrive earlier. Otherwise a completed
+ * final inspection can race the runner: an old process response satisfies the
+ * coarse readiness predicate, then the terminal assertion correctly finds no
+ * response at its own action step. Callers outside a validated scenario retain
+ * the former kind/id-only behavior.
+ */
 export function hasDiagnosticResponses(diagnostics, assertions) {
-  return assertions.every((assertion) => diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
+  return assertions.every((assertion) => Number.isInteger(assertion.after)
+    ? diagnosticForAssertion(diagnostics, assertion) !== undefined
+    : diagnostics.some((entry) => entry.value?.kind === assertion.view && entry.value?.id === assertion.id));
 }
 
 /** A local pilot annotation is authoritative over the runner's interleaved stdout/stderr view. */
@@ -361,6 +449,13 @@ export function diagnosticFromPilotLine(line) {
   return null;
 }
 
+/** A pilot lifecycle failure is control-plane evidence, never harmless renderer noise. */
+export function pilotFailureFromLine(line) {
+  const marker = 'PMV3_PILOT_FATAL ';
+  const index = line.indexOf(marker);
+  return index < 0 ? null : line.slice(index + marker.length).trim() || 'unstructured fatal lifecycle error';
+}
+
 /** The exact run marker, not a stale byte count, bounds one server lifecycle's log. */
 export function logOffsetAfterMarker(output, marker) {
   const index = output.lastIndexOf(marker);
@@ -371,7 +466,7 @@ export function logOffsetAfterMarker(output, marker) {
 
 export function newManifest({ scenario, sha256, runId }) {
   return {
-    schema: 1,
+    schema: 2,
     scenarioId: scenario.id,
     scenarioSha256: sha256,
     runId,
@@ -381,7 +476,9 @@ export function newManifest({ scenario, sha256, runId }) {
     actions: [],
     diagnostics: [],
     frames: [],
-    trace: null
+    trace: null,
+    timing: null,
+    build: null
   };
 }
 

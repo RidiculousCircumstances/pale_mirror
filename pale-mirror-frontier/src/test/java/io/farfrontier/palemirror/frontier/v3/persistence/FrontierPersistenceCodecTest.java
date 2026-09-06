@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -44,5 +46,16 @@ class FrontierPersistenceCodecTest {
         encoded[4] = 32;
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(encoded));
         assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeSnapshot(new byte[] {0, 1, 2}));
+    }
+
+    @Test
+    void preHydrationHeaderConsumesTheCurrentDescriptorInventoryBeforeReadingWorldIdentity() {
+        WorldId world = new WorldId("frontier:header-recovery");
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        FrontierWorldSnapshotHeader header = FrontierWorldSnapshotHeader.read(new FrontierWorldStateCodec().encode(state));
+
+        assertEquals(world, header.worldId());
+        assertEquals(91L, header.seed());
+        assertEquals(state.bootstrap().ruleset(), header.ruleset());
     }
 }

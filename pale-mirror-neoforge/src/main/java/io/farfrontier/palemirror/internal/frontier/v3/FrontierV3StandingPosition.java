@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -54,7 +55,7 @@ final class FrontierV3StandingPosition {
         // A thin route or infection surface is physical geometry.  The retained support is
         // therefore the only legal floor: never climb a player obstruction or consult a
         // heightmap to invent a different world datum for the same canonical cursor.
-        return !level.getBlockState(anchor).isAir() && clearExactBodyCell(level, feet)
+        return hasPhysicalSupport(level, anchor) && clearExactBodyCell(level, feet)
                 && clearExactBodyCell(level, feet.above()) ? feet : null;
     }
 
@@ -77,8 +78,28 @@ final class FrontierV3StandingPosition {
     /** A retained movement cursor needs its exact physical support as well as two clear body cells. */
     static boolean hasExactStandingColumn(ServerLevel level, BlockPosition anchor) {
         BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(floor) && !level.getBlockState(floor).isAir()
+        return level.hasChunkAt(floor) && hasPhysicalSupport(level, floor)
                 && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
+    }
+
+    /**
+     * The one field-worker exception to ordinary exact standing columns. A canonical crop cell
+     * occupies the lower feet voxel above the retained farmland floor, but Vanilla actors may
+     * traverse it. This is not a generic obstruction bypass: only a registered harvest scene
+     * may request it, and the retained floor and head cell remain exact.
+     */
+    static BlockPos aboveExactHarvestFieldFloor(ServerLevel level, BlockPos anchor) {
+        if (!level.hasChunkAt(anchor)) return null;
+        BlockPos feet = anchor.above();
+        if (!level.hasChunkAt(feet)) return null;
+        return !level.getBlockState(anchor).isAir() && clearHarvestWorkerFeetCell(level, feet)
+                && clearExactBodyCell(level, feet.above()) ? feet : null;
+    }
+
+    static boolean hasExactHarvestFieldStandingColumn(ServerLevel level, BlockPosition anchor) {
+        BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
+        return level.hasChunkAt(floor) && !level.getBlockState(floor).isAir()
+                && clearHarvestWorkerFeetCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
     }
 
     /**
@@ -91,5 +112,15 @@ final class FrontierV3StandingPosition {
         if (level.getBlockState(position).isAir()) return true;
         VoxelShape collision = level.getBlockState(position).getCollisionShape(level, position);
         return !collision.isEmpty() && collision.max(Direction.Axis.Y) <= 0.125D;
+    }
+
+    /** A non-air decorative or pass-through block (notably a crop) is never a body support. */
+    private static boolean hasPhysicalSupport(ServerLevel level, BlockPos position) {
+        VoxelShape collision = level.getBlockState(position).getCollisionShape(level, position);
+        return !collision.isEmpty();
+    }
+
+    private static boolean clearHarvestWorkerFeetCell(ServerLevel level, BlockPos position) {
+        return clearExactBodyCell(level, position) || level.getBlockState(position).getBlock() instanceof CropBlock;
     }
 }

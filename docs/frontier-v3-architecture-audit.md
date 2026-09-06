@@ -16,6 +16,18 @@ the evidence recorded for earlier causality/recovery closures.
 
 ## Classification
 
+Accepted semantics follow-up (2026-09-05):
+`frontier-v3-execution-semantics.md` refines the exits for V3-AUD-043 through
+V3-AUD-051 and F0.V/F0.1–F0.6. This is a requirements amendment, not a new code
+audit or evidence of closure. At the next safe F0.VA measurement boundary the
+worker must map each current family to implemented/proved, unproved or planned
+coverage, with its owning slice and negative/recovery test. Required coverage
+includes independent physical activity, bounded knowledge/unknown geometry,
+causally justified aftermath, cross-front effects, physical/player partial-save
+confirmation and repeated-switch neutrality. Retain historical evidence and
+existing defect statuses; never raise debt ceilings or reinterpret old endpoint
+tests to satisfy these stronger exits.
+
 - **Confirmed defect** means current code contradicts an accepted invariant or
   permits a state/format path that the invariant forbids.
 - **Structural debt** means current behavior is correct, but another domain or
@@ -86,6 +98,7 @@ the evidence recorded for earlier causality/recovery closures.
 | V3-AUD-049 | P0 | Confirmed autonomy/recovery defect; replacement accepted | After restart, an unloaded `DRAINING`/unknown projection can retain physical authority until that location is naturally inspected. A never-revisited chunk can therefore freeze its exact actor or operation indefinitely. FND-06 uses durable authority epochs and stale-projection fencing while retaining separate postcondition inspection for ambiguous non-replayable effects. |
 | V3-AUD-050 | P0 | Confirmed failure-model defect; replacement accepted | Expected gameplay actions and ambiguous reconciliation frequently converge on terminal `CONFLICT`/blocked paths designed for invariant safety. Without a generic owning response, ordinary death, theft, obstruction or partial transfer accumulates frozen work. FND-07 separates domain disruption, isolated reconciliation ambiguity and frontier-corrupting invariant failure. |
 | V3-AUD-051 | P1 | Underspecified product contract; correction accepted | “Same truth and fidelity” does not define whether neutral HOT and COLD combat/work require identical outcomes or only equivalent rules. Exact equality scripts HOT physics; unconstrained divergence makes observation alter history. FND-08 defines identity/conservation equality plus fixed-seed calibrated outcome tolerances and observer-neutrality gates. |
+| V3-AUD-052 | P0 | Confirmed defect | Six physical scene executors asked their support for one globally sorted ready candidate and only then tested player demand. An unloaded earlier field, workshop, service work, patrol, treatment or engineering site could therefore suppress a later naturally demanded process. Fresh F0.V `arrival_checkpoint_one` evidence reached the exact fourth harvest job's retained COLD cursor but could never grant its HOT lease because another site sorted first. |
 
 ## Remediation status
 
@@ -137,7 +150,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-040 | OPEN | Enforce the M0–M3 evidence levels and class matrix from `docs/frontier-v3-materialization-completeness.md`; convert batch environmental changes under `MAT-008` to retained spatial progress and map decisions to gameplay consequences under `MAT-009`. Guardrails and review must reject endpoint-only claims for duration-bearing processes. |
 | V3-AUD-041 | OPEN | Before a service work may be admitted, reshape it into a two-station exact custody process: retain the source-container service port and source slot, durable input-issue intent, exact actor custody and separate source/work traversal cursors. Prove source theft, worker death, station loss and restart; never let the endpoint executor consume a remote depot stack. |
 | V3-AUD-042 | CLOSED | The first correction retained the job until its HOT lease released, but the required native scenario then found the remaining schedule-owner defect: release attempted `ScheduleEffect.Created` for the already retained stable `schedule:production-task-complete-*` action and correctly quarantined rather than duplicate it. `ProductionProcess.planCompletion` now reschedules that one durable review while the exact worker lease is HOT/DRAINING; the release receipt reschedules the same ID to the next tick, where the closed lease permits the terminal transform. The focused ordinary/negative regression, Economy 17/17, Scene 56/56 and critical gate (guardrails, check, build/package, 287/287 GameTests) pass. Native `disposable_materialized_production_work_restart` run `74b66054-6464-4279-afb0-7cd8f3730591` reaches the exact 64-bread depot receipt, survives graceful restart and completes without quarantine. |
-| V3-AUD-043 | OPEN | Treat `SceneLease` as execution authority only. First repair `MAT-001`: its canonical harvest must begin and advance without player demand, HOT must attach at the current process cursor, and release must atomically return the next unfinished step to COLD. Close with never-loaded, arrive-mid-process, unload/return, interruption and graceful/abrupt restart evidence. Then add a composition/source gate requiring paired HOT/COLD drivers for every duration-bearing process before reusing the contract elsewhere. |
+| V3-AUD-043 | OPEN; PAUSED FOR F0.V | Preserve the active `MAT-001` harvest work, but do not extend it until mandatory `F0.V` in `docs/frontier-v3-integration-feedback-foundation.md` passes. Then resume the same implementation: canonical harvest begins and advances without player demand, HOT attaches at its current process cursor, and release atomically returns the next unfinished step to COLD. Close with never-loaded, arrive-mid-process, unload/return, interruption and graceful/abrupt restart evidence plus the paired-driver composition gate. |
 | V3-AUD-044 | OPEN | F0.0 baseline is installed: the architecture-debt ratchet counts all 39 production `ContainerSurfaceStatus.ACTIVE` references and rejects new/growing use. Execute F0.2 to replace historical container `ACTIVE` authority with separately persisted replica fingerprint and current custody lease/epoch. Convert one settlement depot and one hive store, then prove never-visited and visited-unloaded liveness plus changed-replica observation before write. |
 | V3-AUD-045 | OPEN | Execute F0.2. Introduce the bounded chunk-indexed semantic-consequence/physical-receipt/deferred-aftermath protocol. Prove one off-screen unrestricted explosion and one constructive obstruction without force-load, replay or unrelated process stall. |
 | V3-AUD-046 | OPEN | Execute F0.3. Introduce fungible resource lots, stable claim allocations, custody accounts and transient physical bindings. Convert all current item owners in one fresh-world format cut and prove split, merge, partial movement, hopper, drop/pickup, theft and replay conservation. |
@@ -146,6 +159,7 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-049 | OPEN | Execute F0.5. Add monotonic physical authority epochs and stale projection fencing for body, cargo, container and effect bindings. Prove hard-crash recovery can resume safe COLD work without a visit and later stale load neither duplicates nor invents a death/effect. |
 | V3-AUD-050 | OPEN | Execute F0.5. Give every normal disruption and ambiguity a smallest owning aggregate, visible reason, bounded retry/repair/replan/abandonment and compaction rule. Retain whole-frontier quarantine only for canonical/persistence corruption. |
 | V3-AUD-051 | OPEN | Execute F0.6. Add fixed-seed HOT/COLD invariant and tolerance comparison, keyed randomness checks and an observer-neutrality report. Exact identities, claims and conservation remain strict; physical trajectories and hit sequences do not. |
+| V3-AUD-052 | OPEN; F0.V correction in verification | Every physical-capable support must publish a complete bounded stable canonical candidate inventory with no player/chunk input. The generic NeoForge demand selector alone scans that inventory and chooses the first naturally demanded member. Generic ambient reservation and read-only diagnostics must inspect all candidates, not a global first. The debt ratchet rejects any `*SceneSupport.nextCandidate(...)` call inside a physical scene executor. Close only after the focused physical selector GameTest and renewed fresh native F0.V arrival evidence prove the observed later harvest candidate receives its exact lease; this correction does not close F0.V or F0.1. |
 
 ## Findings and required corrections
 
@@ -645,6 +659,34 @@ effects, environmental frontiers and ambient custody retain their distinct
 intent/frontier/presence boundaries instead of being forced through a work
 scene.
 
+F0.V native-matrix evidence on 2026-09-04 exposed a separate pre-existing
+integration defect that must not be concealed by choosing a different
+fixture. `FrontierV3ResourceSiteHarvestSceneExecutor` obtains the globally
+first eligible harvest candidate and only afterwards tests local observer
+demand. A player demanding a later active field cannot therefore admit its
+one HOT lease while an earlier field has no observer. The demanded field's
+canonical cursor continues COLD but it has neither lease nor body. This is a
+production scene-selection/fairness defect in the preserved F0.1 work, not a
+test-pilot timeout. The failed disposable run and attributable bundle remain
+at `build/frontier-v3-scenarios/f0v-resource-site-harvest-f0v-ecbc8707-72c4-4df8-bfa1-7f2e7debb782/`.
+F0.V may continue to exercise independent SDK and runner gates, but it cannot
+claim its native vertical exit until allowed F0.1 resumption corrects that
+selection order without making demand create work.
+
+Historically the F0.V runner's first measured same-host three-baseline/three-persistent-client
+series failed the then-mandatory numeric floor: its median
+improved by 19.57%, then by 23.54% after recovery stopped rerunning Gradle
+world preparation, both below the required 25%. Both complete reports and their
+bounded failure bundles remain under `build/frontier-v3-scenarios/`; no timeout,
+terminal assertion or restart was weakened to turn either result green.
+
+2026-09-05 user amendment supersedes that numeric blocker:25 percent is now
+advisory and the later retained22.52-percent reference measurement is accepted
+as sufficient optimization. Preserve the original failure reports unchanged;
+do not relabel them as historical passes or rerun solely to reach25 percent.
+Current-source correctness, actual recovery,3x feedback and2.5x provider evidence
+remain independently required.
+
 Exit evidence: a mechanical registry/composition check rejects a
 duration-bearing process without both drivers; `MAT-001` passes never-loaded,
 arrival-mid-progress, ordinary unload/return, intervention and graceful/abrupt
@@ -663,13 +705,149 @@ visitor, and ordinary disruption can be mistaken for corruption. HOT/COLD
 outcome equivalence is also not precise enough to prevent either scripted
 physics or an observer advantage.
 
-The normative diagnosis, target ownership records, ordered F0.0–F0.6 migration,
-negative/recovery matrix and stop conditions are in
-`docs/frontier-v3-seamless-foundation.md`. This audit owns finding status; that
-document owns the complete implementation hand-off. New MAT breadth is paused
-until all P0 foundation findings close. Existing tests remain valid only for
-their proven boundary and must be rewritten when their expected result encodes
-one of the rejected FND assumptions.
+The normative diagnosis, target ownership records, ordered
+`F0.0 -> F0.V -> F0.1 ... F0.6` migration, negative/recovery matrix and stop
+conditions are in `docs/frontier-v3-seamless-foundation.md`. The mandatory
+integration-feedback prerequisite and its measurable gate are in
+`docs/frontier-v3-integration-feedback-foundation.md`. This audit owns finding
+status; those documents own the complete implementation hand-off. New MAT
+breadth is paused until all P0 foundation findings close. Existing tests remain
+valid only for their proven boundary and must be rewritten when their expected
+result encodes one of the rejected FND assumptions.
+
+### F0.VA CI cold-cache preparation defect
+
+Confirmed by source review on2026-09-05: native preparation, reusable workers
+and sequential timing allocate private fresh GRADLE_USER_HOME directories but
+their first native-environment Gradle invocation is offline. No earlier cache
+provisioning exists in those jobs; the preparation artifact contains identity
+and plan, not resolved dependencies. Warm local builds cannot establish this
+clean-worker prerequisite.
+
+Correction order `docs/work-orders/PM-F0VA-CI-BOOTSTRAP-01.md` requires explicit
+online dependency resolution before the existing offline preparation, in each
+job's own namespace and outside timing. Worker admission and immutable identity
+verification remain mandatory. A scoped failing-before/passing-after workflow
+contract guards ordering; actual clean-runner proof remains provider evidence.
+No runtime/debt ceiling change is required. The unrelated Mineflayer pilot is
+not an established dependency of the native Java execution path.
+
+Local correction accepted: online setup now precedes unchanged offline
+preparation in all three native job forms; worker admission remains first.
+The workflow regression failed before the fix and passes after it; full Node
+130/130 and guardrails check pass. Real provider bootstrap remains unproved.
+
+### F0.VA CI composition defects
+
+Source review on2026-09-05 identifies composition failures not covered
+by the existing synthetic merge tests:
+
+- Each shard calls run-f0v-matrix with one --variant/--lane. For a differential
+  variant the runner nevertheless dereferences both cold and hot_cold results;
+  the absent half fails. Current CI merge checks terminal projection presence
+  but does not evaluate the declared relation. The correction must carry exact
+  plan-bound evidence and compare both halves at the aggregate owner, never
+  suppress the differential requirement.
+- run-ci-matrix-sequential calls mergeFourWorkerMatrix after deliberately
+  serial shard execution. That merger requires simultaneous overlap and a
+  <=30-second start skew, so genuine sequential evidence fails the parallel
+  policy. Separate shared correctness/completeness validation from explicit
+  sequential versus parallel timing admission; never waive overlap for an
+  actual parallel-speedup claim.
+- merge-ci-matrix's sequential timing admission does not bind report status,
+  plan/build/contract identities or exact lane count to the parallel evidence.
+  Plausible timing numbers from a foreign or incomplete matrix must not prove
+  the required speedup. Validate these at the final comparison boundary.
+
+Before implementation, define one bounded CI-composition order and failing
+deterministic orchestration tests. Also preserve the existing cross-lane
+distinct-arrival-checkpoint assertion when distributing its two variants;
+isolated per-lane successes alone cannot establish that relation. No native
+matrix should be spent diagnosing these deterministic composition failures.
+The bounded implementation specification is
+`work-orders/PM-F0VA-CI-COMPOSITION-01.md`; local acceptance is recorded below.
+
+Local correction ACCEPTED on 2026-09-05 under that order. Schema-2 evidence
+retains and validates declared projections; complete aggregate comparison owns
+HOT/COLD and distinct arrivals. Serial and parallel temporal policies are
+separate, and final timing binds all identity fields and exact lane count.
+Main full Node137/137 and critical gate290/290GameTests pass. Real provider
+execution is still unproved; synthetic manifests are protocol evidence only.
+
+### F0.VA persistent-client integration gap
+
+Source review on 2026-09-05 distinguishes the current21 proof from the actual
+CI worker path. The accepted F0.VA.1 requirement covers a worker's complete
+assigned native matrix. run-f0va-persistent-matrix currently constructs a fixed
+smoke-alpha / graceful-before / graceful-after / smoke-beta sequence.
+run-ci-matrix-shard instead invokes run-f0v-matrix separately for every lane;
+that invokes run-isolated-scenario with a new client lifecycle per lane (its
+persistent mode only spans one graceful restart, and crash lanes use fresh
+clients). Neither CI workflow calls the matrix-client owner.
+
+Current21 proves the smoke/restart protocol, not adoption by the complete
+assigned correctness workload. This is a remaining local F0.VA integration
+requirement, not permission to repeat current21 or weaken crash assertions.
+After CI-composition acceptance, scope a separate order to reuse the existing
+persistent-client owner for contract-derived worker lanes, including declared
+crash/recovery handling and bounded failure cleanup. First obtain a deterministic
+orchestration regression; retain actual one-client/native proof as a separate
+gate. PM-F0VA-CI-COMPOSITION-01 does not grant this lifecycle expansion.
+
+Read-only design accepted under PM-F0VA-PERSISTENT-DESIGN-01. Additional source
+evidence: actual worker-0 and worker-3 each own two worlds, while the existing
+benchmark validator requires at least three. Separate generic exact-assignment
+admission from that unchanged proof minimum. Implementation order is compiler
+and real shard preflight (PM-F0VA-PERSISTENT-PLAN-01), authenticated expected
+crash handling in existing owners, actual runner integration, then native
+proof. No partial cut closes this integration finding.
+
+PM-F0VA-PERSISTENT-PLAN-01 local compiler/preflight ACCEPTED: exact assignment
+and trusted identity checks,1/2world admission without benchmark weakening,
+all13lanes and5crash windows. Main review caught inherited crash metadata on
+split executable scenarios (restart removed); arm is now only segment metadata
+and every executable half must pass the existing scenario validator. Full
+Node144/144 and critical290/290GameTests pass. Real runner/client lifecycle
+integration is still pending; the compiled artifact is not lifecycle proof.
+
+Further source-backed adoption checks,2026-09-05: the current matrix client
+retains only terminal assertion/diagnostic counts in its result, whereas
+ci-matrix.evidenceFromManifest consumes actual declared diagnostic projections.
+The real integration must retain bounded per-lane diagnostic evidence, validate
+all declared assertions and preserve terminal/differential/arrival extraction;
+counts or a new status flag cannot substitute for the existing schema2 merge.
+Keep original compiled scenario identity distinct from its exact serialized
+runtime bytes and explicitly map the CI portable build hash to the verified
+local prepared identity (the smoke owner currently hashes the full local build).
+These are existing evidence-consumer contracts, not new gameplay scope.
+Main inspected the actual generated13-lane plan: all current lanes have zero
+frames, worker3 is exactly abrupt release-boundary plus graceful restart. Do not
+add frame breadth to this adoption proof or claim that this proves visual/M3
+acceptance. Crash/session protocol is ACCEPTED under PM-F0VA-PERSISTENT-CRASH-01:
+focused Java12/fullNode148 and critical290GameTests/build/package pass. Actual
+runner integration is specified by PM-F0VA-PERSISTENT-RUNNER-01, not yet proved.
+Further confirmed defects to cover there: readiness PID is overwritten before
+comparison to the retained spawn PID; diagnostics carry action step but lack
+session/epoch/segment attribution and are bucketed by mutable current. Add
+consumed deterministic regressions before native qualification. This finding
+stays open until actual assigned-worker one-client evidence, not helper passes.
+
+Revision2 scenario reconciliation: the shared abrupt harvest declaration keeps
+the player beside the HOT worker, yet its release-boundary recovery requires
+HARVESTING/complete:false. Source work/release conditions only permit partial
+drain after lost demand and safe player distance; natural64crop completion
+contradicts that terminal invariant. The runner order therefore admits one
+ordinary departure copied from unload_return after action3 and changes the
+declared restart offset to4, retaining all5windows and every recovery assertion.
+Existing crash semantics are a non-replayed recovery half: a genuinely earlier
+parked probe can interrupt the pre-half; unreached actions/assertions are not
+claimed completed/passed. Conversely, exhaustion before a later probe keeps the
+same client awaiting that actual causal input within its existing deadline,
+not normal disconnect, premature terminal success or an unbounded sleep.
+All13lane identities/four-worker memberships remain unchanged in a declaration-
+only calculation; changed scenario hashes require fresh evidence. This finding
+is OPEN pending deterministic integration and subsequent physical qualification;
+no canonical scene/runtime change or product-promise weakening is authorized.
 
 ## Explicit non-defects
 
@@ -686,12 +864,14 @@ one of the rejected FND assumptions.
 
 The implementation plan owns execution. The original hardening sequence through
 V3-AUD-036 is complete. Execute the ordered F0 programme in
-`docs/frontier-v3-seamless-foundation.md`: V3-AUD-043 first establishes process
-ownership, then V3-AUD-044 through V3-AUD-051 correct replica custody,
-aftermath, resources, navigation/fronts, recovery/failure policy and
-observer-neutrality. Only after F0 may the materialization-completeness plan
-resume exact assigned movement, human lifecycle, hive metabolism, distributed
-environment and decision comprehension. Do not add another endpoint-only
-executor as a shortcut. Each correction lowers the checked-in debt ratchet.
-Raising a baseline requires an accepted architecture amendment with a new
-finding and removal plan; it is never an ordinary implementation edit.
+`docs/frontier-v3-seamless-foundation.md`: the completed F0.0 baseline is
+followed by mandatory F0.V integration feedback before the preserved
+V3-AUD-043/F0.1 process-ownership work resumes. V3-AUD-044 through V3-AUD-051
+then correct replica custody, aftermath, resources, navigation/fronts,
+recovery/failure policy and observer-neutrality. Only after F0 may the
+materialization-completeness plan resume exact assigned movement, human
+lifecycle, hive metabolism, distributed environment and decision comprehension.
+Do not add another endpoint-only executor as a shortcut. Each correction lowers
+the checked-in debt ratchet. Raising a baseline requires an accepted
+architecture amendment with a new finding and removal plan; it is never an
+ordinary implementation edit.

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Durable atomic transfer of exact HOT ambient bodies into one prepared scene lease. */
-public record SceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+public record SceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public SceneLeaseHandoff {
         Objects.requireNonNull(lease, "scene lease");
         ambientMembers = List.copyOf(ambientMembers);

@@ -59,7 +59,13 @@ export function requestRconStop({ port, password, timeoutMs = 10_000 }) {
           if (!accepted && frame.id === -1) return finish(new Error('disposable RCON rejected its one-time credential'));
           if (!accepted && frame.id === AUTH_ID) {
             accepted = true;
-            socket.write(encodeRconFrame(STOP_ID, 2, 'stop'), (error) => finish(error));
+            socket.write(encodeRconFrame(STOP_ID, 2, 'stop'), (error) => {
+              // This is transport handoff only, not an assertion that Minecraft has
+              // persisted or completed shutdown.  Vanilla RCON does not reliably
+              // respond to `stop`; the lifecycle owner must obtain the separately
+              // typed durable-save and game-port-closed barriers before continuing.
+              finish(error);
+            });
           }
         }
       } catch (error) { finish(error); }

@@ -14,12 +14,49 @@ It expands the F0 contract into ownership, recovery, scenario, testing and
 handoff rules; it does not authorize a deviation from this plan or
 `architecture.yml`.
 
-This is the implementation source of truth for Frontier v3. An engineer or
-agent works only on the current wave recorded in `CONTINUITY.md`, proves that
-wave's exit gate, commits it, and then advances the ledger. Later-wave code is
-not added speculatively.
+The current F0.V work must also follow mandatory substage
+[`frontier-v3-accelerated-verification-loop.md`](frontier-v3-accelerated-verification-loop.md).
+It installs one persistent matrix client, content-addressed evidence and
+dependency selection, an executable test pyramid, exact lifecycle barriers,
+four isolated GitHub Actions workers and development-only immutable fixture
+images before the remaining expensive F0.V matrix is resumed.
+
+After every locally verifiable F0.VA gate is green, the two current repository
+histories must be combined by the post-F0.VA monorepo migration gate below and
+pushed to `git@github.com:RidiculousCircumstances/pale_mirror.git`. The actual
+GitHub four-worker provider run then closes the external F0.VA evidence before
+the original F0.V matrix resumes.
+
+This is the implementation source of truth for Frontier v3. Delivery follows
+[`engineering-agent-protocol.md`](engineering-agent-protocol.md): the engineer
+owns requirements, normative documentation, the ledger and independent review;
+one `gpt-5.6-terra` high executor owns implementation. Work only within the
+approved versioned order under `docs/work-orders/` named in `CONTINUITY.md`.
+Gate A grants implementation, Gate B grants expensive verification and Gate C
+accepts the result before the engineer issues the next order. Neither a green
+test nor an executor report authorizes self-advancement, a commit or deployment.
+Later-wave code is not added speculatively.
 
 ## Execution rules
+
+### Mandatory accepted-semantics alignment
+
+Read [`frontier-v3-execution-semantics.md`](frontier-v3-execution-semantics.md)
+at the next safe boundary of the current F0.VA measurement, before starting the
+next implementation slice. Record a concise existing-family gap map in the
+ledger/audit: proved, unproved or planned, with an owning F0 slice and exact or
+statistical comparator. Preserve running evidence, useful WIP and all six
+acceleration features. Do not resume product F0 without this alignment.
+
+The document's slice matrix adds mandatory exits to F0.V and F0.1–F0.6:
+physical activity independent of visibility, bounded COLD knowledge, causal
+aftermath, cross-front interaction, actual crash confirmation and rapid-switch
+neutrality. It does not create another wave or waive existing M0–M3 gates.
+Changed comparator/assertion meaning invalidates affected cached acceptance;
+old evidence retains only its original scope. The monorepo/provider sequence
+below is unchanged.
+
+### Standing rules
 
 - Treat every simulation, persistence, observation, materialization and runtime
   change as `critical-code`; include a negative or recovery case.
@@ -49,9 +86,76 @@ not added speculatively.
   `CONTINUITY.md` consistent. No wave is complete from code existence alone.
 - Run only the focused tests for the current behavior plus the risk-level gate
   required by `AGENTS.md`; manual and product evidence is recorded separately.
-- Preserve both Git histories. Frontier source/docs belong only to the nested
-  `pale-mirror/` repository; packaging/deployment changes belong to the outer
-  repository and land only after a verified v3 artifact exists.
+- Preserve both Git histories separately until the post-F0.VA monorepo
+  migration gate. The authorized migration must retain both histories without
+  squashing; it does not permit discarding either repository or force-pushing
+  over an unrelated remote history.
+
+## Mandatory post-F0.VA monorepo migration gate
+
+This is an ordered infrastructure boundary, not permission to interrupt an
+active measurement or fold uncommitted work into a synthetic import commit.
+It runs after all locally verifiable F0.VA implementation, timing, negative,
+critical-gate and original graceful-restart requirements are green, but before
+the GitHub-provider matrix and before resuming the remaining original F0.V
+matrix.
+
+The resulting monorepo root is the current workspace root. The existing Far
+Frontier pack/deployment tree remains at that root and Pale Mirror remains at
+`pale-mirror/`; only repository ownership changes. The root history and the
+nested Pale Mirror history must both be ancestors of the final `main` branch.
+
+Migration procedure and stop conditions:
+
+1. Reach a process-safe boundary. Prove no Gradle, Java, Node, pilot, server or
+   timing process is active and no current evidence writer can observe a
+   content-fingerprint change.
+2. Finish and commit the F0.VA work in `pale-mirror/`. Independently inventory,
+   verify and commit any intentional outer-pack changes. Do not discard,
+   silently ignore or absorb unknown dirty/untracked files. Record both exact
+   pre-migration HEADs and create verified Git bundles before changing either
+   repository layout.
+3. Build the merge in a disposable clone of the outer repository. Import the
+   exact nested `main` history under `pale-mirror/` with a non-squashed subtree
+   merge (or an equivalently proven history-preserving merge). Never force-add
+   a live embedded `.git` directory and never use a squashed subtree.
+4. Remove the outer `/pale-mirror/` ignore rule in the migration tree. Retain
+   the root and scoped `AGENTS.md` files, ownership documentation and all
+   source/deployment paths. The final tracked tree must contain exactly one
+   `.git` directory.
+5. Move or compose Pale Mirror GitHub workflows into the monorepo-root
+   `.github/workflows/` directory. Give jobs explicit `pale-mirror` working
+   directories and update artifact/action paths; preserve the outer pack and
+   deployment workflows rather than replacing either workflow family.
+6. Prove both recorded old HEADs are ancestors of final `main`, compare the
+   imported `pale-mirror/` tree with the committed nested tree, and verify
+   repository status, ignore rules, workflow syntax, outer pack checks and the
+   complete Pale Mirror critical gate from the paths used by CI. A content,
+   ancestry or verification mismatch stops the migration.
+7. Inspect the destination before mutation with `git ls-remote`. The only
+   authorized destination is
+   `git@github.com:RidiculousCircumstances/pale_mirror.git`. If `origin` is
+   absent, run exactly:
+
+   ```bash
+   git remote add origin git@github.com:RidiculousCircumstances/pale_mirror.git
+   ```
+
+   If `origin` names anything else, or the destination contains unrelated or
+   non-fast-forward history, stop and report it. Never force-push and never
+   delete remote refs to make the migration pass.
+8. Push the verified `main` branch with `git push -u origin main` and push only
+   collision-free verified tags. Re-read the remote refs and clone the result
+   independently before treating the remote as canonical or retiring the two
+   recoverable pre-migration bundles/checkouts.
+9. Run the checked-in GitHub four-worker correctness matrix and serialized
+   pinned-host timing on that exact remote revision. Require complete,
+   duplicate-free lane merge and the F0.VA 2.5x provider result. Record remote
+   run URLs and exact commit/evidence identities in `CONTINUITY.md`.
+10. Only after the remote clone and provider gate pass may the engineer accept
+    migration and F0.VA complete, adopt the monorepo checkout for continued
+    work and resume the preserved original F0.V matrix. Keep recovery bundles
+    until the user explicitly accepts their removal.
 
 ## Mandatory seamless-foundation correction gate
 
@@ -73,9 +177,13 @@ effect family, execute F0 from
 4. **F0.3 — fungible exact resources.** Replace permanent Vanilla-stack
    identity with exact lots, allocations, custody accounts and transient
    physical bindings that support ordinary split/merge/partial transfer.
-5. **F0.4 — semantic navigation and operation fronts.** Give HOT a bounded
-   local navigation envelope under canonical checkpoints and partition large
-   exact operations into disjoint local fronts instead of one unbounded scene.
+5. **F0.4 — first-class decision ownership, semantic navigation and operation
+   fronts.** Establish one canonical `DecisionAuthority` scope per settlement
+   and for the whole Hivemind, plus one operation-owned `TacticalPlan`; give HOT
+   a bounded local navigation envelope under canonical checkpoints and
+   partition large exact operations into disjoint local fronts instead of one
+   unbounded scene. Policies are registered and asymmetric, while scenes and
+   movement providers only execute traceable bounded directives.
 6. **F0.5 — fenced recovery and failure ownership.** Add authority epochs,
    stale-projection rejection and distinct domain-disruption, reconciliation
    and canonical-corruption outcomes with bounded recovery/abandonment.
@@ -83,10 +191,11 @@ effect family, execute F0 from
    HOT/COLD semantic equivalence, pre-visible graybox catch-up and concurrent
    twelve-settlement/hive-front performance.
 
-F0 is an ordered correction, not a parallel feature list. An implementation
-agent works on only the first incomplete slice recorded in `CONTINUITY.md`,
-commits each coherent fresh-world format cut independently and updates the
-audit/architecture/ledger in the same commit. Existing M0–M2 evidence remains
+F0 is an ordered correction, not a parallel feature list. The executor works
+only on the approved bounded order within the first incomplete slice recorded
+in `CONTINUITY.md`. The engineer accepts each coherent fresh-world format cut
+and synchronizes audit/architecture/ledger before granting its scoped commit.
+Existing M0–M2 evidence remains
 valid only for the boundary it actually proves; tests encoding a rejected FND
 assumption must be rewritten rather than preserved as compatibility behavior.
 

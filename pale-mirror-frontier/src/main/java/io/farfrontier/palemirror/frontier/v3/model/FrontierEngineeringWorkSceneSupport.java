@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -31,10 +32,11 @@ public final class FrontierEngineeringWorkSceneSupport {
                 EngineeringWorksite.workCell(state.bootstrap(), state.routeTopology(), project), positions));
     }
 
-    public static Optional<EngineeringWorkSceneCandidate> nextCandidate(FrontierWorldState state) {
+    /** Complete stable worksite inventory; the adapter alone observes physical demand. */
+    public static List<EngineeringWorkSceneCandidate> candidates(FrontierWorldState state) {
         return java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
                 .sorted(Comparator.comparing(EngineeringWorkOrder::id))
-                .map(project -> candidate(state, project)).flatMap(Optional::stream).findFirst();
+                .map(project -> candidate(state, project)).flatMap(Optional::stream).toList();
     }
 
     public static EngineeringWorkOrder require(FrontierWorldState state, EngineeringWorkSceneCause cause) {

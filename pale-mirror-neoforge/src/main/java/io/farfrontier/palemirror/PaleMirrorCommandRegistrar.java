@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import io.farfrontier.palemirror.internal.adapter.AdapterRegistry;
 import io.farfrontier.palemirror.internal.debug.DebugCommandRegistrar;
 import io.farfrontier.palemirror.internal.presentation.ScenarioCommandPresentation;
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3DiagnosticView;
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxRuntime;
 import io.farfrontier.palemirror.internal.world.TestMineRecord;
@@ -40,29 +41,10 @@ final class PaleMirrorCommandRegistrar {
         LiteralArgumentBuilder<CommandSourceStack> v3 = Commands.literal("v3")
                 .requires(source -> source.hasPermission(2) && FrontierV3ServerLifecycle.ownsPhysicalWorld(source.getServer()));
         LiteralArgumentBuilder<CommandSourceStack> inspect = Commands.literal("inspect");
-        inspect.then(Commands.literal("summary").executes(context -> v3Diagnostic(context, "summary", "")));
-        inspect.then(Commands.literal("performance").executes(context -> v3Diagnostic(context, "performance", "")));
-        inspect.then(diagnosticObject("site"));
-        inspect.then(diagnosticObject("settlement"));
-        inspect.then(diagnosticObject("hive"));
-        inspect.then(diagnosticObject("hive_transfer"));
-        inspect.then(diagnosticObject("hive_mobilization"));
-        inspect.then(diagnosticObject("actor"));
-        inspect.then(diagnosticObject("item"));
-        inspect.then(diagnosticObject("container"));
-        inspect.then(diagnosticObject("market_order"));
-        inspect.then(diagnosticObject("operation"));
-        inspect.then(diagnosticObject("route_construction"));
-        inspect.then(diagnosticObject("route_maintenance"));
-        inspect.then(diagnosticObject("physical_delta"));
-        inspect.then(diagnosticObject("scene"));
-        inspect.then(diagnosticObject("intent"));
-        inspect.then(diagnosticObject("trace"));
-        inspect.then(diagnosticObject("transit"));
-        inspect.then(diagnosticObject("medical"));
-        inspect.then(diagnosticObject("traversal_foundry"));
-        inspect.then(diagnosticObject("hive_foundry"));
-        inspect.then(diagnosticObject("route_topology"));
+        for (FrontierV3DiagnosticView view : FrontierV3DiagnosticView.values()) {
+            if (view.requiresId()) inspect.then(diagnosticObject(view.token()));
+            else inspect.then(Commands.literal(view.token()).executes(context -> v3Diagnostic(context, view.token(), "")));
+        }
         v3.then(inspect);
         v3.then(Commands.literal("advance").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("ticks", IntegerArgumentType.integer(1, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS)).executes(context -> {

@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3.client;
 
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,6 +55,17 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsTheRegisteredProcessDiagnosticThroughTheProductionVocabulary() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"process","id":"job:site-harvest-1-wheat-field-1",
+                "expect":{"identity":{"job":"job:site-harvest-1-wheat-field-1"}},"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"unregistered_process","id":"job:site-harvest-1-wheat-field-1",
+                "expect":{"status":"ok"},"timeoutMs":180000}]}"""));
+    }
+
+    @Test
     void acceptsOneNamedHiveDiagnosticWithoutGrantingMutationAuthority() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"hive","id":"hive:frontier",
@@ -97,12 +109,14 @@ class FrontierV3TestPilotScenarioTest {
     @Test
     void acceptsOnlyBoundedWholeTickFastForwardActions() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"fast_forward","ticks":24000}]}""");
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":24000,"timeoutMs":180000}]}""");
         assertEquals(1, parsed.actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"fast_forward","ticks":24001}]}"""));
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":24001,"timeoutMs":180000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"fast_forward","ticks":1.5}]}"""));
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":1.5,"timeoutMs":180000}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward","ticks":24000}]}"""));
     }
 
     @Test
@@ -132,6 +146,24 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"assert_visible_board","text":"WHEAT FIELD",
                 "position":{"x":4,"y":67,"z":5},"maxDistance":129,"timeoutMs":30000}]}"""));
+    }
+
+    @Test
+    void acceptsOnlyThePublishedProcessCursorAsAnOrdinaryVisitAnchor() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"diagnostic":{"view":"process","id":"job:site-harvest-1-wheat-field-1","field":"cursor.retainedBody"}},"settleMs":1000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"diagnostic":{"view":"process","id":"job:site-harvest-1-wheat-field-1","field":"cursor.actorBody"}},"settleMs":1000}]}"""));
+    }
+
+    @Test
+    void dynamicVisitAnchorUsesTheBoundedVisitTimeoutWhenNoActionTimeoutExists() {
+        assertEquals(120_000L, FrontierV3TestPilotTimeouts.resolutionTimeoutMillis(JsonParser.parseString("""
+                {"type":"visit","dimension":"pale_mirror:frontier_graybox","position":{"x":1,"y":65,"z":2},"settleMs":1000}
+                """).getAsJsonObject()));
     }
 
     @Test

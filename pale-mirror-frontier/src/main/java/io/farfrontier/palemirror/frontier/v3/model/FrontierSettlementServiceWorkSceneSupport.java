@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -10,10 +11,10 @@ import java.util.Set;
 public final class FrontierSettlementServiceWorkSceneSupport {
     private FrontierSettlementServiceWorkSceneSupport() { }
 
-    /** The sole deterministic candidate ordering; loaded demand is evaluated by the physical owner. */
-    public static Optional<Candidate> nextCandidate(FrontierWorldState state) {
+    /** Complete deterministic candidate inventory; loaded demand is evaluated by the physical owner. */
+    public static List<Candidate> candidates(FrontierWorldState state) {
         return state.serviceWorks().values().stream().sorted(java.util.Comparator.comparing(SettlementServiceWork::id))
-                .map(work -> candidate(state, work)).flatMap(Optional::stream).findFirst();
+                .map(work -> candidate(state, work)).flatMap(Optional::stream).toList();
     }
 
     /**

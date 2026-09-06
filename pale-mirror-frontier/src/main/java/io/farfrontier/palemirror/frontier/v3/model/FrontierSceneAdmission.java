@@ -86,22 +86,76 @@ public final class FrontierSceneAdmission {
      */
     public static boolean reservedFromGenericAmbient(FrontierWorldState state, SubjectId actorId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
-        return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
-                || state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED
-                && engagement.attackerIds().contains(actorId))
-                || state.strategicPlans().settlementAssaults().values().stream().anyMatch(assault -> assault.status() != SettlementAssaultStatus.RESOLVED
-                && assault.attackerIds().contains(actorId))
-                || FrontierEngineeringWorkSceneSupport.nextCandidate(state).stream()
-                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId))
-                || FrontierResourceSiteHarvestSceneSupport.nextCandidate(state).stream()
-                .anyMatch(candidate -> candidate.memberPositions().containsKey(actorId))
-                // An active class-D patrol is a retained operation, not a generic GUARD goal.
-                // A pre-existing ambient body stays still until the patrol scene can atomically
-                // adopt that exact entity; an absent body is materialized by the typed scene at
-                // its retained canonical formation, never by ambient wandering.
-                || state.strategicPlans().routePatrols().values().stream()
-                .filter(RoutePatrol::active).anyMatch(patrol -> patrol.memberIds().contains(actorId));
+        return genericAmbientAdmission(state).reserves(actorId);
+    }
+
+    /**
+     * A pre-lease process may need one inert ambient body solely to transfer that exact
+     * physical identity into its registered HOT scene.  This is deliberately narrower than
+     * {@link #reservedFromGenericAmbient(FrontierWorldState, SubjectId)}: it does not release
+     * the actor to generic ambient goals, and it names only a process whose canonical candidate
+     * has already passed all of its own admission checks.
+     */
+    public static boolean permitsPreLeaseAmbientHandoff(FrontierWorldState state, SubjectId actorId) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
+        return genericAmbientAdmission(state).preLeaseSceneCause(actorId).isPresent();
+    }
+
+    /**
+     * Complete generic-ambient ownership decision for one immutable state revision.
+     *
+     * <p>It is deliberately a pure, bounded derived value rather than another persisted
+     * authority. A physical adapter may reuse one instance while it observes that exact state,
+     * but must discard it as soon as a command installs a different state object. This avoids
+     * rebuilding every process candidate for every unrelated resident in one Minecraft tick
+     * without allowing a cached admission to outlive its canonical evidence.</p>
+     */
+    public static GenericAmbientAdmission genericAmbientAdmission(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
+        Set<SubjectId> reserved = new LinkedHashSet<>();
+        state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
+                .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
+        state.strategicPlans().routeEngagements().values().stream()
+                .filter(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED)
+                .forEach(engagement -> reserved.addAll(engagement.attackerIds()));
+        state.strategicPlans().settlementAssaults().values().stream()
+                .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
+                .forEach(assault -> reserved.addAll(assault.attackerIds()));
+        FrontierEngineeringWorkSceneSupport.candidates(state)
+                .forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+
+        java.util.Map<SubjectId, SceneCauseKind> preLeaseCauses = new java.util.LinkedHashMap<>();
+        FrontierResourceSiteHarvestSceneSupport.candidates(state).forEach(candidate -> {
+            SubjectId worker = candidate.workerId();
+            reserved.add(worker);
+            SceneCauseKind previous = preLeaseCauses.putIfAbsent(worker, SceneCauseKind.RESOURCE_SITE_HARVEST);
+            if (previous != null) {
+                throw new IllegalStateException("multiple generic ambient pre-lease claims for " + worker.value());
+            }
+        });
+        // An active class-D patrol is a retained operation, not a generic GUARD goal. A
+        // pre-existing ambient body stays still until the patrol scene can atomically adopt it.
+        state.strategicPlans().routePatrols().values().stream().filter(RoutePatrol::active)
+                .forEach(patrol -> reserved.addAll(patrol.memberIds()));
+        return new GenericAmbientAdmission(reserved, preLeaseCauses);
+    }
+
+    /** Immutable exact-state result of {@link #genericAmbientAdmission(FrontierWorldState)}. */
+    public record GenericAmbientAdmission(Set<SubjectId> reservedActorIds,
+                                          java.util.Map<SubjectId, SceneCauseKind> preLeaseSceneCauses) {
+        public GenericAmbientAdmission {
+            reservedActorIds = Set.copyOf(Objects.requireNonNull(reservedActorIds, "reserved actor ids"));
+            preLeaseSceneCauses = java.util.Map.copyOf(Objects.requireNonNull(preLeaseSceneCauses, "pre-lease scene causes"));
+            if (!reservedActorIds.containsAll(preLeaseSceneCauses.keySet())) {
+                throw new IllegalArgumentException("pre-lease actor must be generically reserved");
+            }
+        }
+
+        public boolean reserves(SubjectId actorId) { return reservedActorIds.contains(Objects.requireNonNull(actorId, "actor id")); }
+
+        public java.util.Optional<SceneCauseKind> preLeaseSceneCause(SubjectId actorId) {
+            return java.util.Optional.ofNullable(preLeaseSceneCauses.get(Objects.requireNonNull(actorId, "actor id")));
+        }
     }
 
     /**
@@ -131,8 +185,8 @@ public final class FrontierSceneAdmission {
         // its scene lease is prepared.  Without this reservation an ordinary ambient visit can
         // re-open one of the exact crew between COLD completion and scene admission (notably
         // after restart), leaving the worksite indefinitely unavailable to itself.
-        FrontierEngineeringWorkSceneSupport.nextCandidate(state)
-                .ifPresent(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+        FrontierEngineeringWorkSceneSupport.candidates(state)
+                .forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A pre-scene route patrol uses the typed atomic ambient-to-scene hand-off. It is not
         // a generic reservation: draining an already-visible resident before admission would
         // replace a real entity rather than transfer it. The separate precursor predicate

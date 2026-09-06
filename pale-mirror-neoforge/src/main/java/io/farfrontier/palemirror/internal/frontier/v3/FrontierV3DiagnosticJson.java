@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.HumanAssignmentProjection;
@@ -27,6 +28,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
@@ -117,6 +120,7 @@ final class FrontierV3DiagnosticJson {
         Objects.requireNonNull(equipmentReturnReadiness, "equipmentReturnReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
+            case "process" -> process(id, checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
             case "hive" -> hive(id, checkpoint, state);
@@ -165,6 +169,58 @@ final class FrontierV3DiagnosticJson {
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
                 + ",\"items\":" + state.inventory().items().size()
                 + ",\"inventoryConflicts\":" + state.inventory().conflicts().size() + "}";
+    }
+
+    /**
+     * One bounded semantic projection of an active duration process.
+     *
+     * <p>This is deliberately a read-only diagnostic boundary, not a second process registry:
+     * the aggregate, lease and schedule remain owned by their production registries.  F0.V uses
+     * it to compare identity, claims, conservation, schedule and result after an ordinary pilot
+     * action without inferring any of those facts from a Minecraft entity or block.</p>
+     */
+    private static String process(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        ResourceSiteHarvestJob job = subject == null ? null : state.resourceSites().sites().values().stream()
+                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(value -> value.id().equals(subject)).findFirst().orElse(null);
+        if (job == null) return unavailable("process", id, checkpoint, "not_found");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .filter(value -> FrontierSceneBehaviors.resourceSiteHarvest(value).jobId().equals(job.id()))
+                .sorted(java.util.Comparator.comparing(value -> value.id().value())).toList();
+        var schedules = checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id()))
+                .sorted().limit(4).toList();
+        String scheduleEntries = schedules.stream().map(value -> "{\"id\":\"" + quote(value.id().value())
+                + "\",\"dueAt\":" + value.dueAt().ticks() + ",\"kind\":\"" + quote(value.kind())
+                + "\",\"weight\":" + value.weight() + "}").reduce((left, right) -> left + "," + right)
+                .map(value -> "[" + value + "]").orElse("[]");
+        String leaseValue = lease.isEmpty() ? "null" : "{\"id\":\"" + quote(lease.getFirst().id().value())
+                + "\",\"status\":\"" + lease.getFirst().status() + "\",\"revision\":" + lease.getFirst().revision()
+                + ",\"members\":" + lease.getFirst().members().size() + ",\"body\":"
+                + (lease.getFirst().memberPosition(job.workerId()) == null ? "null" : position(lease.getFirst().memberPosition(job.workerId()))) + "}";
+        String intentStatus = intent == null ? "MISSING" : intent.status().name();
+        String actorBody = actor == null ? "null" : position(actor.body());
+        int cursorLength = job.traversal().linearCorridorSurfaces().size();
+        return base("process", id, checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
+                + ",\"identity\":{\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value())
+                + "\",\"outputItem\":\"" + quote(job.outputItemId().value()) + "\"}"
+                + ",\"claims\":{\"task\":\"" + quote(job.taskId().value()) + "\",\"site\":\"" + quote(job.siteId().value())
+                + "\",\"worker\":\"" + quote(job.workerId().value()) + "\",\"intent\":\"" + quote(job.intentId().value())
+                + "\",\"outputSlot\":" + job.outputSlot().slot() + ",\"lease\":" + leaseValue + "}"
+                + ",\"conservation\":{\"outputItem\":\"" + quote(job.outputItemId().value()) + "\",\"completedCropSlots\":"
+                + job.progress().completedCropSlots() + ",\"pendingCropSlot\":" + job.progress().pendingCropSlotIndex()
+                + ",\"totalCropSlots\":" + ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS + "}"
+                + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id())).count()
+                + ",\"entries\":" + scheduleEntries + "}"
+                + ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength
+                + ",\"retainedBody\":" + position(job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
+                + ",\"actorBody\":" + actorBody + "}"
+                + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentStatus\":\"" + intentStatus
+                + "\",\"complete\":" + job.progress().complete() + "}}";
     }
 
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
@@ -260,8 +316,8 @@ final class FrontierV3DiagnosticJson {
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         var assignment = resident == null ? null : HumanAssignmentProjection.compile(state).assignment(subject);
-        boolean harvestSceneCandidate = resident != null && FrontierResourceSiteHarvestSceneSupport.nextCandidate(state)
-                .map(candidate -> candidate.workerId().equals(subject)).orElse(false);
+        boolean harvestSceneCandidate = resident != null && FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
+                .anyMatch(candidate -> candidate.workerId().equals(subject));
         var lifecycle = bioform == null ? null : state.hiveColony().bioformLifecycles().get(subject);
         String cocoonHome = lifecycle == null || lifecycle.homeSlot().isEmpty() ? "null" : "{\"hibernaculum\":\""
                 + quote(lifecycle.homeSlot().orElseThrow().hibernaculumId().value()) + "\",\"slot\":"

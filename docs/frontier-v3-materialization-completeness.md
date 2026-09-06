@@ -127,11 +127,19 @@ materialization claim.
 ## Execution-mode ownership
 
 For every duration-bearing class, the canonical process exists and begins from
-domain causes whether or not its area is loaded. Player demand selects only the
-executor: COLD advances bounded semantic progress without Minecraft bodies,
+domain causes whether or not its area is loaded. Presentation demand and
+physical interaction eligibility select bounded execution/custody independently:
+COLD advances bounded semantic progress without Minecraft bodies,
 while a physical lease lets the process-specific HOT driver advance the same
 next steps from observations. The lease is not a second process and owns no
 independent progress or outcome.
+
+Apply `frontier-v3-execution-semantics.md` at every completeness level: exact
+identity/accounting is not exact physical fidelity; COLD knowledge and allowed
+approximation are explicit; scenes have no causal walls; recovery distinguishes
+confirmed consequences from ambiguous custody. A visible endpoint cannot prove
+unknown-terrain causality, observer-free transfer safety or hard-crash durability.
+M2 remains continuous visible work; M3 still requires unbriefed comprehension.
 
 Acquire, checkpoint and release must atomically bind one process version, its
 exact participants/resources and its authoritative cursor. Returning to a

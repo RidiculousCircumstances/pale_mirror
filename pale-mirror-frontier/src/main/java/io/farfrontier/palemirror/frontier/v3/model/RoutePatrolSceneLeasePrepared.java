@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.Objects;
 
 /** Durable-before-effect admission for the exact bodies of one retained patrol. */
-public record RoutePatrolSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
+public record RoutePatrolSceneLeasePrepared(SceneLease lease) implements FrontierPayload, SceneLeaseAdmission {
     public RoutePatrolSceneLeasePrepared {
         Objects.requireNonNull(lease, "route-patrol lease");
         if (!FrontierSceneBehaviors.isRoutePatrol(lease)) throw new IllegalArgumentException("route-patrol lease requires its typed cause");

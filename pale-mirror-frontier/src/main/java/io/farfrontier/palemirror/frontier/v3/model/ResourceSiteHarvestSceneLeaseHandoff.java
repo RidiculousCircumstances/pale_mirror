@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Exact ambient-to-field-work transfer; it preserves the observed farmer body and never respawns it. */
-public record ResourceSiteHarvestSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+public record ResourceSiteHarvestSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public ResourceSiteHarvestSceneLeaseHandoff {
         Objects.requireNonNull(lease, "resource-site harvest scene lease");
         ambientMembers = List.copyOf(Objects.requireNonNull(ambientMembers, "resource-site harvest ambient members"));

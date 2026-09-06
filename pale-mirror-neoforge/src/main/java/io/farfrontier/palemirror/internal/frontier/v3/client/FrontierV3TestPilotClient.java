@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.internal.frontier.v3.client;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -7,6 +6,7 @@ import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -27,7 +27,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,7 +34,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-
 /**
  * Development-only visible pilot. It drives the ordinary NeoForge client interaction layer;
  * it has no v3 API, server state or world-file access. The server still receives normal player packets.
@@ -44,6 +42,7 @@ import java.util.Objects;
 public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
     private static final String CAPTURE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.capture_control_directory";
+    private static final String SERVER_PROPERTY = "pale_mirror.frontier_v3.test_pilot.server";
     private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions;
     private static JsonArray setup;
@@ -58,44 +57,94 @@ public final class FrontierV3TestPilotClient {
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
     private static boolean inspectSent;
+    private static boolean fastForwardSent;
+    private static boolean fastForwardObservedActive;
     private static boolean boardInteractionAttempted;
     private static boolean entityInteractionAttempted;
     private static int attackedEntityRuntimeId = -1;
     private static int entityAttackAttempts;
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
-    private static Boolean originalHideGui;
     private static CaptureBarrier captureBarrier;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
-
     private FrontierV3TestPilotClient() { }
-
     @SubscribeEvent
     public static void login(ClientPlayerNetworkEvent.LoggingIn event) {
         String configured = System.getProperty(SCENARIO_PROPERTY, "");
         if (configured.isBlank()) return;
         try {
+            FrontierV3PilotSessionControl.publishClientPrepared();
+            FrontierV3PilotSessionControl.onLogin(Path.of(configured));
+            FrontierV3PilotSessionControl.bindActiveConnection(event.getConnection());
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
-            inspectSent = false;
+            inspectSent = false; fastForwardSent = false; fastForwardObservedActive = false;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
             captureBarrier = null; diagnostics.clear();
-            clearPilotNoise(Minecraft.getInstance());
+            FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
+            if (FrontierV3PilotSessionControl.resumed()) {
+                FrontierV3PilotSessionControl.publishLifecycleSignal("same_client_reconnected_state_cleared", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
+            } else if (!runningSetup) {
+                FrontierV3PilotSessionControl.publishLifecycleSignal("client_connected_fixture_ready", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
+            }
+            FrontierV3PilotSessionControl.completeReconnect();
             PaleMirrorMod.LOGGER.info("PMV3_PILOT loaded scenario={} setup={} actions={} frames={}", configured, setup.size(), actions.size(), frames.size());
         } catch (IOException | IllegalArgumentException failure) {
             actions = null;
             PaleMirrorMod.LOGGER.error("PMV3_PILOT rejected scenario {}", configured, failure);
+            if (FrontierV3PilotSessionControl.reconnectInFlight()) {
+                FrontierV3PilotSessionControl.failPersistentLifecycle("persistent_reconnect_failed", failure);
+            }
         }
     }
-
     @SubscribeEvent
-    public static void logout(ClientPlayerNetworkEvent.LoggingOut event) { reset(); }
-
+    public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        // The first logout is an expected, runner-owned server restart. Preserve only the
+        // already parsed test scenario until the replacement server has become ready; the next
+        // login atomically reloads the runner-written second segment. Any ordinary logout still
+        // resets all pilot state as before.
+        if (FrontierV3PilotSessionControl.enabled() && FrontierV3PilotSessionControl.expectedLossArmed()) {
+            try {
+                FrontierV3PilotSessionControl.claimExpectedLoss(event.getConnection());
+                clearExpectedLossTransientState();
+                return;
+            } catch (IOException | RuntimeException failure) {
+                if (FrontierV3PilotSessionControl.expectedLossClaimed()) clearExpectedLossTransientState();
+                FrontierV3PilotSessionControl.failPersistentLifecycle("expected_loss", failure); return;
+            }
+        }
+        if (FrontierV3PilotSessionControl.expectedReconnectPredecessorDeparture(event.getConnection())) return;
+        if (FrontierV3PilotSessionControl.reconnectFailureRequiresFatal()) {
+            FrontierV3PilotSessionControl.failPersistentLifecycle("persistent_reconnect_lost",
+                    new IllegalStateException("persistent pilot lost the replacement connection"));
+            return;
+        }
+        if (FrontierV3PilotSessionControl.enabled()
+                && (FrontierV3PilotSessionControl.awaitingResume() || FrontierV3PilotSessionControl.finalCloseRequested())) {
+            if (FrontierV3PilotSessionControl.awaitingResume() || FrontierV3PilotSessionControl.finalCloseRequested()) {
+                try {
+                    FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement();
+                } catch (IOException | RuntimeException failure) {
+                    FrontierV3PilotSessionControl.failPersistentLifecycle("normal_disconnect", failure);
+                    return;
+                }
+            }
+            Minecraft.getInstance().options.keyUp.setDown(false);
+            captureBarrier = null;
+            diagnostics.clear();
+            if (FrontierV3PilotSessionControl.finalCloseRequested()) {
+                // This was a protocol-directed ordinary disconnect, not a supervisor SIGINT.
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+            }
+            return;
+        }
+        if (!FrontierV3PilotSessionControl.failUnexpectedActiveLoss()) reset();
+    }
     /**
      * Retains pilot diagnostics but never renders server command feedback in
      * the visible test client.  The runner's JSONL and the client log remain
@@ -114,7 +163,7 @@ public final class FrontierV3TestPilotClient {
                     // Client/Gradle stdout and stderr are separate pipes. Preserve the action
                     // identity in the local evidence itself rather than inferring it from
                     // incidental cross-pipe log ordering in the Node runner.
-                    if (!runningSetup && actionStartedTick >= 0L) value.addProperty("pilotActionStep", index + 1);
+                    if (!runningSetup && actionStartedTick >= 0L) FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1);
                     diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
                     PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
                 }
@@ -124,13 +173,29 @@ public final class FrontierV3TestPilotClient {
         }
         event.setCanceled(true);
     }
-
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
-        if (actions == null) return;
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) return;
-        clearPilotNoise(minecraft);
+        if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) {
+            try {
+                FrontierV3PersistentPilotTransport.reconnectIfRequested(minecraft, System.getProperty(SERVER_PROPERTY, ""));
+            } catch (RuntimeException failure) {
+                if (FrontierV3PilotSessionControl.reconnectRequestFailureRequiresFatal()) {
+                    FrontierV3PilotSessionControl.failPersistentLifecycle("persistent_reconnect_failed", failure);
+                }
+            }
+            return;
+        }
+        if (actions == null || !FrontierV3PilotSessionControl.mayContinueScenarioActions()) return;
+        if (FrontierV3PilotSessionControl.awaitingFinalClose()) {
+            FrontierV3PersistentPilotTransport.closeIfRequested(minecraft);
+            return;
+        }
+        FrontierV3TestPilotPresentation.clear(minecraft);
+        if (FrontierV3PilotSessionControl.expectedCrashSegment() && !FrontierV3PilotSessionControl.expectedLossArmed()) {
+            try { if (FrontierV3PilotSessionControl.armExpectedLoss(runningSetup ? 0 : index)) return; }
+            catch (IOException | RuntimeException failure) { FrontierV3PilotSessionControl.failPersistentLifecycle("expected_loss_arm", failure); return; }
+        }
         if (captureBarrier != null) {
             advanceCaptureBarrier(minecraft);
             return;
@@ -159,14 +224,17 @@ public final class FrontierV3TestPilotClient {
                 case "interact_board" -> interactBoard(minecraft, action);
                 case "interact_nearest_entity" -> interactNearestEntity(minecraft, action);
                 case "attack_nearest_entity" -> attackNearestEntity(minecraft, action);
-                case "fast_forward" -> { minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); advance(type); }
+                case "fast_forward" -> waitForFastForward(minecraft, action);
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> inspect(minecraft, action);
                 case "look" -> lookAtPosition(minecraft, action);
                 case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
                 case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
-                case "break" -> breakBlock(minecraft, position(action, "position"));
+                case "break" -> {
+                    BlockPos target = resolvedPosition(minecraft, action, "position");
+                    if (target != null) breakBlock(minecraft, target);
+                }
                 case "place" -> placeBlock(minecraft, action);
                 case "open_container" -> {
                     BlockPos target = resolvedPosition(minecraft, action, "position");
@@ -181,7 +249,6 @@ public final class FrontierV3TestPilotClient {
             reset();
         }
     }
-
     private static void walk(Minecraft minecraft, BlockPos target, double radius) {
         Vec3 current = minecraft.player.position();
         double dx = target.getX() + 0.5D - current.x, dz = target.getZ() + 0.5D - current.z;
@@ -189,13 +256,11 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setYRot((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG));
         minecraft.options.keyUp.setDown(true);
     }
-
     private static void breakBlock(Minecraft minecraft, BlockPos target) {
         if (minecraft.level.getBlockState(target).isAir()) { breaking = false; advance("break"); return; }
         if (!breaking) { minecraft.gameMode.startDestroyBlock(target, Direction.UP); breaking = true; }
         else minecraft.gameMode.continueDestroyBlock(target, Direction.UP);
     }
-
     /** Places one declared ordinary block through the normal client use-item-on-block packet. */
     private static void placeBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");
@@ -220,7 +285,6 @@ public final class FrontierV3TestPilotClient {
         }
         timeout(minecraft, action, "ordinary placement did not produce " + itemId + " at " + target);
     }
-
     /** Opens the real block menu through Minecraft's normal client interaction packet. */
     private static void openContainer(Minecraft minecraft, BlockPos target, long timeoutMs) {
         if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("open_container"); return; }
@@ -233,7 +297,6 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out opening ordinary container at " + target);
         }
     }
-
     /** Shift-clicks one exact player stack through the ordinary open-menu protocol. */
     private static void quickMoveFromInventory(Minecraft minecraft, JsonObject action) {
         if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
@@ -254,7 +317,6 @@ public final class FrontierV3TestPilotClient {
         minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
         quickMoveAttempted = true;
     }
-
     /** Shift-clicks one exact existing container stack through the ordinary open-menu protocol. */
     private static void quickMoveFromContainer(Minecraft minecraft, JsonObject action) {
         if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) {
@@ -275,12 +337,10 @@ public final class FrontierV3TestPilotClient {
         minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
         quickMoveAttempted = true;
     }
-
     private static boolean sameStack(Slot slot, ResourceLocation item, int count) {
         return !slot.getItem().isEmpty() && slot.getItem().getCount() == count
                 && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item);
     }
-
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");
         if (target == null) return;
@@ -292,16 +352,16 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out waiting for " + expected + " at " + target + "; client saw " + actual);
         }
     }
-
     /**
      * A visit is ordinary operator travel by the one network client, followed by
      * client-observed natural chunk readiness. It never asks the server to load
      * a chunk; after travel, ordinary player demand performs that work.
      */
     private static void visit(Minecraft minecraft, JsonObject action) {
-        visit(minecraft, position(action, "position"), action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit");
+        BlockPos target = resolvedPosition(minecraft, action, "position");
+        if (target == null) return;
+        visit(minecraft, target, action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit");
     }
-
     /** Uses only a fresh read-only operation snapshot to choose a player-side observation point. */
     private static void visitOperation(Minecraft minecraft, JsonObject action) {
         BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent");
@@ -310,7 +370,6 @@ public final class FrontierV3TestPilotClient {
         visit(minecraft, anchor.offset(offset.get("x").getAsInt(), offset.get("y").getAsInt(), offset.get("z").getAsInt()),
                 action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), action.get("timeoutMs").getAsLong(), "visit_operation");
     }
-
     private static void visit(Minecraft minecraft, BlockPos target, String dimension, long settleMs, long timeoutMs, String actionType) {
         long tick = minecraft.level.getGameTime();
         if (!visitSent) {
@@ -328,13 +387,11 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out visiting naturally loaded " + dimension + " at " + target);
         }
     }
-
     private static void lookOperation(Minecraft minecraft, JsonObject action) {
         BlockPos anchor = operationAnchor(minecraft, action, action.has("anchor") ? action.get("anchor").getAsString() : "travelCargo");
         if (anchor == null) return;
         look(minecraft, anchor); advance("look_operation");
     }
-
     /** Returns one current diagnostic coordinate, requesting it at the same bounded cadence as other waits. */
     private static BlockPos operationAnchor(Minecraft minecraft, JsonObject action, String anchor) {
         String operation = action.get("operationId").getAsString(); long tick = minecraft.level.getGameTime();
@@ -350,7 +407,6 @@ public final class FrontierV3TestPilotClient {
         timeout(minecraft, action, "timed out reading current operation anchor " + operation);
         return null;
     }
-
     /** Proves the player camera itself is aimed at one loaded, non-air exact block. */
     private static void assertVisibleBlock(Minecraft minecraft, JsonObject action) {
         BlockPos expected = resolvedPosition(minecraft, action, "position");
@@ -366,7 +422,6 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("camera never targeted visible block " + expected);
         }
     }
-
     /**
      * Proves a named owned board is in the local rendered entity set, near its
      * expected semantic anchor and inside the player-facing camera cone. It is
@@ -390,7 +445,6 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor);
         }
     }
-
     /** Presentation-only proof: the player camera sees a locally rendered ordinary entity, not a server-selected UUID. */
     private static void assertVisibleEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
@@ -411,7 +465,6 @@ public final class FrontierV3TestPilotClient {
                 + "; candidates=" + localEntityEvidence(minecraft, expectedType, expectedName, maxDistance)
                 + "; view=" + Math.round(view.x * 100.0D) + "," + Math.round(view.y * 100.0D) + "," + Math.round(view.z * 100.0D));
     }
-
     /** Rotates only the local test camera towards one locally rendered named body. */
     private static void lookNearestEntity(Minecraft minecraft, JsonObject action) {
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
@@ -435,7 +488,6 @@ public final class FrontierV3TestPilotClient {
         look(minecraft, target.getEyePosition());
         advance("look_nearest_entity");
     }
-
     /** Bounded failure evidence for a presentation assertion; it neither selects nor mutates a server entity. */
     private static String localEntityEvidence(Minecraft minecraft, ResourceLocation expectedType, String expectedName, double maximum) {
         Vec3 eye = minecraft.player.getEyePosition();
@@ -448,7 +500,6 @@ public final class FrontierV3TestPilotClient {
                         + minecraft.player.hasLineOfSight(entity) + "/distance=" + Math.round(eye.distanceTo(entity.getEyePosition())))
                 .collect(java.util.stream.Collectors.joining(";"));
     }
-
     /**
      * Uses Minecraft's normal entity interaction packet and waits for its local, optional
      * presentation receipt.  The card itself remains noncanonical; the semantic board is the
@@ -472,7 +523,6 @@ public final class FrontierV3TestPilotClient {
         }
         timeout(minecraft, action, "timed out waiting for the contextual board card");
     }
-
     /**
      * Sends one ordinary entity-interaction packet to the nearest locally
      * rendered entity of the declared type. This has no server-side entity
@@ -493,7 +543,6 @@ public final class FrontierV3TestPilotClient {
         if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("interact_nearest_entity"); return; }
         timeout(minecraft, action, "timed out opening ordinary entity container " + expectedType);
     }
-
     /**
      * Repeats ordinary client attack packets against one initially nearest,
      * locally rendered entity. The scenario never supplies an entity UUID or
@@ -559,7 +608,6 @@ public final class FrontierV3TestPilotClient {
         }
         timeout(minecraft, action, "timed out attacking ordinary entity " + expectedType);
     }
-
     /** Walks only to the final locally rendered position of the already selected ordinary target. */
     private static boolean approach(Minecraft minecraft, Vec3 target, double radius) {
         Vec3 current = minecraft.player.position(); double dx = target.x - current.x, dz = target.z - current.z;
@@ -567,7 +615,6 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setYRot((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG)); minecraft.options.keyUp.setDown(true);
         return true;
     }
-
     /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
     private static void waitUntilDiagnostic(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
@@ -581,7 +628,34 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
         }
     }
-
+    /**
+     * The server accepts an advance command before its bounded canonical slices have run.  Keep
+     * the pilot on this action until the registered read-only performance view proves there is
+     * no remaining request; otherwise a following visit can accidentally turn an in-flight COLD
+     * test advance into HOT execution.
+     */
+    private static void waitForFastForward(Minecraft minecraft, JsonObject action) {
+        if (!fastForwardSent) {
+            minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt());
+            fastForwardSent = true;
+        }
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
+        if (fresh(observed) && observed.value().has("fastForwardRemaining")) {
+            int remaining = observed.value().get("fastForwardRemaining").getAsInt();
+            if (remaining > 0) fastForwardObservedActive = true;
+            // A delayed terminal diagnostic from the preceding advance has no authority to
+            // complete this one.  This action must first observe its own active request.
+            if (fastForwardObservedActive && remaining == 0) {
+                advance("fast_forward");
+                return;
+            }
+        }
+        long tick = minecraft.level.getGameTime();
+        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
+        if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
+            throw new IllegalStateException("timed out waiting for bounded canonical fast-forward completion");
+        }
+    }
     /**
      * An inspect completes only after its ordinary read-only command returned. Advancing on
      * packet submission would make that delayed reply look like evidence for the next action.
@@ -598,7 +672,6 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out awaiting read-only diagnostic " + view + " " + id);
         }
     }
-
     /**
      * Waits for one complete physical harvest result: the durable intent carries an exact
      * receipt for its named wheat identity and the site entered its next growth epoch. The
@@ -628,7 +701,6 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out waiting for confirmed harvest site=" + siteId + " intent=" + intentId + " item=" + itemId);
         }
     }
-
     /** Waits for a precise canonical slot-owned stack without needing its generated item identity. */
     private static void waitUntilContainerItem(Minecraft minecraft, JsonObject action) {
         String containerId = action.get("containerId").getAsString(); long tick = minecraft.level.getGameTime();
@@ -637,7 +709,6 @@ public final class FrontierV3TestPilotClient {
         if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect container " + containerId);
         timeout(minecraft, action, "timed out waiting for exact container ingress " + containerId);
     }
-
     private static boolean containerContains(JsonObject container, JsonObject action) {
         if (!"ok".equals(string(container, "status")) || !container.has("occupied") || !container.get("occupied").isJsonArray()) return false;
         String item = action.get("item").getAsString(); int count = action.get("count").getAsInt();
@@ -650,9 +721,7 @@ public final class FrontierV3TestPilotClient {
         }
         return false;
     }
-
     private static boolean fresh(ObservedDiagnostic observed) { return observed != null && observed.tick() >= actionStartedTick; }
-
     /** A fixture is only a bounded read-only precondition; it cannot arrange or mutate the world. */
     private static void assertFixture(Minecraft minecraft, JsonObject action) {
         long tick = minecraft.level.getGameTime(); JsonArray checks = action.getAsJsonArray("checks"); boolean allMatch = true;
@@ -670,7 +739,6 @@ public final class FrontierV3TestPilotClient {
         }
         if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("fixture preconditions did not converge: " + checks);
     }
-
     private static boolean harvestComplete(JsonObject site, JsonObject intent, String itemId) {
         if (!"ok".equals(string(site, "status")) || !"GROWING".equals(string(site, "phase")) || site.get("growthEpoch").getAsLong() < 2L
                 || !"ok".equals(string(intent, "status")) || !"CONFIRMED".equals(string(intent, "intentStatus"))
@@ -679,15 +747,12 @@ public final class FrontierV3TestPilotClient {
         return java.util.stream.StreamSupport.stream(intent.getAsJsonArray("subjects").spliterator(), false)
                 .anyMatch(value -> value.isJsonPrimitive() && itemId.equals(value.getAsString()));
     }
-
     private static String string(JsonObject object, String member) {
         JsonElement value = object.get(member); return value != null && value.isJsonPrimitive() ? value.getAsString() : "";
     }
-
     private static void timeout(Minecraft minecraft, JsonObject action, String detail) {
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException(detail);
     }
-
     private static boolean matches(JsonObject actual, JsonObject expected) {
         for (Map.Entry<String, JsonElement> entry : expected.entrySet()) {
             JsonElement value = actual.get(entry.getKey());
@@ -698,11 +763,9 @@ public final class FrontierV3TestPilotClient {
         }
         return true;
     }
-
     private static void look(Minecraft minecraft, BlockPos target) {
         look(minecraft, Vec3.atCenterOf(target));
     }
-
     /** Updates the local render camera only; no target UUID or server selection is involved. */
     private static void look(Minecraft minecraft, Vec3 target) {
         Vec3 eye = minecraft.player.getEyePosition();
@@ -710,7 +773,6 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setYRot((float) (Mth.atan2(-delta.x, delta.z) * Mth.RAD_TO_DEG));
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
     }
-
     /**
      * Looks at either a literal test coordinate or the one explicitly declared
      * read-only field anchor. The latter prevents a materialization test from
@@ -723,7 +785,6 @@ public final class FrontierV3TestPilotClient {
         look(minecraft, target);
         advance("look");
     }
-
     /**
      * Resolves a deliberately narrow immutable plan anchor from a read-only
      * diagnostic. The container form is usable for an ordinary right-click;
@@ -744,7 +805,7 @@ public final class FrontierV3TestPilotClient {
         // a following action uses its recorded diagnostic rather than inventing
         // a second server-side coordinate lookup.
         if (observed != null) {
-            JsonObject anchor = observed.value().getAsJsonObject(diagnosticField);
+            JsonObject anchor = diagnosticAnchor(observed.value(), diagnosticField);
             if (anchor == null || !anchor.has("x") || !anchor.has("y") || !anchor.has("z")) {
                 throw new IllegalStateException(view + " diagnostic lacks " + diagnosticField + " for " + id);
             }
@@ -753,36 +814,26 @@ public final class FrontierV3TestPilotClient {
         if ((minecraft.level.getGameTime() - actionStartedTick) % 20L == 0L) {
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + " " + id);
         }
-        timeout(minecraft, action, "timed out reading current " + view + " anchor " + id);
+        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= FrontierV3TestPilotTimeouts.resolutionTimeoutMillis(action)) {
+            throw new IllegalStateException("timed out reading current " + view + " anchor " + id);
+        }
         return null;
     }
-
     /**
-     * Frames are captured only after a local, disposable client has hidden all
-     * generic UI, closed any incidental screen and discarded its diagnostic
-     * chat backlog.  This changes neither server state nor the player/world.
+     * The parsed scenario permits only a finite published anchor vocabulary.
+     * Dotted fields are therefore structural read-only paths, not a general
+     * JSON query language or a server-side target selector.
      */
-    private static void prepareCleanCapture(Minecraft minecraft) {
-        if (originalHideGui == null) originalHideGui = minecraft.options.hideGui;
-        minecraft.options.hideGui = true;
-        minecraft.setScreen(null);
-        clearCaptureNoise(minecraft);
-    }
-
-    /** Keeps an explicitly requested player screen, but not disposable-client diagnostics or tutorials. */
-    private static void preparePlayerCapture(Minecraft minecraft) {
-        clearCaptureNoise(minecraft);
-    }
-
-    private static void clearCaptureNoise(Minecraft minecraft) {
-        clearPilotNoise(minecraft);
-    }
-
-    /** The visible pilot stays quiet for its whole run, not only at frame boundaries. */
-    private static void clearPilotNoise(Minecraft minecraft) {
-        minecraft.gui.getChat().clearMessages(false);
-        minecraft.getTutorial().stop();
-        minecraft.getToasts().clear();
+    private static JsonObject diagnosticAnchor(JsonObject diagnostic, String field) {
+        JsonObject current = diagnostic;
+        String[] segments = field.split("\\.", -1);
+        if (segments.length == 0 || segments.length > 2) return null;
+        for (String segment : segments) {
+            if (segment.isEmpty()) return null;
+            current = current.getAsJsonObject(segment);
+            if (current == null) return null;
+        }
+        return current;
     }
 
     private static BlockPos position(JsonObject action, String field) {
@@ -797,19 +848,38 @@ public final class FrontierV3TestPilotClient {
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
+        fastForwardSent = false; fastForwardObservedActive = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-        if (runningSetup && index >= setup.size()) { runningSetup = false; index = 0; PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size()); }
+        if (runningSetup && index >= setup.size()) {
+            runningSetup = false; index = 0;
+            try {
+                if (!FrontierV3PilotSessionControl.resumed()) {
+                    FrontierV3PilotSessionControl.publishLifecycleSignal("client_connected_fixture_ready", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
+                }
+            } catch (IOException | IllegalArgumentException failure) {
+                throw new IllegalStateException("pilot could not acknowledge fixture readiness", failure);
+            }
+            PaleMirrorMod.LOGGER.info("PMV3_PILOT setup complete; beginning evidence actions={}", actions.size());
+        }
         else if (reachedFrame != null) {
             JsonObject frame = reachedFrame;
             String presentation = frame.has("presentation") ? frame.get("presentation").getAsString() : "clean";
-            if (presentation.equals("clean")) prepareCleanCapture(Minecraft.getInstance());
-            else preparePlayerCapture(Minecraft.getInstance());
+            if (presentation.equals("clean")) FrontierV3TestPilotPresentation.prepareCleanCapture(Minecraft.getInstance());
+            else FrontierV3TestPilotPresentation.preparePlayerCapture(Minecraft.getInstance());
             captureBarrier = new CaptureBarrier(completedAction, frame.get("name").getAsString(), presentation,
                     Minecraft.getInstance().level.getGameTime() + CAPTURE_SETTLE_TICKS, false);
         }
         else if (!runningSetup && index >= actions.size()) {
             completeScenario();
+        }
+        if (completedAction > 0) {
+            JsonObject detail = new JsonObject(); detail.addProperty("actionStep", completedAction); detail.addProperty("actionType", type);
+            try {
+                FrontierV3PilotSessionControl.publishLifecycleSignal("action_checkpoint", FrontierV3PilotSessionControl.lifecycleSegment() + "-" + String.format("%04d", completedAction), detail);
+            } catch (IOException | IllegalArgumentException failure) {
+                throw new IllegalStateException("pilot could not acknowledge action checkpoint", failure);
+            }
         }
     }
     private static JsonObject frameAfter(int completedAction) {
@@ -820,7 +890,6 @@ public final class FrontierV3TestPilotClient {
         }
         return null;
     }
-
     /** A filesystem handshake prevents the next chat/command action racing the X11 capture. */
     private static void advanceCaptureBarrier(Minecraft minecraft) {
         CaptureBarrier barrier = captureBarrier;
@@ -852,20 +921,77 @@ public final class FrontierV3TestPilotClient {
         return configured.isBlank() ? null : Path.of(configured);
     }
     private static void completeScenario() {
+        String segment = FrontierV3PilotSessionControl.lifecycleSegment();
+        if (FrontierV3PilotSessionControl.expectedCrashSegment()) {
+            // A declared fault can park after the final ordinary player action.  Keep the same
+            // connection idle only for the runner's bounded real-probe/arm wait; publishing a
+            // terminal result or replaying actions would both falsify the crash boundary.
+            if (!FrontierV3PilotSessionControl.expectedLossArmed()) FrontierV3PilotSessionControl.markAwaitingExpectedLossProbe();
+            return;
+        }
+        if (FrontierV3PilotSessionControl.shouldAwaitNextSegment()) {
+            try {
+                String runId = FrontierV3PilotSessionControl.runId();
+                FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
+                FrontierV3PilotSessionControl.markAwaitingResume();
+                PaleMirrorMod.LOGGER.info("PMV3_PILOT session_segment_complete runId={}", runId);
+                // Queue the normal client disconnect after this tick.  Calling it re-entrantly
+                // from the scenario action tick can leave the live network connection open
+                // until server shutdown, which makes a persistent-client restart slower and
+                // fails to prove an ordinary departure.
+                Minecraft minecraft = Minecraft.getInstance();
+                minecraft.execute(() -> {
+                    if (minecraft.getConnection() == null) {
+                        throw new IllegalStateException("persistent pilot has no live connection to close");
+                    }
+                    minecraft.getConnection().getConnection().disconnect(Component.literal("Frontier v3 persistent-pilot restart"));
+                    minecraft.disconnect();
+                });
+                return;
+            } catch (IOException | IllegalArgumentException failure) {
+                throw new IllegalStateException("persistent pilot could not publish its exact restart boundary", failure);
+            }
+        }
+        if (FrontierV3PilotSessionControl.shouldAwaitFinalClose()) {
+            try {
+                FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
+                FrontierV3PilotSessionControl.markAwaitingFinalClose();
+                PaleMirrorMod.LOGGER.info("PMV3_PILOT final_segment_awaiting_supervisor_close runId={}", FrontierV3PilotSessionControl.runId());
+                return;
+            } catch (IOException | IllegalArgumentException failure) {
+                throw new IllegalStateException("persistent pilot could not publish its final matrix boundary", failure);
+            }
+        }
+        try {
+            FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
+        } catch (IOException | IllegalArgumentException failure) {
+            throw new IllegalStateException("pilot could not acknowledge terminal scenario segment", failure);
+        }
         // The outer runner must still receive the server response to the final
         // read-only assertion before it closes this ordinary client.
         PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", actions.size());
     }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
-        if (originalHideGui != null) { minecraft.options.hideGui = originalHideGui; originalHideGui = null; }
+        FrontierV3TestPilotPresentation.reset(minecraft);
         actions = null; setup = null; frames = null; captureBarrier = null;
         runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L;
         containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
-        diagnostics.clear();
+        diagnostics.clear(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false;
+    }
+    private static void clearExpectedLossTransientState() {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.options.keyUp.setDown(false);
+        actions = null; setup = null; frames = null; captureBarrier = null;
+        runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
+        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L;
+        containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false;
+        fastForwardSent = false; fastForwardObservedActive = false; boardInteractionAttempted = false;
+        entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0;
+        lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear();
     }
     private record DiagnosticIdentity(String view, String id) { }
     private record ObservedDiagnostic(long tick, JsonObject value) { }

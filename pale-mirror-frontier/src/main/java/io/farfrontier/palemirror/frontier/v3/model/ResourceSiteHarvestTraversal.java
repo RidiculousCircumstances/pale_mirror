@@ -29,7 +29,7 @@ public final class ResourceSiteHarvestTraversal {
         SurfaceAnchor first = workstations.getFirst();
         Set<BlockPosition> blocked = immutableBodyObstacles(bootstrap, site, first.support());
         List<SurfaceAnchor> approach = BoundedPedestrianApproach.compile(bootstrap, start, first, blocked,
-                (x, z) -> SurfaceAnchor.at(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z), "field-work");
+                surveyedFieldSurface(bootstrap, site), "field-work");
         List<SurfaceAnchor> corridor = new ArrayList<>(approach);
         for (int index = 1; index < workstations.size(); index++) corridor.add(workstations.get(index));
         if (new LinkedHashSet<>(corridor).size() != corridor.size()) {
@@ -37,6 +37,28 @@ public final class ResourceSiteHarvestTraversal {
         }
         return TraversalTopology.corridor(new TraversalTopologyId("topology:field-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), site.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
+    }
+
+    /**
+     * A crop occupies the feet cell above its farmland, not a second walkable floor.  The
+     * historic generic survey also treated ordinary terrain as a hypothetical extra surface one
+     * cell above its real support.  That can retain a COLD body in air next to a field, which
+     * can never be admitted honestly by HOT.  This field-owned survey instead names the actual
+     * terrain support everywhere and the immutable farmland support in crop columns.  Every
+     * non-first crop surface remains an obstacle during the approach and only the declared
+     * first workstation is entered by the bounded compiler.
+     */
+    private static BoundedPedestrianApproach.SurveyedSurface surveyedFieldSurface(FrontierBootstrap bootstrap, ResourceSite site) {
+        java.util.Map<Long, SurfaceAnchor> fieldSurfaces = new java.util.HashMap<>();
+        for (BlockPosition crop : site.cropSlots()) {
+            fieldSurfaces.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
+        }
+        return (x, z) -> fieldSurfaces.getOrDefault(column(x, z),
+                SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z));
+    }
+
+    private static long column(int x, int z) {
+        return (Integer.toUnsignedLong(x) << 32) | Integer.toUnsignedLong(z);
     }
 
     private static Set<BlockPosition> immutableBodyObstacles(FrontierBootstrap bootstrap, ResourceSite site, BlockPosition firstWorkstation) {

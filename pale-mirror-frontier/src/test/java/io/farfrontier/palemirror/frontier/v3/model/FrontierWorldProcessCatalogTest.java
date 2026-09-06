@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierProcessSceneSdk;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementServiceWorkProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldProcessCatalogTest {
     @Test
@@ -48,12 +51,81 @@ class FrontierWorldProcessCatalogTest {
     }
 
     @Test
+    void pairedDriverCompositionInventoriesEveryCurrentDurationFamilyAndRegistersHarvestExactlyOnce() {
+        assertEquals(java.util.EnumSet.allOf(FrontierDurationProcessDriverRegistry.Family.class),
+                FrontierDurationProcessDriverRegistry.inventory());
+        FrontierDurationProcessDriverRegistry.requireCurrentComposition(FrontierWorldProcessCatalog.descriptors(), FrontierWorldProcessCatalog.scheduledKinds(),
+                java.util.Set.of(SceneCauseKind.values()), FrontierWorldRuntimeDefinition.payloadCodecs().types());
+        assertEquals(List.of(
+                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                "frontier.resource_site.harvest.cold_progress"),
+                        new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                SceneCauseKind.RESOURCE_SITE_HARVEST)),
+                FrontierDurationProcessDriverRegistry.currentRegistrations());
+    }
+
+    @Test
+    void everyInternalProcessSceneDescriptorVocabularyIsDerivedFromTheProductionCatalogAndCodecRegistry() {
+        DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        Map<String, io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor> production = FrontierWorldProcessCatalog.descriptors().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor::id, value -> value));
+        for (FrontierDurationProcessDriverRegistry.Family family : FrontierDurationProcessDriverRegistry.inventory()) {
+            var owner = production.get(family.productionProcessId());
+            assertTrue(owner != null, family + " production owner");
+            FrontierProcessSceneSdk.DescriptorDefinition descriptor = family.definition(owner);
+            assertEquals(owner.commandPayloadTypes(), descriptor.vocabulary().commands(), family + " command vocabulary");
+            assertEquals(owner.reducedEventTypes(), descriptor.vocabulary().observations(), family + " observation vocabulary");
+            assertEquals(owner.codecTypes(), descriptor.vocabulary().payloadCodecs(), family + " codec vocabulary");
+            assertEquals(owner.emittedPayloadTypes(), descriptor.vocabulary().lifecycleTransitions(), family + " lifecycle vocabulary");
+            descriptor.vocabulary().payloadCodecs().forEach(codec -> {
+                assertTrue(codecs.types().contains(codec), family + " production payload codec registry");
+                assertFalse(registry.requireReducedEventOwner(codec).isBlank(), family + " reducer owner");
+            });
+        }
+    }
+
+    @Test
+    void pairedDriverCompositionRejectsAColdOnlyDurationProcess() {
+        assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.compose(List.of(
+                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                "frontier.resource_site.harvest.cold_progress")),
+                FrontierWorldProcessCatalog.scheduledKinds(), java.util.Set.of(SceneCauseKind.values())));
+    }
+
+    @Test
+    void pairedDriverCompositionRejectsAHotOnlyDurationProcess() {
+        assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.compose(List.of(
+                        new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                SceneCauseKind.RESOURCE_SITE_HARVEST)),
+                FrontierWorldProcessCatalog.scheduledKinds(), java.util.Set.of(SceneCauseKind.values())));
+    }
+
+    @Test
+    void pairedDriverCompositionRejectsDuplicateAndMismatchedHarvestDrivers() {
+        assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.compose(List.of(
+                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                "frontier.resource_site.harvest.cold_progress"),
+                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                "frontier.resource_site.harvest.cold_progress"),
+                        new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                SceneCauseKind.RESOURCE_SITE_HARVEST)),
+                FrontierWorldProcessCatalog.scheduledKinds(), java.util.Set.of(SceneCauseKind.values())));
+        assertThrows(IllegalArgumentException.class, () -> FrontierDurationProcessDriverRegistry.compose(List.of(
+                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                "frontier.resource_site.harvest.cold_progress"),
+                        new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                                SceneCauseKind.LOGISTICS)),
+                FrontierWorldProcessCatalog.scheduledKinds(), java.util.Set.of(SceneCauseKind.values())));
+    }
+
+    @Test
     void fieldWorkPhysicalCommandsHaveTheResourceSiteOwnerBeforeAnExecutorCanSubmitThem() {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
         for (String type : List.of(
                 "frontier.resource_site_harvest_crop_prepared",
                 "frontier.resource_site_harvest_progressed",
-                "frontier.resource_site_harvest_traversal_advanced",
+                "frontier.resource_site_harvest_hot_traversal_advanced",
                 "frontier.resource_site_harvest_scene_lease_prepared",
                 "frontier.resource_site_harvest_scene_lease_handoff")) {
             assertEquals("resource-sites", registry.requireCommandOwner(type), type);

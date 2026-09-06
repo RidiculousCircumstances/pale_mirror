@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.farfrontier.palemirror.internal.frontier.v3.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "FrontierV3DurableCrashWindowMixin",
+    "FrontierV3HarvestCrashWindowMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,267 @@
+{
+  "schema": 3,
+  "family": "frontier.resource-site-harvest",
+  "canonicalOwner": "ResourceSiteHarvestJob",
+  "declaration": {
+    "identities": ["job:site-harvest-4-wheat-field-1", "resident:4-31", "site:4-wheat-field", "container:4-depot"],
+    "cursorVocabulary": ["traversalCursor", "progress", "leaseBody"],
+    "legalCheckpoint": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["cursor.index", "cursor.retainedBody", "cursor.actorBody"] },
+    "terminalInvariants": ["identity", "claims", "conservation", "schedule", "result"]
+  },
+  "scenario": {
+    "idPrefix": "disposable_f0v_harvest",
+    "isolation": { "mode": "disposable_lite", "seed": 41 },
+    "server": { "host": "127.0.0.1", "port": 25575, "profile": "world" },
+    "pilot": { "username": "PMTestPilot" },
+    "setup": [{ "type": "command", "command": "/time set day" }],
+    "actions": []
+  },
+  "variants": {
+    "never_loaded": {
+      "driver": "COLD",
+      "evidence": ["sameFarmer", "traversalCursor", "noCropOrOutputBeforeEffect"],
+      "actions": [
+        { "type": "fast_forward", "ticks": 22500, "timeoutMs": 180000 },
+        { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" },
+        { "type": "fast_forward", "ticks": 1500, "timeoutMs": 180000 }
+      ],
+      "assertions": [
+        { "after": 2, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+          "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+          "claims": { "lease": null }, "conservation": { "completedCropSlots": 0 }, "result": { "complete": false }
+        } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+        "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+        "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": null },
+        "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "completedCropSlots": 0, "pendingCropSlot": -1, "totalCropSlots": 64 },
+        "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+      } }],
+      "coldProgress": {
+        "beforeAction": 2,
+        "after": "terminal",
+        "view": "process",
+        "id": "job:site-harvest-4-wheat-field-1",
+        "cursorPath": "cursor.index",
+        "retainedBodyPath": "cursor.retainedBody",
+        "actorBodyPath": "cursor.actorBody",
+        "leasePath": "claims.lease",
+        "minimumAdvance": 1
+      },
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.completedCropSlots", "conservation.pendingCropSlot", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "arrival_checkpoint_one": {
+      "driver": "HOT",
+      "evidence": ["sameFarmer", "exactLease", "exactBody", "traversalCursor"],
+      "arrivalCheckpoint": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index" },
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "intentStatus": "RUNNING" } }, "timeoutMs": 90000 },
+        { "type": "inspect", "view": "actor", "id": "resident:4-31" },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }
+      ],
+      "assertions": [
+        { "after": 4, "view": "actor", "id": "resident:4-31", "expect": {
+          "status": "ok", "assignment": "FIELD_HARVEST", "assignmentOwner": "job:site-harvest-4-wheat-field-1", "harvestSceneCandidate": false, "sceneReserved": true,
+          "physicalAdmission": { "status": "SCENE_OWNED", "entityUuid": "2e56c7c8-796d-3220-83f0-3d1f28694409", "pending": false }
+        } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+        "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+        "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": { "status": "HOT", "members": 1 } },
+        "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "completedCropSlots": 0, "pendingCropSlot": -1, "totalCropSlots": 64 },
+        "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+      } }
+      ],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease.status", "claims.lease.members"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.completedCropSlots", "conservation.pendingCropSlot", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "arrival_checkpoint_two": {
+      "driver": "HOT",
+      "evidence": ["sameFarmer", "exactLease", "exactBody", "distinctTraversalCursor"],
+      "arrivalCheckpoint": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index" },
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "fast_forward", "ticks": 480, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }
+      ],
+      "assertions": [{ "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+        "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+        "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": { "status": "HOT", "members": 1 } },
+        "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "completedCropSlots": 0, "pendingCropSlot": -1, "totalCropSlots": 64 },
+        "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+      } }],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease.status", "claims.lease.members"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.completedCropSlots", "conservation.pendingCropSlot", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "unload_return": {
+      "driver": "HOT_COLD_HOT",
+      "evidence": ["sameFarmer", "sameEntityUuid", "traversalCursor", "releaseThenReacquire"],
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+        { "type": "wait", "ms": 12000, "gameplayElapsedPurpose": "hot_cold_release_hysteresis", "gameplayElapsedJustification": "The retained scene lease must survive its declared no-demand hysteresis before COLD continuation." },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }
+      ],
+      "assertions": [{ "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+        "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+        "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": { "status": "HOT", "members": 1 } },
+        "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "totalCropSlots": 64 },
+        "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+      } }],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease.status", "claims.lease.members"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "player_intervention": {
+      "driver": "HOT",
+      "evidence": ["ordinaryPlayerBreak", "typedOwnerOutcome", "noGenericConflict"],
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+        { "type": "break", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "firstCrop" } }, "timeoutMs": 30000 },
+        { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "388,64,-355", "expect": { "status": "ok", "causeKind": "PLAYER", "trace": "physical-delta:388,64,-355" }, "timeoutMs": 30000 }
+      ],
+      "assertions": [
+        { "after": 6, "view": "physical_delta", "id": "388,64,-355", "expect": { "status": "ok", "causeKind": "PLAYER", "trace": "physical-delta:388,64,-355" } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+          "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+          "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31" },
+          "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "totalCropSlots": 64 },
+          "schedule": { "count": 1 }, "result": { "sitePhase": "CONFLICT", "complete": false }
+        } }
+      ],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "graceful_restart": {
+      "driver": "SNAPSHOT_WAL",
+      "evidence": ["jobActorLeaseCheckpoint", "samePreparedArtifact", "persistentPilotClient", "noDuplicateSchedule"],
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" }
+      ],
+      "restartAfterAction": 3,
+      "assertions": [
+        { "after": 3, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+          "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+          "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31" },
+          "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "totalCropSlots": 64 },
+          "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+        } }
+      ],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "abrupt_restart": {
+      "driver": "CRASH_WAL",
+      "evidence": ["exactCrashBoundary", "jobActorLeaseCheckpoint", "noDuplicateActor", "noDuplicateSchedule", "noDuplicateEffect"],
+      "actions": [
+        { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+        { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" }
+      ],
+      "restartAfterAction": 4,
+      "crashWindows": [
+        { "boundary": "lease_recorded_before_physical_materialization", "phase": "before_restart", "owner": "job:site-harvest-4-wheat-field-1", "payloadType": "frontier.resource_site_harvest_scene_lease_prepared", "expectedRevision": "observed_at_boundary" },
+        { "boundary": "physical_effect_visible_before_typed_observation", "phase": "before_restart", "owner": "site:4-wheat-field", "payloadType": "frontier.resource_site_harvest_progressed", "expectedRevision": "observed_at_boundary" },
+        { "boundary": "typed_observation_durable_before_next_process_checkpoint", "phase": "before_restart", "owner": "site:4-wheat-field", "payloadType": "frontier.resource_site_harvest_progressed", "expectedRevision": "observed_at_boundary" },
+        { "boundary": "hot_checkpoint_durable_before_drain_release", "phase": "before_restart", "owner": "site:4-wheat-field", "payloadType": "frontier.resource_site_harvest_hot_traversal_advanced", "expectedRevision": "observed_at_boundary" },
+        { "boundary": "release_durable_before_cold_resumption", "phase": "before_restart", "owner": "job:site-harvest-4-wheat-field-1", "payloadType": "frontier.scene_lease_released_v2", "expectedRevision": "observed_at_boundary" }
+      ],
+      "assertions": [
+        { "after": 3, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+          "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+          "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31" },
+          "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "totalCropSlots": 64 },
+          "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+        } }
+      ],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ]
+    },
+    "neutral_observer_differential": {
+      "driver": "COLD_VS_HOT_COLD",
+      "evidence": ["sameSemanticCursor", "sameCustody", "sameSchedule", "neutralObserver"],
+      "actions": [{ "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 }],
+      "assertions": [{ "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+        "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
+        "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": null },
+        "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "completedCropSlots": 0, "pendingCropSlot": -1, "totalCropSlots": 64 },
+        "schedule": { "count": 1 }, "result": { "sitePhase": "HARVESTING", "complete": false }
+      } }],
+      "terminalProjections": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.completedCropSlots", "conservation.pendingCropSlot", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["result.sitePhase", "result.complete"] }
+      ],
+      "lanes": {
+        "cold": { "setup": [], "actions": [] },
+        "hot_cold": {
+          "setup": [],
+          "actions": [
+            { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+            { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+            { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+            { "type": "wait", "ms": 12000, "gameplayElapsedPurpose": "hot_cold_release_hysteresis", "gameplayElapsedJustification": "The retained scene lease must survive its declared no-demand hysteresis before COLD continuation." }
+          ]
+        }
+      },
+      "differential": [
+        { "invariant": "identity", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["identity.job", "identity.worker"] },
+        { "invariant": "claims", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["claims.site", "claims.worker", "claims.lease"] },
+        { "invariant": "conservation", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["conservation.outputItem", "conservation.completedCropSlots", "conservation.pendingCropSlot", "conservation.totalCropSlots"] },
+        { "invariant": "schedule", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["schedule.count", "schedule.entries"] },
+        { "invariant": "result", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "paths": ["cursor.index", "cursor.retainedBody", "cursor.actorBody", "result.sitePhase", "result.complete"] }
+      ]
+    }
+  }
+}

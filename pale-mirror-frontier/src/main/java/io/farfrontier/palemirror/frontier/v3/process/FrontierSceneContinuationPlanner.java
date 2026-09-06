@@ -6,6 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneFinalized;
 import io.farfrontier.palemirror.frontier.v3.model.RouteEngagement;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -76,6 +79,7 @@ public final class FrontierSceneContinuationPlanner {
         register(handlers, new ResumeProductionCompletionHandler());
         register(handlers, new ResumeRoutePatrolHandler());
         register(handlers, new BlockRoutePatrolHandler());
+        register(handlers, new ResumeResourceSiteHarvestHandler());
         if (handlers.size() != SceneContinuation.Kind.values().length) {
             throw new IllegalStateException("missing scene continuation handler");
         }
@@ -185,6 +189,17 @@ public final class FrontierSceneContinuationPlanner {
             if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene recovery has no active route patrol");
             return List.of(new ProposedEvent(patrol.settlementId(), new RoutePatrolBlocked(patrol.taskId())),
                     new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.BLOCKED)));
+        }
+    }
+
+    private static final class ResumeResourceSiteHarvestHandler implements ContinuationHandler {
+        @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_RESOURCE_SITE_HARVEST; }
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+            if (!(continuation instanceof SceneContinuation.ResumeResourceSiteHarvest resume)) throw invalid(continuation, kind());
+            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
+                    new ResourceSiteHarvestSceneCause(resume.jobId()));
+            io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction replacement = ResourceSiteHarvestProcess.coldProgress(job, resume.dueAt());
+            return List.of(new ProposedEvent(job.id(), new ScheduleEffect.Rescheduled(replacement.id(), replacement)));
         }
     }
 

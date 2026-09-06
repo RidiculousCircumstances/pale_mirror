@@ -33,7 +33,8 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     /**
      * Pins the still-unstarted field corridor to the one body position observed during the
      * ambient-to-scene transfer.  This is the only legal rebase: after the first retained edge
-     * or crop receipt, the original topology/cursor remains the operation's progress truth.
+     * or crop receipt, the original topology/cursor remains the operation's progress truth and
+     * a later hand-off must prove that exact retained station instead.
      */
     public ResourceSiteHarvestJob rebaseUnstartedTraversal(TraversalTopology next) {
         if (progress.completedCropSlots() != 0 || progress.hasPendingCrop() || traversalCursor != 0) {

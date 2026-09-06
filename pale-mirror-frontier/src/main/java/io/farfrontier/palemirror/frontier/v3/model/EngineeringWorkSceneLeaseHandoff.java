@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Exact ambient-to-scene hand-off for the retained engineering crew. */
-public record EngineeringWorkSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+public record EngineeringWorkSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public EngineeringWorkSceneLeaseHandoff {
         Objects.requireNonNull(lease, "engineering scene lease");
         ambientMembers = List.copyOf(Objects.requireNonNull(ambientMembers, "engineering scene ambient members"));

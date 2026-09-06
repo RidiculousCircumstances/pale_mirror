@@ -280,7 +280,7 @@ class FrontierV3FixtureCatalogTest {
         WorldId world = new WorldId("frontier:engineering-worksite-release");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(world, 41L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.nextCandidate(initial).orElseThrow();
+        EngineeringWorkSceneCandidate candidate = FrontierEngineeringWorkSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
         assertTrue(FrontierSceneAdmission.available(initial, candidate.memberPositions().keySet()),
                 "the COLD-ready crew is free for its own scene hand-off");
         assertTrue(candidate.memberPositions().keySet().stream().allMatch(actor -> FrontierSceneAdmission.reserved(initial, actor)),

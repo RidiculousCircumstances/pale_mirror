@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
@@ -50,6 +51,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -67,6 +69,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -118,25 +121,107 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:scene-hysteresis-game-test"), 91L), new EphemeralStore(), 20_000);
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-hysteresis-game-test");
         try {
-            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 1L, false, false),
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 1L, demand(false), false),
                     "the first absent-demand tick must retain a HOT scene instead of abruptly despawning it");
-            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 200L, false, false),
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 200L, demand(false), false),
                     "the final tick before the bounded 200-tick hand-off window must remain HOT");
-            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 201L, false, false),
+            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 201L, demand(false), false),
                     "only sustained absent demand may permit a COLD hand-off");
-            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 202L, true, false),
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 202L, demand(true), false),
                     "returning player demand must cancel the pending drain rather than leaving a latent despawn");
-            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 203L, false, false),
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 203L, demand(false), false),
                     "a fresh departure begins a new bounded hysteresis interval");
-            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 403L, false, true),
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 403L, demand(false), true),
                     "an otherwise absent player near an exact scene body prevents unsafe capture");
-            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 404L, false, false),
+            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 404L, demand(false), false),
                     "once safely distant after the hysteresis, the next durable release may proceed");
         } finally {
             FrontierV3SceneExecutor.forget(runtime);
             runtime.shutdown();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void twoRealObserversShareOneDemandLeaseWithoutProgressAcceleration(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos anchor = helper.absolutePos(new BlockPos(0, 8, 0));
+        ServerPlayer first = helper.makeMockServerPlayerInLevel();
+        ServerPlayer second = helper.makeMockServerPlayerInLevel();
+        first.setPos(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D);
+        second.setPos(anchor.getX() + 1.5D, anchor.getY(), anchor.getZ() + 0.5D);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:two-observer-demand"), 91L), new EphemeralStore(), 20_000);
+        SceneLeaseId leaseId = new SceneLeaseId("lease:two-observer-demand");
+        try {
+            SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
+            var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("two-observer fixture runtime must be active"));
+            SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
+            FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
+            FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+            SceneLease fixtureProjection = FrontierV3GameTestSceneLeases.projectedIntoFixture(lease,
+                    new BodyPosition(anchor.getX() + 4, anchor.getY(), anchor.getZ()));
+            for (BodyPosition body : fixtureProjection.memberPositions().values()) {
+                BlockPos floor = new BlockPos(body.x(), body.y() - 1, body.z());
+                level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+            }
+            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state(runtime), fixtureProjection),
+                    FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
+                    "one canonical HOT lease must materialize one exact test-cell projection before observer aggregation is assessed");
+            var beforeObservers = runtime.checkpointImage().orElseThrow();
+            var both = FrontierV3SceneExecutor.demandSnapshot(helper.getLevel(), new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
+            helper.assertValueEqual(both.observerIds(), Set.of(first.getUUID(), second.getUUID()),
+                    "two actual observers must be one bounded demand aggregate, never two physical leases");
+            helper.assertValueEqual(state(runtime).sceneLeases().entrySet().stream().filter(entry -> entry.getKey().equals(leaseId)).count(), 1L,
+                    "both observers must retain exactly one canonical lease record");
+            helper.assertValueEqual(lease.members().stream().map(SceneMember::entityId).filter(id -> level.getEntity(id) != null).count(), (long) lease.members().size(),
+                    "both observers must see the one retained deterministic body set, not one set per player");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 1L, both, false),
+                    "aggregate demand must not release a HOT lease");
+            helper.assertValueEqual(runtime.checkpointImage().orElseThrow(), beforeObservers,
+                    "observer count is read-only demand and may not accelerate canonical progress or schedules");
+
+            first.setPos(anchor.getX() + FrontierV3SceneDemand.RADIUS_BLOCKS + 8.5D, anchor.getY(), anchor.getZ() + 0.5D);
+            var one = FrontierV3SceneExecutor.demandSnapshot(helper.getLevel(), new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
+            helper.assertValueEqual(one.observerIds(), Set.of(second.getUUID()), "first departure must retain the exact shared demand");
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 201L, one, false),
+                    "one remaining observer prevents premature drain of the exact retained HOT lease");
+            helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.HOT,
+                    "the first departure may not drain the physical lease while the other observer remains");
+            helper.assertValueEqual(runtime.checkpointImage().orElseThrow(), beforeObservers,
+                    "a join/leave change may not add schedule work or advance the process while demand remains aggregate-active");
+
+            second.setPos(anchor.getX() + FrontierV3SceneDemand.RADIUS_BLOCKS + 9.5D, anchor.getY(), anchor.getZ() + 0.5D);
+            var none = FrontierV3SceneExecutor.demandSnapshot(helper.getLevel(), new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()));
+            helper.assertFalse(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 202L, none, false),
+                    "final departure begins one bounded hysteresis window, not an immediate release");
+            helper.assertTrue(FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, leaseId, 402L, none, false),
+                    "only zero aggregate demand through the full window permits the one final physical release");
+            FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-drain", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
+            long revisionBeforeRelease = runtime.canonicalState().orElseThrow().revision().value();
+            FrontierV3CommandSubmission.submit(runtime, "two-observer-lease-release", leaseId.value(), new SceneLeaseReleased(leaseId,
+                    lease.members().stream().map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(
+                            member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+            helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
+                    "the exact canonical lease must close once, after its final aggregate-demand release");
+            helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revisionBeforeRelease + 1L,
+                    "one and only one canonical transition records the final physical release");
+        } finally {
+            for (Entity entity : level.getEntities().getAll()) {
+                if (entity != null && entity.getPersistentData().getString(FrontierV3SceneExecutor.LEASE_KEY).equals(leaseId.value())) entity.discard();
+            }
+            FrontierV3SceneExecutor.forget(runtime);
+            runtime.shutdown();
+            helper.getLevel().getServer().getPlayerList().remove(first);
+            helper.getLevel().getServer().getPlayerList().remove(second);
+        }
+        helper.succeed();
+    }
+
+    private static FrontierV3SceneDemand.Snapshot demand(boolean active) {
+        return new FrontierV3SceneDemand.Snapshot(true, active
+                ? java.util.Set.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")) : java.util.Set.of());
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

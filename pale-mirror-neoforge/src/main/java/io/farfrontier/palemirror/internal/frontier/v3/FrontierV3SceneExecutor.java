@@ -25,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
@@ -63,7 +64,10 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Loaded-chunk HOT executor for exact route participants.
@@ -76,7 +80,6 @@ final class FrontierV3SceneExecutor {
     static final String LEASE_KEY = "pale_mirror_frontier_v3_scene_lease";
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_scene_actor";
     static final String REVISION_KEY = "pale_mirror_frontier_v3_scene_revision";
-    private static final int DEMAND_RADIUS_BLOCKS = 96;
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     /**
@@ -114,6 +117,11 @@ final class FrontierV3SceneExecutor {
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3SceneBehaviorRegistry.tick(level, runtime);
+    }
+
+    /** One registered family is checked before every physical executor turn. */
+    static void requireRegisteredSceneTurn(SceneLease lease) {
+        FrontierDurationProcessDriverRegistry.requireSceneTick(lease, 1);
     }
 
     /** Logistics behavior entry point; the closed registry owns inter-family ordering. */
@@ -207,10 +215,11 @@ final class FrontierV3SceneExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+        requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> {
-                boolean demand = demandExists(level, lease.handoffPosition());
+                FrontierV3SceneDemand.Snapshot demand = demandSnapshot(level, lease.handoffPosition());
                 if (drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
                     FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_draining", lease,
                             submit(runtime, "scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
@@ -219,7 +228,7 @@ final class FrontierV3SceneExecutor {
                 // An absent-demand scene owns no naturally loaded execution surface.  Do not
                 // turn its expected unloaded cart/body into a conflict while the durable
                 // hand-off window is still running.
-                if (!demand) return;
+                if (!demand.active()) return;
                 executeLocalGoals(level, state, lease);
                 if (!FrontierV3CargoCarrierExecutor.move(level, state, lease, cargoDestination(state, lease))) {
                     conflict(level, runtime, state, lease, "carrier-unavailable"); return;
@@ -337,12 +346,13 @@ final class FrontierV3SceneExecutor {
                 .anyMatch(body -> !entityStorageReady(level, new BlockPos(body.x(), body.y() - 1, body.z())))) {
             return BodyMaterialization.DEFERRED;
         }
-        return materializeBodiesInReadyColumns(level, state, lease);
+        return materializeBodiesInReadyColumns(level, state, lease,
+                FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease));
     }
 
     /** Isolated GameTest fixture entry point; production code must use {@link #materializeBodies}. */
     static BodyMaterialization materializeBodiesForFixture(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        return materializeBodiesInReadyColumns(level, state, lease);
+        return materializeBodiesInReadyColumns(level, state, lease, FrontierV3StandingPosition::aboveExactFloor);
     }
 
     static boolean entityStorageReady(ServerLevel level, BlockPos position) {
@@ -354,7 +364,8 @@ final class FrontierV3SceneExecutor {
         return chunkLoaded && entitiesLoaded;
     }
 
-    private static BodyMaterialization materializeBodiesInReadyColumns(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+    private static BodyMaterialization materializeBodiesInReadyColumns(ServerLevel level, FrontierWorldState state, SceneLease lease,
+                                                                        FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPosition) {
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());
@@ -383,7 +394,7 @@ final class FrontierV3SceneExecutor {
             BodyPosition canonical = lease.memberPosition(member.actorId());
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
-            BlockPos position = FrontierV3StandingPosition.aboveExactFloor(level, candidate);
+            BlockPos position = standingPosition.resolve(level, candidate);
             // The semantic floor is projected independently and only into naturally loaded
             // chunks.  A fresh empty support column is therefore a normal materialization
             // dependency, not permission to substitute a higher terrain surface or to mark a
@@ -631,8 +642,7 @@ final class FrontierV3SceneExecutor {
             // chunk return before a new scene is permitted to materialize.
             if (observed != null) {
                 FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released_unloaded", lease,
-                        submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed)));
-                forgetLeaseTransient(runtime, lease.id());
+                        releaseUnloaded(runtime, lease, observed));
             }
             // A restart deliberately has no volatile observation. Keep DRAINING visible until a
             // normal player/world load permits full physical postcondition inspection.
@@ -655,8 +665,23 @@ final class FrontierV3SceneExecutor {
             positions.add(new SceneMemberPosition(member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease,
-                submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions)));
-        forgetLeaseTransient(runtime, lease.id());
+                releaseLoaded(runtime, lease, positions));
+    }
+
+    /** Volatile observation is discarded only after the canonical release transaction accepted it. */
+    private static CommandResult releaseUnloaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+                                                 List<SceneMemberPosition> observed) {
+        CommandResult result = submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed));
+        if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
+        return result;
+    }
+
+    /** A rejected release retains its same observation for diagnosis; it is never rewritten or guessed. */
+    private static CommandResult releaseLoaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+                                               List<SceneMemberPosition> positions) {
+        CommandResult result = submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions));
+        if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
+        return result;
     }
 
     /**
@@ -684,10 +709,28 @@ final class FrontierV3SceneExecutor {
                 .forEach(lease -> FrontierV3CargoCarrierExecutor.discardClosed(level, state, lease));
     }
 
+    static FrontierV3SceneDemand.Snapshot demandSnapshot(ServerLevel level, BlockPosition anchor) {
+        return FrontierV3SceneDemand.observe(level, anchor);
+    }
+
     static boolean demandExists(ServerLevel level, BlockPosition anchor) {
-        BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(position) && level.players().stream().filter(player -> !player.isSpectator())
-                .anyMatch(player -> player.blockPosition().closerThan(position, DEMAND_RADIUS_BLOCKS));
+        return demandSnapshot(level, anchor).active();
+    }
+
+    /**
+     * Selects the first physically demanded member of a complete, deterministically ordered
+     * canonical candidate inventory.  The canonical model never sees player demand; it is
+     * therefore invalid for a family executor to ask its model support for one global first
+     * candidate and then discard it because that unrelated location is unloaded.
+     */
+    static <Candidate> Optional<Candidate> firstDemandedCandidate(ServerLevel level, List<Candidate> candidates,
+                                                                    Function<Candidate, BlockPosition> demandAnchor) {
+        Objects.requireNonNull(level, "scene demand level");
+        Objects.requireNonNull(candidates, "scene candidates");
+        Objects.requireNonNull(demandAnchor, "scene demand anchor");
+        return candidates.stream()
+                .filter(candidate -> demandExists(level, Objects.requireNonNull(demandAnchor.apply(candidate), "candidate demand anchor")))
+                .findFirst();
     }
 
     private static boolean loaded(ServerLevel level, SceneLease lease) {
@@ -730,8 +773,9 @@ final class FrontierV3SceneExecutor {
 
     /** Package-visible deterministic policy hook for the negative hand-off GameTest. */
     static boolean drainAfterDemandHysteresis(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId, long gameTime,
-                                              boolean demandExists, boolean playerWithinSafeRadius) {
-        if (demandExists) {
+                                              FrontierV3SceneDemand.Snapshot demand, boolean playerWithinSafeRadius) {
+        Objects.requireNonNull(demand, "scene aggregate demand");
+        if (demand.active()) {
             forgetColdDemand(runtime, leaseId);
             return false;
         }
@@ -740,6 +784,7 @@ final class FrontierV3SceneExecutor {
         long started = absentSince.computeIfAbsent(leaseId, ignored -> gameTime);
         return gameTime - started >= DRAIN_HYSTERESIS_TICKS && !playerWithinSafeRadius;
     }
+
 
     /** A logistics scene owns local transport only; combat exists solely under an engagement lease. */
     static boolean combatEnabled(SceneLease lease) {
@@ -753,8 +798,7 @@ final class FrontierV3SceneExecutor {
             Entity entity = level.getEntity(member.entityId());
             if (entity != null) positions.add(entity.blockPosition());
         }
-        return level.players().stream().filter(player -> !player.isSpectator())
-                .anyMatch(player -> positions.stream().anyMatch(position -> player.blockPosition().closerThan(position, DRAIN_SAFE_RADIUS_BLOCKS)));
+        return FrontierV3SceneDemand.observerWithin(level, positions, DRAIN_SAFE_RADIUS_BLOCKS);
     }
 
     private static void forgetInactiveDemand(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {

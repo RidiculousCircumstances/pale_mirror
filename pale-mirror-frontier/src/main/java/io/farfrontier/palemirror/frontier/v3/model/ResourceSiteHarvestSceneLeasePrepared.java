@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.Objects;
 
 /** Durable-before-effect admission of the exact assigned farmer at one retained field cursor. */
-public record ResourceSiteHarvestSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
+public record ResourceSiteHarvestSceneLeasePrepared(SceneLease lease) implements FrontierPayload, SceneLeaseAdmission {
     public ResourceSiteHarvestSceneLeasePrepared {
         Objects.requireNonNull(lease, "resource-site harvest scene lease");
         if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)) {

@@ -183,7 +183,7 @@ class MedicalEvacuationOperationTest {
         PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
-        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
 
         LinkedHashMap<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>();
         candidate.memberPositions().forEach((actor, position) -> ambient.put(actor, new AmbientActorLease(actor, FrontierTestPositions.bodyAboveSupport(position),
@@ -191,7 +191,7 @@ class MedicalEvacuationOperationTest {
         FrontierWorldState hotAmbient = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(ambient));
 
         assertFalse(FrontierSceneAdmission.available(hotAmbient, candidate.memberPositions().keySet()));
-        assertEquals(started.operation().id(), FrontierMedicalTreatmentSceneSupport.nextCandidate(hotAmbient).orElseThrow().operationId());
+        assertEquals(started.operation().id(), FrontierMedicalTreatmentSceneSupport.candidates(hotAmbient).stream().findFirst().orElseThrow().operationId());
         var population = FrontierWorldProcessCatalog.descriptors().stream()
                 .filter(descriptor -> descriptor.id().equals("population")).findFirst().orElseThrow();
         assertTrue(population.commandPayloadTypes().contains("frontier.medical_treatment_scene_lease_prepared"));
@@ -236,7 +236,7 @@ class MedicalEvacuationOperationTest {
         PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
-        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:medical-hot");
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
@@ -305,7 +305,7 @@ class MedicalEvacuationOperationTest {
 
         assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(fixture.lease().id()).status());
         assertEquals(MedicalEvacuationStatus.PREPARED, released.humanPopulation().medicalOperations().get(fixture.operation().id()).status());
-        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(released).orElseThrow();
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(released).stream().findFirst().orElseThrow();
         assertEquals(fixture.operation().id(), candidate.operationId());
         assertEquals(fixture.lease().members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()),
                 candidate.memberPositions().keySet());
@@ -335,7 +335,7 @@ class MedicalEvacuationOperationTest {
         PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
-        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:medical-" + world.value().substring("frontier:".length()));
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();

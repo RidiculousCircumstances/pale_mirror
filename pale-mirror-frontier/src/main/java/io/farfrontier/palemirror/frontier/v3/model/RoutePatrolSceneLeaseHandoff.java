@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Durable transfer of retained ambient patrol bodies into their route-patrol scene. */
-public record RoutePatrolSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+public record RoutePatrolSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public RoutePatrolSceneLeaseHandoff {
         Objects.requireNonNull(lease, "route-patrol lease");
         ambientMembers = List.copyOf(Objects.requireNonNull(ambientMembers, "route-patrol ambient members"));

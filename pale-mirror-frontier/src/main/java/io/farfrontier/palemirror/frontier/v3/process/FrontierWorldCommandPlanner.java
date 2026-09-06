@@ -17,6 +17,8 @@ public final class FrontierWorldCommandPlanner {
         if (!trustedPhysicalExecutor.equals(command.actor())) {
             return rejected("command is not from the trusted physical executor");
         }
+        try { FrontierSceneLeaseAdmissionGuard.require(command.payload()); }
+        catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }
         final String processId;
         try { processId = processRegistry.requireCommandOwner(command.payload().type()); }
         catch (IllegalArgumentException invalid) { return rejected(invalid.getMessage()); }

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -10,9 +11,10 @@ import java.util.Set;
 public final class FrontierProductionWorkSceneSupport {
     private FrontierProductionWorkSceneSupport() { }
 
-    public static Optional<Candidate> nextCandidate(FrontierWorldState state) {
+    /** Stable canonical inventory; physical demand is selected only by the adapter. */
+    public static List<Candidate> candidates(FrontierWorldState state) {
         return state.productionJobs().values().stream().sorted(java.util.Comparator.comparing(ProductionJob::id))
-                .map(job -> candidate(state, job)).flatMap(Optional::stream).findFirst();
+                .map(job -> candidate(state, job)).flatMap(Optional::stream).toList();
     }
     public static Optional<Candidate> candidate(FrontierWorldState state, ProductionJob job) {
         if (hasScene(state, job.id()) || !hasExactMaterializedInput(state, job) || job.workProgress().terminalEffectEligible()) return Optional.empty();

@@ -189,7 +189,7 @@ class ProductionProcessTest {
                 java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
         FrontierWorldState conflicted = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
 
-        assertTrue(FrontierProductionWorkSceneSupport.nextCandidate(conflicted).isEmpty(),
+        assertTrue(FrontierProductionWorkSceneSupport.candidates(conflicted).isEmpty(),
                 "a visible conflict retains the same exact worker instead of admitting a second scene lease");
     }
 

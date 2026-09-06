@@ -37,8 +37,8 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierMedicalTreatmentSceneSupport.nextCandidate(state)
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.infirmaryAnchor()));
+        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+                level, FrontierMedicalTreatmentSceneSupport.candidates(state), FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor);
         if (candidate.isEmpty()) return false;
         FrontierMedicalTreatmentSceneSupport.Candidate treatment = candidate.orElseThrow();
         SceneLease lease = lease(runtime, treatment);
@@ -64,6 +64,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> assemble(level, runtime, state, lease);
             case HOT -> treat(level, runtime, state, lease);
@@ -93,13 +94,13 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             submit(runtime, "medical-scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
-        boolean demand = FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition());
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
                 FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) {
             submit(runtime, "medical-scene-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             return;
         }
-        if (!demand) return;
+        if (!demand.active()) return;
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !FrontierV3SceneExecutor.recognizes(runtime, body) || !body.isAlive()) {

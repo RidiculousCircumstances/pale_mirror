@@ -99,13 +99,21 @@ public final class FrontierV3ServerLifecycle {
      */
     public static String diagnostic(MinecraftServer server, String view, String id) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(view, "view"); Objects.requireNonNull(id, "id");
+        // `execution` is an internal server-only probe; every externally callable diagnostic
+        // must be admitted by the one closed production vocabulary consumed by both Brigadier
+        // and the ordinary pilot.  Reject before touching a runtime so an unknown view cannot
+        // acquire an accidental implementation through a future formatter default.
+        if (!"execution".equals(view) && !FrontierV3DiagnosticView.accepts(view, id)) {
+            return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
+        }
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (!ownsPhysicalWorld(server) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
-        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot());
+        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(),
+                FAST_FORWARD_REMAINING.getOrDefault(server, 0));
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);

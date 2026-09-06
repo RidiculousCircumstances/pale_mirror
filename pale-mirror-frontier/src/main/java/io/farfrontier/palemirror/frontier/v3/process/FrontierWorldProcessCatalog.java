@@ -70,7 +70,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_prepared", "frontier.resource_site_harvest_started",
             "frontier.resource_site_harvest_crop_prepared",
             "frontier.resource_site_harvest_progressed",
-            "frontier.resource_site_harvest_traversal_advanced",
+            "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_hot_traversal_advanced",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_lease_handoff",
             "frontier.resource_site_conflict_observed");
@@ -142,6 +142,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.resource_site.growth", (state, action, autonomous) -> ResourceSiteProcess.planGrowth(state, action)),
             Map.entry("frontier.resource_site.prepare", (state, action, autonomous) -> ResourceSiteProcess.planPreparation(state, action)),
             Map.entry("frontier.resource_site.harvest", (state, action, autonomous) -> ResourceSiteHarvestProcess.plan(state, action)),
+            Map.entry("frontier.resource_site.harvest.cold_progress", (state, action, autonomous) -> ResourceSiteHarvestProcess.planColdProgress(state, action)),
             Map.entry("frontier.objective.resource_harvest", (state, action, autonomous) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
             Map.entry("frontier.structural_repair.scan", (state, action, autonomous) -> StructuralRepairProcess.plan(state, action)),
             Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
@@ -211,6 +212,7 @@ public final class FrontierWorldProcessCatalog {
 
     /** Routes only through the module selected by the registry's exact event-type owner. */
     public static FrontierWorldState reduce(String processId, FrontierWorldState state, FrontierEvent event) {
+        FrontierSceneLeaseAdmissionGuard.require(event.payload());
         return module(processId).reduce(state, event);
     }
 
@@ -284,7 +286,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_conflict_observed",
             "frontier.resource_site_harvest_crop_prepared",
             "frontier.resource_site_harvest_progressed",
-            "frontier.resource_site_harvest_traversal_advanced",
+            "frontier.resource_site_harvest_hot_traversal_advanced",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_lease_handoff"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
@@ -320,7 +322,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.company.foundation.review", "frontier.market.clear"); }
     private static Set<String> resourceSchedules() { return types(
             "frontier.resource_site.growth", "frontier.resource_site.prepare", "frontier.resource_site.harvest",
-            "frontier.objective.resource_harvest"); }
+            "frontier.resource_site.harvest.cold_progress", "frontier.objective.resource_harvest"); }
     private static Set<String> hiveSchedules() { return types(
             "frontier.hive.infection.task", "frontier.hive.growth.task.start", "frontier.hive.growth.task.complete",
             "frontier.hive.nutrient.transfer.progress", "frontier.hive.mobilization.assembly_progress", "frontier.hive.scout.patrol"); }
@@ -422,7 +424,8 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
                     "frontier.resource_site_harvest_started", "frontier.resource_site_harvest_crop_prepared",
-                    "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_traversal_advanced", "frontier.resource_site_harvest_scene_lease_prepared",
+                    "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_cold_traversal_advanced",
+                    "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_scene_lease_prepared",
                     "frontier.resource_site_harvest_scene_lease_handoff",
                     "frontier.resource_site_conflict_observed",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",

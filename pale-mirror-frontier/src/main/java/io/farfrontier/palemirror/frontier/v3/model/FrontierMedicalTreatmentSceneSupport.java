@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -36,9 +37,10 @@ public final class FrontierMedicalTreatmentSceneSupport {
         return Optional.of(new Candidate(operation.id(), infirmary.anchor(), Map.copyOf(positions)));
     }
 
-    public static Optional<Candidate> nextCandidate(FrontierWorldState state) {
+    /** Complete stable treatment inventory; physical demand is a NeoForge-only observation. */
+    public static List<Candidate> candidates(FrontierWorldState state) {
         return state.humanPopulation().medicalOperations().values().stream().sorted(java.util.Comparator.comparing(MedicalEvacuationOperation::id))
-                .map(operation -> candidate(state, operation)).flatMap(Optional::stream).findFirst();
+                .map(operation -> candidate(state, operation)).flatMap(Optional::stream).toList();
     }
 
     public static SubjectId owner(FrontierWorldState state, MedicalTreatmentSceneCause cause) { return require(state, cause).settlementId(); }

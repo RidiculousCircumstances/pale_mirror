@@ -11,12 +11,18 @@ materialization breadth are specified in
 `docs/frontier-v3-seamless-foundation.md`. They are part of this contract, not
 an optional implementation note.
 
+`frontier-v3-execution-semantics.md` specifies the accepted knowledge,
+physical-activity, cross-scene and crash-confirmation boundaries and their F0
+acceptance criteria. It is normative, not a claim that current code meets them.
+
 ## Player promise
 
-The player enters an autonomous world that was living before they arrived,
-continues to live both near and far from them, and treats every physical action
-and consequence as a cause of what happens next without exposing a switch
-between "simulation" and "Minecraft".
+The world develops without the player. Settlements, the hive, people and
+resources retain their identities and history. On approaching, the player sees
+current activity and can intervene through ordinary Minecraft actions. Leaving,
+returning and restarting do not themselves create resources, reset work or undo
+confirmed consequences. HOT/COLD remains an internal execution detail, not a
+visible switch between two worlds.
 
 The graybox proves that promise with readable placeholder geometry. It is not a
 separate diagnostic simulation and cannot use labels or operator commands to
@@ -306,6 +312,30 @@ Both sides use the same three-level decision boundary:
 3. HOT actors receive bounded local goals for Minecraft movement, work and
    combat.
 
+Decision ownership is first-class without requiring one monolithic AI class.
+Each settlement and the one whole `HIVEMIND` have exactly one canonical
+`DecisionAuthority` scope over their perceived knowledge, doctrine, current
+commitments/objectives, reconsideration epoch and bounded decision trace. The
+authority is not a second copy of objectives, tasks, rosters or resources: it
+owns their decision provenance and references the existing canonical owners.
+Its world-bound descriptor retains a stable policy ID/version. One common
+decision protocol dispatches to distinct registered settlement and hive
+policies; a generic policy may not erase their asymmetric knowledge,
+physiology, governance or failure rules.
+
+Every coordinated operation retains one canonical `TacticalPlan` within its
+operation/front ownership. It names the tactical phase, bounded objectives,
+roles, formation constraints, permitted local behaviours, rendezvous and
+fallback/retreat conditions without becoming a second roster or custody
+ledger. Closed tactical and individual-behaviour policy registries turn that
+plan and typed observations into bounded actor directives through stable
+descriptors. Scenes, entity AI and
+movement providers execute those directives and report observations; they may
+not select a new strategic purpose, formation, reinforcement, retreat or
+semantic destination. Every objective/task/order is traceable to exactly one
+decision authority and decision epoch, and every local directive to exactly
+one tactical plan/front and current actor lease. Stale epochs fail closed.
+
 AI cannot inspect hidden enemy state or Minecraft objects outside observations.
 Decisions are triggered by events and scheduled reconsideration, not one global
 daily planner. The initial balance grants settlements a one-to-two-day grace
@@ -314,7 +344,9 @@ scripted guaranteed outcome; exact balance constants remain profile data.
 
 ## HOT and COLD execution
 
-HOT/COLD is an execution-location change, not a change of truth or fidelity.
+HOT/COLD shares canonical truth and rules, not identical physical fidelity.
+Exact accounting and progress coexist with bounded COLD approximations and
+calibrated combat outcomes as defined in `frontier-v3-execution-semantics.md`.
 Every exact actor, cargo batch, operation and building remains canonical in both
 states.
 
@@ -370,9 +402,11 @@ through the lifecycle.
 
 - COLD execution advances exact actors and processes through domain events
   without Minecraft entities or force-loaded chunks.
-- A scene becomes HOT only from naturally loaded non-spectator player demand.
-  Demand selects physical execution for existing eligible work; absence of
-  demand selects COLD execution and never pauses or suppresses that work.
+- Naturally loaded non-spectator player demand selects detailed presentation
+  for existing eligible work. Physical interaction eligibility is a separate
+  input: an active container or mechanism may retain physical custody without
+  a viewer. Absence of demand permits COLD only after the affected physical
+  authority is safely released; it never pauses unrelated canonical work.
   One persisted scene lease names its revision, members, custody and hand-off
   instant before any body or container appears. The broad hand-off point is
   demand/readability metadata only: the lease separately snapshots one exact
@@ -386,8 +420,9 @@ through the lifecycle.
 - While HOT, the domain chooses intent and constraints; Minecraft movement,
   collision, combat, inventory and explosion results supply the physical facts.
   COLD rules do not execute the same action concurrently.
-- Player demand may gate only immediate Minecraft execution and presentation,
-  never the semantic consequence or liveness of its owning process. A HOT
+- Natural physical availability gates immediate Minecraft execution; demand
+  selects presentation, never the existence or liveness of its owning process.
+  Canonical consequences require the family's declared evidence policy. A HOT
   world-effect executor first checks naturally available physical evidence at
   the exact origin and uses a durable-before-effect receipt. If the region is
   unavailable, the canonical consequence advances from known facts and emits a
@@ -429,7 +464,8 @@ through the lifecycle.
   represent physical bodies and therefore do not obstruct pure corridor
   compilation; only a live HOT lease reserves its canonical floor cell, and
   the naturally loaded Minecraft world remains the final admission authority.
-- HOT-to-COLD waits through a bounded no-demand hysteresis, then captures exact
+- HOT-to-COLD waits through bounded no-demand hysteresis, verifies release is
+  safe despite any observer-independent physical activity, then captures exact
   surviving bodies, positions, health, inventories, damage and unfinished
   intents. Durable lease epochs fence every physical binding. A current exact
   binding may be reclaimed; a completely checkpointed lease may be revoked and
@@ -447,7 +483,8 @@ through the lifecycle.
   authority, so an ambient-to-scene hand-off adopts the same body rather than
   cloning or recreating it. Missing, duplicated or obstructed bodies fail
   visibly and do not imply death.
-- An ambient body whose HOT lease was made `UNKNOWN_AFTER_RESTART` is recovered
+- The existing ambient restart path (to be generalized by F0.5) recovers an
+  ambient body whose HOT lease was made `UNKNOWN_AFTER_RESTART`
   only from a naturally loaded exact hand-off column. An owned saved UUID
   returns that same lease to HOT. If that loaded column proves the UUID absent,
   the runtime records a typed restart-absence observation, closes only the
@@ -456,6 +493,9 @@ through the lifecycle.
   foreign/mismatched UUID remains explicit UNKNOWN/CONFLICT and is never
   replaced. A normal player-caused death is still its own durable death
   observation, never an absence inference.
+  F0.5 must additionally allow safely checkpointed fenced COLD resumption under
+  the confirmation rules above; this historical inspection path is not a
+  permanent requirement that a player revisit every old projection.
 - If a naturally loaded player-demand point disproves recovery of a logistics
   scene's complete exact body set or cargo carrier, the runtime persists the
   exact missing identities as recovery evidence and blocks that delivery. It
@@ -466,6 +506,10 @@ through the lifecycle.
   effects cross the boundary atomically; the complete operation is never one
   unbounded physical transaction. Exact reserves and transit actors remain
   canonical people/bioforms at their real positions, not cohorts.
+  Disjoint custody is not immunity: cross-front effects, pursuit and transfers
+  use one bounded canonical ordering/deduplication protocol with exact causes,
+  source/target identities and epochs as specified in
+  `frontier-v3-execution-semantics.md`.
 
 If a player leaves a battle and later returns, they see current survivors,
 positions, damage, infection and structures produced by COLD continuation. They
@@ -537,12 +581,14 @@ This distinction is invariant: materialization cannot overwrite unknown
 reality, while a legitimate causal effect is allowed to change any physically
 reachable reality and must account for it afterwards.
 
-A COLD legitimate effect follows the same rule through a durable bounded
-aftermath footprint. Known semantic consequences commit at their original
-simulation time. The footprint is realized idempotently when its chunks become
-naturally available, affecting foreign/player construction unless a later
-durable event proves it postdates the effect. The old projectile, explosion or
-fight is never replayed for presentation.
+A COLD legitimate effect uses a durable bounded aftermath footprint justified
+by valid known facts and the family's declared approximation. Event time,
+observation time, provenance and preconditions remain distinct. Natural loading
+inspects current evidence before idempotent realization: unknown shielding or
+construction is not permission for blanket destruction or an exact earlier
+casualty. No ownership class is protected from a justified effect. Contradictions
+are reconciled locally, without rewriting confirmed unrelated consequences.
+The old projectile, explosion or fight is never replayed for presentation.
 
 Infection materializes as an obviously foreign dynamic surface and visible
 contamination of structures and organs. Growth, retreat, removal and spread
@@ -621,6 +667,13 @@ Transactions have two durability classes:
 - `DURABLE_BEFORE_EFFECT` covers player custody changes, physical leases and
   non-replayable Minecraft effects and must be flushed before the effect is
   acknowledged or invoked.
+
+This flush acknowledges a prepared intent, not completion of its physical
+effect. Recoverable confirmation must account for every participating owner,
+including chunk/container and player saves. WAL and arbitrary Minecraft state
+are not one atomic transaction. Each family declares its postcondition and
+partial-save reconciliation protocol under `frontier-v3-execution-semantics.md`;
+ambiguous external custody cannot be replayed or rolled back by fiat.
 
 Recovery loads the newest valid snapshot, replays complete WAL transactions in
 order and rejects gaps, checksum errors, duplicate conflicting IDs or invalid

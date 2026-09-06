@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3DiagnosticView;
 
 import java.util.Set;
 
@@ -13,10 +14,6 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
-    private static final Set<String> DIAGNOSTIC_VIEWS = Set.of(
-            "summary", "performance", "site", "settlement", "hive", "hive_transfer", "hive_mobilization", "actor", "item", "container", "market_order", "operation",
-            "route_construction", "route_maintenance", "route_topology", "physical_delta", "scene", "intent", "trace", "transit", "medical", "traversal_foundry", "hive_foundry");
-
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
         int actionCount() { return actions.size(); }
@@ -74,7 +71,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
-                    (type.equals("fast_forward") && !wholeTicks(action, 24_000L)) ||
+                    (type.equals("fast_forward") && (!wholeTicks(action, 24_000L) || !positiveTimeout(action, 180_000L))) ||
                     (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
@@ -113,13 +110,17 @@ final class FrontierV3TestPilotScenario {
     private static boolean validDiagnosticIdentity(JsonObject action) {
         if (!action.has("view") || !action.has("id") || !action.get("view").isJsonPrimitive() || !action.get("id").isJsonPrimitive()) return false;
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString();
-        return DIAGNOSTIC_VIEWS.contains(view) && ((view.equals("summary") || view.equals("performance")) || !id.isBlank());
+        return FrontierV3DiagnosticView.accepts(view, id);
     }
 
     private static boolean timeout(JsonObject action, long maximum) {
         if (!action.has("timeoutMs") || !action.get("timeoutMs").isJsonPrimitive() || !action.get("timeoutMs").getAsJsonPrimitive().isNumber()) return false;
         long value = action.get("timeoutMs").getAsLong();
         return value >= 0L && value <= maximum;
+    }
+
+    private static boolean positiveTimeout(JsonObject action, long maximum) {
+        return timeout(action, maximum) && action.get("timeoutMs").getAsLong() >= 1L;
     }
 
     private static boolean timeout(JsonObject action, long maximum, String field) {
@@ -173,7 +174,7 @@ final class FrontierV3TestPilotScenario {
     private static boolean validVisit(JsonObject action) {
         return action.has("dimension") && action.get("dimension").isJsonPrimitive()
                 && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && position(action) && timeout(action, 120_000L, "settleMs");
+                && resolvablePosition(action, "position") && timeout(action, 120_000L, "settleMs");
     }
 
     /** A semantic camera may read one current operation projection, then perform only ordinary player travel. */
@@ -247,11 +248,13 @@ final class FrontierV3TestPilotScenario {
     }
 
     /**
-     * Dynamic coordinates are intentionally limited to exact immutable plan
-     * anchors published by their named diagnostics. The one scene anchor is a
-     * current/next edge; it cannot select or move a server entity. A normal
-     * player packet may still place or break there, which is the physical
-     * intervention this causal harness must be able to test.
+     * Dynamic coordinates are intentionally limited to exact retained anchors
+     * published by named diagnostics.  Process cursor bodies are included only
+     * for ordinary observer travel: the server still receives a normal player
+     * teleport command and may not select, create or mutate an actor for it.
+     * A normal player packet may still place or break at other admitted anchors,
+     * which is the physical intervention this causal harness must be able to
+     * test.
      */
     private static boolean resolvablePosition(JsonObject action, String field) {
         JsonObject value = action.getAsJsonObject(field);
@@ -263,6 +266,7 @@ final class FrontierV3TestPilotScenario {
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
         return (view.equals("site") && requiredId(reference, "id", "site:") && diagnosticField.equals("firstCrop"))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
+                || (view.equals("process") && requiredId(reference, "id", "job:") && diagnosticField.equals("cursor.retainedBody"))
                 || (view.equals("scene") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("productionCurrent") || diagnosticField.equals("productionNext") || diagnosticField.equals("productionNextBody")
                 || diagnosticField.equals("productionFutureBody")))

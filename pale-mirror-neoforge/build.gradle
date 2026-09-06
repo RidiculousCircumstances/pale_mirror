@@ -64,6 +64,14 @@ def frontierV3PilotRconPassword = providers.environmentVariable('FRONTIER_V3_PIL
 def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
 def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
+def frontierV3PilotLifecycleControlDirectory = providers.gradleProperty('frontierV3PilotLifecycleControlDirectory').orElse('').get()
+def frontierV3PilotLifecycleSegment = providers.gradleProperty('frontierV3PilotLifecycleSegment').orElse('single').get()
+// F0.V exact crash rendezvous: all five fields are required together and are
+// consumed only by the disposable pilot server after a WAL append succeeds.
+def frontierV3PilotCrashBoundary = providers.gradleProperty('frontierV3PilotCrashBoundary').orElse('').get()
+def frontierV3PilotCrashOwner = providers.gradleProperty('frontierV3PilotCrashOwner').orElse('').get()
+def frontierV3PilotCrashRevision = providers.gradleProperty('frontierV3PilotCrashRevision').orElse('').get()
+def frontierV3PilotCrashPayload = providers.gradleProperty('frontierV3PilotCrashPayload').orElse('').get()
 def frontierV3PilotCatalog = new Properties()
 def frontierV3PilotCatalogFile = file('../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties')
 frontierV3PilotCatalogFile.withInputStream { frontierV3PilotCatalog.load(it) }
@@ -103,7 +111,6 @@ def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/c
 sourceSets {
     pilot {
         java.srcDir 'src/pilot/java'
-        resources.srcDir 'src/pilot/resources'
         // Compile the pure fixture sources into the pilot mod source set instead of placing a
         // second jar with Frontier packages on NeoForge's module layer (which is a split package).
         java.srcDir project(':pale-mirror-frontier').file('src/testFixtures/java')
@@ -120,6 +127,9 @@ dependencies {
     implementation project(':pale-mirror-domain')
     implementation project(':pale-mirror-frontier')
     pilotImplementation project(':pale-mirror-frontier')
+    // Pilot-only crash rendezvous is unit-tested from the ordinary test source set, but never
+    // participates in main compilation or the distributable JAR.
+    testImplementation sourceSets.pilot.output
     testImplementation testFixtures(project(':pale-mirror-frontier'))
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
@@ -277,6 +287,15 @@ neoForge {
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
             systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
                     providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
+            // Present only in the F0.V disposable runner.  This allows the one visible native
+            // test client to reconnect after a runner-confirmed server restart without making a
+            // second JVM or a second player authority.
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.session_control_directory',
+                    providers.gradleProperty('frontierV3PilotSessionControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
+                    providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25575').get()
             programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
@@ -293,6 +312,12 @@ neoForge {
                     providers.gradleProperty('frontierV3PilotScenario').orElse('').get()
             systemProperty 'pale_mirror.frontier_v3.test_pilot.capture_control_directory',
                     providers.gradleProperty('frontierV3PilotCaptureControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.session_control_directory',
+                    providers.gradleProperty('frontierV3PilotSessionControlDirectory').orElse('').get()
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
+                    providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
             programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
@@ -304,10 +329,17 @@ neoForge {
             // This server shares neither a pack profile nor a world directory with live work.
             gameDirectory = frontierV3PilotServerDirectory
             programArgument '--nogui'
+            programArgument '--mixin.config'
+            programArgument 'pale_mirror.frontier_v3.pilot_crash.mixins.json'
             systemProperty 'pale_mirror.frontier_v3.enabled', 'true'
             // A disposable runner receives the actual Minecraft JVM identity
             // from its own nonce; Gradle's forked launcher is not that owner.
             systemProperty 'pale_mirror.frontier_v3.pilot.run_id', frontierV3PilotRunId
+            systemProperty 'pale_mirror.frontier_v3.pilot.lifecycle_control_directory', frontierV3PilotLifecycleControlDirectory
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.boundary', frontierV3PilotCrashBoundary
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.owner', frontierV3PilotCrashOwner
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.revision', frontierV3PilotCrashRevision
+            systemProperty 'pale_mirror.frontier_v3.pilot.crash.payload', frontierV3PilotCrashPayload
             // Consumed only by the non-packaged pilot bootstrap. Production startup ignores it.
             systemProperty 'pale_mirror.frontier_v3.pilot.profile', frontierV3PilotProfile
         }
@@ -402,6 +434,13 @@ tasks.register('verifyPackagedJar') {
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierDevelopmentScenarios.class',
                     'io/farfrontier/palemirror/frontier/v3/model/FrontierV3FixtureCatalog.class',
                     'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotFixtureBootstrap.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotLifecycleSignal.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3CrashBoundaryProbe.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3DurableCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3HarvestCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/mixin/FrontierV3DurableCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/mixin/FrontierV3HarvestCrashWindowMixin.class',
+                    'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotCrashHooks.class',
                     'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3GameTestSceneLeases.class',
                     'io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteGameTests.class',
                     'io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties'
@@ -413,6 +452,9 @@ tasks.register('verifyPackagedJar') {
             // sample.  The pilot may link these names only from its non-packaged source set.
             def fixtureSymbols = [
                     'pale_mirror.frontier_v3.pilot.profile',
+                    'pale_mirror.frontier_v3.pilot.crash.',
+                    'PMV3_CRASH_BOUNDARY',
+                    'pale_mirror.frontier_v3.pilot_crash.mixins.json',
                     'developmentUncontestedSupplyConfiguration',
                     'developmentAutonomousSupplyInterceptionConfiguration',
                     'developmentHotSceneStrikeConfiguration',
@@ -848,6 +890,13 @@ def resetFrontierV3PilotLiteClient = tasks.register('resetFrontierV3PilotLiteCli
 }
 tasks.named('prepareFrontierV3PilotClientRun') {
     dependsOn resetFrontierV3PilotLiteClient
+    // `resetFrontierV3PilotLiteClient` deliberately removes this exact disposable
+    // directory before every native run.  The generated RunGame preparation task
+    // does not declare the two client-local bootstrap files as outputs, so Gradle
+    // could otherwise call reset and then skip this doLast as UP-TO-DATE.  Keep the
+    // bootstrap attached to the reset transaction: it is tiny, deterministic and
+    // must run once for every fresh pilot directory.
+    outputs.upToDateWhen { false }
     doLast {
         // A brand-new Minecraft game directory normally opens the first-run
         // accessibility screen.  The native test pilot has no business logic
@@ -857,6 +906,13 @@ tasks.named('prepareFrontierV3PilotClientRun') {
         def options = new File(frontierV3PilotClientDirectory.get().asFile, 'options.txt')
         options.parentFile.mkdirs()
         options.text = 'onboardAccessibility:b:true\n' +
+                // Quick Play is an ordinary client connection, but vanilla puts a newly
+                // created profile behind its third-party-multiplayer acknowledgement.
+                // The disposable test pilot has no interactive setup phase before it can
+                // exercise its declared ordinary player actions, so acknowledge that
+                // client-local informational screen alongside accessibility.  This changes
+                // neither the server, canonical state, nor any normal-player profile.
+                'skipMultiplayerWarning:b:true\n' +
                 'narrator:0\n'
         // NeoForge's early loading screen is not game-facing evidence and is
         // known to fail intermittently in the disposable XWayland profile
@@ -906,10 +962,13 @@ def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3Pil
     }
 }
 
-tasks.named('runFrontierV3PilotServer') {
+// The native F0.V runner prepares the disposable world first and then starts the exact prepared
+// Java launch directly.  Separating world setup from the RunGame task prevents either restart
+// segment from recompiling or resolving a different classpath after its identity was hashed.
+def prepareFrontierV3PilotServerWorld = tasks.register('prepareFrontierV3PilotServerWorld') {
     dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods,
             project(':pale-mirror-frontier').tasks.named('jar')
-    doFirst {
+    doLast {
         def directory = frontierV3PilotServerRunDirectory
         def world = frontierV3PilotWorldName
         def seed = frontierV3PilotSeed
@@ -924,12 +983,140 @@ tasks.named('runFrontierV3PilotServer') {
                 || !(frontierV3PilotRunId ==~ /|[0-9a-f-]{36}/)) {
             throw new GradleException('Frontier v3 pilot world, username, port, RCON endpoint, view distance, profile or run id is invalid')
         }
+        def crashValues = [frontierV3PilotCrashBoundary, frontierV3PilotCrashOwner, frontierV3PilotCrashRevision, frontierV3PilotCrashPayload]
+        if (crashValues.any { !it.isEmpty() }) {
+            if (!(frontierV3PilotRunId ==~ /[0-9a-f-]{36}/) || !(frontierV3PilotCrashBoundary in [
+                    'lease_recorded_before_physical_materialization',
+                    'physical_effect_visible_before_typed_observation',
+                    'typed_observation_durable_before_next_process_checkpoint',
+                    'hot_checkpoint_durable_before_drain_release',
+                    'release_durable_before_cold_resumption'])
+                    || !(frontierV3PilotCrashOwner ==~ /[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}/)
+                    || !(frontierV3PilotCrashRevision ==~ /(?:[0-9]+|observed_at_boundary)/)
+                    || !(frontierV3PilotCrashPayload ==~ /[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}/)) {
+                throw new GradleException('Frontier v3 pilot crash rendezvous must name one exact run, boundary, owner, revision and payload')
+            }
+        }
         directory.mkdirs()
         new File(directory, 'eula.txt').text = 'eula=true\n'
         new File(directory, 'server.properties').text = "level-name=${world}\nlevel-seed=${seed}\nserver-ip=127.0.0.1\nserver-port=${port}\nenable-rcon=true\nrcon.port=${rconPort}\nrcon.password=${rconPassword}\nonline-mode=false\nallow-flight=true\ngamemode=creative\ndifficulty=normal\nspawn-protection=0\nview-distance=${frontierV3PilotViewDistance}\nsimulation-distance=${frontierV3PilotViewDistance}\n"
         def uuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(java.nio.charset.StandardCharsets.UTF_8))
         new File(directory, 'ops.json').text = '[\n  {"uuid":"' + uuid + '","name":"' + username + '","level":4,"bypassesPlayerLimit":false}\n]\n'
     }
+}
+
+tasks.named('runFrontierV3PilotServer') {
+    dependsOn prepareFrontierV3PilotServerWorld
+}
+
+/** Exact Java/tooling paths for the one-build direct F0.V native launcher. */
+def frontierV3PilotPreparedJava = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+def frontierV3PilotRootDirectory = rootProject.projectDir
+def frontierV3PilotModId = rootProject.providers.gradleProperty('mod_id').get()
+def frontierV3PilotModdevDirectory = layout.buildDirectory.dir('moddev').get().asFile
+def frontierV3PilotPreparedLaunchFile = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotPreparedLaunch.json')
+def frontierV3PilotServerVmArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerRunVmArgs.txt')
+def frontierV3PilotServerProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerRunProgramArgs.txt')
+def frontierV3PilotServerClasspath = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotServerLegacyClasspath.txt')
+def frontierV3PilotClientVmArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientRunVmArgs.txt')
+def frontierV3PilotClientProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientRunProgramArgs.txt')
+// The normal Gradle run type carries the pilot username/endpoint from Gradle properties.  A
+// prepared F0.V client must retain the same launch target but receive those two ordinary client
+// arguments exactly once at runtime, so its immutable argument file deliberately omits them.
+// This is an invocation template, not a second launcher or a mutable classpath.
+def frontierV3PilotPreparedClientProgramArgs = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotPreparedClientRunProgramArgs.txt')
+def frontierV3PilotClientClasspath = new File(frontierV3PilotModdevDirectory, 'frontierV3PilotClientLegacyClasspath.txt')
+def frontierV3PilotSourceFolders = [sourceSets.main.output.classesDirs.singleFile, sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-api').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-api').sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-domain').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-domain').sourceSets.main.output.resourcesDir,
+        project(':pale-mirror-frontier').sourceSets.main.output.classesDirs.singleFile, project(':pale-mirror-frontier').sourceSets.main.output.resourcesDir,
+        sourceSets.pilot.output.classesDirs.singleFile, sourceSets.pilot.output.resourcesDir]
+def frontierV3PilotNeoForgeVersion = rootProject.providers.gradleProperty('neo_version').get()
+def frontierV3PilotNeoForgeArtifact = new File(frontierV3PilotModdevDirectory, "artifacts/neoforge-${frontierV3PilotNeoForgeVersion}.jar")
+def frontierV3PilotDevLaunchDirectory = new File(gradle.gradleUserHomeDir, 'caches/modules-2/files-2.1/net.neoforged/DevLaunch/1.0.2')
+def frontierV3PilotModuleJars = [
+        new File(project(':pale-mirror-api').buildDir, "libs/pale-mirror-api-${project(':pale-mirror-api').version}.jar"),
+        new File(project(':pale-mirror-domain').buildDir, "libs/pale-mirror-domain-${project(':pale-mirror-domain').version}.jar"),
+        new File(project(':pale-mirror-frontier').buildDir, "libs/pale-mirror-frontier-${project(':pale-mirror-frontier').version}.jar")]
+def writeFrontierV3PilotPreparedLaunchManifest = tasks.register('writeFrontierV3PilotPreparedLaunchManifest') {
+    dependsOn tasks.named('classes'), tasks.named('pilotClasses'),
+            project(':pale-mirror-api').tasks.named('jar'), project(':pale-mirror-domain').tasks.named('jar'),
+            project(':pale-mirror-frontier').tasks.named('jar'),
+            tasks.named('writeFrontierV3PilotServerLegacyClasspath'), tasks.named('writeFrontierV3PilotClientLegacyClasspath')
+    doLast {
+        def launcher = frontierV3PilotPreparedJava.get().executablePath.asFile.absolutePath
+        def relative = { file -> frontierV3PilotRootDirectory.toPath().relativize(file.toPath()).toString() }
+        if (frontierV3PilotSourceFolders.any { it == null }) throw new GradleException('F0.V prepared launch has an unresolved pilot source folder')
+        // A Java-only module legitimately has no resources output directory.  Omit only those
+        // absent empty directories; every existing compiled/main and pilot output remains part
+        // of the exact launch identity and is fingerprinted by the runner.
+        def materializedSourceFolders = frontierV3PilotSourceFolders.findAll { it.exists() }
+        if (materializedSourceFolders.size() < 7) throw new GradleException('F0.V prepared launch requires compiled main and pilot source folders')
+        def modFolders = materializedSourceFolders.collect { "${frontierV3PilotModId}%%${it.absolutePath}" }.join(File.pathSeparator)
+        def devLaunches = []
+        if (frontierV3PilotDevLaunchDirectory.isDirectory()) {
+            frontierV3PilotDevLaunchDirectory.eachFileRecurse(groovy.io.FileType.FILES) {
+                if (it.name == 'DevLaunch-1.0.2.jar') devLaunches.add(it)
+            }
+        }
+        def requiredLaunchFiles = materializedSourceFolders + [frontierV3PilotNeoForgeArtifact] + frontierV3PilotModuleJars + devLaunches
+        if (devLaunches.size() != 1 || requiredLaunchFiles.any { !it.exists() }) {
+            throw new GradleException('F0.V prepared direct launch is missing one exact launcher artifact')
+        }
+        def launchClasspath = { legacy, role ->
+            def entries = (requiredLaunchFiles.collect { it.absolutePath } + legacy.readLines().collect { it.trim() }.findAll { !it.isEmpty() }).unique()
+            if (entries.isEmpty()) throw new GradleException("F0.V prepared ${role} launch classpath is empty")
+            entries
+        }
+        if (!frontierV3PilotClientProgramArgs.exists()) {
+            throw new GradleException('F0.V prepared direct launch is missing client program arguments')
+        }
+        def clientArguments = frontierV3PilotClientProgramArgs.readLines()
+        def preparedClientArguments = []
+        for (int index = 0; index < clientArguments.size(); index++) {
+            def argument = clientArguments[index].trim()
+            if (argument in ['--username', '--quickPlayMultiplayer']) {
+                if (index + 1 >= clientArguments.size() || clientArguments[index + 1].trim().startsWith('--')) {
+                    throw new GradleException("F0.V prepared client argument ${argument} is missing its exact value")
+                }
+                index++
+                continue
+            }
+            preparedClientArguments.add(clientArguments[index])
+        }
+        if (clientArguments.count { it.trim() == '--username' } != 1
+                || clientArguments.count { it.trim() == '--quickPlayMultiplayer' } != 1
+                || preparedClientArguments.any { it.trim() in ['--username', '--quickPlayMultiplayer'] }) {
+            throw new GradleException('F0.V prepared client launch requires exactly one removable username and endpoint pair')
+        }
+        frontierV3PilotPreparedClientProgramArgs.text = preparedClientArguments.join(System.lineSeparator()) + System.lineSeparator()
+        def value = [schema: 1, java: launcher, modFolders: modFolders,
+                server: [vmArgs: relative(frontierV3PilotServerVmArgs),
+                         programArgs: relative(frontierV3PilotServerProgramArgs),
+                         classpath: relative(frontierV3PilotServerClasspath),
+                         launchClasspath: launchClasspath(frontierV3PilotServerClasspath, 'server'),
+                         gameDirectory: relative(frontierV3PilotServerRunDirectory)],
+                client: [vmArgs: relative(frontierV3PilotClientVmArgs),
+                         programArgs: relative(frontierV3PilotPreparedClientProgramArgs),
+                         classpath: relative(frontierV3PilotClientClasspath),
+                         launchClasspath: launchClasspath(frontierV3PilotClientClasspath, 'client'),
+                         gameDirectory: relative(frontierV3PilotClientDirectory.get().asFile)]]
+        frontierV3PilotPreparedLaunchFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(value)) + '\n'
+    }
+}
+
+// F0.VA fingerprints launch inputs only after the disposable client directory has reached its
+// deterministic baseline. Running the reset after fingerprinting would make a correct
+// hash-drift guard reject its own runner setup.
+tasks.register('prepareFrontierV3PilotNativeEnvironment') {
+    group = 'verification'
+    description = 'Prepares the disposable pilot server and client before writing their one-build native launch identity.'
+    dependsOn tasks.named('prepareFrontierV3PilotClientRun'), tasks.named('prepareFrontierV3PilotServerRun'),
+            writeFrontierV3PilotPreparedLaunchManifest, tasks.named('jar')
+}
+writeFrontierV3PilotPreparedLaunchManifest.configure {
+    mustRunAfter tasks.named('prepareFrontierV3PilotClientRun')
+    mustRunAfter tasks.named('prepareFrontierV3PilotServerRun')
 }
 
 tasks.register('clientSmoke', Exec) {

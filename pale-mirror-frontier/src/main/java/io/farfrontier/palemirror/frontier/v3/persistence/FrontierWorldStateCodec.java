@@ -1,7 +1,15 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
-import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.*; import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
+
+import io.farfrontier.palemirror.frontier.v3.api.*;
+import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 127; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 128; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -15,7 +23,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             verifyPinnedBootstrap(state.bootstrap());
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
-                output.writeInt(MAGIC); output.writeByte(VERSION);
+                output.writeInt(MAGIC); output.writeByte(VERSION); writeString(output, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
                 writeActors(output, state.actorLocations());
@@ -51,6 +59,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
             if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state requires a fresh current-schema world");
+            if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
+                throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
+            }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
             FrontierRuleset ruleset = readRuleset(input); TerrainSurfacePlan terrain = TerrainSurfacePlanCodec.read(input);
             FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain);
@@ -77,6 +88,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
+            FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }

@@ -74,10 +74,11 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:performance-diagnostic"),
                 new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(12L), new byte[]{1}, List.of(), List.of());
 
-        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot());
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), 17);
 
         assertTrue(value.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"performance\""));
-        assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8"));
+        assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8")
+                && value.contains("\"fastForwardRemaining\":17"));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
     }
 
@@ -502,7 +503,7 @@ class FrontierV3DiagnosticJsonTest {
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.nextCandidate(state).orElseThrow();
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-production-r0");
         var members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(actor,
                 io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), leaseId, actor))).toList();
@@ -546,7 +547,7 @@ class FrontierV3DiagnosticJsonTest {
         state = io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess.reduceStarted(state, settlement, started)
                 .preparePhysicalIntent(prepared.intent());
         var operation = state.humanPopulation().medicalOperations().values().iterator().next();
-        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport.nextCandidate(state).orElseThrow();
+        var candidate = io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:diagnostic-medical-r0");
         var members = candidate.memberPositions().keySet().stream().sorted().map(actor -> new io.farfrontier.palemirror.frontier.v3.model.SceneMember(actor,
                 io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(checkpoint.worldId(), leaseId, actor))).toList();

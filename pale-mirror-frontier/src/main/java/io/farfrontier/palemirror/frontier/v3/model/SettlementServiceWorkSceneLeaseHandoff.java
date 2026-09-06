@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Durable capture of the exact ambient service worker body by its retained scene. */
-public record SettlementServiceWorkSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload {
+public record SettlementServiceWorkSceneLeaseHandoff(SceneLease lease, List<SceneMemberPosition> ambientMembers) implements FrontierPayload, SceneLeaseAdmission {
     public SettlementServiceWorkSceneLeaseHandoff {
         Objects.requireNonNull(lease, "service-work scene lease");
         ambientMembers = List.copyOf(Objects.requireNonNull(ambientMembers, "service-work ambient members"));

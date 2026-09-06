@@ -30,6 +30,16 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
         with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
             validate(ROOT, self.policy, broken)
 
+    def test_rejects_a_direct_cause_specific_production_predicate(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        generic = (
+            "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/"
+            "internal/frontier/v3/FrontierV3SceneExecutor.java"
+        )
+        broken["forbidden_scene_cause_predicates"][generic] += 1
+        with self.assertRaisesRegex(DebtError, "per-file ceiling exceeded"):
+            validate(ROOT, self.policy, broken)
+
     def test_rejects_more_positional_enum_tags(self) -> None:
         broken = copy.deepcopy(self.actual)
         broken["persisted_enum_position_tags"]["model/HiddenPositionalCodec.java"] = 1
@@ -76,6 +86,28 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
     def test_rejects_a_v3_gametest_chunk_load(self) -> None:
         broken = copy.deepcopy(self.actual)
         broken["v3_gametest_forced_chunk_loads"]["new/FrontierV3HiddenGameTests.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
+    def test_rejects_a_scene_executor_local_player_scan(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["scene_executor_raw_player_scans"]["new/FrontierV3HiddenSceneExecutor.java"] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
+    def test_rejects_a_scene_executor_global_first_candidate(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["scene_executor_global_first_candidates"][
+            "new/FrontierV3HiddenSceneExecutor.java"
+        ] = 1
+        with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
+            validate(ROOT, self.policy, broken)
+
+    def test_rejects_a_scene_lease_payload_without_sdk_admission_marker(self) -> None:
+        broken = copy.deepcopy(self.actual)
+        broken["unfenced_scene_lease_admission_payloads"][
+            "model/HiddenSceneLeasePrepared.java"
+        ] = 1
         with self.assertRaisesRegex(DebtError, "spread to unapproved files"):
             validate(ROOT, self.policy, broken)
 

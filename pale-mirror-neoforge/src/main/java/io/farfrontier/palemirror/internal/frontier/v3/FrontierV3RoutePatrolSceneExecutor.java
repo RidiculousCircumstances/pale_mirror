@@ -33,8 +33,8 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierRoutePatrolSceneSupport.Candidate> candidate = FrontierRoutePatrolSceneSupport.nextCandidate(state)
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.handoffPosition()));
+        Optional<FrontierRoutePatrolSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+                level, FrontierRoutePatrolSceneSupport.candidates(state), FrontierRoutePatrolSceneSupport.Candidate::handoffPosition);
         if (candidate.isEmpty()) return false;
         FrontierRoutePatrolSceneSupport.Candidate patrol = candidate.orElseThrow();
         SceneLease lease = lease(runtime, patrol);
@@ -88,6 +88,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
+        FrontierV3SceneExecutor.requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> patrol(level, runtime, state, lease);
@@ -112,10 +113,10 @@ final class FrontierV3RoutePatrolSceneExecutor {
         RoutePatrol retained = FrontierRoutePatrolSceneSupport.require(state, FrontierSceneBehaviors.routePatrol(lease));
         if (!retained.active()) { drain(runtime, lease); return; }
         BlockPosition demand = lease.memberPosition(retained.guardId()).supportingSurface().support();
-        boolean demanded = FrontierV3SceneExecutor.demandExists(level, demand);
+        FrontierV3SceneDemand.Snapshot demanded = FrontierV3SceneExecutor.demandSnapshot(level, demand);
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demanded,
                 FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) { drain(runtime, lease); return; }
-        if (!demanded) return;
+        if (!demanded.active()) return;
         Optional<BlockPosition> obstruction = FrontierRouteNetwork.firstObstructionOnCarriagewaySegment(retained.route(), retained.routeIndex(), state.physicalDeltas());
         if (obstruction.isPresent()) {
             submit(runtime, "route-patrol-obstruction", lease.id().value(), new RoutePatrolObstructionConfirmed(retained.taskId(), obstruction.orElseThrow()));

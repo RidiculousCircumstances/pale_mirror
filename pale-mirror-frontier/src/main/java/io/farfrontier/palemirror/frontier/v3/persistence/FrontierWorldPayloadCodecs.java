@@ -40,7 +40,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             MarketPayloadCodecs.cancelled())), ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
-            ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(), ResourceSitePayloadCodecs.harvestTraversalAdvanced(),
+            ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
+            ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),
             ResourceSitePayloadCodecs.conflictObserved())), ResourceSiteHarvestScenePayloadCodecs.codecs()); }
     static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(), HiveMobilizationPayloadCodecs.codecs(), new PayloadCodecs(List.of(new InfectionCodec(),
             new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),

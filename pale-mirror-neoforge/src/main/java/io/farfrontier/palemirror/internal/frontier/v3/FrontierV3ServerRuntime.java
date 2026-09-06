@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
@@ -44,11 +45,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private CheckpointImage cachedCheckpoint;
 
     private FrontierV3ServerRuntime(
-            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RecoveryImage recovered,
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
             RuntimeException startupFailure
     ) {
         this.configuration = Objects.requireNonNull(configuration, "configuration")
-                .withTransactionCommitter(new FrontierStoreTransactionCommitter(store));
+                .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
         this.store = Objects.requireNonNull(store, "store");
         if (checkpointIntervalTicks < 1) throw new IllegalArgumentException("checkpoint interval must be positive");
         this.checkpointIntervalTicks = checkpointIntervalTicks;
@@ -73,21 +74,22 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> start(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, null, null);
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, null);
     }
 
     /** Starts from one already-verified recovery image, avoiding a second store read after profile selection. */
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered, int checkpointIntervalTicks
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, Objects.requireNonNull(recovered, "recovered image"), null);
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks,
+                Objects.requireNonNull(recovered, "recovered image"), null);
     }
 
     /** Preserves visible fail-closed lifecycle state when recovery selection itself is invalid. */
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, checkpointIntervalTicks, null, Objects.requireNonNull(failure, "startup failure"));
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, Objects.requireNonNull(failure, "startup failure"));
     }
 
     FrontierV3RuntimeStatus status() { return status; }

@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import java.util.Objects;
 
 /** Durable-before-effect admission of one exact patient and retained medical team. */
-public record MedicalTreatmentSceneLeasePrepared(SceneLease lease) implements FrontierPayload {
+public record MedicalTreatmentSceneLeasePrepared(SceneLease lease) implements FrontierPayload, SceneLeaseAdmission {
     public MedicalTreatmentSceneLeasePrepared {
         Objects.requireNonNull(lease, "medical treatment scene lease");
         if (!FrontierSceneBehaviors.isMedicalTreatment(lease)) {

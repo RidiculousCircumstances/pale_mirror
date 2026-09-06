@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
-import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotDiagnosticActionStep, pilotServerPid, pilotServerReady, restartSegments, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotCrashBoundary, pilotDiagnosticActionStep, pilotFailureFromLine, pilotServerPid, pilotServerQuarantineFailure, pilotServerReady, restartSegments, scenarioDeadlineMs, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
 import { decodeRconFrames, encodeRconFrame } from '../src/rcon.mjs';
 
 const scenario = {
@@ -19,6 +19,13 @@ test('scenario separates setup from evidence-bearing actions', () => {
   assert.doesNotThrow(() => validateScenario(scenario));
   assert.throws(() => validateScenario({ ...scenario, actions: [{ type: 'command', command: '/kill @s' }] }), /unsupported actions action/);
   assert.throws(() => validateScenario({ ...scenario, setup: [{ type: 'break', position: { x: 1, y: 2, z: 3 } }] }), /unsupported setup action/);
+});
+
+test('persistent-pilot lifecycle failures are machine-readable control-plane evidence', () => {
+  assert.equal(pilotFailureFromLine('[Render thread/ERROR] PMV3_PILOT_FATAL boundary=normal_disconnect reason=java.io.IOException: unavailable'),
+    'boundary=normal_disconnect reason=java.io.IOException: unavailable');
+  assert.equal(pilotFailureFromLine('PMV3_PILOT_FATAL '), 'unstructured fatal lifecycle error');
+  assert.equal(pilotFailureFromLine('ordinary renderer warning'), null);
 });
 
 test('disposable RCON uses bounded little-endian authenticated frames and retains partial TCP data', () => {
@@ -88,11 +95,20 @@ test('an isolated scenario has an explicit deterministic disposable-world seed',
   assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
 });
 
+test('a canonical startup quarantine fails a nonce-owned disposable server immediately', () => {
+  assert.equal(pilotServerQuarantineFailure('[Server thread/ERROR]: Frontier v3 development runtime quarantined at startup: IllegalArgumentException: foreign snapshot'),
+    'IllegalArgumentException: foreign snapshot');
+  assert.equal(pilotServerQuarantineFailure('Frontier v3 runtime started for a normal world'), undefined);
+});
+
 test('chunk visits are ordinary-player travel and may be causal evidence actions', () => {
   const visit = { ...scenario, setup: [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: { x: 1, y: 65, z: 2 }, settleMs: 1000 }] };
   assert.doesNotThrow(() => validateScenario(visit));
   assert.throws(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], dimension: 'frontier_graybox' }] }), /visit needs/);
   assert.doesNotThrow(() => validateScenario({ ...visit, actions: [{ ...visit.setup[0] }], assertions: [], frames: [] }));
+  const retainedProcessCursor = { diagnostic: { view: 'process', id: 'job:site-harvest-1-wheat-field-1', field: 'cursor.retainedBody' } };
+  assert.doesNotThrow(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], position: retainedProcessCursor }] }));
+  assert.throws(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], position: { diagnostic: { ...retainedProcessCursor.diagnostic, field: 'cursor.actorBody' } } }] }), /visit needs/);
 });
 
 test('native pilot permits only named isolated development profiles', () => {
@@ -150,7 +166,10 @@ test('materialization may follow only named immutable diagnostic anchors', () =>
   assert.doesNotThrow(() => validateScenario({ ...anchored, actions: [{ type: 'place', position: { diagnostic: { view: 'scene', id: 'job:example', field: 'productionFutureBody' } }, item: 'minecraft:gray_concrete', timeoutMs: 10_000 }] }));
   assert.throws(() => validateScenario({ ...anchored, actions: [{ type: 'place', position: { diagnostic: { view: 'scene', id: 'job:example', field: 'productionNextBody' } }, item: 'minecraft:gray_concrete', timeoutMs: 10_000 }] }), /position/);
   assert.throws(() => validateScenario({ ...anchored, actions: [{ ...anchored.actions[0], position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'cropSlots' } } }] }), /position/);
-  assert.throws(() => validateScenario({ ...anchored, actions: [{ type: 'break', position: crop }] }), /position/);
+  // A named crop anchor is an ordinary player target: F0.V intervention must not obtain a
+  // server mutation escape hatch merely because the position originated in a read-only view.
+  assert.doesNotThrow(() => validateScenario({ ...anchored, actions: [{ type: 'break', position: crop, timeoutMs: 10_000 }] }));
+  assert.throws(() => validateScenario({ ...anchored, actions: [{ type: 'break', position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'cropSlots' } } }] }), /position/);
   assert.throws(() => validateScenario({ ...anchored, actions: [{ type: 'open_container', position: { diagnostic: { view: 'container', id: 'container:1-depot', field: 'slots' } }, timeoutMs: 10_000 }] }), /position/);
 });
 
@@ -182,6 +201,18 @@ test('restart runner slices action-relative assertions without a second scenario
   assert.throws(() => validateScenario({ ...recoverable, restart: { mode: 'graceful', afterAction: 3 } }), /restart needs/);
 });
 
+test('an armed crash names one exact durable boundary and cannot broaden an abrupt scenario', () => {
+  const recoverable = { ...scenario, actions: [{ type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }], assertions: [], frames: [],
+    restart: { mode: 'abrupt', afterAction: 1 }, crash: { phase: 'before_restart', boundary: 'hot_checkpoint_durable_before_drain_release',
+      owner: 'site:4-wheat-field', payloadType: 'frontier.resource_site_harvest_hot_traversal_advanced', expectedRevision: 17 } };
+  assert.doesNotThrow(() => validateScenario(recoverable));
+  assert.throws(() => validateScenario({ ...recoverable, crash: { ...recoverable.crash, owner: '' } }), /crash needs/);
+  assert.throws(() => validateScenario({ ...recoverable, restart: { ...recoverable.restart, mode: 'graceful' } }), /crash needs/);
+  assert.deepEqual(pilotCrashBoundary('PMV3_CRASH_BOUNDARY runId=00000000-0000-0000-0000-000000000017 boundary=hot_checkpoint_durable_before_drain_release owner=site:4-wheat-field revision=17 payload=frontier.resource_site_harvest_hot_traversal_advanced',
+    '00000000-0000-0000-0000-000000000017'), { runId: '00000000-0000-0000-0000-000000000017', boundary: 'hot_checkpoint_durable_before_drain_release',
+    owner: 'site:4-wheat-field', revision: 17, payloadType: 'frontier.resource_site_harvest_hot_traversal_advanced' });
+});
+
 test('stepped-route recovery binds each physical-loss assertion to its producing diagnostic action', async () => {
   const steppedRoute = JSON.parse(await readFile(new URL('../scenarios/disposable-stepped-route-restart.json', import.meta.url), 'utf8'));
   const foundation = steppedRoute.assertions.find((value) => value.view === 'physical_delta' && value.id === '-372,65,-343');
@@ -206,11 +237,27 @@ test('hive assembly recovery requests its terminal mobilisation evidence again a
   assert.equal(segments.after.actions[terminal.after - 1].id, terminal.id);
 });
 
-test('native pilot may advance only the bounded canonical v3 clock', () => {
-  const advance = { ...scenario, actions: [{ type: 'fast_forward', ticks: 24_000 }], assertions: [], frames: [] };
+test('native pilot may advance only the bounded canonical v3 clock with an explicit wall-time budget', () => {
+  const advance = { ...scenario, actions: [{ type: 'fast_forward', ticks: 24_000, timeoutMs: 180_000 }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(advance));
   assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 24_001 }] }), /fast_forward/);
   assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 1.5 }] }), /fast_forward/);
+  assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 24_000 }] }), /fast_forward/);
+  assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 24_000, timeoutMs: 180_001 }] }), /fast_forward/);
+});
+
+test('runner reserves each declared action window and rejects aggregate overflow instead of truncating a later action', () => {
+  const bounded = { ...scenario, setup: [], actions: [
+    { type: 'fast_forward', ticks: 24_000, timeoutMs: 180_000 },
+    { type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: { x: 1, y: 65, z: 2 }, settleMs: 1_000 },
+    { type: 'wait_until_diagnostic', view: 'site', id: 'site:1-wheat-field', expect: { status: 'ok' }, timeoutMs: 90_000 },
+    { type: 'inspect', view: 'site', id: 'site:1-wheat-field' }
+  ], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(bounded));
+  assert.equal(scenarioDeadlineMs(bounded), 450_000,
+    '180s fast-forward + 120s visit + 90s diagnostic + 30s inspection + 30s terminal grace');
+  const overflow = { ...bounded, actions: Array.from({ length: 20 }, () => ({ type: 'fast_forward', ticks: 24_000, timeoutMs: 180_000 })) };
+  assert.throws(() => validateScenario(overflow), /wall-time budget exceeds/);
 });
 
 test('manifest records stable action correlations', () => {
@@ -234,6 +281,14 @@ test('runner waits for every requested asynchronous diagnostic response', () => 
   const trace = { value: { kind: 'trace', id: 'player:pilot' } };
   assert.equal(hasDiagnosticResponses([site], assertions), false);
   assert.equal(hasDiagnosticResponses([site, trace], assertions), true);
+});
+
+test('runner does not let an earlier matching diagnostic satisfy a later action-bound assertion', () => {
+  const assertion = { after: 6, view: 'process', id: 'job:site-harvest-4-wheat-field-1' };
+  const stale = { actionStep: 3, value: { kind: 'process', id: 'job:site-harvest-4-wheat-field-1' } };
+  const fresh = { actionStep: 6, value: { kind: 'process', id: 'job:site-harvest-4-wheat-field-1' } };
+  assert.equal(hasDiagnosticResponses([stale], [assertion]), false);
+  assert.equal(hasDiagnosticResponses([stale, fresh], [assertion]), true);
 });
 
 test('an action-bound assertion retains its own diagnostic when a later action reads the same object', () => {

@@ -14,10 +14,22 @@ final class FrontierV3PerformanceDiagnostic {
     private FrontierV3PerformanceDiagnostic() { }
 
     static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics) {
+        return render(checkpoint, metrics, 0);
+    }
+
+    /**
+     * Includes the one bounded operator-time request as a read-only progress value.  A pilot
+     * must not treat the command packet acknowledgement as completion while the server is still
+     * advancing the canonical clock in slices.
+     */
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining) {
+        if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
+            throw new IllegalArgumentException("bounded fast-forward remainder");
+        }
         StringBuilder value = new StringBuilder("{\"schema\":1,\"kind\":\"performance\",\"id\":\"\",\"revision\":")
                 .append(checkpoint.revision().value()).append(",\"status\":\"ok\",\"droppedAttributions\":")
                 .append(metrics.droppedAttributions()).append(",\"stageCount\":").append(metrics.stages().size()).append(",\"queueCount\":")
-                .append(metrics.queues().size()).append(",\"stages\":[");
+                .append(metrics.queues().size()).append(",\"fastForwardRemaining\":").append(fastForwardRemaining).append(",\"stages\":[");
         appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues());
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append("]}").toString());
     }
