@@ -309,6 +309,25 @@ architecture boundaries remain valid, failures are observable, and no
 unbounded state or silent fallback was introduced. Use concise Conventional
 Commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build:`).
 
+### Private supplied-reference gate
+
+Public CI and portable `guardrails` do not certify the genuine Hunyuan supplied
+reference. Full local pre-commit/release acceptance additionally requires,
+from this source directory:
+
+```bash
+PALE_MIRROR_HARVESTER_REFERENCES=/absolute/private/reference-root ./gradlew verifyHunyuan2mvSuppliedReferenceIntegration --no-daemon
+```
+
+Resolve the actual authorized local reference root; the example path is not
+a fixture. Run this gate again when its tool, test, wiring or reference inputs
+change. Missing/wrong/changed input is a failure, not a skip; report unavailable
+local evidence explicitly. Preserve the authentic positive assertions and
+report this gate separately from public mechanics/negative contract tests.
+Never upload the private image or derived private fixtures to public CI/Git.
+Synthetic mechanics and automated source checks do not grant likeness or human
+visual acceptance. This user-approved split does not waive any Frontier gate.
+
 ## Recurrence prevention
 
 - Treat every native-scenario, watchdog, persistence or deployment failure as a

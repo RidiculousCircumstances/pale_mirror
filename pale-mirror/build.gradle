@@ -121,6 +121,7 @@ def harvesterBlindPairwiseTests = layout.projectDirectory.file('tools/engineerin
 def harvesterBlindPairwiseProtocol = layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json').asFile
 def hunyuan2mvPreparationTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_collector_multiview.py').asFile
 def hunyuan2mvPreparationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_preparation.py').asFile
+def hunyuan2mvPreparationContractTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_preparation_contract.py').asFile
 def hunyuan2mvExternalSheetTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_external_reference_sheet.py').asFile
 def hunyuan2mvExternalSheetTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_external_sheet_preparation.py').asFile
 def historicalBlenderOperationTests = layout.projectDirectory.file('tools/engineering/test_hunyuan2mv_review_contract.py').asFile
@@ -489,12 +490,37 @@ tasks.register('testHarvesterBlindPairwise', Exec) {
     commandLine 'python3', harvesterBlindPairwiseTests.absolutePath
 }
 
-tasks.register('testHunyuan2mvPreparation', Exec) {
+def suppliedHarvesterReferenceRoot = providers.environmentVariable('PALE_MIRROR_HARVESTER_REFERENCES')
+def suppliedHarvesterPrimary = suppliedHarvesterReferenceRoot.map { root ->
+    new File(root, '01_harvester_biomass_collector.jpg')
+}
+
+tasks.register('testHunyuan2mvPreparationContract', Exec) {
     group = 'verification'
-    description = 'Checks the pinned four-view Hunyuan3D-2mv diagnostic input contract.'
-    inputs.files(hunyuan2mvPreparationTool, hunyuan2mvPreparationTests,
+    description = 'Checks portable Hunyuan input mechanics and fail-closed supplied-reference boundaries.'
+    inputs.files(hunyuan2mvPreparationTool, hunyuan2mvPreparationContractTests,
             layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/references/biomass_collector_turntable_v01.png'),
             layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_multiview_bakeoff_v01.json'))
+    commandLine 'python3', hunyuan2mvPreparationContractTests.absolutePath
+}
+
+tasks.register('verifyHunyuan2mvSuppliedReferenceIntegration', Exec) {
+    group = 'verification'
+    description = 'Requires the private supplied Collector image and verifies its exact noncanonical Hunyuan input preparation.'
+    inputs.files(hunyuan2mvPreparationTool, hunyuan2mvPreparationTests, suppliedHarvesterPrimary,
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/references/biomass_collector_turntable_v01.png'),
+            layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_multiview_bakeoff_v01.json'))
+    inputs.property('suppliedHarvesterReferenceRoot', suppliedHarvesterReferenceRoot)
+    outputs.upToDateWhen { false }
+    doFirst {
+        if (!suppliedHarvesterReferenceRoot.isPresent() || suppliedHarvesterReferenceRoot.get().isBlank()) {
+            throw new GradleException('PALE_MIRROR_HARVESTER_REFERENCES is required for supplied-reference integration.')
+        }
+        File primary = suppliedHarvesterPrimary.get()
+        if (!primary.isFile()) {
+            throw new GradleException("Supplied Collector reference is missing: ${primary}")
+        }
+    }
     commandLine 'python3', hunyuan2mvPreparationTests.absolutePath
 }
 
@@ -664,7 +690,7 @@ tasks.register('guardrails') {
             tasks.named('testFrontierV3ArchitectureDebt'), tasks.named('verifyFrontierV3ArchitectureDebt'),
             tasks.named('testHarvesterContourOverlay'), tasks.named('testHarvesterAnatomicalModels'),
             tasks.named('testHarvesterVolumeBakeoff'), tasks.named('testHarvesterPrimaryModelOverlay'), tasks.named('testCollectorDirectMeshProtocol'),
-            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparation'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
+            tasks.named('testHarvesterBlindPairwise'), tasks.named('testHunyuan2mvPreparationContract'), tasks.named('testHunyuan2mvExternalSheetPreparation'), tasks.named('testHistoricalBlenderOperationIsolation'),
             tasks.named('testBlenderWinAppControls'), tasks.named('testAutomodelContracts'),
             tasks.named('testAutomodelMultiviewRing'),
             tasks.named('testAutomodelRingBenchmark'),

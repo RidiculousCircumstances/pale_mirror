@@ -27,21 +27,24 @@ test('monorepo workflows keep Pale Mirror commands and artifact paths under pale
   assert.match(sample, /path: pale-mirror\/build\/f0va-ci/);
 });
 
-test('core CI provisions its complete isolated Python test footprint before Gradle', async () => {
+test('core CI provisions its complete isolated Node and Python test footprint before Gradle', async () => {
   const workflow = await readFile(resolve(workflowRoot, 'build.yml'), 'utf8');
   const requirements = await readFile(resolve(project, 'tools/engineering/requirements-ci.txt'), 'utf8');
   assert.equal(requirements, 'Pillow==12.1.1\nPyYAML==6.0.3\n');
   const core = workflow.slice(workflow.indexOf('  core:\n'), workflow.indexOf('\n  f0va-prepare:\n'));
-  assertCorePythonBootstrap(core);
+  assertCoreRuntimeBootstrap(core);
 
-  assert.throws(() => assertCorePythonBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('      - name: Setup Node 22\n',
+    '      - name: Missing Node setup\n')), /Node 22/);
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace("node-version: '22'", "node-version: '24'")), /Node 22/);
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
     '      - name: Missing isolated Python test environment\n')), /initializer/);
-  assert.throws(() => assertCorePythonBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
     '      - name: Delayed isolated Python test environment\n') + '\n      - name: Initialize isolated Python test environment\n'), /before Gradle/);
-  assert.throws(() => assertCorePythonBootstrap(core.replace('tools/engineering/requirements-ci.txt', 'tools/engineering/requirements-local.txt')),
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('tools/engineering/requirements-ci.txt', 'tools/engineering/requirements-local.txt')),
     /requirements/);
-  assert.throws(() => assertCorePythonBootstrap(core.replace('>> "$GITHUB_PATH"', '>> "$UNSAFE_PATH"')), /GITHUB_PATH/);
-  assert.throws(() => assertCorePythonBootstrap(core.replace('python-version: \'3.11\'', 'python-version: \'3.14\'')), /Python 3\.11/);
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('>> "$GITHUB_PATH"', '>> "$UNSAFE_PATH"')), /GITHUB_PATH/);
+  assert.throws(() => assertCoreRuntimeBootstrap(core.replace('python-version: \'3.11\'', 'python-version: \'3.14\'')), /Python 3\.11/);
 });
 
 test('monorepo content inventory stays rooted in Pale Mirror rather than pack inputs', async () => {
@@ -55,16 +58,20 @@ test('monorepo content inventory stays rooted in Pale Mirror rather than pack in
   assert(fingerprint.files.every((file) => !file.path.startsWith('../') && !file.path.split('/').includes('..')));
 });
 
-function assertCorePythonBootstrap(core) {
+function assertCoreRuntimeBootstrap(core) {
+  const node = core.indexOf('      - name: Setup Node 22\n');
   const python = core.indexOf('      - name: Setup Python 3.11\n');
   const initializer = core.indexOf('      - name: Initialize isolated Python test environment\n');
   const gradle = core.indexOf('      - name: Setup Gradle\n');
   const verification = core.indexOf('      - name: Verify core vertical slice\n');
+  assert.notEqual(node, -1, 'core CI lacks Node 22 setup');
   assert.notEqual(python, -1, 'core CI lacks Python 3.11 setup');
   assert.notEqual(initializer, -1, 'core CI lacks isolated Python initializer');
   assert.notEqual(gradle, -1, 'core CI lacks Gradle setup');
   assert.notEqual(verification, -1, 'core CI lacks the core Gradle gate');
-  assert.ok(python < initializer && initializer < gradle && gradle < verification, 'Python initializer must run before Gradle');
+  assert.ok(node < python && python < initializer && initializer < gradle && gradle < verification, 'Node and Python initializers must run before Gradle');
+  const nodeBlock = core.slice(node, python);
+  assert.match(nodeBlock, /uses: actions\/setup-node@v4\n        with:\n          node-version: '22'/);
   const pythonBlock = core.slice(python, initializer);
   assert.match(pythonBlock, /uses: actions\/setup-python@v5\n        with:\n          python-version: '3\.11'/);
   const initializerBlock = core.slice(initializer, gradle);

@@ -18,8 +18,15 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
-primary_root = Path(os.environ.get("PALE_MIRROR_HARVESTER_REFERENCES", str(Path.home() / "harvester_references")))
+reference_root = os.environ.get("PALE_MIRROR_HARVESTER_REFERENCES")
+if not reference_root:
+    raise SystemExit("PALE_MIRROR_HARVESTER_REFERENCES is required for supplied-reference integration.")
+primary_root = Path(reference_root)
+if not primary_root.is_absolute():
+    raise SystemExit("PALE_MIRROR_HARVESTER_REFERENCES must be an absolute path.")
 primary = primary_root / module.PRIMARY_FILE
+if not primary.is_file():
+    raise SystemExit(f"Supplied Collector reference is missing: {primary}")
 turntable = ROOT / "pale-mirror-visuals" / "src" / "main" / "blender" / "harvester" / "references" / module.TURNTABLE_FILE
 with tempfile.TemporaryDirectory() as temporary:
     output = Path(temporary) / "input"
