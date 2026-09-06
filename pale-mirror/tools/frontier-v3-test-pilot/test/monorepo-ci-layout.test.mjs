@@ -27,6 +27,23 @@ test('monorepo workflows keep Pale Mirror commands and artifact paths under pale
   assert.match(sample, /path: pale-mirror\/build\/f0va-ci/);
 });
 
+test('core CI provisions its complete isolated Python test footprint before Gradle', async () => {
+  const workflow = await readFile(resolve(workflowRoot, 'build.yml'), 'utf8');
+  const requirements = await readFile(resolve(project, 'tools/engineering/requirements-ci.txt'), 'utf8');
+  assert.equal(requirements, 'Pillow==12.1.1\nPyYAML==6.0.3\n');
+  const core = workflow.slice(workflow.indexOf('  core:\n'), workflow.indexOf('\n  f0va-prepare:\n'));
+  assertCorePythonBootstrap(core);
+
+  assert.throws(() => assertCorePythonBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
+    '      - name: Missing isolated Python test environment\n')), /initializer/);
+  assert.throws(() => assertCorePythonBootstrap(core.replace('      - name: Initialize isolated Python test environment\n',
+    '      - name: Delayed isolated Python test environment\n') + '\n      - name: Initialize isolated Python test environment\n'), /before Gradle/);
+  assert.throws(() => assertCorePythonBootstrap(core.replace('tools/engineering/requirements-ci.txt', 'tools/engineering/requirements-local.txt')),
+    /requirements/);
+  assert.throws(() => assertCorePythonBootstrap(core.replace('>> "$GITHUB_PATH"', '>> "$UNSAFE_PATH"')), /GITHUB_PATH/);
+  assert.throws(() => assertCorePythonBootstrap(core.replace('python-version: \'3.11\'', 'python-version: \'3.14\'')), /Python 3\.11/);
+});
+
 test('monorepo content inventory stays rooted in Pale Mirror rather than pack inputs', async () => {
   const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: project, encoding: 'utf8' })
     .split('\0').filter(Boolean);
@@ -37,3 +54,27 @@ test('monorepo content inventory stays rooted in Pale Mirror rather than pack in
   assert(fingerprint.files.some((file) => file.path === 'architecture.yml'));
   assert(fingerprint.files.every((file) => !file.path.startsWith('../') && !file.path.split('/').includes('..')));
 });
+
+function assertCorePythonBootstrap(core) {
+  const python = core.indexOf('      - name: Setup Python 3.11\n');
+  const initializer = core.indexOf('      - name: Initialize isolated Python test environment\n');
+  const gradle = core.indexOf('      - name: Setup Gradle\n');
+  const verification = core.indexOf('      - name: Verify core vertical slice\n');
+  assert.notEqual(python, -1, 'core CI lacks Python 3.11 setup');
+  assert.notEqual(initializer, -1, 'core CI lacks isolated Python initializer');
+  assert.notEqual(gradle, -1, 'core CI lacks Gradle setup');
+  assert.notEqual(verification, -1, 'core CI lacks the core Gradle gate');
+  assert.ok(python < initializer && initializer < gradle && gradle < verification, 'Python initializer must run before Gradle');
+  const pythonBlock = core.slice(python, initializer);
+  assert.match(pythonBlock, /uses: actions\/setup-python@v5\n        with:\n          python-version: '3\.11'/);
+  const initializerBlock = core.slice(initializer, gradle);
+  assert.match(initializerBlock, /test -n "\$\{RUNNER_TEMP:-\}"/);
+  assert.match(initializerBlock, /test -n "\$\{GITHUB_PATH:-\}"/);
+  assert.match(initializerBlock, /case "\$RUNNER_TEMP" in/);
+  assert.match(initializerBlock, /case "\$GITHUB_PATH" in/);
+  assert.match(initializerBlock, /frontier_v3_core_python_env="\$RUNNER_TEMP\/frontier-v3-core-python"/);
+  assert.match(initializerBlock, /python -m venv "\$frontier_v3_core_python_env"/);
+  assert.match(initializerBlock, /\$frontier_v3_core_python_env\/bin\/python" -m pip install --disable-pip-version-check --requirement tools\/engineering\/requirements-ci\.txt/);
+  assert.match(initializerBlock, /\$frontier_v3_core_python_env\/bin\/python" -c "import PIL, yaml"/);
+  assert.match(initializerBlock, /printf '%s\\n' "\$frontier_v3_core_python_env\/bin" >> "\$GITHUB_PATH"/);
+}

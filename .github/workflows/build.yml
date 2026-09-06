@@ -33,6 +33,31 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Initialize isolated Python test environment
+        shell: bash
+        run: |
+          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
+          test -n "${GITHUB_PATH:-}" || { echo "GITHUB_PATH is required" >&2; exit 1; }
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
+          esac
+          case "$GITHUB_PATH" in
+            /*) ;;
+            *) echo "GITHUB_PATH must be absolute" >&2; exit 1 ;;
+          esac
+          frontier_v3_core_python_env="$RUNNER_TEMP/frontier-v3-core-python"
+          case "$frontier_v3_core_python_env" in
+            *$'\n'*|*$'\r'*) echo "Python environment is malformed" >&2; exit 1 ;;
+          esac
+          python -m venv "$frontier_v3_core_python_env"
+          "$frontier_v3_core_python_env/bin/python" -m pip install --disable-pip-version-check --requirement tools/engineering/requirements-ci.txt
+          "$frontier_v3_core_python_env/bin/python" -c "import PIL, yaml"
+          printf '%s\n' "$frontier_v3_core_python_env/bin" >> "$GITHUB_PATH"
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Verify core vertical slice
