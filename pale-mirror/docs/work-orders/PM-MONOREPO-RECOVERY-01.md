@@ -73,3 +73,20 @@ and services retained. No cleanup or external authority inferred.
 AC-4: enough exact path/ref evidence for independent review; no whole-F0.VA or
 monorepo acceptance claimed. Report stable completion or concrete blocker;
 no intermediate heartbeat required. A failed invariant stops this grant.
+
+## Review record
+
+ACCEPTED by engineer on 2026-09-06. Checkpoint
+bafbb8ebb59435ebb50138c8d87dac002ad6054d has exact parent b82c0406 and
+only the three allowed documentation paths; tree
+0e3656d4823fd7e8637635e184e11d7d6d6ff252. Main independently checked
+both bundle SHA256 values, restored HEAD/tree IDs, matching persistent refs
+and ref trees, actual fsck/complete-history verification reports and original
+statuses. Recovery directory: /home/rd/proj/pm-migration-recovery.OaRskN.
+Nested bundle SHA256 c53ae205ea0d7bda629c87148d53e18a96093e5b4b6374d6ef73712219c76062;
+outer bundle SHA256 4a54192a16364d3c37e8ee44ee436d0a201bd8140eff33ecae50b4d487b3d8d1.
+Seven nested persistent refs and one outer persistent ref recover exactly;
+25 linked-worktree pseudo-HEAD objects are included without recreating their
+metadata. Dangling commits in restored fsck are retained worktree-only objects,
+not corrupt objects. Original nested clean, outer only .f0v-baseline/ untracked.
+No migration/provider/product acceptance follows from this backup gate.

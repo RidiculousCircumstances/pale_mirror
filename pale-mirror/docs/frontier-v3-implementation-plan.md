@@ -100,16 +100,18 @@ critical-gate and original graceful-restart requirements are green, but before
 the GitHub-provider matrix and before resuming the remaining original F0.V
 matrix.
 
-The resulting monorepo root is the current workspace root. The existing Far
-Frontier pack/deployment tree remains at that root and Pale Mirror remains at
-`pale-mirror/`; only repository ownership changes. The root history and the
-nested Pale Mirror history must both be ancestors of the final `main` branch.
+The resulting monorepo preserves the workspace layout: the Far Frontier
+pack/deployment tree is at its root and Pale Mirror remains at `pale-mirror/`.
+Assembly uses an isolated candidate; it does not replace the original live
+workspace or authorize deployment. Both original histories must be ancestors
+of final `main`. Checkout adoption is a separate gate below.
 
 Migration procedure and stop conditions:
 
-1. Reach a process-safe boundary. Prove no Gradle, Java, Node, pilot, server or
-   timing process is active and no current evidence writer can observe a
-   content-fingerprint change.
+1. Reach a process-safe boundary for the affected checkout, artifact paths and
+   evidence inputs. Prove there is no competing writer and no active measurement
+   observes changed inputs. Unrelated live services and artifact readers remain
+   untouched; their existence is not permission or a requirement to stop them.
 2. Finish and commit the F0.VA work in `pale-mirror/`. Independently inventory,
    verify and commit any intentional outer-pack changes. Do not discard,
    silently ignore or absorb unknown dirty/untracked files. Record both exact
@@ -121,17 +123,27 @@ Migration procedure and stop conditions:
    a live embedded `.git` directory and never use a squashed subtree.
 4. Remove the outer `/pale-mirror/` ignore rule in the migration tree. Retain
    the root and scoped `AGENTS.md` files, ownership documentation and all
-   source/deployment paths. The final tracked tree must contain exactly one
-   `.git` directory.
+   source/deployment paths. The checkout has exactly one root Git metadata
+   directory; its tracked tree contains neither embedded `.git` nor gitlinks.
 5. Move or compose Pale Mirror GitHub workflows into the monorepo-root
    `.github/workflows/` directory. Give jobs explicit `pale-mirror` working
-   directories and update artifact/action paths; preserve the outer pack and
-   deployment workflows rather than replacing either workflow family.
-6. Prove both recorded old HEADs are ancestors of final `main`, compare the
-   imported `pale-mirror/` tree with the committed nested tree, and verify
-   repository status, ignore rules, workflow syntax, outer pack checks and the
-   complete Pale Mirror critical gate from the paths used by CI. A content,
-   ancestry or verification mismatch stops the migration.
+   directories and update artifact/action paths. Preserve existing workflow
+   families and pack/deployment scripts; if the original outer repository has
+   no workflows, record that fact rather than inventing a missing family.
+   Retain root CI bytes in relevant prepared/cache identities. Normalize Git
+   change discovery into the selector's source coordinates, separately handling
+   root CI and unrelated pack inputs; unknown relevant impact stays fail-closed.
+6. Prove both old HEADs are ancestors of final `main`. At the import checkpoint,
+   prove exact nested-tree equality and unchanged outer files. Then reconcile
+   every adaptation against that checkpoint, including deliberate normative
+   documentation updates; no unexplained source or payload drift is allowed.
+   Verify status, ignores, workflow syntax, pack checks and the complete Pale
+   Mirror critical gate from CI working paths. Pack validation checks incoming
+   bytes and both manifest hashes without silently refreshing them. Deliberate
+   migration-only regeneration requires an explained payload delta and a
+   repeatable idempotence check. Repository-only source/CI/evidence stays out
+   of the pack, while legitimate nested worldgen assets remain included.
+   A content, ancestry or verification mismatch stops the migration.
 7. Inspect the destination before mutation with `git ls-remote`. The only
    authorized destination is
    `git@github.com:RidiculousCircumstances/pale_mirror.git`. If `origin` is

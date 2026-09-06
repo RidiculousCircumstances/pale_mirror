@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CI_MATRIX_MAX_START_SKEW_MILLIS, CI_MATRIX_SCHEMA, createFourWorkerMatrixPlan, evidenceFromManifest, mergeFourWorkerMatrix, mergeSequentialFourWorkerMatrix, requireCiMatrixMedianSpeedup, requireCiMatrixSpeedup, terminalSemanticsFromManifest, validateCiCorrectnessAdmission, validateCiShardResult } from '../src/ci-matrix.mjs';
 import { parse as parsePlan } from '../src/write-ci-matrix-plan.mjs';
 import { compileWorkerPersistentPlan, parse as parseShard, requireWorkerIdentity } from '../src/run-ci-matrix-shard.mjs';
@@ -11,6 +13,12 @@ import { parseEnvironment as parseCiWorkerEnvironment } from '../src/validate-ci
 
 const hash = (letter) => letter.repeat(64);
 const contract = async () => JSON.parse(await readFile(new URL('../contracts/resource-site-harvest-f0v.json', import.meta.url), 'utf8'));
+const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const workflowRoot = resolve(project, '..', '.github', 'workflows');
+const workflows = async () => await Promise.all([
+  readFile(resolve(workflowRoot, 'build.yml'), 'utf8'),
+  readFile(resolve(workflowRoot, 'f0va-native-correctness-sample.yml'), 'utf8')
+]);
 
 test('four-worker plan deterministically covers every generated semantic lane exactly once', async () => {
   const input = await contract();
@@ -209,10 +217,7 @@ test('CI command parsers are closed to duplicate, unsafe, and incomplete inputs'
 });
 
 test('native CI runs three ordered four-worker samples with private ports and exact lifecycle identity', async () => {
-  const [workflow, sample] = await Promise.all([
-    readFile(new URL('../../../.github/workflows/build.yml', import.meta.url), 'utf8'),
-    readFile(new URL('../../../.github/workflows/f0va-native-correctness-sample.yml', import.meta.url), 'utf8')
-  ]);
+  const [workflow, sample] = await workflows();
   const measurements = [...workflow.matchAll(/measurement: (correctness-[1-3])\s+workers: >-\s+(\{[^\n]+\})/g)];
   assert.deepEqual(measurements.map((entry) => entry[1]), ['correctness-1', 'correctness-2', 'correctness-3']);
   const assignments = measurements.flatMap((entry) => JSON.parse(entry[2]).include.map((worker) => ({ measurement: entry[1], ...worker })));
@@ -237,10 +242,7 @@ test('native CI runs three ordered four-worker samples with private ports and ex
 });
 
 test('each isolated native CI job bootstraps its private Gradle home before offline proof', async () => {
-  const [workflow, sample] = await Promise.all([
-    readFile(new URL('../../../.github/workflows/build.yml', import.meta.url), 'utf8'),
-    readFile(new URL('../../../.github/workflows/f0va-native-correctness-sample.yml', import.meta.url), 'utf8')
-  ]);
+  const [workflow, sample] = await workflows();
   const prepare = jobBlock(workflow, 'f0va-prepare', 'f0va-correctness-1');
   const sequential = jobBlock(workflow, 'f0va-sequential-timing', 'f0va-merge');
   const worker = jobBlock(sample, 'native-correctness');

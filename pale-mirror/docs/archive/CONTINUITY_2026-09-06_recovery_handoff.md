@@ -1,14 +1,4 @@
-# Continuity Ledger
-
-> Historical pre-migration snapshot, retained from the imported checkpoint.
-> The grants and current-state statements below are not active authority.
-> Local assembly technical verification has since passed; see
-> docs/work-orders/PM-MONOREPO-ASSEMBLY-01.md and
-> docs/work-orders/PM-MONOREPO-RECOVERY-01.md for accepted evidence and scope.
-> Until explicit remote-clone/provider acceptance and checkout adoption, the
-> single active ledger is /home/rd/proj/minecraft/pale-mirror/CONTINUITY.md.
-> Do not maintain this snapshot as a competing ledger or infer deployment,
-> provider, full F0.VA or product acceptance from the assembled history.
+# Archived continuity: recovery acceptance and assembly handoff
 
 ## Goal (success criteria)
 
@@ -20,7 +10,7 @@
 
 - Root owns pack/deployment; ignored nested pale-mirror owns source/docs/tests/build. Preserve both histories/WIP. Java21/Minecraft1.21.1/NeoForge21.1.248; snapshot126/envelope41 fresh-v3 only, no v2 migration/fallback or recreation as hydration repair.
 - Main edits normative Markdown/declarative architecture only; never source/tests/scripts/build/CI/executable config. Sole writer `/root/terra_crash_completion`, gpt-5.6-terra high. Former executors must not resume.
-- Preservation commit b82c0406 accepted; user-approved WIP retained without feature acceptance. PM-MONOREPO-RECOVERY-01 granted to sole Terra after acknowledgement: exact three-doc checkpoint then two local bundles/independent bare restore proofs. No implementation/outer commit/remote/merge/migration/deploy/service-change authority.
+- Preservation commit b82c0406 and recovery checkpoint bafbb8e accepted; user-approved WIP retained without feature acceptance. PM-MONOREPO-ASSEMBLY-01 Gate A ACK accepted, IMPLEMENTING granted exclusively to sole Terra: isolated non-squashed assembly and CI path adaptation; no original-repo mutation, remote/push/deploy/service change or heavy/native authority.
 - One heavy owner/one visible client DISPLAY=:0. Rediscover XAUTHORITY (last /run/user/1000/.mutter-Xwaylandauth.AZ4VT3). Qualification25631/32, benchmark25641/42; all verified closed after r12. Live far-frontier-v3-live.service/artifact hosts unrelated and untouched.
 - No force-loading, canonical test mutation API, arbitrary world edits, fabricated ack, timeout inflation, blind retry or module clean. Retain worlds/bundles. architecture.yml owns boundaries; source owns implementation; this is sole active ledger.
 
@@ -74,7 +64,8 @@
 
 ### Next
 
-- Independently verify recovery bundle/restore packet and exact checkpoint refs, then grant bounded disposable history-preserving merge with CI path adaptation. Provider/originalF0.V remain later; no intermediate polling.
+- Recovery ACCEPTED: main checked bundle hashes, actual restored HEAD/tree IDs, persistent refs/ref trees and fsck reports, exact three-doc checkpoint parent/path set and original statuses. Recovery root /home/rd/proj/pm-migration-recovery.OaRskN retained. Nested clean before new engineer docs; root only .f0v-baseline/. Worktree pseudo-HEAD objects retained, not metadata; originals remain required.
+- ASSEMBLY-01 Gate A accepted and isolated implementation granted. Terra reports immutable outer tree contains no .github/workflows; preserve its actual validation/deploy scripts without inventing a missing workflow family. Review stable Gate B before fresh heavy verification. Engineer will supply normative migration docs in candidate checkout; original ledger remains canonical until adoption. Provider/originalF0.V remain later; no intermediate polling.
 - V3-AUD-052 arrival_checkpoint_one may need later correction; no new F0.1/MAT breadth yet.
 
 ## Open questions
@@ -85,7 +76,7 @@
 
 ## Working set
 
-- docs/work-orders/PM-MONOREPO-RECOVERY-01.md active checkpoint/backup; accepted PRESERVATION-PRECOMMIT/PRE-MONOREPO-WIP/LOCAL-EXIT-AUDIT/NATIVE-QUAL and earlier corrective orders; engineering-agent-protocol; architecture.yml.
+- docs/work-orders/PM-MONOREPO-ASSEMBLY-01.md active IMPLEMENTING; RECOVERY-01 and PRESERVATION-PRECOMMIT/PRE-MONOREPO-WIP/LOCAL-EXIT-AUDIT/NATIVE-QUAL accepted within scope; engineering-agent-protocol; architecture.yml. New engineer governance edits require next executor docs gate.
 - tools/frontier-v3-test-pilot/src persistent assigned compiler/runner/validator and matching test/. Java/scenario meaning/build/CI outside active correction.
 - Contract/execution-semantics/implementation-plan/seamless-foundation/accelerated-verification-loop/integration-feedback-foundation/Terra brief/architecture-audit normative.
 - Archives: CONTINUITY_2026-09-06_native_r12.md and native_r9.md; earlier2026-09-05_native_r7/engineer_handoff/crash_protocol_handoff retain history/product decisions. Historical grants never current authority.

@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: pale-mirror
+
 jobs:
   core:
     name: Core build and package gate
@@ -64,7 +68,7 @@ jobs:
         with:
           name: f0va-preparation
           if-no-files-found: error
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci
 
   f0va-correctness-1:
     name: F0.VA native correctness sample 1
@@ -122,7 +126,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: f0va-preparation
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci
       - name: Bootstrap isolated native Gradle home online
         run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon
       - name: Recreate and verify exact timing classpaths
@@ -143,10 +147,10 @@ jobs:
           name: f0va-sequential-timing
           if-no-files-found: warn
           path: |
-            build/f0va-ci/sequential-timing.json
-            build/f0va-ci/sequential-results
-            build/frontier-v3-ci-shards
-            build/frontier-v3-scenarios
+            pale-mirror/build/f0va-ci/sequential-timing.json
+            pale-mirror/build/f0va-ci/sequential-results
+            pale-mirror/build/frontier-v3-ci-shards
+            pale-mirror/build/frontier-v3-scenarios
 
   f0va-merge:
     name: F0.VA fail-closed matrix merge
@@ -163,16 +167,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: f0va-preparation
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci
       - name: Download every worker result
         uses: actions/download-artifact@v4
         with:
           pattern: f0va-correctness-?-worker-?
-          path: build/f0va-ci/results
+          path: pale-mirror/build/f0va-ci/results
       - uses: actions/download-artifact@v4
         with:
           name: f0va-sequential-timing
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci
       - name: Merge only complete comparable worker evidence
         run: >-
           node tools/frontier-v3-test-pilot/src/merge-ci-matrix.mjs
@@ -197,4 +201,4 @@ jobs:
         with:
           name: f0va-merged-matrix
           if-no-files-found: warn
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci

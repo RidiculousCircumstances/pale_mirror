@@ -1,6 +1,15 @@
-hosted/
 build/
+hosted/
 neoforge-*-installer.jar.log
-pale-mirror/
 AGENTS.md
 perf.data
+pale-mirror/
+
+# Repository-only monorepo inputs must never become distributable pack payload.
+.assembly-*
+.github/
+.work/
+crash-reports/
+logs/
+run/
+/world*/

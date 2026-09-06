@@ -2,13 +2,16 @@
 
 ## Workspace layout
 
-- This workspace contains the Far Frontier pack/deployment repository at the
-  root and the independent Pale Mirror source repository at `pale-mirror/`.
-- Preserve both Git histories. The nested repository is intentionally ignored
-  by the outer repository; do not convert it to a submodule, subtree or ordinary
-  tracked directory unless the user explicitly requests a repository migration.
-- Inspect, stage and commit each repository separately. A cross-repository task
-  must report verification and dirty state for both repositories.
+- This checkout contains the Far Frontier pack/deployment tree at the root and
+  the Pale Mirror source project at `pale-mirror/`, in one Git repository.
+- Preserve the non-squashed ancestry of both original repositories. Do not
+  create an embedded `.git`, gitlink or submodule under `pale-mirror/`.
+- Inspect and commit the combined repository from its root, with explicit
+  reviewed paths. Report verification for each affected ownership boundary.
+- Migration is not accepted merely because the histories have been assembled.
+  Until explicit adoption, preserve both original checkouts, common Git
+  metadata, linked worktrees, local artifacts and verified recovery bundles.
+  No force-push, original cleanup, service change or deployment is implied.
 
 ## Pale Mirror work
 
@@ -22,12 +25,23 @@
 - `pale-mirror/CONTINUITY.md` is the single continuity ledger for Pale Mirror
   source, packaging and disposable test-server work. Do not create a competing
   workspace-level copy.
+- Temporary migration rule: this candidate has not been adopted. Its imported
+  ledger is historical; additionally read the active ledger and work order at
+  `/home/rd/proj/minecraft/pale-mirror/CONTINUITY.md`. Only the engineer may
+  transfer ledger authority after the required migration/provider gates.
 
 ## Ownership boundaries
 
-- The root repository owns the modpack manifest, client/server installers,
+- The root pack/deployment boundary owns the modpack manifest, client/server installers,
   hosted artifacts and deployment scripts.
 - `pale-mirror/` owns mod source, architecture, tests and build outputs.
 - Crossing the boundary must be explicit: build and verify in `pale-mirror/`,
   then publish/install through root scripts according to the Pale Mirror
   release and server-operation rules.
+- Git tracking is not pack payload admission. Source, CI, build outputs and
+  diagnostic evidence must stay out of the distributable Packwiz payload.
+  Validate incoming pack/index metadata without silently accepting its repair;
+  deliberate regeneration is a separate reviewed step.
+- Root `.github/workflows/` owns CI entry points. Shell steps for Pale Mirror
+  run from `pale-mirror/`; action/artifact paths resolve from checkout root.
+  Evidence identity must retain relevant root CI inputs after relocation.

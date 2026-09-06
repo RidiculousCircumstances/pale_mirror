@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 
 const exec = promisify(execFile);
 export const EVIDENCE_CACHE_SCHEMA = 1;
+// These workflows drive the prepared native matrix after the Pale Mirror project becomes a
+// subdirectory.  They remain deliberately separate from root pack payload discovery.
+export const MONOREPO_WORKFLOW_PREFIXES = Object.freeze(['.github/workflows/']);
 
 /**
  * Hashes actual working-tree bytes, not a commit ID.  `git ls-files` deliberately includes
@@ -18,6 +21,22 @@ export async function fingerprintWorkingContent(project, prefixes) {
   const paths = [...new Set(stdout.split('\0').filter(Boolean))].filter((path) => checked.some((prefix) => path === prefix || path.startsWith(prefix))).sort();
   if (paths.length === 0) throw new Error('content fingerprint has no relevant working-tree inputs');
   return fingerprintPaths(root, paths);
+}
+
+/**
+ * Adds the explicitly owned root CI inputs to a subproject content identity without allowing
+ * parent traversal in ordinary project paths.  The root entries are namespace-tagged before
+ * hashing, so an equally named Pale Mirror file cannot stand in for a workflow.
+ */
+export async function fingerprintWorkingContentWithMonorepoWorkflows(project, prefixes) {
+  const [projectContent, workflowContent] = await Promise.all([
+    fingerprintWorkingContent(project, prefixes),
+    fingerprintWorkingContent(monorepoRoot(project), MONOREPO_WORKFLOW_PREFIXES)
+  ]);
+  return fingerprintContentFiles([
+    ...projectContent.files,
+    ...workflowContent.files.map((entry) => Object.freeze({ ...entry, path: `monorepo/${entry.path}` }))
+  ]);
 }
 
 export async function fingerprintPaths(project, paths) {
@@ -35,8 +54,30 @@ export async function fingerprintPaths(project, paths) {
       else throw error;
     }
   }
-  const value = Object.freeze({ schema: EVIDENCE_CACHE_SCHEMA, kind: 'frontier-v3-working-content', files: Object.freeze(files) });
+  return fingerprintContentFiles(files);
+}
+
+/** Builds one canonical content identity from already-resolved safe file records. */
+export function fingerprintContentFiles(files) {
+  if (!Array.isArray(files) || files.length === 0 || files.some((entry) => !safeContentEntry(entry))) {
+    throw new Error('content fingerprint files are malformed');
+  }
+  const paths = new Set();
+  const ordered = [...files].sort((left, right) => left.path.localeCompare(right.path)).map((entry) => {
+    if (paths.has(entry.path)) throw new Error('content fingerprint files are duplicate');
+    paths.add(entry.path); return Object.freeze({ path: entry.path, state: entry.state, sha256: entry.sha256 });
+  });
+  const value = Object.freeze({ schema: EVIDENCE_CACHE_SCHEMA, kind: 'frontier-v3-working-content', files: Object.freeze(ordered) });
   return Object.freeze({ ...value, sha256: hash(stable(value)) });
+}
+
+/** Resolves the one permitted monorepo parent; no caller may supply an arbitrary ancestor. */
+export function monorepoRoot(project) {
+  const source = resolve(project);
+  if (basename(source) !== 'pale-mirror') throw new Error('monorepo source project must be named pale-mirror');
+  const root = resolve(source, '..');
+  if (relative(root, source) !== 'pale-mirror') throw new Error('monorepo source project has an unsafe parent');
+  return root;
 }
 
 /** Creates the complete cache key. Omitted identity fields are rejected rather than defaulted. */
@@ -87,6 +128,7 @@ function validateProofs(value) {
 }
 function validatePrefixes(value) { if (!Array.isArray(value) || value.length === 0 || value.some((entry) => !safePath(entry))) throw new Error('content fingerprint prefixes are malformed'); return [...new Set(value)].sort(); }
 function safePath(value) { return typeof value === 'string' && value.length > 0 && !value.startsWith('/') && !value.includes('\\') && !value.split('/').includes('..'); }
+function safeContentEntry(value) { return value && safePath(value.path) && ['PRESENT', 'MISSING'].includes(value.state) && sha256(value.sha256); }
 function token(value) { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value); }
 function fixture(value) { return value === null || sha256(value); }
 function sha256(value) { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); }

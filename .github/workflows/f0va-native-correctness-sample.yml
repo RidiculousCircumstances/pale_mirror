@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: pale-mirror
+
 jobs:
   native-correctness:
     name: F0.VA ${{ inputs.measurement }} ${{ matrix.worker }}
@@ -44,7 +48,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: f0va-preparation
-          path: build/f0va-ci
+          path: pale-mirror/build/f0va-ci
       - name: Admit exact four-worker correctness matrix before Gradle
         run: node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs
       - name: Bootstrap isolated native Gradle home online
@@ -67,6 +71,6 @@ jobs:
           name: f0va-${{ inputs.measurement }}-${{ matrix.worker }}
           if-no-files-found: warn
           path: |
-            build/f0va-ci/results/${{ inputs.measurement }}/${{ matrix.worker }}.json
-            build/frontier-v3-ci-shards
-            build/frontier-v3-scenarios
+            pale-mirror/build/f0va-ci/results/${{ inputs.measurement }}/${{ matrix.worker }}.json
+            pale-mirror/build/frontier-v3-ci-shards
+            pale-mirror/build/frontier-v3-scenarios

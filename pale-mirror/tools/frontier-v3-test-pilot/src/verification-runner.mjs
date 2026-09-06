@@ -4,7 +4,7 @@ import { readFile, mkdir, stat, writeFile } from 'node:fs/promises';
 import { hostname, platform, arch, release } from 'node:os';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { evidenceCacheKey, fingerprintWorkingContent, readReusableEvidence, storeSuccessfulEvidence } from './evidence-cache.mjs';
+import { evidenceCacheKey, fingerprintWorkingContentWithMonorepoWorkflows, MONOREPO_WORKFLOW_PREFIXES, monorepoRoot, readReusableEvidence, storeSuccessfulEvidence } from './evidence-cache.mjs';
 import { loadDependencyManifest, selectVerificationPlan, VERIFICATION_PLAN_SCHEMA } from './verification-selector.mjs';
 import { requirePreparedF0vBuild } from './prepared-build.mjs';
 
@@ -40,7 +40,7 @@ export async function createVerificationExecution({ project, changedPaths, fresh
   }
   const selection = selectVerificationPlan(manifest, { changedPaths, freshEvidence });
   const checkedBuild = validateBuildIdentity(build);
-  const source = await fingerprintWorkingContent(root, sourcePrefixes(manifest, selection.changedPaths));
+  const source = await fingerprintWorkingContentWithMonorepoWorkflows(root, sourcePrefixes(manifest, selection.changedPaths));
   const executionRuntime = runtime === undefined ? await runtimeIdentity() : validateRuntimeIdentity(runtime);
   const contractSha256 = hash(contractBytes);
   const directory = resolve(root, RELATIVE.output, runId);
@@ -135,11 +135,15 @@ export async function executeVerificationExecution(execution, { execute = defaul
 export async function discoverChangedPaths(project) {
   const { execFile } = await import('node:child_process'); const { promisify } = await import('node:util');
   const exec = promisify(execFile); const root = resolve(project);
+  const monorepo = monorepoRoot(root);
   const [tracked, untracked] = await Promise.all([
-    exec('git', ['diff', '--name-only', '--no-ext-diff', 'HEAD'], { cwd: root }),
-    exec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: root })
+    exec('git', ['diff', '--name-status', '-z', '--no-ext-diff', '--find-renames', 'HEAD'], { cwd: monorepo }),
+    exec('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd: monorepo })
   ]);
-  const paths = [...new Set(`${tracked.stdout}\n${untracked.stdout}`.split(/\r?\n/).filter(Boolean))].sort();
+  const paths = [...new Set([
+    ...nameStatusPaths(tracked.stdout),
+    ...untracked.stdout.split('\0').filter(Boolean)
+  ].flatMap(normalizeChangedCoordinate))].sort();
   if (paths.length === 0) throw new Error('verification selection needs explicit changed paths for a clean tree');
   return Object.freeze(paths);
 }
@@ -240,6 +244,32 @@ function sourcePrefixes(manifest, changedPaths) {
   return [...new Set([...manifest.rules.flatMap((rule) => rule.prefixes), ...changedPaths,
     'tools/frontier-v3-test-pilot/package.json', RELATIVE.manifest, RELATIVE.contract])].sort();
 }
+function nameStatusPaths(value) {
+  const values = value.split('\0').filter(Boolean); const paths = [];
+  for (let index = 0; index < values.length;) {
+    const status = values[index++];
+    if (status === undefined || !/^(?:[ADMTUXB]|[RC][0-9]{1,3})$/.test(status)) throw new Error('verification Git status output is malformed');
+    const count = status.startsWith('R') || status.startsWith('C') ? 2 : 1;
+    for (let path = 0; path < count; path++) {
+      const candidate = values[index++];
+      if (candidate === undefined) throw new Error('verification Git status path is malformed');
+      paths.push(candidate);
+    }
+  }
+  return paths;
+}
+function normalizeChangedCoordinate(path) {
+  if (path.startsWith('pale-mirror/')) {
+    const projectPath = path.slice('pale-mirror/'.length);
+    if (!safeChangedPath(projectPath)) throw new Error('verification project change path is malformed');
+    return [projectPath];
+  }
+  if (MONOREPO_WORKFLOW_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    if (!safeChangedPath(path)) throw new Error('verification root workflow path is malformed');
+    return [path];
+  }
+  return [];
+}
 /**
  * Verification is an admission check, not an identity projection. In particular, native child
  * runners must retain the exact source-content fingerprint supplied by preparation instead of
@@ -339,6 +369,7 @@ async function writeExclusive(path, contents) {
   catch (error) { if (error?.code === 'EEXIST') throw new Error(`verification evidence already exists: ${basename(path)}`); throw error; }
 }
 function inside(root, target) { const path = relative(resolve(root), resolve(target)); return path !== '' && !path.startsWith('..') && !path.includes('/..'); }
+function safeChangedPath(value) { return typeof value === 'string' && value.length > 0 && !value.startsWith('/') && !value.includes('\\') && !value.split('/').includes('..'); }
 function token(value) { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value); }
 function sha(value) { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); }
 function hash(value) { return createHash('sha256').update(value).digest('hex'); }

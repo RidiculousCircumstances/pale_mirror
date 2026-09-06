@@ -9,7 +9,8 @@ import { fingerprintPreparedBuild, fingerprintPreparedSource, portablePreparedBu
 import { ensurePreparedLaunchWorkingDirectory, preparedLaunch } from '../src/prepared-launch.mjs';
 
 test('prepared build fingerprints both native classpaths and fails closed on drift', async () => {
-  const root = await mkdtemp(resolve(tmpdir(), 'pmv3-prepared-build-'));
+  const monorepo = await mkdtemp(resolve(tmpdir(), 'pmv3-prepared-build-'));
+  const root = resolve(monorepo, 'pale-mirror');
   try {
     const artifact = resolve(root, 'pale-mirror-neoforge/build/libs/pale_mirror-test.jar');
     const dependency = resolve(root, 'runtime/dependency.bin');
@@ -21,15 +22,18 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await mkdir(resolve(root, 'runtime'), { recursive: true });
     await mkdir(resolve(root, 'pale-mirror-frontier/src/main'), { recursive: true });
     await mkdir(resolve(root, 'tools/frontier-v3-test-pilot/src'), { recursive: true });
+    await mkdir(resolve(monorepo, '.github/workflows'), { recursive: true });
     await writeFile(resolve(root, '.gitignore'), 'pale-mirror-neoforge/build/\n');
     await writeFile(resolve(root, 'pale-mirror-frontier/src/main/Owner.java'), 'class Owner {}\n');
     await writeFile(resolve(root, 'tools/frontier-v3-test-pilot/src/runner.mjs'), 'export const version = 1;\n');
+    await writeFile(resolve(monorepo, '.github/workflows/build.yml'), 'name: build-v1\n');
+    await writeFile(resolve(monorepo, '.github/workflows/f0va-native-correctness-sample.yml'), 'name: sample-v1\n');
     const exec = promisify(execFile);
     const environment = { ...process.env };
     delete environment.GIT_DIR; delete environment.GIT_WORK_TREE; delete environment.GIT_INDEX_FILE;
-    await exec('git', ['init', '-q'], { cwd: root, env: environment });
-    await exec('git', ['add', '.'], { cwd: root, env: environment });
-    await exec('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'prepared-source'], { cwd: root, env: environment });
+    await exec('git', ['init', '-q'], { cwd: monorepo, env: environment });
+    await exec('git', ['add', '.'], { cwd: monorepo, env: environment });
+    await exec('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'prepared-source'], { cwd: monorepo, env: environment });
     await writeFile(artifact, 'artifact-v1'); await writeFile(dependency, 'classpath-v1'); await writeFile(launchOnly, 'launch-v1');
     const serverProgramArgs = resolve(root, 'pale-mirror-neoforge/build/moddev/frontierV3PilotServerRunProgramArgs.txt');
     const clientProgramArgs = resolve(root, 'pale-mirror-neoforge/build/moddev/frontierV3PilotClientRunProgramArgs.txt');
@@ -71,6 +75,12 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await writeFile(serverProgramArgs, serverArguments);
     await writeFile(clientProgramArgs, clientArguments);
     const identity = Object.freeze({ sourceContent: await fingerprintPreparedSource(root), ...(await fingerprintPreparedBuild(root, artifact)) });
+    assert.ok(identity.sourceContent.files.some((entry) => entry.path === 'monorepo/.github/workflows/build.yml'));
+    await exec('git', ['rm', '--cached', '.github/workflows/f0va-native-correctness-sample.yml'], { cwd: monorepo, env: environment });
+    assert.ok((await exec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: monorepo, env: environment })).stdout
+      .split(/\r?\n/).includes('.github/workflows/f0va-native-correctness-sample.yml'));
+    assert.deepEqual(await fingerprintPreparedSource(root), identity.sourceContent,
+      'an untracked root workflow contributes its exact bytes rather than disappearing from identity');
     await requirePreparedBuild(root, identity);
     await requirePreparedF0vBuild(root, identity);
     const portable = portablePreparedBuildIdentity(identity);
@@ -100,9 +110,13 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await writeFile(launchOnly, 'launch-v2');
     await assert.rejects(() => requirePreparedBuild(root, identity), /hash drifted/);
     await writeFile(launchOnly, 'launch-v1');
+    await writeFile(resolve(monorepo, '.github/workflows/build.yml'), 'name: build-v2\n');
+    await assert.rejects(() => requirePreparedF0vBuild(root, identity), /source content hash drifted/);
+    await writeFile(resolve(monorepo, '.github/workflows/build.yml'), 'name: build-v1\n');
+    await requirePreparedF0vBuild(root, identity);
     await writeFile(resolve(root, 'tools/frontier-v3-test-pilot/src/runner.mjs'), 'export const version = 2;\n');
     await assert.rejects(() => requirePreparedF0vBuild(root, identity), /source content hash drifted/);
     await assert.rejects(() => requirePreparedBuild(root, { ...identity,
       preparedArtifact: { ...identity.preparedArtifact, path: '/outside-worker.jar' } }), /escapes project/);
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally { await rm(monorepo, { recursive: true, force: true }); }
 });

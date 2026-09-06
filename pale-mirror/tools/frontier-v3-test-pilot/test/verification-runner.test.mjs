@@ -4,8 +4,8 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createVerificationExecution, executeVerificationExecution, focusedT1Descriptor } from '../src/verification-runner.mjs';
+import { join, resolve } from 'node:path';
+import { createVerificationExecution, discoverChangedPaths, executeVerificationExecution, focusedT1Descriptor } from '../src/verification-runner.mjs';
 import { parse } from '../src/run-verification-plan.mjs';
 
 const exec = promisify(execFile);
@@ -15,7 +15,7 @@ const runtime = Object.freeze({ jdkSha256: HASH('d'), platformSha256: HASH('e'),
 const verify = async () => build;
 
 test('executable runner uses only its closed tier catalog, caches successful non-final terminal records, and reuses them exactly', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const first = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
     preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'first' });
   assert.deepEqual(first.tiers.map((tier) => tier.tier), ['T0', 'T1', 'T3']);
@@ -32,7 +32,7 @@ test('executable runner uses only its closed tier catalog, caches successful non
 });
 
 test('runner never reuses stale dirty-content evidence, failed evidence, corrupt proof, or an under-selected unknown path', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const input = { project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'], preparedIdentity: {}, verifyPrepared: verify, runtime };
   const first = await createVerificationExecution({ ...input, runId: 'seed' });
   await executeVerificationExecution(first, { execute: async () => ({ status: 'ok', code: 0 }) });
@@ -60,8 +60,73 @@ test('runner never reuses stale dirty-content evidence, failed evidence, corrupt
   assert.equal(entries.length, 6, 'a failed run must not append cache entries');
 });
 
+test('root CI changes retain their root coordinates, affect identity/cache, and never admit root pack content', async (context) => {
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
+  const baseline = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
+    preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'root-workflow-before' });
+  await writeFile(resolve(project, '..', '.github/workflows/build.yml'), 'name: changed-root-workflow\n');
+  await writeFile(resolve(project, '..', 'pack.toml'), 'name = "changed-tracked-pack"\n');
+  await writeFile(resolve(project, '..', 'untracked-pack-payload.txt'), 'unrelated root pack input\n');
+  const changed = await discoverChangedPaths(project);
+  assert.deepEqual(changed, ['.github/workflows/build.yml']);
+  const after = await createVerificationExecution({ project, changedPaths: changed,
+    preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'root-workflow-after' });
+  assert.notEqual(after.source.sha256, baseline.source.sha256);
+  assert.ok(after.source.files.some((entry) => entry.path === 'monorepo/.github/workflows/build.yml'));
+  assert.ok(!after.source.files.some((entry) => entry.path === 'pack.toml'));
+  assert.equal(after.selection.conservative, false);
+  assert.deepEqual(after.selection.requiredTiers, ['T0', 'T1', 'T2', 'T3', 'T4']);
+});
+
+test('project Git coordinates normalize tracked, staged, deleted, renamed, and untracked paths without losing selective ownership', async (context) => {
+  const tracked = await fixture(); context.after(() => rm(resolve(tracked, '..'), { recursive: true, force: true }));
+  await writeFile(join(tracked, 'tools/frontier-v3-test-pilot/scenarios/example.json'), '{"tracked":true}\n');
+  await writeFile(resolve(tracked, '..', 'pack.toml'), 'name = "unrelated-tracked-pack"\n');
+  assert.deepEqual(await discoverChangedPaths(tracked), ['tools/frontier-v3-test-pilot/scenarios/example.json']);
+  const selected = await createVerificationExecution({ project: tracked, changedPaths: await discoverChangedPaths(tracked),
+    preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'tracked-project-coordinate' });
+  assert.equal(selected.selection.conservative, false);
+  assert.deepEqual(selected.selection.selections.map((entry) => entry.owner), ['pilot-scenarios']);
+  assert.deepEqual(selected.selection.requiredTiers, ['T0', 'T1', 'T3']);
+
+  const staged = await fixture(); context.after(() => rm(resolve(staged, '..'), { recursive: true, force: true }));
+  await writeFile(join(staged, 'tools/frontier-v3-test-pilot/scenarios/example.json'), '{"staged":true}\n');
+  await exec('git', ['add', 'pale-mirror/tools/frontier-v3-test-pilot/scenarios/example.json'], { cwd: resolve(staged, '..') });
+  assert.deepEqual(await discoverChangedPaths(staged), ['tools/frontier-v3-test-pilot/scenarios/example.json']);
+
+  const deleted = await fixture(); context.after(() => rm(resolve(deleted, '..'), { recursive: true, force: true }));
+  await rm(join(deleted, 'tools/frontier-v3-test-pilot/scenarios/example.json'));
+  assert.deepEqual(await discoverChangedPaths(deleted), ['tools/frontier-v3-test-pilot/scenarios/example.json']);
+
+  const renamed = await fixture(); context.after(() => rm(resolve(renamed, '..'), { recursive: true, force: true }));
+  await exec('git', ['mv', 'pale-mirror/tools/frontier-v3-test-pilot/scenarios/example.json',
+    'pale-mirror/tools/frontier-v3-test-pilot/scenarios/renamed.json'], { cwd: resolve(renamed, '..') });
+  assert.deepEqual(await discoverChangedPaths(renamed), [
+    'tools/frontier-v3-test-pilot/scenarios/example.json', 'tools/frontier-v3-test-pilot/scenarios/renamed.json'
+  ]);
+
+  const untracked = await fixture(); context.after(() => rm(resolve(untracked, '..'), { recursive: true, force: true }));
+  await writeFile(join(untracked, 'tools/frontier-v3-test-pilot/unowned-untracked.mjs'), 'export {};\n');
+  const unknown = await createVerificationExecution({ project: untracked, changedPaths: await discoverChangedPaths(untracked),
+    preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'untracked-project-coordinate' });
+  assert.deepEqual(unknown.selection.changedPaths, ['tools/frontier-v3-test-pilot/unowned-untracked.mjs']);
+  assert.equal(unknown.selection.conservative, true);
+});
+
+test('an additional root workflow remains a visible all-tier CI input rather than disappearing', async (context) => {
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
+  await writeFile(resolve(project, '..', '.github/workflows/unknown.yml'), 'name: unknown\n');
+  const execution = await createVerificationExecution({ project, changedPaths: await discoverChangedPaths(project),
+    preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'unknown-root-workflow' });
+  assert.deepEqual(execution.selection.changedPaths, ['.github/workflows/unknown.yml']);
+  assert.equal(execution.selection.conservative, false);
+  assert.deepEqual(execution.selection.selections.map((entry) => entry.owner), ['ci-workflow']);
+  assert.deepEqual(execution.selection.requiredTiers, ['T0', 'T1', 'T2', 'T3', 'T4']);
+  assert.ok(execution.source.files.some((entry) => entry.path === 'monorepo/.github/workflows/unknown.yml'));
+});
+
 test('fresh evidence mechanically bypasses every cached record and forbids fixture images', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const ordinary = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
     preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'ordinary' });
   await executeVerificationExecution(ordinary, { execute: async () => ({ status: 'ok', code: 0 }) });
@@ -75,7 +140,7 @@ test('fresh evidence mechanically bypasses every cached record and forbids fixtu
 });
 
 test('a conservative timing cohort can add only lower iterative tiers, bypass cache, and passes one immutable prepared identity to every command', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const execution = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
     preparedIdentity: build, verifyPrepared: verify, runtime, runId: 'timing-baseline', extraIterativeTiers: ['T2'],
     reuseEvidence: false, nativeClientStrategy: 'INDEPENDENT' });
@@ -105,7 +170,7 @@ test('verification CLI accepts only an identity, safe declared paths, and an exp
 });
 
 test('T1 commands are selected by the owning manifest and require an exact test filter', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const execution = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
     preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'focused-t1' });
   const commands = execution.tiers.find((tier) => tier.tier === 'T1').descriptor.commands;
@@ -114,7 +179,7 @@ test('T1 commands are selected by the owning manifest and require an exact test 
 });
 
 test('conservative T1 is an explicit full registered-owner baseline, never an accidental candidate shortcut', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const selected = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
     preparedIdentity: {}, verifyPrepared: verify, runtime, runId: 'selected' });
   const conservative = await createVerificationExecution({ project, changedPaths: ['tools/frontier-v3-test-pilot/scenarios/example.json'],
@@ -134,7 +199,7 @@ test('conservative T1 is an explicit full registered-owner baseline, never an ac
 });
 
 test('NeoForge T1 puts its exact test filter after the Test task, never after pilot preparation', async (context) => {
-  const project = await fixture(); context.after(() => rm(project, { recursive: true, force: true }));
+  const project = await fixture(); context.after(() => rm(resolve(project, '..'), { recursive: true, force: true }));
   const manifest = {
     rules: [{ id: 'neoforge-owner', t1: { nodeTests: [], gradleTests: [{ module: 'neoforge', className: 'example.ExactTest' }],
       allModules: { frontier: false, neoforge: false, domain: false, api: false } } }]
@@ -148,11 +213,13 @@ test('NeoForge T1 puts its exact test filter after the Test task, never after pi
 });
 
 async function fixture() {
-  const project = await mkdtemp(join(tmpdir(), 'pmv3-verification-runner-'));
+  const monorepo = await mkdtemp(join(tmpdir(), 'pmv3-verification-runner-'));
+  const project = join(monorepo, 'pale-mirror');
   await mkdir(join(project, 'tools/frontier-v3-test-pilot/contracts'), { recursive: true });
   await mkdir(join(project, 'tools/frontier-v3-test-pilot/scenarios'), { recursive: true });
   await mkdir(join(project, 'tools/frontier-v3-test-pilot/src'), { recursive: true });
   await mkdir(join(project, 'docs'), { recursive: true });
+  await mkdir(join(monorepo, '.github/workflows'), { recursive: true });
   await writeFile(join(project, '.gitignore'), 'build/\n');
   await writeFile(join(project, 'README.md'), 'fixture\n');
   await writeFile(join(project, 'tools/frontier-v3-test-pilot/package.json'), '{}\n');
@@ -165,9 +232,12 @@ async function fixture() {
   }) + '\n');
   await writeFile(join(project, 'tools/frontier-v3-test-pilot/contracts/resource-site-harvest-f0v.json'), '{}\n');
   await writeFile(join(project, 'tools/frontier-v3-test-pilot/scenarios/example.json'), '{}\n');
-  await exec('git', ['init', '-q'], { cwd: project });
-  await exec('git', ['add', '.'], { cwd: project });
-  await exec('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'], { cwd: project });
+  await writeFile(join(monorepo, '.github/workflows/build.yml'), 'name: build\n');
+  await writeFile(join(monorepo, '.github/workflows/f0va-native-correctness-sample.yml'), 'name: sample\n');
+  await writeFile(join(monorepo, 'pack.toml'), 'name = "fixture-pack"\n');
+  await exec('git', ['init', '-q'], { cwd: monorepo });
+  await exec('git', ['add', '.'], { cwd: monorepo });
+  await exec('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'], { cwd: monorepo });
   return project;
 }
 

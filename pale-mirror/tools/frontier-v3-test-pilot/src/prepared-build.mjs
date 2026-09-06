@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
-import { fingerprintWorkingContent } from './evidence-cache.mjs';
+import { fingerprintWorkingContentWithMonorepoWorkflows } from './evidence-cache.mjs';
 
 const CLASSPATHES = Object.freeze({
   server: 'pale-mirror-neoforge/build/moddev/frontierV3PilotServerLegacyClasspath.txt',
@@ -84,7 +84,7 @@ export async function fingerprintPreparedBuild(project, artifact) {
  * bytes which can otherwise change the semantics of a run without changing the packaged JAR.
  */
 export async function fingerprintPreparedSource(project) {
-  return await fingerprintWorkingContent(project, PREPARED_SOURCE_PREFIXES);
+  return await fingerprintWorkingContentWithMonorepoWorkflows(project, PREPARED_SOURCE_PREFIXES);
 }
 
 /**

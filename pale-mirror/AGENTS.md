@@ -1,5 +1,21 @@
 # Pale Mirror engineering guardrails
 
+## Repository layout and migration authority
+
+This is the Pale Mirror source subproject of the monorepo, not a nested Git
+repository. Resolve project-relative commands, skills and architecture paths
+from this directory; Git commits/status cover the combined root repository.
+CI entry points live at `../.github/workflows/`, not inside this subproject;
+their relevant content remains part of verification identity. Root pack
+payload and source-project build outputs are distinct ownership boundaries.
+
+Temporary pre-adoption rule: the imported local `CONTINUITY.md` is historical.
+Also read the canonical ledger and active order in
+`/home/rd/proj/minecraft/pale-mirror/` before acting. Do not update this imported
+ledger as a competing active record. Engineer transfers authority only after
+the required remote-clone/provider migration gates; original checkouts and
+linked-worktree metadata remain preserved. No deployment permission follows.
+
 ## Continuity
 
 Maintain one compact Continuity Ledger in `CONTINUITY.md`. It is the canonical
