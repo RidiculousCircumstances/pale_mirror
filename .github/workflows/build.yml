@@ -43,12 +43,24 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
     needs: core
     runs-on: [self-hosted, pm-native]
-    env:
-      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-prepare-gradle
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Initialize isolated Gradle home
+        shell: bash
+        run: |
+          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
+          test -n "${GITHUB_ENV:-}" || { echo "GITHUB_ENV is required" >&2; exit 1; }
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
+          esac
+          frontier_v3_gradle_home="$RUNNER_TEMP/frontier-v3-f0va-prepare-gradle"
+          case "$frontier_v3_gradle_home" in
+            *$'\n'*|*$'\r'*) echo "Gradle home is malformed" >&2; exit 1 ;;
+          esac
+          printf 'GRADLE_USER_HOME=%s\n' "$frontier_v3_gradle_home" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -109,13 +121,26 @@ jobs:
       group: frontier-v3-f0va-timing-${{ github.ref }}
       cancel-in-progress: false
     env:
-      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-timing-gradle
       FRONTIER_V3_PILOT_PORT: '25610'
       FRONTIER_V3_PILOT_WORKER_ID: sequential-timing
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Initialize isolated Gradle home
+        shell: bash
+        run: |
+          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
+          test -n "${GITHUB_ENV:-}" || { echo "GITHUB_ENV is required" >&2; exit 1; }
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
+          esac
+          frontier_v3_gradle_home="$RUNNER_TEMP/frontier-v3-f0va-timing-gradle"
+          case "$frontier_v3_gradle_home" in
+            *$'\n'*|*$'\r'*) echo "Gradle home is malformed" >&2; exit 1 ;;
+          esac
+          printf 'GRADLE_USER_HOME=%s\n' "$frontier_v3_gradle_home" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           java-version: '21'

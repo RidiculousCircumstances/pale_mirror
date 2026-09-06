@@ -28,7 +28,6 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(inputs.workers) }}
     env:
-      GRADLE_USER_HOME: ${{ runner.temp }}/frontier-v3-f0va-${{ inputs.measurement }}-${{ matrix.worker }}-gradle
       FRONTIER_V3_CI_MEASUREMENT: ${{ inputs.measurement }}
       FRONTIER_V3_CI_WORKERS_JSON: ${{ inputs.workers }}
       FRONTIER_V3_PILOT_PORT: ${{ matrix.port }}
@@ -37,6 +36,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Initialize isolated Gradle home
+        shell: bash
+        run: |
+          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
+          test -n "${GITHUB_ENV:-}" || { echo "GITHUB_ENV is required" >&2; exit 1; }
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
+          esac
+          case "${FRONTIER_V3_CI_MEASUREMENT:-}" in
+            correctness-1|correctness-2|correctness-3) ;;
+            *) echo "measurement is malformed" >&2; exit 1 ;;
+          esac
+          case "${FRONTIER_V3_PILOT_WORKER_ID:-}" in
+            worker-0|worker-1|worker-2|worker-3) ;;
+            *) echo "worker identity is malformed" >&2; exit 1 ;;
+          esac
+          frontier_v3_gradle_home="$RUNNER_TEMP/frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle"
+          case "$frontier_v3_gradle_home" in
+            *$'\n'*|*$'\r'*) echo "Gradle home is malformed" >&2; exit 1 ;;
+          esac
+          printf 'GRADLE_USER_HOME=%s\n' "$frontier_v3_gradle_home" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           java-version: '21'

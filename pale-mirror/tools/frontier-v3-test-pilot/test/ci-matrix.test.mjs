@@ -246,20 +246,36 @@ test('each isolated native CI job bootstraps its private Gradle home before offl
   const prepare = jobBlock(workflow, 'f0va-prepare', 'f0va-correctness-1');
   const sequential = jobBlock(workflow, 'f0va-sequential-timing', 'f0va-merge');
   const worker = jobBlock(sample, 'native-correctness');
-  assertColdHomeBootstrap(prepare, 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs');
-  assertColdHomeBootstrap(sequential, OFFLINE_NATIVE_PREPARATION);
-  assertColdHomeBootstrap(worker, OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs');
+  assertColdHomeBootstrap(prepare, 'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs');
+  assertColdHomeBootstrap(sequential, 'frontier-v3-f0va-timing-gradle', OFFLINE_NATIVE_PREPARATION);
+  assertColdHomeBootstrap(worker, 'frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle',
+    OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs', true);
 
   assert.throws(() => assertColdHomeBootstrap(prepare.replace(ONLINE_NATIVE_PREPARATION, ''),
-    'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /bootstrap/);
+    'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /bootstrap/);
   assert.throws(() => assertColdHomeBootstrap(sequential.replace(ONLINE_NATIVE_PREPARATION, '').replace(OFFLINE_NATIVE_PREPARATION,
-    `${OFFLINE_NATIVE_PREPARATION}\n      - run: ${ONLINE_NATIVE_PREPARATION}`), OFFLINE_NATIVE_PREPARATION), /precede offline/);
+    `${OFFLINE_NATIVE_PREPARATION}\n      - run: ${ONLINE_NATIVE_PREPARATION}`), 'frontier-v3-f0va-timing-gradle', OFFLINE_NATIVE_PREPARATION), /precede offline/);
   assert.throws(() => assertColdHomeBootstrap(worker.replace(ONLINE_NATIVE_PREPARATION,
-    `${ONLINE_NATIVE_PREPARATION} --offline`), OFFLINE_NATIVE_PREPARATION,
-  'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs'), /must stay online/);
+    `${ONLINE_NATIVE_PREPARATION} --offline`), 'frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle',
+  OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs', true), /must stay online/);
   assert.throws(() => assertColdHomeBootstrap(worker.replace('node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs',
-    `${ONLINE_NATIVE_PREPARATION}\n      - run: node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs`), OFFLINE_NATIVE_PREPARATION,
-  'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs'), /admit.*before bootstrap/);
+    `${ONLINE_NATIVE_PREPARATION}\n      - run: node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs`), 'frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle',
+  OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs', true), /admit.*before bootstrap/);
+  assert.throws(() => assertColdHomeBootstrap(prepare.replace('      - name: Initialize isolated Gradle home\n',
+    '      - name: Removed isolated Gradle home\n'), 'frontier-v3-f0va-prepare-gradle',
+  'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /initializer/);
+  assert.throws(() => assertColdHomeBootstrap(prepare.replace('      - name: Initialize isolated Gradle home\n',
+    '      - name: Deactivated isolated Gradle home\n') + '\n      - name: Initialize isolated Gradle home\n',
+  'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /initializer.*before Gradle/);
+  assert.throws(() => assertColdHomeBootstrap(prepare.replace('case "$RUNNER_TEMP" in', 'case "$UNSAFE_HOME" in'),
+    'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /RUNNER_TEMP/);
+  assert.throws(() => assertColdHomeBootstrap(prepare.replace('>> "$GITHUB_ENV"', '>> "$UNSAFE_ENV"'),
+    'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /GITHUB_ENV/);
+  assert.throws(() => assertColdHomeBootstrap(prepare.replace('    steps:\n',
+    '    env:\n      GRADLE_USER_HOME: ${{ runner.temp }}/unsafe\n    steps:\n'),
+  'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /job env/);
+  assert.doesNotThrow(() => assertColdHomeBootstrap(prepare + '\n      - name: Legitimate step runner context\n        env:\n          DIAGNOSTIC_TMP: ${{ runner.temp }}',
+    'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'));
 });
 
 test('native launcher helpers never shadow the Node process environment while spawning', async () => {
@@ -326,9 +342,27 @@ function jobBlock(workflow, job, nextJob = undefined) {
   return workflow.slice(start, end);
 }
 
-function assertColdHomeBootstrap(block, firstOfflinePreparation, admission = undefined) {
+function assertColdHomeBootstrap(block, homeSuffix, firstOfflinePreparation, admission = undefined, workerIdentity = false) {
+  const environment = jobEnvironment(block);
+  assert.doesNotMatch(environment, /\bGRADLE_USER_HOME\b/, 'isolated Gradle home must not use job env');
+  const initializer = block.indexOf('      - name: Initialize isolated Gradle home\n');
+  assert.notEqual(initializer, -1, 'native job lacks isolated Gradle-home initializer');
   const bootstrap = block.indexOf(ONLINE_NATIVE_PREPARATION);
   assert.notEqual(bootstrap, -1, 'native job must bootstrap its cold Gradle home');
+  assert.ok(initializer < bootstrap, 'isolated Gradle-home initializer must run before Gradle');
+  const initializerBlock = block.slice(initializer, bootstrap);
+  assert.match(initializerBlock, /shell: bash/);
+  assert.match(initializerBlock, /test -n "\$\{RUNNER_TEMP:-\}"/);
+  assert.match(initializerBlock, /test -n "\$\{GITHUB_ENV:-\}"/);
+  assert.match(initializerBlock, /case "\$RUNNER_TEMP" in/);
+  assert.match(initializerBlock, new RegExp(`frontier_v3_gradle_home="\\$RUNNER_TEMP/${escapeRegExp(homeSuffix)}"`));
+  assert.match(initializerBlock, /\*\$'\\n'\*\|\*\$'\\r'\*/);
+  assert.match(initializerBlock, /printf 'GRADLE_USER_HOME=%s\\n' "\$frontier_v3_gradle_home" >> "\$GITHUB_ENV"/);
+  assert.doesNotMatch(initializerBlock, /(?:^|\n)\s*home=/, 'initializer must not repurpose a generic home variable');
+  if (workerIdentity) {
+    assert.match(initializerBlock, /case "\$\{FRONTIER_V3_CI_MEASUREMENT:-\}" in/);
+    assert.match(initializerBlock, /case "\$\{FRONTIER_V3_PILOT_WORKER_ID:-\}" in/);
+  }
   const bootstrapLine = block.slice(bootstrap, block.indexOf('\n', bootstrap));
   assert.equal(bootstrapLine, ONLINE_NATIVE_PREPARATION, 'native bootstrap must stay online');
   const offlinePreparation = block.indexOf(firstOfflinePreparation);
@@ -339,4 +373,14 @@ function assertColdHomeBootstrap(block, firstOfflinePreparation, admission = und
     assert.notEqual(admissionIndex, -1, 'native worker lacks exact matrix admission');
     assert.ok(admissionIndex < bootstrap, 'native worker must admit its matrix before bootstrap');
   }
+}
+
+function jobEnvironment(block) {
+  const steps = block.indexOf('    steps:\n');
+  const environment = block.indexOf('    env:\n');
+  return environment === -1 || environment > steps ? '' : block.slice(environment, steps);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
