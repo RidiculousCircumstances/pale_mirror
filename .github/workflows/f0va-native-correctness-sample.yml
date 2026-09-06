@@ -78,7 +78,7 @@ jobs:
         run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --offline --no-daemon
       - name: Run one isolated native shard on its private display
         run: >-
-          xvfb-run -a -s '-screen 0 1920x1080x24'
+          scripts/with-private-xvfb.sh
           node tools/frontier-v3-test-pilot/src/run-ci-matrix-shard.mjs
           --plan=build/f0va-ci/plan.json
           --prepared=build/f0va-ci/prepared-build.json

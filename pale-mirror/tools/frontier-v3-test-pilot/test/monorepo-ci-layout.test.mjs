@@ -103,6 +103,22 @@ test('prepared native launch resolves DevLaunch as an explicit isolated Gradle i
   assert.doesNotMatch(build, /frontierV3PilotDevLaunchDirectory/);
 });
 
+test('provider-native workflows use the repository-owned private Xvfb launcher', async () => {
+  const [workflow, sample, launcher] = await Promise.all([
+    readFile(resolve(workflowRoot, 'build.yml'), 'utf8'),
+    readFile(resolve(workflowRoot, 'f0va-native-correctness-sample.yml'), 'utf8'),
+    readFile(resolve(project, 'scripts', 'with-private-xvfb.sh'), 'utf8')
+  ]);
+  for (const content of [workflow, sample]) {
+    assert.match(content, /scripts\/with-private-xvfb\.sh/);
+    assert.doesNotMatch(content, /xvfb-run/);
+  }
+  assert.match(launcher, /FRONTIER_V3_PILOT_PORT/);
+  assert.match(launcher, /command -v Xvfb/);
+  assert.match(launcher, /-nolisten tcp/);
+  assert.match(launcher, /DISPLAY="\$display" LIBGL_ALWAYS_SOFTWARE=1/);
+});
+
 test('all curated bunkhouses use the supported property-free rice bag provision without decoded collateral drift', async () => {
   const curator = resolve(project, 'tools', 'engineering', 'curate_bunkhouse_rice_bags.mjs');
   // The retained-before bytes are the accepted publication parent, rather

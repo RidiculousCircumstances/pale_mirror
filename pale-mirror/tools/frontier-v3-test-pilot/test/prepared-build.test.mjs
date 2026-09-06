@@ -21,11 +21,13 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await mkdir(resolve(root, 'pale-mirror-neoforge/build/runs/client'), { recursive: true });
     await mkdir(resolve(root, 'runtime'), { recursive: true });
     await mkdir(resolve(root, 'pale-mirror-frontier/src/main'), { recursive: true });
+    await mkdir(resolve(root, 'scripts'), { recursive: true });
     await mkdir(resolve(root, 'tools/frontier-v3-test-pilot/src'), { recursive: true });
     await mkdir(resolve(monorepo, '.github/workflows'), { recursive: true });
     await writeFile(resolve(root, '.gitignore'), 'pale-mirror-neoforge/build/\n');
     await writeFile(resolve(root, 'pale-mirror-frontier/src/main/Owner.java'), 'class Owner {}\n');
     await writeFile(resolve(root, 'tools/frontier-v3-test-pilot/src/runner.mjs'), 'export const version = 1;\n');
+    await writeFile(resolve(root, 'scripts/with-private-xvfb.sh'), '#!/usr/bin/env bash\n# Xvfb v1\n');
     await writeFile(resolve(monorepo, '.github/workflows/build.yml'), 'name: build-v1\n');
     await writeFile(resolve(monorepo, '.github/workflows/f0va-native-correctness-sample.yml'), 'name: sample-v1\n');
     const exec = promisify(execFile);
@@ -76,6 +78,7 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await writeFile(clientProgramArgs, clientArguments);
     const identity = Object.freeze({ sourceContent: await fingerprintPreparedSource(root), ...(await fingerprintPreparedBuild(root, artifact)) });
     assert.ok(identity.sourceContent.files.some((entry) => entry.path === 'monorepo/.github/workflows/build.yml'));
+    assert.ok(identity.sourceContent.files.some((entry) => entry.path === 'scripts/with-private-xvfb.sh'));
     await exec('git', ['rm', '--cached', '.github/workflows/f0va-native-correctness-sample.yml'], { cwd: monorepo, env: environment });
     assert.ok((await exec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: monorepo, env: environment })).stdout
       .split(/\r?\n/).includes('.github/workflows/f0va-native-correctness-sample.yml'));
@@ -115,6 +118,9 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     await writeFile(resolve(monorepo, '.github/workflows/build.yml'), 'name: build-v1\n');
     await requirePreparedF0vBuild(root, identity);
     await writeFile(resolve(root, 'tools/frontier-v3-test-pilot/src/runner.mjs'), 'export const version = 2;\n');
+    await assert.rejects(() => requirePreparedF0vBuild(root, identity), /source content hash drifted/);
+    await writeFile(resolve(root, 'tools/frontier-v3-test-pilot/src/runner.mjs'), 'export const version = 1;\n');
+    await writeFile(resolve(root, 'scripts/with-private-xvfb.sh'), '#!/usr/bin/env bash\n# Xvfb v2\n');
     await assert.rejects(() => requirePreparedF0vBuild(root, identity), /source content hash drifted/);
     await assert.rejects(() => requirePreparedBuild(root, { ...identity,
       preparedArtifact: { ...identity.preparedArtifact, path: '/outside-worker.jar' } }), /escapes project/);
