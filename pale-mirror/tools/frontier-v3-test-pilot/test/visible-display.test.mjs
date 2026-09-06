@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveVisibleDisplayAuthority } from '../src/visible-display.mjs';
+import { resolveVisibleDisplayAuthority, verifiedPrivateDisplayEnvironment } from '../src/visible-display.mjs';
 
 test('visible native pilot derives one exact current Xwayland authority', () => {
   assert.equal(resolveVisibleDisplayAuthority({ display: ':0', runtimeDirectory: '/run/user/1000', entries: [
@@ -16,4 +16,9 @@ test('visible native pilot fails before launch when display authority is unsafe 
   assert.throws(() => resolveVisibleDisplayAuthority({ display: ':0', runtimeDirectory: '/run/user/1000', entries: [
     '.mutter-Xwaylandauth.one', '.mutter-Xwaylandauth.two'
   ] }), /ambiguous or absent/);
+});
+
+test('private CI display admission excludes the user desktop and stale Xauthority', async () => {
+  await assert.rejects(() => verifiedPrivateDisplayEnvironment({ DISPLAY: ':0' }), /nonzero/);
+  await assert.rejects(() => verifiedPrivateDisplayEnvironment({ DISPLAY: ':not-a-display' }), /numeric/);
 });

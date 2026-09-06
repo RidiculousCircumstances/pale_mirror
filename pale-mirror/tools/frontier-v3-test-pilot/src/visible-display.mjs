@@ -39,6 +39,21 @@ export async function verifiedVisibleDisplayEnvironment(environment = process.en
   return Object.freeze({ ...environment, DISPLAY: ':0', XAUTHORITY: authority });
 }
 
+/**
+ * CI workers own a fresh unauthenticated Xvfb display, never the user's
+ * Xwayland session. It is deliberately a separate admission path: callers
+ * must opt in and cannot silently turn a local visible pilot into headless CI.
+ */
+export async function verifiedPrivateDisplayEnvironment(environment = process.env) {
+  const display = environment.DISPLAY;
+  if (!/^:[1-9][0-9]*$/.test(display ?? '')) throw new Error('private CI display must be a nonzero numeric DISPLAY');
+  const { XAUTHORITY: _xauthority, ...privateEnvironment } = environment;
+  const probe = spawn('xdpyinfo', ['-display', display], { env: { ...privateEnvironment, DISPLAY: display }, stdio: 'ignore' });
+  const code = await awaitWithin(exited(probe), 10_000, 'private CI Xvfb preflight did not finish');
+  if (code !== 0) throw new Error('private CI Xvfb preflight was rejected');
+  return Object.freeze({ ...privateEnvironment, DISPLAY: display, FRONTIER_V3_PRIVATE_DISPLAY: 'true' });
+}
+
 function exited(child) {
   return child.exitCode !== null || child.signalCode !== null
     ? Promise.resolve(child.exitCode ?? 1)

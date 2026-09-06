@@ -8,7 +8,7 @@ import { preparedLaunch } from './prepared-launch.mjs';
 import { LifecycleSignal, awaitLifecycleSignal, openLifecycleBarrierSession } from './lifecycle-barrier.mjs';
 import { awaitPersistentMatrixFinalClose, publishPersistentMatrixResult, validatePersistentMatrixPlan } from './persistent-matrix.mjs';
 import { awaitWithin, childExitCancellation } from './deadline-watchdog.mjs';
-import { verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
+import { verifiedPrivateDisplayEnvironment, verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
 
 export const MAX_DIAGNOSTIC_VALUES_PER_SEGMENT = 1024;
 export const MAX_DIAGNOSTIC_LINE_BYTES = 64 * 1024;
@@ -39,7 +39,9 @@ export async function main(argumentsValue = process.argv.slice(2)) {
     const fatal = pilotFailureFromLine(line); if (fatal !== null) fail(new Error(`persistent matrix pilot lifecycle failed: ${fatal}`));
   });
   const report = { schema: 1, kind: 'frontier-v3-persistent-matrix-client', status: 'running', build: identity, lifecycle: lifecycle.identity, clientPid: null, segments: [] };
-  const visibleClientEnvironment = await verifiedVisibleDisplayEnvironment(); let child;
+  const visibleClientEnvironment = process.env.FRONTIER_V3_PRIVATE_DISPLAY === 'true'
+    ? await verifiedPrivateDisplayEnvironment()
+    : await verifiedVisibleDisplayEnvironment(); let child;
   try {
     await requirePreparedF0vBuild(project, identity);
     const launch = await preparedLaunch(project, identity, 'client', {

@@ -14,7 +14,7 @@ import { LifecycleBarrier, LifecycleSignal, awaitLifecycleSignal, createLifecycl
 import { awaitPersistentMatrixResult, createPersistentMatrixSession, matrixSegment, publishPersistentMatrixExpectedCrashArm, publishPersistentMatrixExpectedCrashRelease, publishPersistentMatrixFinalClose, publishPersistentMatrixResume, publishPersistentMatrixServerReady, sha256Json, validatePersistentMatrixEvidence, validatePersistentMatrixPlan } from './persistent-matrix.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { awaitWithin, childExitCancellation } from './deadline-watchdog.mjs';
-import { verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
+import { verifiedPrivateDisplayEnvironment, verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
 import { terminateOwnedProcessGroup } from './owned-process-group.mjs';
 import { compileAssignedPersistentMatrix } from './persistent-worker-plan.mjs';
 
@@ -39,7 +39,9 @@ const port = Number(process.env.FRONTIER_V3_PILOT_PORT ?? 25575);
 if (!Number.isInteger(port) || port < 1024 || port >= 65535) throw new Error('FRONTIER_V3_PILOT_PORT must be 1024..65534');
 if (await portOpen(port) || await portOpen(port + 1)) throw new Error(`F0.VA persistent matrix ports ${port}/${port + 1} are already occupied`);
 await absent(output, 'persistent matrix manifest');
-const visibleClientEnvironment = await verifiedVisibleDisplayEnvironment();
+const visibleClientEnvironment = assignedPlan === undefined
+  ? await verifiedVisibleDisplayEnvironment()
+  : await verifiedPrivateDisplayEnvironment();
 
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 const suppliedPreparedIdentity = process.env.FRONTIER_V3_PREPARED_BUILD_IDENTITY;
