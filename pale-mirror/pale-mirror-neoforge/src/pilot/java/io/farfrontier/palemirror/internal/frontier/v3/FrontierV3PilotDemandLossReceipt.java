@@ -21,8 +21,9 @@ public final class FrontierV3PilotDemandLossReceipt {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         net.minecraft.server.MinecraftServer server = event.getServer();
-        Optional<String> request = FrontierV3PilotLifecycleSignal.normalDemandLossAuthorized();
-        if (request.isEmpty() || PUBLISHED.getOrDefault(server, Set.of()).contains(request.get())
+        Set<String> published = PUBLISHED.getOrDefault(server, Set.of());
+        Optional<String> request = FrontierV3PilotLifecycleSignal.normalDemandLossAuthorized(published);
+        if (request.isEmpty()
                 || !server.getPlayerList().getPlayers().isEmpty() || !FrontierV3ServerLifecycle.normalDemandLossReleased(server)) return;
         FrontierV3PilotLifecycleSignal.normalDemandLossRelease(request.get());
         PUBLISHED.computeIfAbsent(server, ignored -> new HashSet<>()).add(request.get());

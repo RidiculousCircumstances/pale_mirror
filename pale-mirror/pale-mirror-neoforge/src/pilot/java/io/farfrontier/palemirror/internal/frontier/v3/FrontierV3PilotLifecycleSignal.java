@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,7 +48,8 @@ final class FrontierV3PilotLifecycleSignal {
      * own normal-disconnect receipt.  This server-side read is test-pilot correlation only; it
      * cannot issue a command or alter the canonical world.
      */
-    static Optional<String> normalDemandLossAuthorized() {
+    static Optional<String> normalDemandLossAuthorized(Set<String> published) {
+        Objects.requireNonNull(published, "published");
         String configured = System.getProperty(CONTROL_DIRECTORY_PROPERTY, "");
         String serverRunId = System.getProperty(RUN_ID_PROPERTY, "");
         if (configured.isBlank() || !serverRunId.matches("[0-9a-f-]{36}")) return Optional.empty();
@@ -59,16 +62,18 @@ final class FrontierV3PilotLifecycleSignal {
             try (var entries = Files.list(directory)) {
                 for (Path candidate : entries.sorted().toList()) {
                     Matcher match = request.matcher(candidate.getFileName().toString());
-                    if (match.matches() && Files.isRegularFile(candidate)
+                    if (!match.matches()) continue;
+                    String suffix = serverRunId + "-" + match.group(1);
+                    if (!published.contains(suffix) && Files.isRegularFile(candidate)
                             && (runId + ":" + match.group(1) + "\n").equals(Files.readString(candidate, StandardCharsets.UTF_8))) {
-                        return Optional.of(serverRunId + "-" + match.group(1));
+                        return Optional.of(suffix);
                     }
                 }
             }
             // Retain the isolated-runner protocol while the persistent matrix uses the
             // append-only per-boundary requests above.
             Path token = directory.resolve("demand-loss-" + serverRunId + ".token");
-            return Files.isRegularFile(token) && (runId + ":" + serverRunId + "\n")
+            return !published.contains(serverRunId) && Files.isRegularFile(token) && (runId + ":" + serverRunId + "\n")
                     .equals(Files.readString(token, StandardCharsets.UTF_8)) ? Optional.of(serverRunId) : Optional.empty();
         } catch (IOException | IllegalArgumentException failure) {
             throw new IllegalStateException("pilot normal-demand-loss receipt is invalid", failure);

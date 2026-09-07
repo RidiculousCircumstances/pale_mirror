@@ -249,6 +249,10 @@ test('the server-owned demand-loss receipt retains its exact per-boundary suffix
   const source = await readFile(new URL('../../../pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotLifecycleSignal.java', import.meta.url), 'utf8');
   assert.match(source, /signal\.addProperty\("suffix", suffix\)/);
   assert.match(source, /signals\.resolve\(kind \+ "-" \+ suffix \+ "\.json"\)/);
+  assert.match(source, /!published\.contains\(suffix\)/);
+  assert.match(source, /!published\.contains\(serverRunId\)/);
+  const receipt = await readFile(new URL('../../../pale-mirror-neoforge/src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PilotDemandLossReceipt.java', import.meta.url), 'utf8');
+  assert.match(receipt, /normalDemandLossAuthorized\(published\)/);
 });
 
 async function compiledEvidence(workerId) {
