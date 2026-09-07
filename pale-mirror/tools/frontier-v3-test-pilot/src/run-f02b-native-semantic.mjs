@@ -22,7 +22,13 @@ const child = spawn('./gradlew', [':pale-mirror-neoforge:jar', ':pale-mirror-neo
     FRONTIER_V3_REFERENCE_LANE: lane, DISPLAY: namespaces.display }, stdio: ['ignore', 'pipe', 'pipe']
 });
 child.stdout.pipe(stream, { end: false }); child.stderr.pipe(stream, { end: false });
+// Process exit does not guarantee that the two captured output streams have
+// drained into the evidence file.  Keep those listeners armed before awaiting
+// exit, then finish the shared stream only after both have ended.
+const stdoutDrained = new Promise((resolveDrain, rejectDrain) => child.stdout.once('error', rejectDrain).once('end', resolveDrain));
+const stderrDrained = new Promise((resolveDrain, rejectDrain) => child.stderr.once('error', rejectDrain).once('end', resolveDrain));
 const code = await new Promise((resolveExit, rejectExit) => { child.once('error', rejectExit); child.once('exit', resolveExit); });
+await Promise.all([stdoutDrained, stderrDrained]);
 stream.end();
 await closed;
 const finishedAtMillis = Date.now(); const transcript = await readFile(log, 'utf8');
