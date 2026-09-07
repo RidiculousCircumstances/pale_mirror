@@ -64,10 +64,11 @@
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
         { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "intentKind": "RESOURCE_SITE_HARVEST", "intentStatus": "PREPARED", "intentObservationId": null } }, "timeoutMs": 90000 },
         { "type": "inspect", "view": "actor", "id": "resident:4-31" },
-        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:4-31", "expect": { "status": "ok", "physicalAdmission": { "status": "SCENE_OWNED", "pending": false } }, "timeoutMs": 90000 }
       ],
       "assertions": [
-        { "after": 4, "view": "actor", "id": "resident:4-31", "expect": {
+        { "after": 6, "view": "actor", "id": "resident:4-31", "expect": {
           "status": "ok", "assignment": "FIELD_HARVEST", "assignmentOwner": "job:site-harvest-4-wheat-field-1", "harvestSceneCandidate": false, "sceneReserved": true,
           "physicalAdmission": { "status": "SCENE_OWNED", "entityUuid": "2e56c7c8-796d-3220-83f0-3d1f28694409", "pending": false }
         } },
