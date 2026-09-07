@@ -11,6 +11,7 @@ import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundar
 import { requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
+import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
 import { createCrashController } from './crash-controller.mjs';
 import { fingerprintPreparedBuild, fingerprintPreparedSource, requirePreparedF0vBuild } from './prepared-build.mjs';
 import { preparedLaunch } from './prepared-launch.mjs';
@@ -180,29 +181,46 @@ try {
 } finally {
   timing.end('scenario.total');
   timing.begin('cleanup');
-  if (server != null && !abruptStopAttempted) await stopServerForCleanup(server, port);
-  await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
-  if (completed) await rm(sessionDirectory, { recursive: true, force: true });
-  // A failed recovery run is diagnostic evidence.  In particular, never erase
-  // the session.lock/world that prevented the next server from starting.
-  if (completed && process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') await rm(disposableWorld, { recursive: true, force: true });
+  const finalization = await finalizeFailurePath({
+    originalFailure: failure,
+    cleanup: async (attempt) => {
+      const serverStopped = await attempt('server_cleanup', async () => {
+        if (server != null && !abruptStopAttempted) await stopServerForCleanup(server, port);
+      });
+      const scenariosRemoved = await attempt('ephemeral_scenarios', async () => {
+        await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
+      });
+      // A failed recovery run is diagnostic evidence. In particular, never erase the
+      // session.lock/world that prevented the next server from starting or the world that
+      // supplied graceful-stop forensics. Successful runs retain their existing cleanup.
+      if (completed && failure === null && serverStopped && scenariosRemoved) {
+        const sessionRemoved = await attempt('persistent_session', async () => rm(sessionDirectory, { recursive: true, force: true }));
+        if (sessionRemoved && process.env.FRONTIER_V3_KEEP_DISPOSABLE !== 'true') {
+          await attempt('disposable_world', async () => rm(disposableWorld, { recursive: true, force: true }));
+        }
+      }
+    },
+    emitFailureBundle: async ({ terminalFailure, cleanupFailures }) => {
+      const decodedWalTail = await decodeWalTail(disposableWorld);
+      const diagnosticSnapshots = await retainedDiagnostics([output, beforeRestartManifest]);
+      const bundle = await writeFailureBundle({ project, output, scenarioPath: sourcePath, runId,
+        timing: timing.finish({ runner: 'isolated-native', status: 'failed' }), failure: terminalFailure, serverLog,
+        clientLog, tracePath: output.replace(/\.json$/i, '') + '.pmv3.jsonl', worldDirectory: disposableWorld,
+        build: buildIdentity, crash: crashEvidence,
+        process: { world, port, serverRunId: server?.serverRunId ?? lastServerAttempt?.serverRunId ?? null,
+          serverPid: server?.serverPid ?? lastServerAttempt?.serverPid ?? null,
+          startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null,
+          gracefulShutdown: server?.gracefulShutdown ?? lastServerAttempt?.gracefulShutdown ?? null,
+          cleanupFailures: boundedCleanupFailures(cleanupFailures) },
+        termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
+        lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
+      console.error(`PMV3_ISOLATED failure_bundle=${bundle}`);
+      return bundle;
+    }
+  });
   timing.end('cleanup');
-  timing.abortOpen({ status: failure === null ? 'ok' : 'failed' });
-  if (failure !== null) {
-    const decodedWalTail = await decodeWalTail(disposableWorld);
-    const diagnosticSnapshots = await retainedDiagnostics([output, beforeRestartManifest]);
-    const bundle = await writeFailureBundle({ project, output, scenarioPath: sourcePath, runId,
-      timing: timing.finish({ runner: 'isolated-native', status: 'failed' }), failure, serverLog,
-      clientLog, tracePath: output.replace(/\.json$/i, '') + '.pmv3.jsonl', worldDirectory: disposableWorld,
-      build: buildIdentity, crash: crashEvidence,
-      process: { world, port, serverRunId: server?.serverRunId ?? lastServerAttempt?.serverRunId ?? null,
-        serverPid: server?.serverPid ?? lastServerAttempt?.serverPid ?? null,
-        startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null,
-        gracefulShutdown: server?.gracefulShutdown ?? lastServerAttempt?.gracefulShutdown ?? null },
-      termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
-      lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
-    console.error(`PMV3_ISOLATED failure_bundle=${bundle}`);
-  }
+  timing.abortOpen({ status: finalization.terminalFailure === null ? 'ok' : 'failed' });
+  if (failure === null && finalization.terminalFailure !== null) throw finalization.terminalFailure;
 }
 
 if (completed) {
@@ -606,13 +624,22 @@ async function stopServerForCleanup(server, serverPort) {
     // exited. A closed listener is not an ownership release. The PID is the
     // nonce-announced JVM created by this runner, so only that exact child is
     // terminated after the normal stop path failed.
-    server.gracefulShutdown = await gracefulShutdownEvidence(server, disposableWorld);
-    if (requiresExactChildTerminationAfterGracefulFailure({
-      gracefulStopFailed: true,
-      childExited: server.child.exitCode !== null || server.child.signalCode !== null
-    })) killIfPresent(server.serverPid);
-    await ownedServerExit(server, serverPort, 45_000, `disposable v3 cleanup could not stop its exact JVM after graceful failure: ${failure.message}`);
-    releaseWrapper(server.child);
+    try { server.gracefulShutdown = await gracefulShutdownEvidence(server, disposableWorld); }
+    catch (forensicFailure) {
+      server.gracefulShutdown = { pid: server.serverPid, captureFailed: String(forensicFailure?.message ?? forensicFailure) };
+    }
+    try {
+      if (requiresExactChildTerminationAfterGracefulFailure({
+        gracefulStopFailed: true,
+        childExited: server.child.exitCode !== null || server.child.signalCode !== null
+      })) killIfPresent(server.serverPid);
+      await ownedServerExit(server, serverPort, 45_000, `disposable v3 cleanup could not stop its exact JVM after graceful failure: ${failure.message}`);
+    } catch (exactChildFailure) {
+      server.gracefulShutdown = { ...(server.gracefulShutdown ?? {}),
+        exactChildCleanupFailed: String(exactChildFailure?.message ?? exactChildFailure) };
+    } finally {
+      releaseWrapper(server.child);
+    }
     throw failure;
   }
 }
