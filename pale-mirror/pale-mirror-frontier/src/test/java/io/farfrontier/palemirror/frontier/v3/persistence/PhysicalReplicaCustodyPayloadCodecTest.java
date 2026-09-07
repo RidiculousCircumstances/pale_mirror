@@ -26,7 +26,8 @@ class PhysicalReplicaCustodyPayloadCodecTest {
         PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(OBJECT, "container.depot", 10L, "sha256:a", "owned:genesis");
         PhysicalCustodyLease lease = new PhysicalCustodyLease(SCOPE, OBJECT, PROVIDER, 1L, 10L, 2L,
                 PhysicalCustodyLeaseStatus.ACQUIRED, null);
-        List<FrontierPayload> payloads = List.of(new ReplicaDeclared(replica), new ReplicaObserved(OBJECT, 10L, 1L,
+        List<FrontierPayload> payloads = List.of(new ReplicaDeclared(replica), new ReplicaEmitted(OBJECT, 10L, 2L, 11L,
+                "sha256:b", "owned:cycle-two"), new ReplicaObserved(OBJECT, 10L, 1L,
                 "sha256:a", "owned:genesis", 10L), new CustodyAcquired(lease), new CustodyCheckpointed(SCOPE, 1L, 10L, 2L),
                 new CustodyUnresolved(SCOPE, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY),
                 new CustodyReleased(SCOPE, 1L, 10L, 2L));

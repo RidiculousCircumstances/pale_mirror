@@ -16,6 +16,8 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
         try {
             return switch (command.payload()) {
                 case ReplicaDeclared declared -> { state.replicaCustody().declare(declared.replica()); yield accepted(declared.replica().objectId(), declared); }
+                case ReplicaEmitted emitted -> { state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),
+                        emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()); yield accepted(emitted.objectId(), emitted); }
                 case ReplicaObserved observed -> { state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(), observed.expectedReplicaRevision(),
                         observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()); yield accepted(observed.objectId(), observed); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
@@ -36,6 +38,8 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
         try {
             return switch (event.payload()) {
                 case ReplicaDeclared declared -> replace(state, state.replicaCustody().declare(declared.replica()));
+                case ReplicaEmitted emitted -> replace(state, state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),
+                        emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()));
                 case ReplicaObserved observed -> replace(state, state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(),
                         observed.expectedReplicaRevision(), observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()));
                 case CustodyAcquired acquired -> replace(state, state.replicaCustody().acquire(acquired.lease()));

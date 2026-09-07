@@ -23,7 +23,9 @@ public record PhysicalCustodyLease(SubjectId scopeId, SubjectId objectId, Subjec
                 PhysicalCustodyLeaseStatus.CHECKPOINTED, null);
     }
     public PhysicalCustodyLease unresolved(PhysicalCustodyUnresolvedReason reason) {
-        if (!live()) throw new IllegalArgumentException("released custody cannot become unresolved");
+        if (status != PhysicalCustodyLeaseStatus.ACQUIRED && status != PhysicalCustodyLeaseStatus.CHECKPOINTED) {
+            throw new IllegalArgumentException("custody unresolved transition is illegal");
+        }
         return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, expectedCanonicalRevision, expectedReplicaRevision,
                 PhysicalCustodyLeaseStatus.UNRESOLVED, Objects.requireNonNull(reason, "unresolved reason"));
     }

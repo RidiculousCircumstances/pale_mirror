@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,6 +52,49 @@ class PhysicalReplicaCustodyStateTest {
         assertThrows(IllegalArgumentException.class, () -> other.release(SCOPE_B, 1L, 10L, 2L));
         assertEquals(PhysicalReplicaState.CONFLICT, other.replicas().get(OBJECT_A).state());
         assertEquals(PhysicalCustodyLeaseStatus.UNRESOLVED, other.custodyByScope().get(SCOPE_B).status());
+    }
+
+    @Test
+    void sameObjectRetainsTwoExactlyFencedEmissionCyclesAndConflictEvidence() {
+        PhysicalReplicaCustodyState first = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A))
+                .observe(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L)
+                .acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L)).release(SCOPE_A, 1L, 10L, 2L);
+        PhysicalReplicaCustodyState second = first.emit(OBJECT_A, 10L, 2L, 11L, "sha256:b", "owned:cycle-two")
+                .observe(OBJECT_A, 11L, 3L, "sha256:b", "owned:cycle-two", 11L)
+                .acquire(lease(SCOPE_B, OBJECT_A, 2L, 11L, 4L)).release(SCOPE_B, 2L, 11L, 4L);
+        assertEquals(11L, second.replicas().get(OBJECT_A).emittedCanonicalRevision());
+        assertEquals(4L, second.replicas().get(OBJECT_A).replicaRevision());
+        assertThrows(IllegalArgumentException.class, () -> second.emit(OBJECT_A, 10L, 4L, 12L, "sha256:c", "owned:cycle-three"));
+
+        PhysicalReplicaCustodyState conflicted = second.emit(OBJECT_A, 11L, 4L, 12L, "sha256:c", "owned:cycle-three")
+                .observe(OBJECT_A, 12L, 5L, "sha256:foreign", "foreign:player", 12L);
+        PhysicalReplicaRecord record = conflicted.replicas().get(OBJECT_A);
+        assertEquals(PhysicalReplicaState.CONFLICT, record.state());
+        assertEquals("sha256:foreign", record.observedFingerprint().orElseThrow());
+        assertEquals("foreign:player", record.observedProvenance().orElseThrow());
+        assertEquals(PhysicalReplicaConflictReason.FINGERPRINT_AND_PROVENANCE_MISMATCH, record.conflictReason().orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> conflicted.acquire(lease(new SubjectId("scope:conflict"), OBJECT_A, 3L, 12L, 6L)));
+
+        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:replica-conflict"), 91L));
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(
+                baseline.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(conflicted))));
+        PhysicalReplicaCustodyProjection.Entry entry = FrontierWorldProjectionCompiler.compile(restored, restored.bootstrap().worldId(), Revision.ZERO,
+                SimInstant.ZERO, ProjectionQuery.summary()).replicaCustody().entries().getFirst();
+        assertEquals("sha256:foreign", entry.observedFingerprint().orElseThrow());
+        assertEquals(PhysicalReplicaConflictReason.FINGERPRINT_AND_PROVENANCE_MISMATCH, entry.conflictReason().orElseThrow());
+    }
+
+    @Test
+    void forgedInitialVersionAndRepeatedUnresolvedOrTerminalTransitionsFailClosed() {
+        PhysicalReplicaRecord forgedInitial = new PhysicalReplicaRecord(OBJECT_A, "container.depot", 10L, 10L, 2L,
+                "sha256:a", "owned:genesis", PhysicalReplicaState.EXPECTED, Optional.empty(), Optional.empty(), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> PhysicalReplicaCustodyState.empty().declare(forgedInitial));
+        PhysicalReplicaCustodyState held = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A))
+                .observe(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L).acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L))
+                .unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST);
+        assertThrows(IllegalArgumentException.class, () -> held.unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST));
+        assertThrows(IllegalArgumentException.class, () -> held.release(SCOPE_A, 1L, 10L, 2L));
+        assertThrows(IllegalArgumentException.class, () -> held.checkpoint(SCOPE_A, 1L, 10L, 2L));
     }
 
     @Test
@@ -101,7 +145,7 @@ class PhysicalReplicaCustodyStateTest {
 
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
         assertEquals(changed.replicaCustody(), codec.decode(encoded).replicaCustody());
-        encoded[4] = (byte) 129;
+        encoded[4] = (byte) 130;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded));
         assertThrows(IllegalArgumentException.class, () -> new PhysicalReplicaCustodyState(Map.of(), Map.of(SCOPE_A, lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L))));
     }

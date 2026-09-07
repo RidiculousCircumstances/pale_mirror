@@ -26,10 +26,10 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
                 throw new IllegalArgumentException("custody must retain one indexed known replica scope");
             }
             PhysicalReplicaRecord replica = replicas.get(entry.getValue().objectId());
-            if (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
+            if (entry.getValue().live() && (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
                     || entry.getValue().expectedCanonicalRevision() != replica.observedCanonicalRevision()
-                    || entry.getValue().expectedReplicaRevision() != replica.replicaRevision()) {
-                throw new IllegalArgumentException("custody must exactly fence retained replica evidence");
+                    || entry.getValue().expectedReplicaRevision() != replica.replicaRevision())) {
+                throw new IllegalArgumentException("live custody must exactly fence current replica evidence");
             }
         }
         for (PhysicalCustodyLease left : custodyByScope.values()) for (PhysicalCustodyLease right : custodyByScope.values()) {
@@ -43,11 +43,24 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
     public static PhysicalReplicaCustodyState empty() { return new PhysicalReplicaCustodyState(Map.of(), Map.of()); }
     public PhysicalReplicaCustodyState declare(PhysicalReplicaRecord replica) {
         Objects.requireNonNull(replica, "replica");
-        if (replica.state() != PhysicalReplicaState.EXPECTED || replica.observedCanonicalRevision() != replica.emittedCanonicalRevision()) {
+        if (replica.state() != PhysicalReplicaState.EXPECTED || replica.replicaRevision() != 1L
+                || replica.observedCanonicalRevision() != replica.emittedCanonicalRevision() || replica.conflictReason().isPresent()) {
             throw new IllegalArgumentException("replica declaration must start as unobserved expected evidence");
         }
         if (replicas.containsKey(replica.objectId())) throw new IllegalArgumentException("replica identity already exists");
         Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas); next.put(replica.objectId(), replica);
+        return new PhysicalReplicaCustodyState(next, custodyByScope);
+    }
+    public PhysicalReplicaCustodyState emit(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                            long emittedCanonicalRevision, String fingerprint, String provenance) {
+        PhysicalReplicaRecord current = requireReplica(objectId);
+        if (current.state() != PhysicalReplicaState.OBSERVED_CURRENT || current.emittedCanonicalRevision() != expectedCanonicalRevision
+                || current.replicaRevision() != expectedReplicaRevision
+                || custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(objectId))) {
+            throw new IllegalArgumentException("replica emission fence is stale or custody is live");
+        }
+        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
+        next.put(objectId, current.reemit(emittedCanonicalRevision, fingerprint, provenance));
         return new PhysicalReplicaCustodyState(next, custodyByScope);
     }
     public PhysicalReplicaCustodyState observe(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,

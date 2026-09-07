@@ -11,7 +11,7 @@ public enum PhysicalReplicaState {
     public boolean mayTransitionTo(PhysicalReplicaState next) {
         return switch (this) {
             case EXPECTED -> next == OBSERVED_CURRENT || next == CONFLICT;
-            case OBSERVED_CURRENT -> next == OBSERVED_CURRENT || next == CONFLICT;
+            case OBSERVED_CURRENT -> next == EXPECTED;
             case CONFLICT -> false;
         };
     }

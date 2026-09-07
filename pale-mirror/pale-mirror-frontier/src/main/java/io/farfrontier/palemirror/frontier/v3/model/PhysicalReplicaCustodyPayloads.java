@@ -13,6 +13,15 @@ public final class PhysicalReplicaCustodyPayloads {
         public ReplicaDeclared { Objects.requireNonNull(replica, "replica"); }
         @Override public String type() { return "frontier.physical_replica_declared"; }
     }
+    public record ReplicaEmitted(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                 long emittedCanonicalRevision, String fingerprint, String provenance) implements FrontierPayload {
+        public ReplicaEmitted {
+            Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(fingerprint, "fingerprint"); Objects.requireNonNull(provenance, "provenance");
+            if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || emittedCanonicalRevision < 0
+                    || fingerprint.isBlank() || provenance.isBlank()) throw new IllegalArgumentException("replica emission is invalid");
+        }
+        @Override public String type() { return "frontier.physical_replica_emitted"; }
+    }
     public record ReplicaObserved(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision, String fingerprint, String provenance,
                                   long observedCanonicalRevision) implements FrontierPayload {
         public ReplicaObserved {

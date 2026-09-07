@@ -43,7 +43,8 @@ public final class FrontierWorldProjectionCompiler {
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.providerId()),
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.authorityEpoch()),
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.status()),
-                            lease == null || lease.unresolvedReason() == null ? java.util.Optional.empty() : java.util.Optional.of(lease.unresolvedReason()));
+                            lease == null || lease.unresolvedReason() == null ? java.util.Optional.empty() : java.util.Optional.of(lease.unresolvedReason()),
+                            replica.observedFingerprint(), replica.observedProvenance(), replica.conflictReason());
                 }).toList());
     }
 }

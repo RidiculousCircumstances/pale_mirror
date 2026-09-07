@@ -21,6 +21,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaEmitted;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -89,6 +91,31 @@ class FrontierFileStoreTest {
     }
 
     @Test
+    void fileStoreReplaysASecondEmissionAndObservationCycleForOneStableObject(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:replica-file-store-cycle");
+        SubjectId object = new SubjectId("container:file-store-cycle"), scope = new SubjectId("scope:file-store-cycle"), provider = new SubjectId("provider:file-store-cycle");
+        PhysicalReplicaCustodyState firstCycle = PhysicalReplicaCustodyState.empty()
+                .declare(PhysicalReplicaRecord.expected(object, "container.depot", 10L, "sha256:a", "owned:genesis"))
+                .observe(object, 10L, 1L, "sha256:a", "owned:genesis", 10L)
+                .acquire(new PhysicalCustodyLease(scope, object, provider, 1L, 10L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null))
+                .release(scope, 1L, 10L, 2L);
+        FrontierWorldState snapshotState = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L))
+                .withChanges(FrontierWorldStateUpdate.begin().replicaCustody(firstCycle));
+        FrontierFileStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        store.installSnapshot(new SnapshotRecord(new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO,
+                new FrontierWorldStateCodec().encode(snapshotState), List.of(), List.of()), 0L));
+        store.append(replicaTransaction(world, 1L, object, new ReplicaEmitted(object, 10L, 2L, 11L, "sha256:b", "owned:cycle-two")), Durability.BATCHABLE);
+        store.append(replicaTransaction(world, 2L, object, new ReplicaObserved(object, 11L, 3L, "sha256:b", "owned:cycle-two", 11L)), Durability.BATCHABLE);
+
+        var recovered = store.recover(world);
+        FrontierWorldState replayed = new FrontierWorldStateCodec().decode(recovered.checkpoint().orElseThrow().checkpoint().canonicalState());
+        for (TransactionRecord transaction : recovered.walTail()) replayed = FrontierWorldProcessCatalog.reduce("replica-custody", replayed, transaction.events().getFirst());
+        assertEquals(11L, replayed.replicaCustody().replicas().get(object).emittedCanonicalRevision());
+        assertEquals(PhysicalCustodyLeaseStatus.RELEASED, replayed.replicaCustody().custodyByScope().get(scope).status());
+        assertEquals(4L, replayed.replicaCustody().replicas().get(object).replicaRevision());
+    }
+
+    @Test
     void revisionGapsAndCorruptWalFailClosed(@TempDir Path directory) throws IOException {
         FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
         assertThrows(IllegalStateException.class, () -> store.append(transaction(2L), Durability.BATCHABLE));
@@ -126,5 +153,11 @@ class FrontierFileStoreTest {
         FrontierEvent event = new FrontierEvent(1, new EventId("event:file-store-" + revision), transaction, WORLD,
                 new Revision(revision), new SimInstant(revision), SUBJECT, CauseChain.root(command), new ScheduleEffect.Created(action));
         return new TransactionRecord(transaction, WORLD, new Revision(revision), new SimInstant(revision), List.of(event));
+    }
+    private static TransactionRecord replicaTransaction(WorldId world, long revision, SubjectId subject, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
+        TransactionId transaction = new TransactionId("transaction:replica-cycle-" + revision); CommandId command = new CommandId("command:replica-cycle-" + revision);
+        FrontierEvent event = new FrontierEvent(1, new EventId("event:replica-cycle-" + revision), transaction, world, new Revision(revision),
+                new SimInstant(revision), subject, CauseChain.root(command), payload);
+        return new TransactionRecord(transaction, world, new Revision(revision), new SimInstant(revision), List.of(event));
     }
 }

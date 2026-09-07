@@ -13,7 +13,7 @@ import java.util.List;
 /** Stable WAL payload codecs for the pure replica/custody transition vocabulary. */
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
-    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Observed(), new Acquired(), new Checkpointed(), new Unresolved(), new Released()); }
+    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new Acquired(), new Checkpointed(), new Unresolved(), new Released()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -35,6 +35,17 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaObserved(
                 subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), input.readLong())); }
+    }
+    private static final class Emitted extends Base {
+        @Override public String type() { return "frontier.physical_replica_emitted"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ReplicaEmitted value = (ReplicaEmitted) payload; subject(output, value.objectId());
+            output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
+            output.writeLong(value.emittedCanonicalRevision()); FrontierWorldPayloadCodecs.writeString(output, value.fingerprint());
+            FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaEmitted(subject(input),
+                input.readLong(), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
     }
     private static final class Acquired extends Base {
         @Override public String type() { return "frontier.physical_custody_acquired"; }
@@ -70,11 +81,25 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         FrontierWorldPayloadCodecs.writeSubject(output, value.objectId()); FrontierWorldPayloadCodecs.writeString(output, value.semanticKind());
         output.writeLong(value.emittedCanonicalRevision()); output.writeLong(value.observedCanonicalRevision()); output.writeLong(value.replicaRevision());
         FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance()); output.writeByte(value.state().wireTag());
+        output.writeBoolean(value.observedFingerprint().isPresent());
+        if (value.observedFingerprint().isPresent()) {
+            FrontierWorldPayloadCodecs.writeString(output, value.observedFingerprint().orElseThrow());
+            FrontierWorldPayloadCodecs.writeString(output, value.observedProvenance().orElseThrow());
+            output.writeByte(value.conflictReason().orElseThrow().wireTag());
+        }
     }
     private static PhysicalReplicaRecord readReplica(DataInputStream input) throws IOException {
         var object = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
         long emitted = input.readLong(); long observed = input.readLong(); long replicaRevision = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input); String provenance = FrontierWorldPayloadCodecs.readString(input);
-        return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, readReplicaState(input.readUnsignedByte()));
+        PhysicalReplicaState state = readReplicaState(input.readUnsignedByte());
+        java.util.Optional<String> observedFingerprint = java.util.Optional.empty(), observedProvenance = java.util.Optional.empty();
+        java.util.Optional<PhysicalReplicaConflictReason> reason = java.util.Optional.empty();
+        if (input.readBoolean()) {
+            observedFingerprint = java.util.Optional.of(FrontierWorldPayloadCodecs.readString(input));
+            observedProvenance = java.util.Optional.of(FrontierWorldPayloadCodecs.readString(input));
+            reason = java.util.Optional.of(readConflictReason(input.readUnsignedByte()));
+        }
+        return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, state, observedFingerprint, observedProvenance, reason);
     }
     private static void writeLease(DataOutputStream output, PhysicalCustodyLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.scopeId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.objectId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.providerId());
@@ -110,5 +135,9 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     private static PhysicalCustodyUnresolvedReason readReason(int tag) { return switch (tag) {
         case 1 -> PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH; case 2 -> PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY;
         case 3 -> PhysicalCustodyUnresolvedReason.PROVIDER_LOST; default -> throw new IllegalArgumentException("unknown custody reason tag");
+    }; }
+    private static PhysicalReplicaConflictReason readConflictReason(int tag) { return switch (tag) {
+        case 1 -> PhysicalReplicaConflictReason.FINGERPRINT_MISMATCH; case 2 -> PhysicalReplicaConflictReason.PROVENANCE_MISMATCH;
+        case 3 -> PhysicalReplicaConflictReason.FINGERPRINT_AND_PROVENANCE_MISMATCH; default -> throw new IllegalArgumentException("unknown replica conflict reason tag");
     }; }
 }
