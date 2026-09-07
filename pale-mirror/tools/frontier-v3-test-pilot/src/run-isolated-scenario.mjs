@@ -197,9 +197,10 @@ try {
       build: buildIdentity, crash: crashEvidence,
       process: { world, port, serverRunId: server?.serverRunId ?? lastServerAttempt?.serverRunId ?? null,
         serverPid: server?.serverPid ?? lastServerAttempt?.serverPid ?? null,
-        startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null },
+        startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null,
+        gracefulShutdown: server?.gracefulShutdown ?? lastServerAttempt?.gracefulShutdown ?? null },
       termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
-      lifecycleDirectory: lifecycle.directory });
+      lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
     console.error(`PMV3_ISOLATED failure_bundle=${bundle}`);
   }
 }
@@ -605,6 +606,7 @@ async function stopServerForCleanup(server, serverPort) {
     // exited. A closed listener is not an ownership release. The PID is the
     // nonce-announced JVM created by this runner, so only that exact child is
     // terminated after the normal stop path failed.
+    server.gracefulShutdown = await gracefulShutdownEvidence(server, disposableWorld);
     if (requiresExactChildTerminationAfterGracefulFailure({
       gracefulStopFailed: true,
       childExited: server.child.exitCode !== null || server.child.signalCode !== null
@@ -613,6 +615,39 @@ async function stopServerForCleanup(server, serverPort) {
     releaseWrapper(server.child);
     throw failure;
   }
+}
+
+/** Bounded forensic state captured before exact-child cleanup; never an acknowledgement substitute. */
+async function gracefulShutdownEvidence(server, worldDirectory) {
+  const pid = server.serverPid;
+  const evidence = { pid, capturedAt: new Date().toISOString(), childExitCode: server.child.exitCode,
+    childSignalCode: server.child.signalCode, world: await boundedWorldSaveMetadata(worldDirectory) };
+  if (!Number.isInteger(pid) || pid <= 1) return evidence;
+  for (const name of ['status', 'stat', 'wchan']) {
+    try { evidence[`proc_${name}`] = (await readFile(`/proc/${pid}/${name}`, 'utf8')).slice(0, 16 * 1024); }
+    catch (failure) { evidence[`proc_${name}`] = { unavailable: failure?.code ?? String(failure) }; }
+  }
+  return evidence;
+}
+
+async function boundedWorldSaveMetadata(worldDirectory) {
+  const selected = [];
+  const pending = [worldDirectory];
+  while (pending.length > 0 && selected.length < 128) {
+    const directory = pending.shift();
+    try {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (selected.length >= 128) break;
+        const path = resolve(directory, entry.name);
+        if (entry.isDirectory()) pending.push(path);
+        else if (entry.isFile()) {
+          const value = await stat(path);
+          selected.push({ path: path.slice(worldDirectory.length + 1), bytes: value.size, modifiedMs: value.mtimeMs });
+        }
+      }
+    } catch (failure) { return { unavailable: failure?.code ?? String(failure), files: selected }; }
+  }
+  return { files: selected, truncated: pending.length > 0 };
 }
 async function stopUnreadyServer(server, serverPort) {
   // This is not an abrupt-recovery experiment: readiness never occurred.  First request the

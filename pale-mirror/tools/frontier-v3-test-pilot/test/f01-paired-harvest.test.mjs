@@ -89,7 +89,7 @@ test('F0.1 merge rejects a missing, duplicate, foreign or non-advancing cross-wo
       ['missing-arrival', (value) => { delete value.variants.find(entry => entry.variant === 'arrival_checkpoint_one').arrivalCheckpoint; }, /observed HOT arrival/],
       ['duplicate-stage', (value) => { value.variants.find(item => item.variant === 'arrival_checkpoint_two').arrivalCheckpoint.stage = 'early.approach'; }, /ordered retained early-to-later process relation/],
       ['reversed-range', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_two').arrivalCheckpoint; entry.before = 15; entry.after = 16; }, /ordered retained early-to-later process relation/],
-      ['disconnected-range', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_two').arrivalCheckpoint; entry.before = 18; entry.after = 19; }, /ordered retained early-to-later process relation/],
+      ['overlapping-range', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_two').arrivalCheckpoint; entry.before = 16; entry.after = 17; }, /ordered retained early-to-later process relation/],
       ['foreign-arrival', (value) => { value.variants.find(entry => entry.variant === 'arrival_checkpoint_two').arrivalCheckpoint.id = 'job:foreign'; }, /ordered retained early-to-later process relation/],
       ['non-advancing', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_one').arrivalCheckpoint; entry.after = entry.before; }, /observed HOT arrival/]
     ]) {

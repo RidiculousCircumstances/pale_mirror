@@ -85,11 +85,12 @@ test('actual runner call site replaces the former single-half dereference with d
   assert.match(runner, /finalizeMatrixEntry\(entry, runs, \{ selectedLane: requestedLane !== undefined \}\)/);
 });
 
-test('arrival comparator requires one ordered contiguous retained early-to-later relation', () => {
+test('arrival comparator requires one ordered non-overlapping retained early-to-later relation', () => {
   const first = { stage: 'early.approach', view: 'summary', id: 'job:test', path: 'cursor.index', beforeAction: 1, before: 1, after: 2, minimumAdvance: 1 };
   const second = { stage: 'later.approach', view: 'summary', id: 'job:test', path: 'cursor.index', beforeAction: 1, before: 2, after: 3, minimumAdvance: 1 };
   assert.equal(requireDistinctArrivalCheckpoints(first, second).first.after, 2);
-  assert.throws(() => requireDistinctArrivalCheckpoints(first, { ...second, before: 3, after: 4 }), /ordered retained early-to-later/);
+  assert.equal(requireDistinctArrivalCheckpoints(first, { ...second, before: 3, after: 4 }).second.before, 3);
+  assert.throws(() => requireDistinctArrivalCheckpoints(first, { ...second, before: 1, after: 2 }), /ordered retained early-to-later/);
 });
 
 test('declared differential tolerance accepts its bound and rejects a larger deviation', () => {

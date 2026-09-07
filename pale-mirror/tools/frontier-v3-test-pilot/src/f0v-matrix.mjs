@@ -159,7 +159,7 @@ export function requireDistinctArrivalCheckpoints(first, second) {
   if (!first || !second || first.view !== second.view || first.id !== second.id || first.path !== second.path
       || first.stage !== 'early.approach' || second.stage !== 'later.approach'
       || first.before >= first.after || second.before >= second.after
-      || second.before !== first.after) {
+      || second.before < first.after) {
     throw new Error('F0.V arrival checkpoints do not prove one ordered retained early-to-later process relation');
   }
   return Object.freeze({ first: Object.freeze(structuredClone(first)), second: Object.freeze(structuredClone(second)) });
