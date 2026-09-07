@@ -13,13 +13,17 @@ const lane = laneFor(values.worker);
 if (!output.startsWith(`${process.cwd()}/`) || !log.startsWith(`${process.cwd()}/`) || values.lane !== lane) throw new Error('F0.2B semantic invocation is malformed');
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const startedAtMillis = Date.now();
+// Attach before the child can finish: a quick GameTest may close its output
+// stream before the child exit callback runs.
+const stream = createWriteStream(log, { flags: 'wx' });
+const closed = new Promise((resolveClose, rejectClose) => stream.once('error', rejectClose).once('close', resolveClose));
 const child = spawn('./gradlew', [':pale-mirror-neoforge:jar', ':pale-mirror-neoforge:runFrontierV3ReferenceGameTestServer', '--no-daemon'], {
   cwd: process.cwd(), env: { ...process.env, GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_REFERENCE_WORLD_ROOT: namespaces.world,
     FRONTIER_V3_REFERENCE_LANE: lane, DISPLAY: namespaces.display }, stdio: ['ignore', 'pipe', 'pipe']
 });
-const stream = createWriteStream(log, { flags: 'wx' }); child.stdout.pipe(stream); child.stderr.pipe(stream);
+child.stdout.pipe(stream); child.stderr.pipe(stream);
 const code = await new Promise((resolveExit, rejectExit) => { child.once('error', rejectExit); child.once('exit', resolveExit); });
-await new Promise((resolveClose, rejectClose) => stream.once('error', rejectClose).once('close', resolveClose));
+await closed;
 const finishedAtMillis = Date.now(); const transcript = await readFile(log, 'utf8');
 if (code !== 0 || !transcript.includes("Launching target 'forgeserverdev'") || !transcript.includes(`Running test batch 'pm-frontier-v3-reference-${lane}:0'`)
   || !transcript.includes('All 1 required test passed :)') || !transcript.includes('BUILD SUCCESSFUL')) throw new Error('F0.2B native semantic GameTest did not complete its declared lane');
