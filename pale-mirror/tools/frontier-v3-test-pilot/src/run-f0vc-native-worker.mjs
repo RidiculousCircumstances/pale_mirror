@@ -35,8 +35,8 @@ async function main() {
     FRONTIER_V3_PREPARED_BUILD_IDENTITY: resolve(project, localIdentity), FRONTIER_V3_F0VC_PREPARED_RUNTIME: 'true'
   }, resolve(project, nativeLog));
   if (code !== 0) throw new Error(`F0.VC native worker failed (${code})`);
-  const matrix = JSON.parse(await readFile(resolve(project, result), 'utf8'));
-  if (matrix.status !== 'ok') throw new Error('F0.VC native worker matrix is incomplete');
+  const matrixResult = JSON.parse(await readFile(resolve(project, result), 'utf8'));
+  if (matrixResult.status !== 'ok') throw new Error('F0.VC native worker matrix is incomplete');
   await mkdir(dirname(output), { recursive: true }); await writeFile(output, `${JSON.stringify({ schema: 1, kind: 'frontier-v3-f0vc-native-worker-result', status: 'ok', worker,
     runtimeContentSha256: runtime.contentSha256, preflightPlan: values.preflight, matrix: result, nativeLog, consumer: consumed.receipt,
     timing: { startedEpochMillis: started, finishedEpochMillis: Date.now() } }, null, 2)}\n`, { flag: 'wx' });
