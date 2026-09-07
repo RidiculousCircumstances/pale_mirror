@@ -45,7 +45,8 @@ public final class FrontierWorldStateUpdate {
         STRATEGIC_PLANS,
         HUMAN_POPULATION,
         COMPANIES,
-        RESOURCE_SITES
+        RESOURCE_SITES,
+        REPLICA_CUSTODY
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -72,6 +73,7 @@ public final class FrontierWorldStateUpdate {
     private HumanPopulation humanPopulation;
     private CompanyRegistry companies;
     private ResourceSiteState resourceSites;
+    private PhysicalReplicaCustodyState replicaCustody;
 
     private FrontierWorldStateUpdate() { }
 
@@ -148,6 +150,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate resourceSites(ResourceSiteState next) {
         mark(Component.RESOURCE_SITES); resourceSites = require(next, "resource sites"); return this;
     }
+    public FrontierWorldStateUpdate replicaCustody(PhysicalReplicaCustodyState next) {
+        mark(Component.REPLICA_CUSTODY); replicaCustody = require(next, "replica custody"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -172,6 +177,7 @@ public final class FrontierWorldStateUpdate {
     HumanPopulation humanPopulation(FrontierWorldState state) { return changed(Component.HUMAN_POPULATION, humanPopulation, state.humanPopulation()); }
     CompanyRegistry companies(FrontierWorldState state) { return changed(Component.COMPANIES, companies, state.companies()); }
     ResourceSiteState resourceSites(FrontierWorldState state) { return changed(Component.RESOURCE_SITES, resourceSites, state.resourceSites()); }
+    PhysicalReplicaCustodyState replicaCustody(FrontierWorldState state) { return changed(Component.REPLICA_CUSTODY, replicaCustody, state.replicaCustody()); }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

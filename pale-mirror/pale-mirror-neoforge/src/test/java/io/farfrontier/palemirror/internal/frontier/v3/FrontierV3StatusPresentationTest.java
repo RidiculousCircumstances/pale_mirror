@@ -13,7 +13,8 @@ class FrontierV3StatusPresentationTest {
     void activeStatusNamesV3AndReportsTheBoundedCanonicalAuditSurface() {
         FrontierWorldProjection projection = new FrontierWorldProjection(
                 new WorldId("frontier:graybox"), new Revision(42L), new SimInstant(9_001L), "bootstrap",
-                12, 274, 48, 17, 63, 2, 1, 3, 4, 5, 6, 7, 8, 9);
+                12, 274, 48, 17, 63, 2, 1, 3, 4, 5, 6, 7, 8, 9,
+                new io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyProjection(java.util.List.of()));
 
         assertEquals("Frontier v3 ACTIVE | world=frontier:graybox rev=42 tick=9001"
                         + " | settlements=12 residents=274 bioforms=48 infectedCells=17"

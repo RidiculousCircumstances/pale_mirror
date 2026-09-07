@@ -50,7 +50,7 @@ final class FrontierWorldInitialState {
                 ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap)),
                 Map.of(), Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), colony,
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population, CompanyRegistry.empty(),
-                ResourceSiteState.initial(bootstrap));
+                ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty());
     }
 
     private static Map<SubjectId, BioformLifecycle> initialBioformLifecycles(FrontierBootstrap bootstrap) {

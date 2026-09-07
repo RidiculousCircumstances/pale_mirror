@@ -192,6 +192,8 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("kernel-schedule", new ScheduleEffect.Cancelled(new ScheduleId("schedule:representative"))),
                 Map.entry("physical-observation", new PhysicalIntentTransition(new PhysicalIntentId("intent:representative"),
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())),
+                Map.entry("replica-custody", new PhysicalReplicaCustodyPayloads.ReplicaDeclared(PhysicalReplicaRecord.expected(
+                        new SubjectId("object:representative"), "crate", 1L, "fingerprint:representative", "provenance:representative"))),
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
                 Map.entry("population", new ResidentMigrationBlocked(new SubjectId("resident:representative"), ResidentMigrationBlockReason.QUARANTINE)),

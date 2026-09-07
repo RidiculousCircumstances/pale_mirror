@@ -36,6 +36,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.structure_damaged", "frontier.resource_deposited", "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released");
+    private static final Set<String> REPLICA_CUSTODY = types(
+            "frontier.physical_replica_declared", "frontier.physical_replica_observed", "frontier.physical_custody_acquired",
+            "frontier.physical_custody_checkpointed", "frontier.physical_custody_unresolved", "frontier.physical_custody_released");
     private static final Set<String> AMBIENT = types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed");
@@ -103,19 +106,20 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
-    private static final Set<String> ALL_WORLD = union(PHYSICAL, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
+    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY);
-    private static final Map<String, FrontierWorldProcessModule> MODULES = Map.of(
-            "physical-observation", new FrontierPhysicalProcessModule(),
-            "ambient-actors", new FrontierAmbientProcessModule(),
-            "logistics-scenes", new FrontierLogisticsProcessModule(),
-            "population", new FrontierPopulationProcessModule(),
-            "economy", new FrontierEconomyProcessModule(),
-            "resource-sites", new FrontierResourceSiteProcessModule(),
-            "hive", new FrontierHiveProcessModule(),
-            "infrastructure", new FrontierInfrastructureProcessModule(),
-            "settlement-service-work", new FrontierSettlementServiceWorkProcessModule(),
-            "strategy", new FrontierStrategyProcessModule());
+    private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
+            Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
+            Map.entry("replica-custody", new FrontierReplicaCustodyProcessModule()),
+            Map.entry("ambient-actors", new FrontierAmbientProcessModule()),
+            Map.entry("logistics-scenes", new FrontierLogisticsProcessModule()),
+            Map.entry("population", new FrontierPopulationProcessModule()),
+            Map.entry("economy", new FrontierEconomyProcessModule()),
+            Map.entry("resource-sites", new FrontierResourceSiteProcessModule()),
+            Map.entry("hive", new FrontierHiveProcessModule()),
+            Map.entry("infrastructure", new FrontierInfrastructureProcessModule()),
+            Map.entry("settlement-service-work", new FrontierSettlementServiceWorkProcessModule()),
+            Map.entry("strategy", new FrontierStrategyProcessModule()));
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
             Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
@@ -186,6 +190,7 @@ public final class FrontierWorldProcessCatalog {
         return List.of(
                 descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), emissions("kernel-schedule"), KERNEL),
                 descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emissions("physical-observation"), PHYSICAL),
+                descriptor("replica-custody", replicaCustodyCommands(), Set.of(), REPLICA_CUSTODY, emissions("replica-custody"), REPLICA_CUSTODY),
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
                 descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emissions("logistics-scenes"), LOGISTICS),
                 descriptor("population", populationCommands(), populationSchedules(), POPULATION, emissions("population"), POPULATION),
@@ -266,6 +271,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited", "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released"); }
+    private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed"); }
@@ -363,6 +369,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.scene_lease_transition",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized");
+            case "replica-custody" -> REPLICA_CUSTODY;
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",

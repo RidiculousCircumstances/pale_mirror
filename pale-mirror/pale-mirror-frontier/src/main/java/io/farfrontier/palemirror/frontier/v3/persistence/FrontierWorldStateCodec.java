@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 128; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 129; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -35,6 +35,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeEconomicLedger(output, state.inventory().economics());
                 writeCompanyRegistry(output, state.companies());
                 writeInventory(output, state.inventory());
+                writeReplicaCustody(output, state.replicaCustody());
                 writeProductionJobs(output, state.productionJobs());
                 SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
                 writeContracts(output, state.contracts());
@@ -71,7 +72,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             Map<InfectionCell, FixedRatio> infection = readInfection(input); HiveColony colony = readHiveColony(input, true, true, true);
             EconomicLedger economics = readEconomicLedger(input, true);
             CompanyRegistry companies = readCompanyRegistry(input, true, true, true);
-            ExactInventory inventory = readInventory(input, economics); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, true);
+            ExactInventory inventory = readInventory(input, economics); PhysicalReplicaCustodyState replicaCustody = readReplicaCustody(input); Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, true);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
             LogisticsHistory history = readLogisticsHistory(input);
@@ -86,7 +87,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
-                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites);
+                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
             return state;
@@ -113,6 +114,56 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     }
     private static FrontierRuleset readRuleset(DataInputStream input) throws IOException {
         return FrontierRulesets.require(readString(input), input.readInt(), readString(input));
+    }
+    private static void writeReplicaCustody(DataOutputStream output, PhysicalReplicaCustodyState state) throws IOException {
+        writeCount(output, state.replicas().size());
+        for (PhysicalReplicaRecord replica : state.replicas().values().stream().sorted(Comparator.comparing(PhysicalReplicaRecord::objectId)).toList()) {
+            writeString(output, replica.objectId().value()); writeString(output, replica.semanticKind());
+            output.writeLong(replica.emittedCanonicalRevision()); output.writeLong(replica.observedCanonicalRevision());
+            writeString(output, replica.fingerprint()); writeString(output, replica.provenance()); output.writeByte(replica.state().wireTag());
+        }
+        writeCount(output, state.custodyByScope().size());
+        for (PhysicalCustodyLease lease : state.custodyByScope().values().stream().sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
+            writeString(output, lease.scopeId().value()); writeString(output, lease.objectId().value()); writeString(output, lease.providerId().value());
+            output.writeLong(lease.authorityEpoch()); output.writeLong(lease.expectedCanonicalRevision()); output.writeLong(lease.expectedReplicaRevision());
+            output.writeByte(lease.status().wireTag()); output.writeBoolean(lease.unresolvedReason() != null);
+            if (lease.unresolvedReason() != null) output.writeByte(lease.unresolvedReason().wireTag());
+        }
+    }
+    private static PhysicalReplicaCustodyState readReplicaCustody(DataInputStream input) throws IOException {
+        Map<SubjectId, PhysicalReplicaRecord> replicas = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId object = new SubjectId(readString(input)); String semanticKind = readString(input); long emitted = input.readLong(); long observed = input.readLong();
+            String fingerprint = readString(input); String provenance = readString(input); int state = input.readUnsignedByte();
+            PhysicalReplicaState lifecycle = replicaState(state);
+            if (replicas.put(object, new PhysicalReplicaRecord(object, semanticKind, emitted, observed, fingerprint, provenance, lifecycle)) != null) {
+                throw new IllegalArgumentException("duplicate physical replica identity");
+            }
+        }
+        Map<SubjectId, PhysicalCustodyLease> leases = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId scope = new SubjectId(readString(input)); SubjectId object = new SubjectId(readString(input)); SubjectId provider = new SubjectId(readString(input));
+            long epoch = input.readLong(); long canonicalRevision = input.readLong(); long replicaRevision = input.readLong();
+            PhysicalCustodyLeaseStatus status = custodyStatus(input.readUnsignedByte());
+            PhysicalCustodyUnresolvedReason reason = input.readBoolean() ? unresolvedReason(input.readUnsignedByte()) : null;
+            if (leases.put(scope, new PhysicalCustodyLease(scope, object, provider, epoch, canonicalRevision, replicaRevision, status, reason)) != null) {
+                throw new IllegalArgumentException("duplicate physical custody scope");
+            }
+        }
+        return new PhysicalReplicaCustodyState(replicas, leases);
+    }
+    private static PhysicalReplicaState replicaState(int tag) {
+        return switch (tag) { case 1 -> PhysicalReplicaState.EXPECTED; case 2 -> PhysicalReplicaState.OBSERVED_CURRENT; case 3 -> PhysicalReplicaState.CONFLICT;
+            default -> throw new IllegalArgumentException("unknown physical replica lifecycle tag"); };
+    }
+    private static PhysicalCustodyLeaseStatus custodyStatus(int tag) {
+        return switch (tag) { case 1 -> PhysicalCustodyLeaseStatus.ACQUIRED; case 2 -> PhysicalCustodyLeaseStatus.CHECKPOINTED;
+            case 3 -> PhysicalCustodyLeaseStatus.UNRESOLVED; case 4 -> PhysicalCustodyLeaseStatus.RELEASED;
+            default -> throw new IllegalArgumentException("unknown physical custody lifecycle tag"); };
+    }
+    private static PhysicalCustodyUnresolvedReason unresolvedReason(int tag) {
+        return switch (tag) { case 1 -> PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH; case 2 -> PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY;
+            case 3 -> PhysicalCustodyUnresolvedReason.PROVIDER_LOST; default -> throw new IllegalArgumentException("unknown physical custody conflict tag"); };
     }
     private static void writeActors(DataOutputStream output, Map<SubjectId, ActorLocation> values) throws IOException {
         writeCount(output, values.size());

@@ -15,6 +15,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
             new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+    static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
             AmbientLeasePayloadCodecs.restartAbsenceObserved())); }

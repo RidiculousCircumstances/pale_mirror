@@ -26,6 +26,20 @@ public final class FrontierWorldProjectionCompiler {
                 (int) state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
                 (int) state.ambientLeases().values().stream().filter(lease -> lease.status() != AmbientLeaseStatus.CLOSED).count(),
                 (int) state.ambientLeases().values().stream().filter(lease -> lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART).count(),
-                state.inventory().conflicts().size());
+                state.inventory().conflicts().size(), replicaCustody(state));
+    }
+    private static PhysicalReplicaCustodyProjection replicaCustody(FrontierWorldState state) {
+        return new PhysicalReplicaCustodyProjection(state.replicaCustody().replicas().values().stream().sorted(java.util.Comparator.comparing(PhysicalReplicaRecord::objectId))
+                .map(replica -> {
+                    PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().values().stream()
+                            .filter(value -> value.objectId().equals(replica.objectId())).findFirst().orElse(null);
+                    return new PhysicalReplicaCustodyProjection.Entry(replica.objectId(), replica.semanticKind(), replica.emittedCanonicalRevision(),
+                            replica.observedCanonicalRevision(), replica.fingerprint(), replica.provenance(), replica.state(),
+                            lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.scopeId()),
+                            lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.providerId()),
+                            lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.authorityEpoch()),
+                            lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.status()),
+                            lease == null || lease.unresolvedReason() == null ? java.util.Optional.empty() : java.util.Optional.of(lease.unresolvedReason()));
+                }).toList());
     }
 }
