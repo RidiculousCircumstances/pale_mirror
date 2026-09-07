@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionTransformationObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionTransformationStateSupport;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -43,6 +44,8 @@ final class FrontierV3ProductionTransformationExecutor {
         catch (IllegalArgumentException conflict) { unknown(runtime, intent.id(), "canonical-precondition-conflict"); return; }
         BlockPos position = new BlockPos(target.chestPosition().x(), target.chestPosition().y(), target.chestPosition().z());
         if (!level.hasChunkAt(position)) return;
+        if (ReferenceContainerCustody.isReferenceContainer(state, target.slot().containerId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, target.slot().containerId())) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
                 new FrontierV3CargoHandoffExecutor.StoreTarget(position, target.slot().containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }

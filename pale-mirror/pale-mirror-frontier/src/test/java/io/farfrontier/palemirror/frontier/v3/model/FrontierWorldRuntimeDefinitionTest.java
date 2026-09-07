@@ -812,8 +812,8 @@ class FrontierWorldRuntimeDefinitionTest {
     materializedSupplyConfiguration(WorldId world, long seed) {
         var base = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(world, seed);
         SubjectId westStore = new SubjectId("container:hive-west-store");
-        FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory()
-                .withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.ACTIVE));
+        FrontierWorldState state = ReferenceContainerCustodyFixtures.observedAndHeld(base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.ACTIVE)), westStore);
         return new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter());

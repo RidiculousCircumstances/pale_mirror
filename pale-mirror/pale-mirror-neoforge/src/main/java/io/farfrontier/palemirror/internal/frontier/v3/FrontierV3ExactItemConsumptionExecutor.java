@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentScene
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -47,6 +48,8 @@ final class FrontierV3ExactItemConsumptionExecutor {
         Target target = target(state, intent);
         if (target == null) { if (intent.status() == PhysicalIntentStatus.RUNNING) unknown(runtime, intent.id(), "target-conflict"); return; }
         if (!level.hasChunkAt(target.chestPosition())) return;
+        if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level, new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
         if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {

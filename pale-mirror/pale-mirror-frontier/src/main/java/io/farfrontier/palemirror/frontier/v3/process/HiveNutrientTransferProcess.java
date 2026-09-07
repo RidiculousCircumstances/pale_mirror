@@ -36,11 +36,10 @@ public final class HiveNutrientTransferProcess {
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
                     schedule(advance(transfer, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveNutrientTransferStepInterval())));
         }
-        ContainerSurfaceStatus targetSurface = state.inventory().surfaces().get(transfer.targetStoreId()).status();
-        if (targetSurface == ContainerSurfaceStatus.CONFLICT) {
+        if (ReferenceContainerCustody.hasConflict(state, transfer.targetStoreId())) {
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST)));
         }
-        if (targetSurface != ContainerSurfaceStatus.UNMATERIALIZED) {
+        if (ReferenceContainerCustody.hasLiveCustody(state, transfer.targetStoreId())) {
             HiveNutrientTransfer waiting = transfer.advanceTo(nextCursor).awaitArrival(arrivalIntentId(transfer));
             return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferAdvanced(transfer.id(), nextCursor)),
                     new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferEndpointPrepared(waiting)),
@@ -81,7 +80,7 @@ public final class HiveNutrientTransferProcess {
         List<BlockPosition> corridor = corridor(state.inventory().surfaces().get(sourceSlot.containerId()).position(), state.inventory().surfaces().get(targetStore).position());
         String idSuffix = task.id().value().replace(':', '-');
         SubjectId transferId = new SubjectId("transfer:hive-nutrient-" + idSuffix);
-        boolean physicalDeparture = state.inventory().surfaces().get(sourceSlot.containerId()).status() != ContainerSurfaceStatus.UNMATERIALIZED;
+        boolean physicalDeparture = ReferenceContainerCustody.hasLiveCustody(state, sourceSlot.containerId());
         return new HiveNutrientTransfer(transferId, state.bootstrap().hive().id(), task.id(),
                 sourceSlot.containerId(), sourceSlot, targetStore, new InventoryCustody.ContainerSlot(targetStore, targetSlot),
                 new SubjectId("cargo:hive-nutrient-" + idSuffix), item.id(), corridor, 0,
@@ -131,7 +130,7 @@ public final class HiveNutrientTransferProcess {
     }
 
     private static HiveNutrientTransferBlockReason blockReason(FrontierWorldState state, HiveNutrientTransfer transfer) {
-        if (state.inventory().surfaces().get(transfer.targetStoreId()).status() == ContainerSurfaceStatus.CONFLICT) return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
+        if (ReferenceContainerCustody.hasConflict(state, transfer.targetStoreId())) return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
         if (state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) return HiveNutrientTransferBlockReason.TARGET_SLOT_UNAVAILABLE;
         return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
     }

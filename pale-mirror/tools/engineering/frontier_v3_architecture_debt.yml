@@ -26,7 +26,7 @@ process_unhashed_tuning_constants:
 # pattern: F0.2 must remove entries as replica realization and custody leases
 # replace ContainerSurfaceStatus.ACTIVE. New files or references fail.
 historical_surface_active_references:
-  max_total: 39
+  max_total: 34
   allowed_files:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/CargoLoadingStateSupport.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DecontaminationStateSupport.java: 1
@@ -47,10 +47,8 @@ historical_surface_active_references:
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/DefenderEquipmentReturnProcess.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/EngineeringEquipmentProcess.java: 2
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/FrontierWorldPhysicalObservationProcess.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/HiveGrowthProcess.java: 2
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/MedicalTreatmentProcess.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/PopulationBirthProcess.java: 1
-    pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/ProductionProcess.java: 3
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteConstructionProcess.java: 1
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/RouteMaintenanceProcess.java: 2
     pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/SettlementProvisionProcess.java: 2

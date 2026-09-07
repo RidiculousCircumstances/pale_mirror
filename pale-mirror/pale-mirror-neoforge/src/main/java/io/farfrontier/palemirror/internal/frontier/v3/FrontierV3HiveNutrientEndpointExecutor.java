@@ -21,6 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientDepartureObservat
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -51,6 +52,8 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         try { target = endpoint(state, intent); }
         catch (IllegalArgumentException invalid) { unknown(runtime, intent.id(), "canonical-precondition-conflict"); return; }
         if (!level.hasChunkAt(target.position())) return;
+        if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
         if (target.surface().status() == ContainerSurfaceStatus.UNMATERIALIZED || target.surface().status() == ContainerSurfaceStatus.PREPARED) return;
         if (target.surface().status() == ContainerSurfaceStatus.CONFLICT) { unknown(runtime, intent.id(), "surface-conflict"); return; }
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,

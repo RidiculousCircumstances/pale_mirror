@@ -429,8 +429,8 @@ class FrontierWorldStateTest {
                 new Bioform(new SubjectId("bioform:east-grown-1"), hive, east, BioformChassis.RUNT,
                         java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(436, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
-        FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
-                .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);
+        FrontierWorldState active = ReferenceContainerCustodyFixtures.observedAndHeld(baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)), store).startHiveGrowth(job);
         assertTrue(active.inventory().items().containsKey(job.consumedItemId()));
         assertEquals(job, active.hiveColony().growthJobs().get(job.id()));
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
@@ -468,8 +468,8 @@ class FrontierWorldStateTest {
                 new Bioform(new SubjectId("bioform:east-grown-unknown"), hive, east, BioformChassis.RUNT,
                         java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(444, 64, 432)));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
-        FrontierWorldState active = baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
-                .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)).startHiveGrowth(job);
+        FrontierWorldState active = ReferenceContainerCustodyFixtures.observedAndHeld(baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)), store).startHiveGrowth(job);
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);

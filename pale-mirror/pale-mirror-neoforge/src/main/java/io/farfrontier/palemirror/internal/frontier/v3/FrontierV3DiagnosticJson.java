@@ -399,9 +399,25 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
                 + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch()) + "\"}").orElse("");
+        String replica = referenceCustody(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
-                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + physical + "}";
+                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + replica + physical + "}";
+    }
+
+    /** Reference scopes report canonical stock separately from replica evidence and temporary lease authority. */
+    private static String referenceCustody(FrontierWorldState state, SubjectId containerId) {
+        if (!io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.isReferenceContainer(state, containerId)) return "";
+        var record = state.replicaCustody().replicas().get(containerId);
+        var lease = state.replicaCustody().custodyByScope().get(io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(containerId));
+        String replica = record == null ? "null" : "{\"state\":\"" + record.state() + "\",\"revision\":" + record.replicaRevision()
+                + ",\"canonicalRevision\":" + record.observedCanonicalRevision() + ",\"conflict\":\""
+                + quote(record.conflictReason().map(Enum::name).orElse("")) + "\",\"observedFingerprint\":\""
+                + quote(record.observedFingerprint().orElse("")) + "\",\"observedProvenance\":\""
+                + quote(record.observedProvenance().orElse("")) + "\"}";
+        String custody = lease == null ? "null" : "{\"status\":\"" + lease.status() + "\",\"epoch\":" + lease.authorityEpoch()
+                + ",\"replicaRevision\":" + lease.expectedReplicaRevision() + "}";
+        return ",\"replica\":" + replica + ",\"custody\":" + custody;
     }
 
     private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {

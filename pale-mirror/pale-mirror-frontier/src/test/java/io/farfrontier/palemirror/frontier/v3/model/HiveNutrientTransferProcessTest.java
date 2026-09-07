@@ -55,7 +55,8 @@ class HiveNutrientTransferProcessTest {
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(baseline, task, biomass, new SubjectId("container:hive-west-store"), 0);
         FrontierWorldState started = HiveNutrientTransferProcess.reduceStarted(baseline, transfer.hiveId(), transfer);
-        FrontierWorldState endpointMaterialized = started.withInventory(started.inventory().withSurfaceStatus(transfer.targetStoreId(), ContainerSurfaceStatus.PREPARED));
+        FrontierWorldState endpointMaterialized = ReferenceContainerCustodyFixtures.observedAndHeld(
+                started.withInventory(started.inventory().withSurfaceStatus(transfer.targetStoreId(), ContainerSurfaceStatus.PREPARED)), transfer.targetStoreId());
 
         FrontierWorldState beforeArrival = endpointMaterialized;
         for (int cursor = 1; cursor < transfer.corridor().size() - 1; cursor++) {
@@ -85,7 +86,9 @@ class HiveNutrientTransferProcessTest {
         FrontierWorldState baseline = growthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
-        FrontierWorldState sourcePrepared = baseline.withInventory(baseline.inventory().withSurfaceStatus(new SubjectId("container:hive-east-store"), ContainerSurfaceStatus.PREPARED));
+        FrontierWorldState sourcePrepared = ReferenceContainerCustodyFixtures.observedAndHeld(
+                baseline.withInventory(baseline.inventory().withSurfaceStatus(new SubjectId("container:hive-east-store"), ContainerSurfaceStatus.PREPARED)),
+                new SubjectId("container:hive-east-store"));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(sourcePrepared, task, biomass, new SubjectId("container:hive-west-store"), 0);
         assertEquals(HiveNutrientTransferPhase.DEPARTURE_PENDING, transfer.phase());
         FrontierWorldState pending = HiveNutrientTransferProcess.reduceStarted(sourcePrepared, transfer.hiveId(), transfer);

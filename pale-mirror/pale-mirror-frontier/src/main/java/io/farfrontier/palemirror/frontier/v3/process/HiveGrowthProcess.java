@@ -60,11 +60,9 @@ public final class HiveGrowthProcess {
         }
         SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);
-        // A prepared surface is a durable, owned pending physical socket.  Growth may bind its
-        // exact intent to it, but the NeoForge executor will refuse to consume until that socket
-        // has materialized as ACTIVE.  An unmaterialized store, on the other hand, has no
-        // loaded-world boundary and remains eligible for the normal COLD calculation.
-        if (state.inventory().surfaces().get(sourceStore).status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+        // A serialized surface is only prior projection evidence.  COLD remains eligible until
+        // the exact currently observed store has a live custody epoch.
+        if (!ReferenceContainerCustody.hasLiveCustody(state, sourceStore)) {
             return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(hive, new HiveGrowthStarted(job)),
                     new ProposedEvent(hive, new HiveGrowthBiomassConsumed(job.id(), job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 200L)));
         }
@@ -108,7 +106,7 @@ public final class HiveGrowthProcess {
         }
         ExactItemStack item = state.inventory().items().get(consumed.itemId());
         if (item == null || !BIOMASS.equals(item.itemKind()) || item.count() != 64 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
-                || !state.isHiveStore(slot.containerId()) || state.inventory().surfaces().get(slot.containerId()).status() == ContainerSurfaceStatus.ACTIVE) {
+                || !state.isHiveStore(slot.containerId()) || ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())) {
             throw new IllegalArgumentException("cold hive growth consumption bypasses its exact inactive store");
         }
         if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
@@ -139,9 +137,8 @@ public final class HiveGrowthProcess {
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !BIOMASS.equals(input.itemKind()) || input.count() != 64 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !state.isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth consumption requires an exact biomass stack");
-        ContainerSurfaceStatus surface = state.inventory().surfaces().get(slot.containerId()).status();
-        if (surface != ContainerSurfaceStatus.PREPARED && surface != ContainerSurfaceStatus.ACTIVE) {
-            throw new IllegalArgumentException("hive growth physical consumption requires a prepared local store");
+        if (!ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())) {
+            throw new IllegalArgumentException("hive growth physical consumption requires current local store custody");
         }
         if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("hive growth consumption intent crosses nest-local biomass custody");

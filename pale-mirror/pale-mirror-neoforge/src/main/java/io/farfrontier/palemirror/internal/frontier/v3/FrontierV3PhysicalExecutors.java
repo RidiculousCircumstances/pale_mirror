@@ -34,9 +34,10 @@ final class FrontierV3PhysicalExecutors {
             // mistakes its own known recovery window for player/world tampering.
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
+            executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.
-            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
+            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("reference-container-custody"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
             executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-harvest"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
             executor("defender-equipment-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("hive-nutrient-endpoints"), "defender-equipment-issue-effect", FrontierV3EquipmentIssueExecutor::tick),
             executor("settlement-service-input-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "settlement-service-input-issue-effect", FrontierV3SettlementServiceInputIssueExecutor::tick),

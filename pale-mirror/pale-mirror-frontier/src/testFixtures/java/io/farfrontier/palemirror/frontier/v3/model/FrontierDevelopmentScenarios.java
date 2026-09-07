@@ -514,8 +514,8 @@ final class FrontierDevelopmentScenarios {
         // This is the durable boundary after a socket has been claimed but before its physical
         // chest write.  The native pilot must load the chunk and let the ordinary container
         // executor complete PREPARED -> ACTIVE before exact consumption can run.
-        FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory()
-                .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED));
+        FrontierWorldState initial = ReferenceContainerCustodyFixtures.observedAndHeld(base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)), store);
         var engine = FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter()));
@@ -544,8 +544,8 @@ final class FrontierDevelopmentScenarios {
                 StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-hive-nutrient-transfer"), objective.id(), hive,
                 StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(state.inventory()
-                .withSurfaceStatus(eastStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED));
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(state.inventory()
+                .withSurfaceStatus(eastStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED)), eastStore);
         return new HiveNutrientTransferFixture(state, SimInstant.ZERO, List.of(HiveGrowthProcess.start(task, 1L)),
                 new SubjectId("transfer:hive-nutrient-task-development-hive-nutrient-transfer"));
     }

@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionTransformationStateSupport;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -118,6 +119,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                                               FrontierWorldState state) {
         var active = state.inventory().surfaces().values().stream()
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
+                .filter(surface -> !ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
                 .sorted(Comparator.comparing(ContainerSurface::containerId)).toList();
         if (active.isEmpty()) return;
         ContainerSurface surface = active.get((int) Math.floorMod(level.getGameTime(), active.size()));
@@ -138,6 +140,8 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (!(level.getBlockEntity(target) instanceof ChestBlockEntity chest)) return null;
         if (!chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY).isBlank() || !chest.isEmpty()) return null;
         chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, containerId.value());
+        chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY,
+                ReferenceContainerCustody.provenance(containerId));
         chest.setChanged();
         return chest;
     }
@@ -160,6 +164,22 @@ final class FrontierV3ContainerSurfaceExecutor {
     /** The sole safe PREPARED recovery write: an already-owned chest must still be empty. */
     static boolean restorePreparedOwnedEmptyChest(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
         return chest.isEmpty() && writeCanonicalSlots(chest, state, containerId);
+    }
+
+    /**
+     * Replaces an already-owned exact chest only after the replica adapter has compared the
+     * complete old physical snapshot to retained evidence and durably emitted the next one.
+     * It is deliberately package-private so no generic surface lifecycle can use it.
+     */
+    static boolean replaceCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        if (state.inventory().containers().get(containerId) == null || chest.getContainerSize() != state.inventory().containers().get(containerId).slotCount()) return false;
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, ItemStack.EMPTY);
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+            ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
+            if (item != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
+        }
+        chest.setChanged();
+        return matchesCanonicalSlots(chest, state, containerId);
     }
 
     static boolean matchesCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {

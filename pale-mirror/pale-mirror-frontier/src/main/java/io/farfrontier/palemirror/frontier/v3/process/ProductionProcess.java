@@ -67,9 +67,9 @@ public final class ProductionProcess {
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.INPUT_UNAVAILABLE);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        boolean physicallyActive = state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE;
+        boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
-        ProductionJob job = job(state, settlement, workshop, input.orElseThrow(), ordinal, !physicallyActive);
+        ProductionJob job = job(state, settlement, workshop, input.orElseThrow(), ordinal, !physicalCustody);
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
@@ -171,8 +171,8 @@ public final class ProductionProcess {
         if (input == null || !WHEAT.equals(input.itemKind()) || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) throw new IllegalArgumentException("production start input is unavailable or not in its depot");
         if (input.count() != job.outputCount() || !BREAD.equals(job.outputItemKind())) throw new IllegalArgumentException("production output is not a verified wheat conversion");
-        boolean physicallyActive = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).status() == ContainerSurfaceStatus.ACTIVE;
-        if (physicallyActive != (job.inputHold() instanceof ProductionInputHold.Materialized)) {
+        boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()));
+        if (physicalCustody != (job.inputHold() instanceof ProductionInputHold.Materialized)) {
             throw new IllegalArgumentException("production input hold does not match its admitted HOT/COLD boundary");
         }
         TraversalTopology expectedTraversal = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(job.workerId()), job.id());
@@ -180,7 +180,7 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production start must retain its exact worker-to-workshop traversal");
         }
         StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
-        FrontierWorldState startedState = physicallyActive ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
+        FrontierWorldState startedState = physicalCustody ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
         return CompanyWorkPaymentProcess.reserve(startedState, job);
     }
 
@@ -379,7 +379,7 @@ public final class ProductionProcess {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
                 int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
-                boolean cold = state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE;
+                boolean cold = !ReferenceContainerCustody.hasLiveCustody(state, depot);
                 if (CompanyWorkPaymentProcess.canReserve(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal, cold))) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
