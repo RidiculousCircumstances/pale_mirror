@@ -55,7 +55,8 @@ class FrontierV3CrashBoundaryProbeTest {
                     "the mixin package must not own fixture, hook, or probe classes");
             List<String> mixins = new ArrayList<>();
             resource.getAsJsonArray("mixins").forEach(mixin -> mixins.add(mixin.getAsString()));
-            assertEquals(List.of("FrontierV3DurableCrashWindowMixin", "FrontierV3HarvestCrashWindowMixin"), mixins);
+            assertEquals(List.of("FrontierV3DurableServerSaveMixin", "FrontierV3DurableCrashWindowMixin",
+                    "FrontierV3HarvestCrashWindowMixin"), mixins);
         }
     }
 
@@ -132,15 +133,16 @@ class FrontierV3CrashBoundaryProbeTest {
     }
 
     @Test
-    void typedLeaseHandoffMatchesTheArmedJobRatherThanItsSettlementEventSubject() {
+    void typedLeasePreparationMatchesTheArmedJobBeforeAnyPhysicalMaterialization() {
         String job = "job:site-harvest-crash";
         FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, job,
                 FrontierV3CrashBoundaryProbe.LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION,
-                "frontier.resource_site_harvest_scene_lease_handoff")::get, ignored -> { });
+                "frontier.resource_site_harvest_scene_lease_prepared")::get, ignored -> { });
 
-        assertFalse(probe.matches(prepare(7L, "settlement:crash", job, "lease:crash")),
-                "a pre-provider PREPARED record is not the traversal lease handoff");
-        assertTrue(probe.matches(handoff(7L, "settlement:crash", job, "lease:crash")));
+        assertTrue(probe.matches(prepare(7L, "settlement:crash", job, "lease:crash")),
+                "the durable PREPARED lease is the exact pre-materialization boundary");
+        assertFalse(probe.matches(handoff(7L, "settlement:crash", job, "lease:crash")),
+                "a later ambient handoff must not stand in for the already durable lease record");
     }
 
     @Test
@@ -352,6 +354,8 @@ class FrontierV3CrashBoundaryProbeTest {
 
     @Test
     void pilotCrashMixinsDeclareExactlyOneExpectedTargetEach() throws IOException {
+        assertEquals(List.of("net.minecraft.server.MinecraftServer"),
+                mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableServerSaveMixin"));
         assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierStoreTransactionCommitter"),
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableCrashWindowMixin"));
         assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteHarvestSceneExecutor"),

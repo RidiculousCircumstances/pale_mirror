@@ -23,6 +23,7 @@ export const LifecycleBarrier = Object.freeze({
   OWNED_SERVER_EXIT: 'owned_server_exit',
   CLIENT_EXPECTED_LOSS: 'client_expected_loss',
   CLIENT_NORMALLY_DISCONNECTED: 'client_normally_disconnected',
+  NORMAL_DEMAND_LOSS_RELEASE: 'normal_demand_loss_release',
   DURABLE_SERVER_SAVE: 'durable_server_save',
   GAME_PORT_CLOSED: 'game_port_closed',
   RECOVERY_SERVER_READY: 'recovery_server_ready',
@@ -49,6 +50,7 @@ export const LifecycleSignal = Object.freeze({
   EXPECTED_LOSS_ARMED: 'expected_loss_armed',
   CLIENT_EXPECTED_LOSS: 'client_expected_loss',
   CLIENT_NORMALLY_DISCONNECTED: 'client_normally_disconnected',
+  NORMAL_DEMAND_LOSS_RELEASE: 'normal_demand_loss_release',
   SAME_CLIENT_RECONNECTED_STATE_CLEARED: 'same_client_reconnected_state_cleared'
 });
 
@@ -69,6 +71,7 @@ const REPEATABLE = new Set([
   LifecycleBarrier.OWNED_SERVER_EXIT,
   LifecycleBarrier.CLIENT_EXPECTED_LOSS,
   LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED,
+  LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE,
   LifecycleBarrier.DURABLE_SERVER_SAVE,
   LifecycleBarrier.GAME_PORT_CLOSED,
   LifecycleBarrier.RECOVERY_SERVER_READY,
@@ -87,7 +90,8 @@ const NEXT = Object.freeze({
   // the server durably releases its HOT lease.  That exact completed segment may therefore arm
   // the nonce-bound crash controller, but cannot otherwise skip its expected-loss sequence.
   [LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE]: new Set([LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleBarrier.EXPECTED_LOSS_ARMED, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
-  [LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED]: new Set([LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
+  [LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED]: new Set([LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
+  [LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE]: new Set([LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED]),
   [LifecycleBarrier.DURABLE_SERVER_SAVE]: new Set([LifecycleBarrier.GAME_PORT_CLOSED]),
   [LifecycleBarrier.GAME_PORT_CLOSED]: new Set([LifecycleBarrier.RECOVERY_SERVER_READY]),
   [LifecycleBarrier.RECOVERY_SERVER_READY]: new Set([
@@ -95,7 +99,7 @@ const NEXT = Object.freeze({
     LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED
   ]),
   [LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED]: new Set([LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE]),
-  [LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]: new Set()
+  [LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]: new Set([LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED])
 });
 
 export async function createLifecycleBarrierSession(root, identity) {

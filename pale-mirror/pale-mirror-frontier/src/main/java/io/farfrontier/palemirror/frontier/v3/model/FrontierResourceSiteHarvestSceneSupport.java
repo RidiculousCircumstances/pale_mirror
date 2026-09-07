@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 
 import java.util.Map;
 import java.util.List;
@@ -32,11 +31,11 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     }
     private static Optional<Candidate> candidate(FrontierWorldState state, ResourceSiteHarvestJob job, boolean rejectExistingScene) {
         if ((rejectExistingScene && hasNonClosedScene(state, job.id())) || job.progress().complete()) return Optional.empty();
-        // PREPARED means the canonical job exists but its loaded field/depot baseline has not
-        // yet been observed ready by the sole physical harvest owner.  RUNNING is that durable
-        // readiness hand-off; only then may the actor leave ambient custody for field work.
-        if (state.physicalIntents().get(job.intentId()) == null
-                || state.physicalIntents().get(job.intentId()).status() != PhysicalIntentStatus.RUNNING) return Optional.empty();
+        // An exact physical-effect lifecycle is not a scene-readiness bit.  Before F0.2, the
+        // retained traversal may use a PREPARED intent but must leave its non-replayable effect
+        // unbegun; after F0.2 the process-owned effect admission supplies RUNNING instead.
+        // This remains process policy, not a generic scene-family branch.
+        if (!ResourceSitePhysicalIntentStateSupport.admitsTraversal(state.physicalIntents().get(job.intentId()))) return Optional.empty();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)

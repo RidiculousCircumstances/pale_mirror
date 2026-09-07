@@ -122,22 +122,13 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
         assertFalse(harvesting.inventory().items().containsKey(output.id()), "canonical inventory must wait for Minecraft receipt");
         assertEquals(StrategicTaskStatus.ACTIVE, harvesting.strategicPlans().tasks().get(task.id()).status());
-        assertFalse(FrontierSceneAdmission.reservedActors(harvesting).contains(started.job().workerId()),
-                "a PREPARED harvest has no observed loaded-world field baseline yet");
-        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        assertFalse(FrontierSceneAdmission.reservedActors(harvesting).contains(started.job().workerId()),
-                "a live farmer remains available for the typed ambient-to-scene hand-off until its scene lease exists");
+        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).isPresent(),
+                "the traversal-only profile may acquire a HOT cursor lease without beginning its crop effect");
         assertTrue(FrontierSceneAdmission.reservedFromGenericAmbient(harvesting, started.job().workerId()),
-                "an unrelated ambient admission may not reopen the worker between the field job and scene hand-off");
-        assertTrue(FrontierSceneAdmission.permitsPreLeaseAmbientHandoff(harvesting, started.job().workerId()),
-                "the exact ready field worker may obtain only the inert precursor body required for the typed hand-off");
-        FrontierSceneAdmission.GenericAmbientAdmission genericAdmission = FrontierSceneAdmission.genericAmbientAdmission(harvesting);
-        assertTrue(genericAdmission.reserves(started.job().workerId()),
-                "one immutable generic-ambient decision retains the exact field worker");
-        assertEquals(Optional.of(SceneCauseKind.RESOURCE_SITE_HARVEST), genericAdmission.preLeaseSceneCause(started.job().workerId()),
-                "the same decision names the only registered physical provider allowed to receive the inert precursor");
-        assertTrue(genericAdmission.preLeaseSceneCause(new SubjectId("resident:1-2")).isEmpty(),
-                "an unrelated resident cannot borrow the crop-foot exception from the named farmer");
+                "the PREPARED traversal candidate keeps its exact worker out of unrelated ambient admission");
+        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).isPresent(),
+                "a retained RUNNING effect remains a recovery-relevant scene candidate for the later effect-capable profile");
 
         harvesting = completeHarvestWork(harvesting, site, started.job());
         ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
@@ -573,11 +564,15 @@ class ResourceSiteHarvestProcessTest {
 
         assertTrue(FrontierWorldProcessCatalog.planCommand("resource-sites", hot.state(), command) instanceof CommandPlan.Accepted,
                 "the trusted physical owner must durably admit the player observation before vanilla may mutate the cell");
+        assertTrue(ResourceSiteProcess.planConflict(hot.state(), observed).stream()
+                        .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                        .anyMatch(new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())::equals),
+                "the accepted conflict cancels its exact durable continuation rather than leaving a stale due action");
         FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(hot.state(), hot.site(), observed);
 
         assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, conflicted.physicalIntents().get(job.intentId()).status(),
-                "the retired harvest cannot retain a nonterminal canonical-subject claim");
+                "a RUNNING effect retains recovery custody after its accepted player conflict");
         assertEquals(StrategicTaskStatus.BLOCKED, conflicted.strategicPlans().tasks().get(job.taskId()).status());
         assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(hot.lease().id()).status(),
                 "the former HOT worker has no second physical interpretation after admission");
@@ -588,6 +583,24 @@ class ResourceSiteHarvestProcessTest {
         assertTrue(FrontierSceneBehaviors.releasePlan(conflicted, conflicted.sceneLeases().get(hot.lease().id()), 22_303L, released)
                         .continuation() instanceof SceneContinuation.None,
                 "releasing the drained worker cannot reschedule a harvest after the accepted player conflict");
+    }
+
+    @Test
+    void playerBreakLeavesAnUnbegunTraversalIntentPrepared() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        BlockPosition crop = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site()).cropSlots().getFirst();
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents =
+                new java.util.LinkedHashMap<>(hot.state().physicalIntents());
+        intents.put(job.intentId(), intents.get(job.intentId()).withStatus(PhysicalIntentStatus.PREPARED, Optional.empty()));
+        FrontierWorldState prepared = hot.state().withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents));
+
+        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(prepared, hot.site(),
+                new ResourceSiteConflictObserved(hot.site(), crop, "player:prepared-contract"));
+
+        assertEquals(PhysicalIntentStatus.PREPARED, conflicted.physicalIntents().get(job.intentId()).status(),
+                "the traversal-only profile must not invent RUNNING/unknown recovery custody");
+        assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
     }
 
     @Test

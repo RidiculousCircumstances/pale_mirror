@@ -1,6 +1,6 @@
 # PM-F0V-ADOPT-COMPLETE-01: adopt the monorepo and close original F0.V
 
-Specification revision: 4. Parent slice: F0.V. Risk: critical-code plus bounded
+Specification revision: 10. Parent slice: F0.V. Risk: critical-code plus bounded
 Git operations. Engineer: supervising root. Executor:
 `/root/terra_f0va_unrestricted`, `gpt-5.6-terra`, reasoning `high`.
 Acceptance owner is this original `CONTINUITY.md` until the adoption checkpoint;
@@ -17,7 +17,11 @@ preserved read-only.
   amendment close F0.VA. Provider runs `34042975487` and `34043019208` are
   honestly cancelled and prove no complete native matrix or speed ratio.
 - GitHub repository runner inventory is zero and no task-owned runner process
-  remains. Do not provision a runner or begin another timing campaign.
+  remains. The user requires four simultaneous isolated `pm-native` CI worker
+  slots as pipeline acceleration, not as an additional F0.V acceptance gate.
+  Their bounded activation is the separate mandatory post-F0.V checkpoint
+  `PM-F0VB-PARALLEL-NATIVE-PIPELINE-01`; do not repeat the already-running
+  matrix or begin that next order here.
 - `/home/rd/proj/pale-mirror-monorepo` was absent at order creation and is the
   approved durable adopted checkout path. The original outer/nested repos,
   `/tmp/pm-f0va-publication.tKJfmL`, the deferred terrain candidate, recovery
@@ -35,7 +39,7 @@ monorepo. The delivered result is a reviewable fast-forward remote `main` whose
 F0.V Gate C proves reusable HOT/COLD process contracts, exact lifecycle/crash
 boundaries and the required real Minecraft recovery matrix.
 
-No standalone timing/provider campaign, self-hosted runner provisioning,
+No standalone timing/provider-speed campaign, self-hosted runner provisioning,
 natural-terrain/Foundry work, new MAT/process/scene/gameplay breadth, F0.2+
 consequence/aftermath implementation, production deployment, v2 cutover/removal, history rewrite, cleanup of
 the original repositories or human product-acceptance claim is included.
@@ -96,11 +100,38 @@ aftermath. Do not implement that later capability in this order.
    fail closed, and no deadline is inferred from observation/release time. The
    exact API/design remains the executor's responsibility; the model behavior
    registry must not receive the complete engine queue.
+   Revision 5 resolves the terminal r58 review failure. `PhysicalIntent` is
+   durable canonical recovery state: `RUNNING` means its non-replayable effect
+   may have begun, not merely that a loaded field/depot is ready or a scene may
+   be admitted. The traversal-only profile must retain the same intent kind,
+   status and observation binding in neutral COLD and HOT/COLD lanes; neutral
+   HOT acquisition/checkpoint/release may not promote the harvest intent from
+   `PREPARED`. Include those fields in the declared exact terminal projection
+   and reject a seeded mismatch even when all formerly compared fields match.
+   The executor owns the coherent lifecycle/admission design; do not enable the
+   deferred crop effect or weaken the comparison.
+   Revision 6 resolves the r70/r71 verification impasse and preserves revision
+   2's split: disabling the irreversible crop effect may gate only that effect,
+   never the registered HOT driver's observed due traversal checkpoint over the
+   shared cursor and continuation. For a non-restart lane, terminal semantic
+   evidence is authenticated before cleanup; the exact client then disconnects
+   normally and the ordinary bounded demand-loss path reaches a safe
+   checkpoint/release/fence before RCON shutdown. These post-evidence
+   transitions remain separately attributed and cannot rewrite terminal
+   assertions. Restart/crash lanes preserve their declared recovery state.
+   No timeout inflation, arbitrary wait, force-unload, test-only canonical
+   mutation or fabricated durable receipt is permitted. If shutdown still
+   exceeds the existing bound after that correct lifecycle, retain the evidence
+   and return the newly classified runtime/save impasse rather than masking it.
 5. Use the accelerated selector/pyramid on this real work. Numeric speed is
-   recorded when naturally available but never gates completion. Final F0.V
+   recorded when naturally available but never gates completion. Allow the
+   already-started sequential `r77` to reach its natural attributable boundary
+   and preserve its evidence. If semantically complete and green, it may satisfy
+   the F0.V native matrix; do not repeat it merely for worker topology. Final
    evidence remains fresh where the contract requires fresh native/restart
    execution and may not be replaced by cache, mock, server command or a
-   cancelled provider shard.
+   cancelled provider shard. Four-slot activation follows only after independent
+   F0.V acceptance under its separately issued infrastructure order.
 6. Commit coherent verified corrections and push only a reviewable non-force
    fast-forward `main`. Do not deploy. Return one terminal Gate C packet; do not
    self-start F0.1 after completion.
@@ -126,9 +157,9 @@ history rewrite, destructive cleanup, secret publication or broad staging.
 | --- | --- | --- | --- |
 | AC-1 | Durable monorepo adoption preserves both histories and exact published baseline | remote/ref/tree/ancestry, path/blob allowlist, clean-clone and docs gates | N/A |
 | AC-2 | Reusable closed process SDK uses production owners/codecs and has no concrete-family lifecycle branch | harvest plus structurally different existing-process conformance; missing/duplicate driver, cursor, schedule, payload, codec and stale-version negatives | N/A |
-| AC-3 | HOT/COLD authority, observer aggregation and semantic comparison retain exact identity/custody/conservation over the admitted traversal-only reference; neither mode completes crops or creates output before F0.2; one engine-owned continuation binding keeps schedule identity/cadence exact across HOT checkpoint/release without duplicate domain storage or release-time reconstruction | pure matrix and focused NeoForge tests, including two-observer ordering, missing/duplicate/stale schedule-binding rejection and rejection of premature irreversible harvest progress | smallest applicable native variants and exact neutral differential |
+| AC-3 | HOT/COLD authority, observer aggregation and semantic comparison retain exact identity/custody/conservation plus physical-intent kind/status/observation binding over the admitted traversal-only reference; neither mode completes crops, creates output or promotes an unbegun effect to `RUNNING` before F0.2; the disabled effect does not suppress HOT traversal over the shared cursor; one engine-owned continuation binding keeps schedule identity/cadence exact across HOT checkpoint/release without duplicate domain storage or release-time reconstruction | pure matrix and focused NeoForge tests, including two-observer ordering, observed no-effect HOT traversal, physical-intent mismatch rejection, missing/duplicate/stale schedule-binding rejection and rejection of premature irreversible harvest progress | smallest applicable native variants and exact neutral differential |
 | AC-4 | Crash controller is attributable and restart yields reclaim, safe fence/resume or smallest-owner ambiguity without duplication/loss | complete five-boundary vocabulary/controller negatives and recovery assertions | graceful plus the three applicable traversal/lease same-world abrupt boundaries; physical-effect/typed-observation native windows remain explicitly deferred to F0.2 |
-| AC-5 | One declarative vertical contract composes never-loaded, arrive-mid-process, unload/return, intervention, graceful and abrupt variants | generator/schema/semantic assertions and fail-closed failure-bundle tests | fresh required F0.V matrix using one prepared build and persistent client where specified |
+| AC-5 | One declarative vertical contract composes never-loaded, arrive-mid-process, unload/return, intervention, graceful and abrupt variants; non-restart terminal evidence is immutable before exact normal disconnect, ordinary bounded demand-loss release and durable shutdown | generator/schema/semantic assertions, typed terminal/cleanup lifecycle ordering and fail-closed failure-bundle tests | fresh required F0.V matrix using one prepared build and persistent client where specified; the already-running sequential r77 is valid if complete, and every normal stop has its exact durable receipt/JVM exit/closed port |
 | AC-6 | Production artifact contains no fixture/fault-injection authority and all F0.V exit criteria are traceably satisfied | guardrails, check, applicable core/Visuals GameTests, build and packaged-JAR verification | terminal criterion-to-evidence Gate C report |
 
 The final packet must map every bullet in
@@ -138,7 +169,8 @@ record source/spec/artifact identities, commands/results, native run/world/
 client/server IDs, failures and corrections; prove no owned process/port/
 display remains; show remote refs and final status for the adopted and both
 preserved original repositories. A cancelled provider run is historical
-evidence only.
+evidence only. A complete green r77 retains full ordinary matrix evidence
+despite being sequential.
 
 ## Review and execution permissions
 
@@ -147,13 +179,20 @@ diagnosis, implementation, focused and full local verification, ordinary
 in-scope corrections, coherent commits and non-force `main` pushes. Terra is
 the sole heavy owner and may use task-owned disposable worlds, loopback ports,
 private displays, caches and temporary directories with unrestricted host/
-network access and no approval prompts. Preserve unrelated live services.
+network access and no approval prompts. Preserve unrelated live services and
+runners. Runner provisioning belongs to the next order. Final accepted `main`
+remains a reviewable non-force fast-forward; do not force or delete refs.
 
-There is no intermediate approval checkpoint and no heartbeat. Report only an
-actual `ARCHITECTURE`, `AUTHORITY`, `RISK` or `IMPASSE` boundary, or the terminal
-Gate C packet. The engineer does not prescribe implementation or poll routine
-WIP. A final run already in progress may reach its attributable safe boundary;
-do not start another run after a terminal result merely to improve timing.
+There is no intermediate approval checkpoint and no executor heartbeat. Report
+only an actual `ARCHITECTURE`, `AUTHORITY`, `RISK` or `IMPASSE` boundary, or the
+terminal Gate C packet. Under the binding 2026-09-07 amendment the engineer
+performs one bounded liveness check after every ten minutes of Terra silence,
+limited to collaboration status, exact task-owned process/job liveness and one
+bounded progress marker; a healthy result causes no message, code review or
+direction. The already-running sequential `r77` may reach its attributable safe
+boundary and may close its declared matrix evidence. Return the terminal F0.V
+packet without starting the separate worker order or another matrix merely to
+prove topology or improve its measured ratio.
 
 ## Stop conditions
 
@@ -192,3 +231,27 @@ share one attributable continuation fact. Revision 4 keeps the scheduler as
 sole storage authority and adds the generic typed engine/process binding above;
 it does not authorize a harvest branch, copied queue or weaker comparator.
 Pending terminal Gate C.
+
+Revision 4 produced commit `d1940c8dd33b52d904b6fde15c676033081147d1`
+and an otherwise green fresh r58 matrix, but independent Gate C review rejected
+its neutral differential. At the same absolute `SimInstant 24608`, both lanes
+had cursor 17, no lease, zero crop progress and the same complete scheduled
+continuation, while COLD retained intent `PREPARED` and HOT/COLD retained
+`RUNNING`. The declared comparator omitted `result.intentStatus`, concealing a
+canonical recovery-state difference: restart and conflict handling distinguish
+those statuses. Revision 5 requires exact intent-lifecycle neutrality and a
+recurrence guard; prior r58 remains useful negative evidence, not Gate C.
+
+Revision 5 candidate work corrected intent diagnostics/comparison and retained
+`PREPARED`; focused player/native evidence and the r69 two-server lifecycle
+smoke passed. Fresh r70 and the isolated r71 reproduction then reached a valid
+`arrival_checkpoint_two` terminal manifest but failed disposable shutdown.
+The r71 server thread remained `RUNNABLE` in
+`ChunkMap.processUnloads -> MinecraftServer.stopServer` beyond the 90-second
+bound after the isolated non-restart runner requested RCON stop without first
+publishing or awaiting `client_normally_disconnected`; no durable-save signal
+was emitted. Independent source review also found that the candidate guarded
+the HOT semantic traversal checkpoint with the false crop-effect capability,
+which would preserve intent neutrality by disabling required HOT traversal.
+Revision 6 establishes the separate traversal/effect and terminal/cleanup
+boundaries above. r70/r71 remain attributable negative evidence, not Gate C.

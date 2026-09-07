@@ -7,7 +7,6 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 /** Test/moddev-only fixture selector. This class is deliberately excluded from the packaged mod. */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
@@ -31,10 +30,4 @@ public final class FrontierV3PilotFixtureBootstrap {
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_FIXTURE profile={} source={} assertion={}", profile.id(), profile.sourceProfile(), profile.requiredAssertion());
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public static void onServerStopped(ServerStoppedEvent event) {
-        if (FrontierV3ServerLifecycle.v3LaunchOwnsPhysicalWorld()) {
-            FrontierV3PilotLifecycleSignal.durableServerSave();
-        }
-    }
 }

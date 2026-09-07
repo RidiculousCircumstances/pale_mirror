@@ -7,6 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +53,33 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
         assertEquals(action(101L), FrontierV3ContinuationBinding.requireDueNextTurn(checkpoint(100L, 101L), JOB,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
+    }
+
+    @Test
+    void conflictedReleaseDoesNotRequireTheContinuationItsAcceptedConflictCancelled() {
+        assertEquals(java.util.Optional.empty(), FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(
+                emptyCheckpoint(100L), JOB, ResourceSitePhase.CONFLICT));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(
+                emptyCheckpoint(100L), JOB, ResourceSitePhase.HARVESTING));
+    }
+
+    @Test
+    void descendingPhysicalEdgeMayRemainInFlightButCannotBecomeAnotherTraversal() {
+        SurfaceAnchor current = SurfaceAnchor.at(390, 64, -370);
+        SurfaceAnchor next = SurfaceAnchor.at(389, 63, -370);
+        assertTrue(FrontierV3TraversalEdgeEnvelope.contains(new BodyPosition(389, 65, -370), current, next),
+                "the horizontal successor before its one-block descent is still the retained edge");
+        assertFalse(FrontierV3TraversalEdgeEnvelope.contains(new BodyPosition(388, 65, -370), current, next),
+                "an off-edge body remains a visible physical conflict rather than a route choice");
+    }
+
+    @Test
+    void typedPreLeaseCannotFreezeColdTraversalOutsidePhysicalDemand() {
+        assertFalse(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(true, false),
+                "an unloaded candidate has no physical body authority and must release COLD");
+        assertTrue(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(true, true),
+                "a demanded typed candidate may retain its exact ambient body for hand-off");
+        assertFalse(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(false, true));
     }
 
     private static CheckpointImage checkpoint(long instant, long dueAt) {

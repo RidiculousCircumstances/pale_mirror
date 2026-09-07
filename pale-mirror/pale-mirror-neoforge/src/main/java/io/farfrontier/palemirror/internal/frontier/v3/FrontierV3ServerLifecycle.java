@@ -475,6 +475,28 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /**
+     * Read-only pilot receipt predicate.  It deliberately observes only the normal executor
+     * result after the last ordinary player has departed: neither the receipt nor its caller can
+     * advance a cursor, force a chunk, or manufacture a release.
+     */
+    static boolean normalDemandLossReleased(MinecraftServer server) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        // The isolated F0.V receipt owns the resource-site-harvest physical boundary, not the
+        // whole world's independently demanded work.  Requiring unrelated service, route, or
+        // ambient leases to drain would turn their ordinary continuing demand into a fabricated
+        // failure of this already released harvest scene.  Conversely, every harvest scene is
+        // in scope: a second retained harvest body cannot be hidden behind the target's release.
+        return state.sceneLeases().values().stream()
+                .filter(io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors::isResourceSiteHarvest)
+                .noneMatch(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED
+                        || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT
+                        || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING);
+    }
+
+    /**
      * Durably releases an exact HOT shipment before vanilla opens its chest-minecart UI. The cart
      * remains in the world and each later player/drop/hopper move is observed from its stable
      * world-carrier identity; a rejected release must keep the interaction closed.

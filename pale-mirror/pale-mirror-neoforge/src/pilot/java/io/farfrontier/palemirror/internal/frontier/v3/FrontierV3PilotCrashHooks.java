@@ -15,6 +15,18 @@ public final class FrontierV3PilotCrashHooks {
         PROBE.afterDurableAppend(transaction);
     }
 
+    /**
+     * Publishes the pilot-only stop receipt only after Minecraft has returned from its
+     * ordinary server-stop path.  The event-bus {@code ServerStoppedEvent} is not a
+     * dependable boundary for the direct moddev launcher: it can be observed only
+     * after that launcher has already released the server callback thread.  The
+     * {@code MinecraftServer.stopServer} tail is the exact post-save boundary used
+     * by the disposable supervisor.
+     */
+    public static void afterMinecraftServerDurablyStopped() {
+        FrontierV3PilotLifecycleSignal.durableServerSave();
+    }
+
     public static void cropEffectBecameVisible(ResourceSiteHarvestJob job, BlockPosition cropSlot) {
         PROBE.cropEffectBecameVisible(job, cropSlot);
     }

@@ -230,6 +230,16 @@ try {
     lifecycleBarrier(LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, undefined, undefined, { assertionCount: (scenario.assertions ?? []).length });
     await lifecycleWrites;
   }
+  if (lifecycle !== undefined && lifecycleTerminalAssertion && sessionControlDirectory === undefined) {
+    const segment = lifecycleSegment();
+    const close = join(lifecycle.directory, `close-client-${segment}.token`);
+    await writeFile(close, `${lifecycle.identity.runId}:${segment}\n`, { encoding: 'utf8', flag: 'wx' });
+    await lifecycleSignalOrExit(LifecycleSignal.CLIENT_NORMALLY_DISCONNECTED, segment,
+      'native pilot exited before its normal disconnect acknowledgement');
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, { clientPid: child.pid, segment });
+    const exitCode = await exited(child);
+    if (exitCode !== 0) throw new Error(`native pilot exited after its normal disconnect acknowledgement (${exitCode})`);
+  }
   manifest.status = 'ok';
 } catch (error) {
   manifest.status = 'failed'; manifest.error = String(error?.stack ?? error);
@@ -280,7 +290,8 @@ async function launchPreparedClient() {
     'pale_mirror.frontier_v3.test_pilot.server': `${scenario.server.host}:${scenario.server.port}`,
     'pale_mirror.frontier_v3.test_pilot.session_control_directory': sessionControlDirectory ?? '',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory': lifecycleControlDirectory ?? '',
-    'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment()
+    'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment(),
+    'pale_mirror.frontier_v3.test_pilot.lifecycle_terminal': lifecycleTerminalAssertion ? 'true' : 'false'
   }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${scenario.server.host}:${scenario.server.port}`]);
   try {
     if (!(await stat(launch.cwd)).isDirectory()) throw new Error('not a directory');
@@ -304,6 +315,15 @@ function exited(child) {
     EXIT_CODES.set(child, observed);
   }
   return observed;
+}
+
+async function lifecycleSignalOrExit(signal, suffix, exitLabel) {
+  const acknowledgement = awaitLifecycleSignal(lifecycle, signal, suffix, 300_000);
+  const code = await Promise.race([
+    acknowledgement,
+    exited(child).then((exitCode) => { throw new Error(`${exitLabel} (${exitCode})`); })
+  ]);
+  return code;
 }
 
 function waitForPilot(child, predicate, startedAt, startupTimeoutMs, scenarioTimeoutMs) {

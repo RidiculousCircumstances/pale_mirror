@@ -366,6 +366,14 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment)
   const code = await exited(pilot);
   timing.end(phase, { exitCode: code });
   if (code !== 0) throw new Error(`isolated native pilot exited with ${code}`);
+  // Terminal semantics are frozen before the runner writes this nonce.  The server can now
+  // observe its ordinary demand-loss hysteresis/release without a client or a cleanup RCON
+  // request racing that ownership boundary.
+  await writeFile(join(lifecycle.directory, `demand-loss-${server.serverRunId}.token`),
+    `${lifecycle.identity.runId}:${server.serverRunId}\n`, { encoding: 'utf8', flag: 'wx' });
+  await serverSignalOrExit(server, LifecycleSignal.NORMAL_DEMAND_LOSS_RELEASE, server.serverRunId,
+    DURABLE_STOP_TIMEOUT_MS, 'normal demand-loss release');
+  await publishLifecycleBarrier(lifecycle, LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, { serverRunId: server.serverRunId, segment });
   const clientManifest = JSON.parse(await readFile(manifest, 'utf8'));
   clientSegments.push({ segment, manifest, runId: clientManifest.runId, timing: clientManifest.timing });
 }

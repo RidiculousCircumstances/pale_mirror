@@ -36,9 +36,12 @@ prerequisite.
 After every locally verifiable F0.VA gate is green, the two current repository
 histories must be combined by the post-F0.VA monorepo migration gate below and
 pushed to `git@github.com:RidiculousCircumstances/pale_mirror.git`. The
-four-worker workflow remains available for ordinary development, but a
-standalone provider-speed certification no longer blocks F0.VA or resumption of
-the original F0.V matrix. Provider timing is collected from later real work.
+four-worker workflow is the mandatory accelerated path for each newly started
+complete native matrix. It is infrastructure, not an extra semantic acceptance
+gate: a valid sequential matrix already in flight when this rule is adopted is
+not repeated merely to prove topology. A standalone provider-speed
+certification and any numeric speedup floor remain non-blocking; timing is
+collected from ordinary real work.
 
 This is the implementation source of truth for Frontier v3. Delivery follows
 [`engineering-agent-protocol.md`](engineering-agent-protocol.md): the engineer
@@ -50,22 +53,25 @@ necessary local full verification and repairs together (Gate A). Gate B is
 optional consultation for an actual architectural/authority boundary or impasse,
 not permission to run ordinary tests. Gate C reviews the completed result before
 the engineer issues the next order. No micro-orders, duplicate investigations or
-preference-only rewrites; routine liveness checks at most once per ten minutes
-across turns, with event-driven waiting preferred. Before every intervention,
-the engineer applies the protocol's enforceable supervisor self-check and names
-the permitted reason; status messages and intermediate process/diff inspection
-count together. Ordinary in-scope failures and repairs remain Terra-owned and
+preference-only rewrites. Under the binding 2026-09-07 cadence amendment, one
+bounded liveness check is mandatory after each ten minutes of executor silence
+across turns and never more frequently; event-driven waiting fills the interval.
+Before every intervention, the engineer applies the protocol's enforceable
+supervisor self-check and names the permitted reason. Status messages and
+process inspection count together, while source/diff inspection is never part
+of routine liveness. Ordinary in-scope failures and repairs remain Terra-owned and
 must not become terminal permission-only handoffs. Neither a green test nor an
 executor report authorizes self-advancement, a commit or deployment. Later-wave
 code is not added speculatively.
 
 For avoidance of doubt, the protocol's seven intervention reasons are
 exhaustive. In the absence of `ARCHITECTURE`, `AUTHORITY`, `RISK`, `IMPASSE`,
-`FINAL_REVIEW`, an explicit `USER_AUDIT`, or genuine `LIVENESS` uncertainty, the
-engineer does not contact Terra or inspect intermediate work. Ten minutes is an
-absolute liveness-check rate limit, never a cadence; normally there are no
-routine checks. Terra chooses the implementation and proceeds through ordinary
-failures and corrections to one coherent result. The engineer may require an
+`FINAL_REVIEW`, an explicit `USER_AUDIT`, or a due `LIVENESS` check, the engineer
+does not contact Terra or inspect intermediate work. The due check reads only
+collaboration state and exact task-owned process/job liveness plus a bounded
+progress marker; a healthy result creates no executor message or design review.
+Terra chooses the implementation and proceeds through ordinary failures and
+corrections to one coherent result. The engineer may require an
 observable invariant but may not turn a preferred algorithm, helper/file layout
 or command sequence into a blocking instruction.
 
@@ -86,8 +92,11 @@ aftermath, cross-front interaction, actual crash confirmation and rapid-switch
 neutrality. It does not create another wave or waive existing M0–M3 gates.
 Changed comparator/assertion meaning invalidates affected cached acceptance;
 old evidence retains only its original scope. The monorepo/publication sequence
-below remains mandatory; provider timing is advisory under the 2026-09-06
-product decision.
+below remains mandatory. Under the user decisions of 2026-09-06 and 2026-09-07,
+provider timing is advisory, while every newly started complete native matrix
+uses the four-slot isolated CI pipeline and fail-closed aggregate. This is a
+pipeline requirement, not an additional F0 semantic criterion or reason to
+repeat an already-running valid matrix.
 
 ### Standing rules
 
@@ -193,17 +202,29 @@ Migration procedure and stop conditions:
    collision-free verified tags. Re-read the remote refs and clone the result
    independently before treating the remote as canonical or retiring the two
    recoverable pre-migration bundles/checkouts.
-9. Keep the checked-in GitHub four-worker correctness matrix available for
-   ordinary development. Any result used as correctness evidence must have a
-   complete duplicate-free merge and exact commit/evidence identity. Record
-   comparable timing when it arises, but do not run or repair a standalone
-   campaign merely to meet a numeric speed ratio.
+9. Use the checked-in GitHub four-worker correctness pipeline for each newly
+   started complete native matrix. Require four simultaneously available
+   isolated slots, deterministic assignment, a complete duplicate-free
+   fail-closed merge and exact commit/evidence identity. Same-host slots are
+   valid only after capacity and isolation preflight. Do not repeat a valid
+   matrix that was already running when this requirement was adopted; worker
+   topology accelerates future pipeline work and is not a new F0 acceptance
+   assertion. Record comparable timing when it arises, but do not run or repair
+   a standalone campaign merely to meet a numeric speed ratio.
 10. After the clean remote clone and local F0.VA correctness gates pass, the
     engineer may accept migration and F0.VA, adopt the monorepo checkout for
     continued work and resume the preserved original F0.V matrix. Keep recovery
     bundles until the user explicitly accepts their removal.
 
 ## Mandatory seamless-foundation correction gate
+
+After F0.V receives independent Gate C acceptance and before F0.1 starts,
+execute the separate planned infrastructure checkpoint
+[`PM-F0VB-PARALLEL-NATIVE-PIPELINE-01`](work-orders/PM-F0VB-PARALLEL-NATIVE-PIPELINE-01.md).
+It activates and qualifies the reusable four-slot on-demand pipeline without
+rerunning F0.V or adding another F0.V correctness criterion. Every newly
+started complete native matrix after that checkpoint uses the sharded path;
+focused development tests remain selected by the ordinary test pyramid.
 
 Before resuming `MAT-004` or adding any other process, scene, inventory or
 effect family, execute F0 from

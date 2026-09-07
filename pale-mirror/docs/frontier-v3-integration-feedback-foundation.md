@@ -80,7 +80,8 @@ events, reducer, scheduler and persistence codecs through this matrix:
 7. intervention owned by the affected process;
 8. snapshot and WAL recovery at each complete semantic checkpoint;
 9. stale authority epoch rejection when that state exists;
-10. terminal identity, custody, conservation and schedule assertions.
+10. terminal identity, custody, physical-intent lifecycle, conservation and
+    schedule assertions.
 
 The harness compares exact semantic projections for identical input streams,
 not unconditional whole-world HOT/COLD digests or physical trajectories.
@@ -102,6 +103,18 @@ F0.2 supplies independent physical eligibility, bounded knowledge and deferred
 aftermath. This is not permission to delete that WIP or to substitute a fake
 process; it prevents an out-of-order HOT-only capability from making neutral
 observation change history.
+
+For this traversal-only profile, the harvest `PhysicalIntent` remains
+`PREPARED` in both neutral lanes. `RUNNING` is reserved for the later admitted
+durable-before-effect boundary; it is not a field/depot readiness signal or a
+scene-admission prerequisite. The versioned terminal projection and comparator
+must include the intent kind, status and observation binding, and a seeded
+negative must prove that a status mismatch fails the differential even when
+identity, cursor, lease, conservation and schedule otherwise match.
+The disabled crop effect may not disable traversal itself: on the ordinary due
+turn, a registered HOT driver commits an observed retained-edge arrival to the
+same cursor/continuation used by COLD while the intent stays `PREPARED` and crop
+progress remains zero.
 
 Treat the result as an internal Process/Scene SDK, not as a harvest helper or a
 new public mod API. A closed inventory may register stable family keys and typed
@@ -275,6 +288,18 @@ reconnect as the same declared ordinary player and clear all transient scenario
 state before continuing. The client cannot retain a canonical assertion result
 as authority after reconnect.
 
+For a successful non-restart lane, freeze and authenticate the terminal
+semantic projection before cleanup. The supervisor then requires the exact
+ordinary client-disconnect acknowledgement and lets the normal bounded
+demand-loss path checkpoint/release/fence the HOT scope before requesting RCON
+shutdown. This post-evidence state is retained only as attributed lifecycle
+evidence and cannot rewrite terminal assertions or differentials. Restart and
+crash variants preserve the state named by their recovery contract instead of
+using this drain. No lane may replace the sequence with an arbitrary delay,
+force-unload, timeout increase, canonical fixture mutation or synthetic save
+receipt; the exact server run must still save and exit within the existing
+bound.
+
 Use a Gradle daemon, a generated launch manifest or direct prepared Java launch
 as implementation detail, provided the manifest proves one build identity and
 packaged-JAR verification still checks the production artifact. Do not reuse a
@@ -358,10 +383,14 @@ turns timing noise into a false product defect.
   mandatory; historical timing is not promoted to current-source correctness;
 - mandatory substage F0.VA passes its persistent-matrix-client,
   content-addressed cache, executable test-pyramid, exact-barrier, four-worker
-  CI and immutable-development-fixture correctness gates. Numeric feedback and
-  CI speedups are advisory telemetry: retain the accepted 5.065026x local
-  result and collect future samples from ordinary F0 work, without a standalone
-  provider benchmark blocking product progress;
+  CI and immutable-development-fixture correctness gates. Each newly started
+  complete native matrix uses one deterministic four-slot isolated assignment
+  with a fail-closed aggregate; a valid sequential matrix already in flight when
+  this operating rule was accepted retains its semantic evidence and is not
+  repeated for topology. Numeric feedback and CI speedups are advisory
+  telemetry: retain the accepted 5.065026x local result and collect future
+  samples from ordinary F0 work, without a standalone provider benchmark
+  blocking product progress;
 - focused tests, `guardrails`, `check`, the applicable GameTest slice, full
   critical-code gate and packaged-JAR fixture-absence checks pass;
 - the architecture audit and Continuity Ledger record the evidence and name

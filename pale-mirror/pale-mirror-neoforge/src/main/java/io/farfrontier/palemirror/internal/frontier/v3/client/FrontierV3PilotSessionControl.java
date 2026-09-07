@@ -25,6 +25,7 @@ final class FrontierV3PilotSessionControl {
     private static final String MODE_PROPERTY = "pale_mirror.frontier_v3.test_pilot.session_mode";
     private static final String LIFECYCLE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory";
     private static final String LIFECYCLE_SEGMENT_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_segment";
+    private static final String LIFECYCLE_TERMINAL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_terminal";
     private static final int SCHEMA = 1;
 
     private static boolean awaitingResume;
@@ -80,7 +81,7 @@ final class FrontierV3PilotSessionControl {
         // visibly fatal instead of turning the persistent pilot into an idle client.
     }
 
-    static boolean enabled() { return controlDirectory() != null; }
+    static boolean enabled() { return controlDirectory() != null || lifecycleDirectory() != null; }
     static boolean resumed() { return matrix() ? epoch > 0 : controlDirectory() != null && Files.isRegularFile(controlDirectory().resolve("resumed")); }
     static boolean awaitingResume() { return awaitingResume; }
     static boolean reconnectInFlight() { return reconnectInFlight; }
@@ -192,7 +193,16 @@ final class FrontierV3PilotSessionControl {
         return true;
     }
     static String lifecycleSegment() {
-        if (enabled()) return matrix() ? requireSegment() : resumed() ? "after_restart" : "before_restart";
+        if (matrix()) return requireSegment();
+        // The standalone lifecycle protocol owns its explicit immutable segment name.  It is
+        // not a legacy one-process restart session, so deriving before_restart here would
+        // publish a different signal suffix than the supervisor authenticated at launch.
+        if (lifecycleDirectory() != null && controlDirectory() == null) {
+            String configured = System.getProperty(LIFECYCLE_SEGMENT_PROPERTY, "single");
+            if (!token(configured)) throw new IllegalArgumentException("pilot lifecycle segment is invalid");
+            return configured;
+        }
+        if (controlDirectory() != null) return resumed() ? "after_restart" : "before_restart";
         String configured = System.getProperty(LIFECYCLE_SEGMENT_PROPERTY, "single");
         if (!token(configured)) throw new IllegalArgumentException("pilot lifecycle segment is invalid");
         return configured;
@@ -227,7 +237,11 @@ final class FrontierV3PilotSessionControl {
     static void publishClientPrepared() throws IOException {
         if (!enabled() || preparedLifecycleSignal) return;
         JsonObject detail = new JsonObject(); detail.addProperty("clientPid", ProcessHandle.current().pid());
-        publishLifecycleSignal("prepared_client_ready", "client", detail);
+        // A restart owns two distinct ordinary client JVMs.  Their immutable prepared
+        // acknowledgements must therefore be segmented just like their terminal and
+        // disconnect evidence; one generic filename would reject the replacement before
+        // it can authenticate its own connection.
+        publishLifecycleSignal("prepared_client_ready", lifecycleSegment(), detail);
         preparedLifecycleSignal = true;
     }
 
@@ -242,6 +256,48 @@ final class FrontierV3PilotSessionControl {
     /** The final matrix segment remains live until the supervisor authenticates its result. */
     static boolean shouldAwaitFinalClose() {
         return matrix() && finalSegment && !awaitingFinalClose && !finalCloseRequested;
+    }
+
+    /**
+     * A one-shot isolated pilot has no restart-session descriptor, but its terminal result is
+     * still not permission for the wrapper to kill the client.  The supervisor first freezes
+     * the read-only terminal evidence, then writes this nonce-bound close token so Minecraft
+     * itself performs the ordinary disconnect that the server must observe.
+     */
+    static boolean shouldAwaitLifecycleFinalClose() {
+        return !matrix() && controlDirectory() == null && lifecycleDirectory() != null
+                && "true".equals(System.getProperty(LIFECYCLE_TERMINAL_PROPERTY, "false"))
+                && !awaitingFinalClose && !finalCloseRequested;
+    }
+
+    static boolean awaitingLifecycleFinalClose() {
+        return !matrix() && controlDirectory() == null && lifecycleDirectory() != null && awaitingFinalClose && !finalCloseRequested;
+    }
+
+    static void markAwaitingLifecycleFinalClose() {
+        if (!shouldAwaitLifecycleFinalClose()) {
+            throw new IllegalStateException("isolated pilot final close is not available");
+        }
+        awaitingFinalClose = true;
+    }
+
+    static boolean requestLifecycleFinalClose() throws IOException {
+        if (!awaitingLifecycleFinalClose()) return false;
+        String suffix = lifecycleSegment();
+        Path directory = requireLifecycleDirectory();
+        Path token = directory.resolve("close-client-" + suffix + ".token");
+        if (!Files.isRegularFile(token)) return false;
+        JsonObject identity = JsonParser.parseString(Files.readString(directory.resolve("identity.json"), StandardCharsets.UTF_8)).getAsJsonObject();
+        if (identity.get("runId") == null || !identity.get("runId").getAsString().matches("[0-9a-f-]{36}")) {
+            throw new IllegalArgumentException("pilot lifecycle identity is invalid");
+        }
+        String expected = identity.get("runId").getAsString() + ":" + suffix + "\n";
+        if (!expected.equals(Files.readString(token, StandardCharsets.UTF_8))) {
+            throw new IllegalArgumentException("isolated pilot final close nonce mismatch");
+        }
+        awaitingFinalClose = false;
+        finalCloseRequested = true;
+        return true;
     }
 
     static void markAwaitingFinalClose() {
@@ -309,6 +365,7 @@ final class FrontierV3PilotSessionControl {
         scenarioId = "";
         scenarioSha256 = "";
         finalSegment = false;
+        preparedLifecycleSignal = false;
         normalDisconnectAcknowledgement = "";
         persistentLifecycleFailure = false;
         expectedCrashSegment = false; expectedLossArmed = false; expectedLossAcknowledged = false; expectedLossCompletedActionPrefix = -1; awaitingExpectedLossProbe = false;

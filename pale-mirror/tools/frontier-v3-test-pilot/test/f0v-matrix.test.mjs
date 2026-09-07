@@ -37,6 +37,16 @@ test('matrix materializes declared lanes and compares every required differentia
     conservation: 64, schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(8), instant: 112, result: 'done' } }] }), /result diverged at cursor.index/);
 });
 
+test('checked-in neutral differential rejects an intent lifecycle mismatch despite equal former fields', async () => {
+  const checkedIn = JSON.parse(await readFile(new URL('../contracts/resource-site-harvest-f0v.json', import.meta.url), 'utf8'));
+  const differential = materializeF0vMatrix(checkedIn).find((entry) => entry.variant === 'neutral_observer_differential');
+  const cold = processDiagnostic(); const hotCold = structuredClone(cold);
+  hotCold.result.intentStatus = 'RUNNING';
+  assert.throws(() => compareDifferential(differential, { diagnostics: [{ value: cold }] },
+    { diagnostics: [{ value: hotCold }] }), /result diverged at result.intentStatus/,
+  'RUNNING changes recovery semantics even when cursor, custody, conservation and schedule remain equal');
+});
+
 test('selected differential evidence is explicitly pending while a complete local pair still compares', () => {
   const differential = materializeF0vMatrix(contract).find((entry) => entry.variant === 'neutral_observer_differential');
   const manifest = { diagnostics: [{ value: diagnostic() }] };
@@ -169,9 +179,21 @@ function diagnostic() {
     schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), instant: 112, result: 'done' };
 }
 
+function processDiagnostic() {
+  const body = { x: 14, y: 65, z: -22 };
+  return { kind: 'process', id: 'job:site-harvest-4-wheat-field-1', instant: 24608,
+    identity: { job: 'job:site-harvest-4-wheat-field-1', worker: 'resident:4-31' },
+    claims: { site: 'site:4-wheat-field', worker: 'resident:4-31', lease: null },
+    conservation: { outputItem: 'item:site-harvest-4-wheat-field-1-wheat', completedCropSlots: 0, pendingCropSlot: -1, totalCropSlots: 64 },
+    schedule: { count: 1, entries: [{ id: 'schedule:resource-site-harvest-cold-progress-4-wheat-field-1', dueAt: 24702,
+      kind: 'frontier.resource_site.harvest.cold_progress', weight: 1 }] },
+    cursor: { index: 17, retainedBody: body, actorBody: { ...body } },
+    result: { sitePhase: 'HARVESTING', intentKind: 'RESOURCE_SITE_HARVEST', intentStatus: 'PREPARED', intentObservationId: null, complete: false } };
+}
+
 function crashWindows() {
   return [
-    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_handoff'],
+    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_prepared'],
     ['physical_effect_visible_before_typed_observation', 'frontier.resource_site_harvest_progressed'],
     ['typed_observation_durable_before_next_process_checkpoint', 'frontier.resource_site_harvest_progressed'],
     ['hot_checkpoint_durable_before_drain_release', 'frontier.resource_site_harvest_hot_traversal_advanced'],

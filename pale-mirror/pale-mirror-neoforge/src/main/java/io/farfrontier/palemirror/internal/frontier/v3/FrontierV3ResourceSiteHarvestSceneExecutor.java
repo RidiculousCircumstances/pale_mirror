@@ -78,7 +78,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
             case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease,
-                    Optional.of(binding(runtime, FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId())));
+                    releaseBinding(runtime, state, lease));
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -159,11 +159,21 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 // and is never direct-line repaired.
                 if (atTraversalSurface(worker, target)) {
                     var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                    // The F0.V effect gate closes only the irreversible crop/output path.
+                    // A loaded arrival is still the observed form of the one retained
+                    // traversal action: consume its exact engine binding so HOT advances the
+                    // same cursor and continuation as COLD, while the intent remains PREPARED.
                     if (binding.isPresent()) {
                         submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
                                 checkpoint(job, lease, worker), binding.orElseThrow());
                     }
-                } else conflict(level, runtime, lease, "field-work-cursor-body-mismatch");
+                } else if (withinTraversalEdgeEnvelope(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()), target)) {
+                    // Minecraft resolves a descending grid edge through an intermediate feet
+                    // cell (the horizontal successor before gravity settles one block down).
+                    // It is still only the exact retained edge: keep driving that same target,
+                    // without advancing or rewriting the cursor, until an endpoint is observed.
+                    moveToTraversalSurface(level, worker, target);
+                } else conflict(level, runtime, lease, mismatchReason(worker, job));
                 return;
             }
             if (atTraversalSurface(worker, target)) {
@@ -183,7 +193,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return;
         }
         if (!job.atCurrentCropStation() || !atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-            conflict(level, runtime, lease, "field-work-station-mismatch"); return;
+            conflict(level, runtime, lease, stationMismatchReason(worker, job)); return;
         }
         // The F0.V/F0.1 reference is deliberately traversal-only in both modes.  Keep the
         // retained crop-effect path below intact for the F0.2 ownership cut, but do not let a
@@ -214,6 +224,23 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // navigator may approach continuously, but only the observed feet cell exactly above
         // the retained support can advance the canonical cursor.
         return worker.getBlockX() == surface.x() && worker.getBlockY() == surface.y() + 1 && worker.getBlockZ() == surface.z();
+    }
+
+    static boolean withinTraversalEdgeEnvelope(Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor current,
+                                               io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor next) {
+        return FrontierV3TraversalEdgeEnvelope.contains(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(
+                worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()), current, next);
+    }
+
+    private static String mismatchReason(Mob worker, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
+        return "field-work-cursor-body-mismatch:actual=" + worker.getBlockX() + "," + worker.getBlockY() + "," + worker.getBlockZ()
+                + ":retained=" + job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody()
+                + ":next=" + job.nextTraversalSurface().standingBody();
+    }
+
+    private static String stationMismatchReason(Mob worker, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
+        return "field-work-station-mismatch:actual=" + worker.getBlockX() + "," + worker.getBlockY() + "," + worker.getBlockZ()
+                + ":retained=" + job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
     }
 
     private static void moveToTraversalSurface(ServerLevel level, Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
@@ -297,5 +324,25 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                            io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId) {
         return FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), jobId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);
+    }
+
+    /**
+     * A normal HOT release must carry the sole retained COLD continuation.  An accepted player
+     * conflict is different: that same transaction has already cancelled its continuation and
+     * moved the field into CONFLICT, so release is only the durable body-exit receipt.  Asking
+     * for a now-retired binding would quarantine the server after the authoritative break.
+     */
+    static Optional<ScheduledAction> releaseBinding(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                    FrontierWorldState state, SceneLease lease) {
+        ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
+        var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
+        return releaseBinding(runtime.checkpointImage().orElseThrow(), job.id(),
+                state.resourceSites().site(job.siteId()).phase());
+    }
+
+    static Optional<ScheduledAction> releaseBinding(io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint,
+                                                    io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId,
+                                                    io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase phase) {
+        return FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(checkpoint, jobId, phase);
     }
 }

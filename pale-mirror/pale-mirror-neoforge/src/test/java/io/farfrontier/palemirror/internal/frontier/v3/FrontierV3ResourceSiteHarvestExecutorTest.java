@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class FrontierV3ResourceSiteHarvestExecutorTest {
@@ -34,6 +35,12 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
 
         assertEquals(loadedLater, FrontierV3ResourceSiteHarvestExecutor.firstRunnable(List.of(unloadedHead, loadedLater),
                 candidate -> candidate.equals(loadedLater)).orElseThrow());
+    }
+
+    @Test
+    void traversalOnlyProfileNeverSchedulesAnEffectExecutorForPreparedHarvests() {
+        assertFalse(FrontierV3ResourceSiteHarvestExecutor.effectExecutionAdmitted(),
+                "loaded traversal demand must not arm the crop-effect executor before F0.2");
     }
 
     private static PhysicalIntent intent(String settlement) {

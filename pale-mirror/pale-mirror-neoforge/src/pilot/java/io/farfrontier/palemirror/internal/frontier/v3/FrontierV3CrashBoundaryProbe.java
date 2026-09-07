@@ -35,7 +35,7 @@ final class FrontierV3CrashBoundaryProbe {
     static final String HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE = "hot_checkpoint_durable_before_drain_release";
     static final String RELEASE_DURABLE_BEFORE_COLD_RESUMPTION = "release_durable_before_cold_resumption";
     private static final java.util.Map<String, String> DURABLE_PAYLOADS = java.util.Map.of(
-            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, "frontier.resource_site_harvest_scene_lease_handoff",
+            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, "frontier.resource_site_harvest_scene_lease_prepared",
             TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT, "frontier.resource_site_harvest_progressed",
             HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, "frontier.resource_site_harvest_hot_traversal_advanced",
             RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, "frontier.scene_lease_released_v2");
@@ -233,13 +233,12 @@ final class FrontierV3CrashBoundaryProbe {
             if (!DURABLE_PAYLOADS.containsKey(boundary)) return false;
             if (LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION.equals(boundary)) {
                 return (revision == -1L || transaction.revision().value() == revision) && transaction.events().stream()
-                        // The traversal-only profile records a durable scene handoff, rather than
-                        // a crop effect.  It is the first record that binds the exact job lease to
-                        // its physical provider, so it is the attributable lease-before-effect
-                        // rendezvous.  A predecessor PREPARED record alone is not that handoff.
-                        .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestSceneLeaseHandoff handoff
-                                && FrontierSceneBehaviors.isResourceSiteHarvest(handoff.lease())
-                                && owner.equals(FrontierSceneBehaviors.resourceSiteHarvest(handoff.lease()).jobId().value()));
+                        // PREPARED is the durable lease-custody record before any physical
+                        // materialization. An optional later ambient handoff is not guaranteed
+                        // on the direct admission path and cannot replace that boundary.
+                        .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestSceneLeasePrepared prepared
+                                && FrontierSceneBehaviors.isResourceSiteHarvest(prepared.lease())
+                                && owner.equals(FrontierSceneBehaviors.resourceSiteHarvest(prepared.lease()).jobId().value()));
             }
             return (revision == -1L || transaction.revision().value() == revision) && transaction.events().stream().anyMatch(this::matches);
         }

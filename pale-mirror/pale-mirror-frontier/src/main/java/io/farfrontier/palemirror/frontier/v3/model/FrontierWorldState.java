@@ -290,7 +290,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (Map.Entry<PhysicalIntentId, PhysicalIntent> entry : physicalIntents.entrySet()) {
             PhysicalIntent intent = entry.getValue();
             if (!entry.getKey().equals(intent.id())) throw new IllegalArgumentException("physical intent map key must match intent identity");
-            if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+            boolean preparedConflictCustody = ResourceSitePhysicalIntentStateSupport.ownsPreparedConflictIntent(resourceSites, intent);
+            if ((intent.status() != PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && !preparedConflictCustody)
                     && !expectedActors.contains(intent.causeSubjectId()) && !inventory.cargo().containsKey(intent.causeSubjectId()) && !operations.containsKey(intent.causeSubjectId()) && !hiveColony.growthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.medicalOperations().containsKey(intent.causeSubjectId())
@@ -305,7 +306,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
             for (SubjectId subject : intent.subjectIds()) {
-                if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) continue;
+                if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || preparedConflictCustody) continue;
                 RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
                 boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
                 boolean reservedRouteConstructionCargo = intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING && routeConstruction != null && routeConstruction.cargoId().isEmpty()

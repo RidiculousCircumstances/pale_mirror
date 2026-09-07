@@ -208,6 +208,9 @@ final class FrontierV3DiagnosticJson {
                 + ",\"members\":" + lease.members().size() + ",\"body\":"
                 + (lease.memberPosition(job.workerId()) == null ? "null" : position(lease.memberPosition(job.workerId()))) + "}";
         String intentStatus = intent == null ? "MISSING" : intent.status().name();
+        String intentKind = intent == null ? "MISSING" : intent.kind().name();
+        String intentObservationId = intent == null || intent.postconditionObservationId().isEmpty() ? "null"
+                : "\"" + quote(intent.postconditionObservationId().orElseThrow().value()) + "\"";
         String actorBody = actor == null ? "null" : position(actor.body());
         int cursorLength = job.traversal().linearCorridorSurfaces().size();
         return base("process", id, checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
@@ -224,8 +227,9 @@ final class FrontierV3DiagnosticJson {
                 + ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength
                 + ",\"retainedBody\":" + position(job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
                 + ",\"actorBody\":" + actorBody + "}"
-                + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentStatus\":\"" + intentStatus
-                + "\",\"complete\":" + job.progress().complete() + "}}";
+                + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentKind\":\"" + intentKind
+                + "\",\"intentStatus\":\"" + intentStatus + "\",\"intentObservationId\":" + intentObservationId
+                + ",\"complete\":" + job.progress().complete() + "}}";
     }
 
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {

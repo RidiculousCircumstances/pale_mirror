@@ -32,6 +32,22 @@ final class FrontierV3PersistentPilotTransport {
         }
     }
 
+    /** Performs the isolated supervisor's distinct, lifecycle-directory close protocol. */
+    static void closeLifecycleIfRequested(Minecraft minecraft) {
+        try {
+            if (!FrontierV3PilotSessionControl.requestLifecycleFinalClose()) return;
+            minecraft.execute(() -> {
+                if (minecraft.getConnection() == null) {
+                    throw new IllegalStateException("isolated pilot has no live final connection to close");
+                }
+                minecraft.getConnection().getConnection().disconnect(Component.literal("Frontier v3 isolated-pilot terminal"));
+                minecraft.disconnect();
+            });
+        } catch (IOException | IllegalArgumentException failure) {
+            throw new IllegalStateException("isolated pilot final close control is invalid", failure);
+        }
+    }
+
     static void reconnectIfRequested(Minecraft minecraft, String server) {
         if (!FrontierV3PilotSessionControl.awaitingResume()) return;
         try {

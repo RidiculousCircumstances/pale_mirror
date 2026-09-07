@@ -12,6 +12,11 @@ orders and all subsequent revisions of PM-CI-COMPILE-DEPS-01; historical
 evidence and unrelated external/destructive restrictions are not retroactively
 changed.
 
+Binding liveness-cadence amendment accepted on 2026-09-07. It requires one
+bounded check after every ten minutes of executor silence while an assignment
+is `EXECUTING`; it does not restore implementation supervision or executor
+heartbeats.
+
 ### Normative force and precedence
 
 This amendment is a role boundary, not advice. `MUST`, `MUST NOT`, `ONLY` and
@@ -34,15 +39,22 @@ of, or intermediate inspection of an executing Terra assignment:
 4. `IMPASSE`: Terra reports an evidenced impasse or contradictory requirement;
 5. `FINAL_REVIEW`: Terra has delivered a coherent terminal result for Gate C;
 6. `USER_AUDIT`: the user explicitly requests an audit of current execution;
-7. `LIVENESS`: ownership or process liveness is genuinely uncertain and must be
-   resolved to protect work or resources. This is not a progress inquiry.
+7. `LIVENESS`: the mandatory bounded ten-minute check of executor and exact
+   task-owned process/job liveness, or resolution of concrete ownership/process
+   uncertainty. It is not an implementation-progress inquiry.
 
 Before acting, the engineer MUST name exactly one of these reasons in its own
 working note and in any message to Terra. If none applies, contact,
-interruption, intermediate diff/hash/process inspection and unsolicited design
-direction are prohibited. The ten-minute rule below is only an absolute rate
-limit on `LIVENESS`; it does not create a periodic polling entitlement. With no
-evidence of a liveness problem, the correct number of routine checks is zero.
+interruption, intermediate diff/hash inspection and unsolicited design direction
+are prohibited. While an assignment is `EXECUTING`, one bounded `LIVENESS`
+check is mandatory after each ten minutes without an executor milestone,
+exception or terminal packet, including across turns. It MUST NOT occur more
+frequently; an executor event resets the interval. The check is limited to
+collaboration status, the exact task-owned process/job handle and a bounded
+progress marker such as state/exit/elapsed time or output modification time. It
+MUST NOT inspect source, diffs, implementation choices or semantic intermediate
+results. A healthy check causes no message or direction to Terra and no ledger
+update merely to record a heartbeat.
 
 ## Mandatory autonomy and intervention boundary
 
@@ -87,10 +99,12 @@ Before contacting the executor or inspecting intermediate work, the engineer
 must identify one permitted reason: a user-requested audit, a concrete
 architecture/authority decision, an evidenced risk or reported impasse, final
 acceptance, or a permitted liveness check. If none applies, do not intervene.
-Elapsed time, an automatic continuation and curiosity about implementation are
-not reasons. The ten-minute limit covers all routine status mechanisms together,
-including messages requesting status and process/diff inspection; switching
-tools does not reset it.
+Elapsed time below the required interval, an automatic continuation and
+curiosity about implementation are not reasons. The mandatory ten-minute
+`LIVENESS` check is itself an allowed reason once due. The interval covers all
+routine status mechanisms together, including messages requesting status and
+process inspection; switching tools does not reset it. Source/diff inspection
+never becomes allowed merely because the liveness interval elapsed.
 
 An intervention names its reason in the message and states the outcome or
 decision needed, not a sequence of implementation commands. Do not create a
@@ -232,19 +246,19 @@ next step and decision needed. Do not send entire logs, JSON fingerprints or
 unchanged status repeatedly; link exact artifacts and project only needed fields.
 
 The engineer reviews a completed result, not every internal milestone or method.
-During silence, routine agent-status checks occur no more than once per ten
-minutes, including across automatic goal continuations. This is a maximum
-frequency, not a schedule or a requirement to poll. Earlier checks require
-a user request, a delivered milestone/blocker, or concrete evidence of a safety
-or authority risk. Passive event-driven waiting takes precedence over repeated
-status, diff, process and hash queries. A long test is not a hang without
-process/output evidence. The supervisor keeps the user informed according to
-session rules without turning those updates into executor polling. A passive
-wait timeout is not evidence of a hang and must not trigger a status request,
-new permission exchange or restart. Prefer event-driven waiting; do not build
-an extra heartbeat loop. Avoid repetitive user-facing "still waiting" messages
-where session-level communication requirements permit; never claim progress
-or change the ledger merely because another wait interval elapsed.
+During silence, perform exactly one bounded liveness check when each ten-minute
+interval becomes due, including across automatic goal continuations; never poll
+more frequently. Between checks, prefer event-driven waiting. The check reads
+only collaboration state and an exact known task-owned process/job handle plus a
+bounded progress marker. It does not read source/diffs or judge implementation.
+If the executor is active or the owned handle remains live and attributable,
+take no action. If the handle disappeared, a job is terminal but unreported, or
+two due checks show neither executor activity nor any live/moving owned handle,
+send one `LIVENESS` request; do not restart or kill anything solely from silence.
+A long test is not a hang while its handle remains live. A passive wait timeout
+is not evidence of failure. Avoid repetitive user-facing "still waiting"
+messages where session rules permit; never claim progress or change the ledger
+merely because another interval elapsed.
 
 The executor owns routine investigation and test operation. The engineer does
 not convert a reported implementation hypothesis into mandatory helper/state
@@ -296,10 +310,11 @@ sends proposed ledger facts. Compact or archive history through the existing
 ledger rules, never create another root or agent continuity file. Work orders
 retain specifications and review records, not a second active progress ledger.
 
-After interruption/compaction, read the ledger and current order. Inspect agent
-and command handles when ownership/liveness is uncertain, respecting the same
-cross-turn polling limit; automatic continuation alone does not justify a new
-inspection. Resume the same executor if available. Replacing it
+After interruption/compaction, read the ledger and current order. Resume the
+same ten-minute liveness interval across turns; inspect agent and exact command
+handles when the scheduled check is due or ownership/liveness is otherwise
+uncertain. Automatic continuation alone does not reset or accelerate the
+interval. Resume the same executor if available. Replacing it
 requires releasing the previous write/run ownership first. Preserve all WIP
 and output; do not restart the project from an old plan paragraph.
 

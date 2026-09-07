@@ -80,7 +80,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
 /**
  * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
  *
@@ -196,7 +195,8 @@ final class FrontierV3AmbientActorExecutor {
                 // any other process) semantics.
                 Optional<FrontierV3SceneBehaviorRegistry.StandingPositionProvider> preLeaseStanding = genericAdmission.preLeaseSceneCause(actorId)
                         .map(FrontierV3SceneBehaviorRegistry::preLeaseStandingPositionProvider);
-                if (preLeaseStanding.isPresent()) {
+                if (FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(preLeaseStanding.isPresent(),
+                        demand(level, location.supportingSurface().support()))) {
                     if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
                         submit(runtime, "ambient-pre-lease-prepare", actorId.value(),
                                 new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId,
@@ -210,6 +210,12 @@ final class FrontierV3AmbientActorExecutor {
                             admitted++;
                         }
                     }
+                } else if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
+                    Entity body = level.getEntity(entityId(state, actorId));
+                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId)) && drain(runtime, mob)) admitted++;
+                } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
+                        && abandonPreparedForReservation(level, runtime, state, actorId, lease)) {
+                    admitted++;
                 }
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
@@ -979,10 +985,8 @@ final class FrontierV3AmbientActorExecutor {
     private static BlockPos minecraftBody(BodyPosition body) { return new BlockPos(body.x(), body.y(), body.z()); }
     private static BodyPosition observedBody(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
     private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
-        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.get(runtime);
-        if (absentSince == null) return;
-        absentSince.remove(actorId);
-        if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
+        Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.get(runtime); if (absentSince == null) return;
+        absentSince.remove(actorId); if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
     }
     private static boolean playerWithin(ServerLevel level, BlockPos position, int radius) {
         return FrontierV3SceneDemand.observerWithin(level, List.of(position), radius);
@@ -991,8 +995,6 @@ final class FrontierV3AmbientActorExecutor {
                                                                                     String phase, String id, FrontierPayload payload) {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
-    private record PendingAdmission(Entity entity) { }
-    record ObservedPosition(double x, double y, double z) { }
-    enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT }
-    enum JoinDisposition { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
+    private record PendingAdmission(Entity entity) { } record ObservedPosition(double x, double y, double z) { }
+    enum Result { APPLIED, CURRENT, PENDING, DEFERRED, CONFLICT } enum JoinDisposition { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
 }

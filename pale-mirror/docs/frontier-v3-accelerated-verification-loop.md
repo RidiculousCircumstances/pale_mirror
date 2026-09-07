@@ -59,6 +59,17 @@ timing passively from ordinary subsequent F0 work and review a regression when
 it occurs. Correctness, isolation, exact identity, fail-closed evidence merge
 and required recovery semantics remain mandatory regardless of timing.
 
+User amendment, 2026-09-07: do not confuse an acceleration mechanism with a
+correctness criterion. Provision and use four simultaneously available isolated
+CI worker slots for each newly started complete native matrix so ordinary F0
+work benefits from sharding, but execution topology does not change the matrix's
+semantic acceptance rules. A valid sequential local matrix already in flight
+may finish and satisfy its declared F0 evidence; never repeat it solely to prove
+worker topology or speed. The four slots may share a host only after a bounded
+capacity and isolation preflight proves separate work roots, caches, ports,
+displays, worlds, process custody and evidence identities; otherwise use
+separate hosts. Runner queue time and any measured speedup remain advisory.
+
 Before implementation, retain the existing phase reports and add three
 repeatable same-host workflow baselines:
 
@@ -272,16 +283,16 @@ execution speed. An actual provider timing result is not required to close
 F0.VA; it is gathered opportunistically from later ordinary work rather than by
 repeated standalone certification runs.
 
-The current local checkout contains the GitHub Actions workflow but has no
-configured Git remote or proven native/timing runner. If provider access or
-runner provisioning is unavailable to the implementation agent, it must still
-complete the checked-in workflow, deterministic shard/merge CLI and their
-local protocol tests, then record the external evidence as
-`UNCONFIRMED_EXTERNAL`. Finish local F0.VA correctness gates and the
-history-preserving monorepo/push gate before resuming the original F0.V matrix.
-Provider availability or a missing numeric timing sample does not block that
-resumption. Report unavailable provider access/provisioning without creating a
-standalone remediation campaign.
+Historical F0.VA work was allowed to record unavailable provider execution as
+`UNCONFIRMED_EXTERNAL` after completing the checked-in workflow, deterministic
+shard/merge CLI and local protocol tests. For subsequent newly started complete
+native matrices, provision the bounded four-slot capacity, execute the exact
+candidate through the sharded pipeline and retain its aggregate and lane
+artifacts. Provider timing remains optional. A valid sequential matrix already
+running when this amendment was accepted retains its ordinary semantic value;
+do not duplicate it merely to change execution topology. Report unavailable
+access or capacity as an infrastructure defect to correct before the next new
+full matrix, not as grounds to weaken or expand a current slice's semantics.
 
 ## F0.VA.6 — immutable development fixture images
 
@@ -342,8 +353,11 @@ would only make failures faster and less attributable.
 - no coordination sleep remains in F0.V unless gameplay elapsed time is the
   named assertion;
 - four-worker workflow composition and merge tests reject duplicate, missing,
-  stale, foreign and incomparable lanes; any actual provider result claimed as
-  correctness evidence is complete, but no provider timing result is required;
+  stale, foreign and incomparable lanes; newly started complete native matrices
+  use four simultaneous isolated worker slots and produce one complete
+  exact-identity aggregate, while a valid matrix already in flight when the
+  requirement was adopted is not repeated solely for topology; no provider
+  timing result or numeric speedup floor is required;
 - the representative iterative-workflow timing is recorded as advisory
   evidence; the retained 5.065026x local result is sufficient for F0.VA;
 - the graceful-reference optimization has accepted measured benefit (the
@@ -357,7 +371,8 @@ would only make failures faster and less attributable.
 
 Only after this gate and the ordered history-preserving monorepo/publication
 boundary may the engineer authorize further full-matrix time closing the
-remaining original F0.V variants and crash windows. `UNCONFIRMED_EXTERNAL`
-records provider evidence still absent, but does not block product work.
-F0.1 remains paused until the original F0.V exit gate, not merely F0.VA, is
-complete.
+remaining original F0.V variants and crash windows. Historical
+`UNCONFIRMED_EXTERNAL` records why F0.VA lacked provider execution. It does not
+invalidate a semantically complete sequential F0.V matrix that was already
+running when the acceleration amendment was adopted. F0.1 remains paused until
+the original F0.V exit gate, not merely F0.VA, is complete.

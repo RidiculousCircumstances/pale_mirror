@@ -200,7 +200,8 @@ test('worker evidence extracts every terminal semantic class from a real declare
   const diagnostic = { kind: 'process', id: 'job:site-harvest-4-wheat-field-1', identity: { job: 'job', worker: 'resident' },
     claims: { site: 'site', worker: 'resident', lease: null }, conservation: { outputItem: 'wheat', completedCropSlots: 0, pendingCropSlot: -1, totalCropSlots: 64 },
     schedule: { count: 1, entries: [{ kind: 'continuation' }] }, cursor: { index: 4, retainedBody: { x: 1 }, actorBody: { x: 1 } },
-    result: { sitePhase: 'HARVESTING', complete: false } };
+    result: { sitePhase: 'HARVESTING', intentKind: 'RESOURCE_SITE_HARVEST', intentStatus: 'PREPARED',
+      intentObservationId: null, complete: false } };
   const evidence = terminalSemanticsFromManifest(lane, { status: 'ok', diagnostics: [{ observed: { value: diagnostic } }] });
   assert.deepEqual(Object.keys(evidence).sort(), ['claims', 'conservation', 'identity', 'result', 'schedule']);
   assert.equal(evidence.identity.values['identity.job'], 'job');

@@ -447,12 +447,19 @@ Exit:
   optimization; do not spend native runs chasing that difference;
 - test-only fault/fixture controls are absent from the production JAR;
 - neutral COLD and HOT/COLD lanes are exactly equal over the admitted
-  traversal projection, and the native crash matrix arms only lease,
+  traversal projection, including the canonical physical-intent kind, status
+  and observation binding; a traversal-only visit cannot promote `PREPARED`
+  to `RUNNING`, the disabled crop effect cannot suppress an observed HOT
+  traversal checkpoint, and the native crash matrix arms only lease,
   checkpoint and release boundaries applicable before F0.2;
 - the process descriptor owns schedule meaning while one engine-owned
   `ScheduledAction` remains the only durable deadline; HOT checkpoint/release
   validates its exact continuation binding atomically, and a release without a
   semantic step cannot reconstruct or shift that action;
+- every non-restart native lane freezes its terminal semantic evidence before
+  an exact normal client disconnect and ordinary bounded demand-loss
+  checkpoint/release precede durable shutdown; cleanup cannot alter acceptance,
+  while restart/crash lanes retain their declared recovery state;
 - the ledger explicitly resumes F0.1 only after the F0.V gate is recorded.
 
 ### F0.1 — process/execution ownership reference

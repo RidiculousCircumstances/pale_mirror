@@ -327,6 +327,18 @@ matrix only after the F0.VA exit gate passes.
 F0.V must leave a reusable fast HOT/COLD contract harness, deterministic
 crash-window controller, generated semantic scenario matrix, one-build/
 one-client restart runner, phase-timing report and automatic failure bundle.
+Its exact neutral projection includes canonical physical-intent lifecycle:
+traversal-only HOT admission cannot use `RUNNING` as readiness, because that
+status means a non-replayable effect may have begun and changes recovery.
+Keeping that effect `PREPARED` must not disable the registered HOT traversal
+checkpoint: observed arrival still advances the same process cursor and
+engine-owned continuation while crop/output progress remains zero.
+For a non-restart lane, authenticate terminal semantic evidence before the
+exact client's normal disconnect and ordinary bounded demand-loss
+checkpoint/release; request durable server shutdown only afterwards and keep
+that cleanup state outside the terminal projection. Restart/crash lanes retain
+their declared recovery state. Do not use timeout inflation, sleeps, forced
+chunks or test-only canonical cleanup.
 Its exit gate includes unchanged correctness evidence and measured benefit for
 the same graceful reference restart. The user accepted 22.52 percent on
 2026-09-05; 25 percent is an advisory target, not a blocking floor or reason to

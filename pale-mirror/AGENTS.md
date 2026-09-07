@@ -92,11 +92,15 @@ implementation; release verification follows it.
   `LIVENESS`. Name one before contacting Terra or inspecting intermediate work.
   If none applies, do not act. An older work-order checkpoint cannot override
   this boundary; only a real outcome/safety/authority limit remains binding.
-- Routine status checks are at most once per ten minutes across turns, not a
-  required schedule or polling entitlement. With no evidence of a liveness
-  problem, perform zero routine checks. Prefer event notifications; passive wait
-  timeouts do not justify polling or interruption. Do not maintain
-  heartbeat/documentation churn merely to demonstrate supervisory activity.
+- Binding user amendment 2026-09-07: while a Terra assignment is `EXECUTING`
+  and no milestone, exception or terminal packet has arrived, the engineer MUST
+  perform one bounded liveness check after each ten minutes of silence across
+  turns. Never check more frequently. An executor event resets the interval.
+  Inspect only collaboration status and the exact task-owned process/job handle
+  plus a bounded progress marker when one exists; do not inspect source, diffs,
+  implementation choices or semantic intermediate results. A healthy check
+  produces no message or direction to Terra and no ledger churn. A passive wait
+  timeout alone is not a failure; the scheduled check determines liveness.
 - Apply the protocol's enforceable supervisor self-check before intervening.
   Count all routine status mechanisms together; do not bypass the polling limit
   with messages or intermediate process/diff inspection. Ordinary in-scope

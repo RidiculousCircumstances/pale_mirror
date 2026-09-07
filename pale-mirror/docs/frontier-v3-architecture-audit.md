@@ -99,6 +99,8 @@ tests to satisfy these stronger exits.
 | V3-AUD-050 | P0 | Confirmed failure-model defect; replacement accepted | Expected gameplay actions and ambiguous reconciliation frequently converge on terminal `CONFLICT`/blocked paths designed for invariant safety. Without a generic owning response, ordinary death, theft, obstruction or partial transfer accumulates frozen work. FND-07 separates domain disruption, isolated reconciliation ambiguity and frontier-corrupting invariant failure. |
 | V3-AUD-051 | P1 | Underspecified product contract; correction accepted | “Same truth and fidelity” does not define whether neutral HOT and COLD combat/work require identical outcomes or only equivalent rules. Exact equality scripts HOT physics; unconstrained divergence makes observation alter history. FND-08 defines identity/conservation equality plus fixed-seed calibrated outcome tolerances and observer-neutrality gates. |
 | V3-AUD-052 | P0 | Confirmed defect | Six physical scene executors asked their support for one globally sorted ready candidate and only then tested player demand. An unloaded earlier field, workshop, service work, patrol, treatment or engineering site could therefore suppress a later naturally demanded process. Fresh F0.V `arrival_checkpoint_one` evidence reached the exact fourth harvest job's retained COLD cursor but could never grant its HOT lease because another site sorted first. |
+| V3-AUD-053 | P0 | Confirmed defect | The revision-5 candidate correctly kept the traversal-only harvest effect intent `PREPARED`, but guarded the HOT semantic traversal checkpoint with the disabled irreversible-crop capability. The physical worker can therefore move while the process-owned cursor and due continuation cannot advance, contradicting the paired-driver F0.V/F0.1 contract. |
+| V3-AUD-054 | P1 | Confirmed test-lifecycle defect | Fresh r70 and isolated r71 reached a valid `arrival_checkpoint_two` terminal state, then the non-restart runner requested RCON stop without an authenticated `client_normally_disconnected` barrier or ordinary post-evidence demand-loss hand-off. r71 remained server-thread `RUNNABLE` in `ChunkMap.processUnloads -> MinecraftServer.stopServer` beyond 90 seconds and emitted no durable-save receipt; r69 proves the receipt path itself works on a correctly bounded graceful restart. |
 
 ## Remediation status
 
@@ -160,6 +162,8 @@ finding is not silently removed merely because its ceiling no longer grows.
 | V3-AUD-050 | OPEN | Execute F0.5. Give every normal disruption and ambiguity a smallest owning aggregate, visible reason, bounded retry/repair/replan/abandonment and compaction rule. Retain whole-frontier quarantine only for canonical/persistence corruption. |
 | V3-AUD-051 | OPEN | Execute F0.6. Add fixed-seed HOT/COLD invariant and tolerance comparison, keyed randomness checks and an observer-neutrality report. Exact identities, claims and conservation remain strict; physical trajectories and hit sequences do not. |
 | V3-AUD-052 | OPEN; F0.V correction in verification | Every physical-capable support must publish a complete bounded stable canonical candidate inventory with no player/chunk input. The generic NeoForge demand selector alone scans that inventory and chooses the first naturally demanded member. Generic ambient reservation and read-only diagnostics must inspect all candidates, not a global first. The debt ratchet rejects any `*SceneSupport.nextCandidate(...)` call inside a physical scene executor. Close only after the focused physical selector GameTest and renewed fresh native F0.V arrival evidence prove the observed later harvest candidate receives its exact lease; this correction does not close F0.V or F0.1. |
+| V3-AUD-053 | OPEN; F0.V revision 6 | Keep the irreversible crop/output transition unreachable and its intent `PREPARED`, while the registered HOT driver still commits an observed due retained edge through the exact continuation binding. Close with focused paired-driver/negative evidence and the applicable native arrival/checkpoint/crash lanes; neither a moving body with a frozen cursor nor a HOT-only crop effect is acceptable. |
+| V3-AUD-054 | OPEN; F0.V revision 6 | Separate authenticated non-restart terminal evidence from disposable cleanup. Require exact normal client disconnect, ordinary bounded demand-loss checkpoint/release/fence, then the same server run's durable save, JVM exit and closed port. Do not alter restart/crash recovery state or increase the existing timeout. If a correctly ordered reproduction still stalls, reclassify the retained evidence as a runtime save/unload defect rather than weakening lifecycle proof. |
 
 ## Findings and required corrections
 
@@ -683,6 +687,37 @@ at `build/frontier-v3-scenarios/f0v-resource-site-harvest-f0v-ecbc8707-72c4-4df8
 F0.V may continue to exercise independent SDK and runner gates, but it cannot
 claim its native vertical exit until allowed F0.1 resumption corrects that
 selection order without making demand create work.
+
+Independent review of the later r58 F0.V candidate exposed a second neutral-
+observer defect at the same boundary. At exact `SimInstant 24608`, the COLD and
+HOT/COLD lanes retained the same worker, cursor 17, released lease, zero crop
+progress and byte-equal scheduled continuation, but the harvest
+`PhysicalIntent` was `PREPARED` in COLD and `RUNNING` after the HOT visit. The
+declarative comparator omitted `result.intentStatus`. This is not physical
+trajectory freedom: `RUNNING` is persisted canonical recovery state meaning a
+non-replayable effect may have begun, and restart/conflict reducers treat it
+differently. F0.V remains open until the traversal-only scene stops using the
+intent lifecycle as readiness/admission state, the exact projection includes
+kind/status/observation binding, and a mismatch fails before native execution.
+The correction must not enable the deferred F0.2 crop effect.
+
+Revision-5 WIP then exposed the inverse error: the HOT checkpoint submission was
+guarded by the false irreversible-crop capability. Intent neutrality does not
+mean traversal inactivity. Before F0.2, observed HOT arrival and ordinary COLD
+execution advance the same retained traversal cursor/continuation while both
+retain zero crop/output progress and `PREPARED` intent. This is V3-AUD-053 and
+must be corrected without merging traversal and effect lifecycle again.
+
+Fresh r70/r71 also classify a test-lifecycle defect rather than justify a
+timeout increase. The isolated non-restart lane authenticated its terminal
+assertion but never published/awaited an exact normal client disconnect before
+RCON stop. r71 then remained in vanilla `ChunkMap.processUnloads` for more than
+90 seconds and emitted no durable receipt; a focused r69 graceful restart
+emitted both exact receipts, including the final one after 7.36 seconds. F0.V
+revision 6 therefore makes terminal evidence immutable before a separately
+attributed ordinary demand-loss release and durable cleanup. If that corrected
+sequence still reproduces the stall, the result is runtime save/unload evidence,
+not a reason to hide it with more time. This is V3-AUD-054.
 
 Historically the F0.V runner's first measured same-host three-baseline/three-persistent-client
 series failed the then-mandatory numeric floor: its median

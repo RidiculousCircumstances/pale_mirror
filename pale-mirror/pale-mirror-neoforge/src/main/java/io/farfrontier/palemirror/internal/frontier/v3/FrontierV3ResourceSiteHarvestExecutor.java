@@ -56,6 +56,10 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private FrontierV3ResourceSiteHarvestExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        // F0.V is traversal-only.  This executor owns the durable-before-effect transition and
+        // must therefore stay inert until the process profile admits irreversible crop/output
+        // work; loaded demand may still acquire the separate retained traversal scene.
+        if (!effectExecutionAdmitted()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         // Never let an unloaded alphabetically first field starve a later naturally loaded one.
         // The bounded site aggregate is the work set: scanning it is capped by the bootstrap's
@@ -69,6 +73,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     }
 
     static List<PhysicalIntent> pendingIntents(FrontierWorldState state) {
+        if (!effectExecutionAdmitted()) return List.of();
         return state.resourceSites().sites().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteLifecycle::siteId))
                 .flatMap(lifecycle -> lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                         .map(ResourceSiteHarvestJob.class::cast).stream())
@@ -82,6 +87,10 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     static Optional<PhysicalIntent> firstRunnable(List<PhysicalIntent> candidates, Predicate<PhysicalIntent> runnable) {
         Objects.requireNonNull(candidates, "harvest candidates"); Objects.requireNonNull(runnable, "harvest runnable probe");
         return candidates.stream().filter(runnable).findFirst();
+    }
+
+    static boolean effectExecutionAdmitted() {
+        return io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted();
     }
 
     /** Explains a pending harvest without loading chunks or mutating either world. */

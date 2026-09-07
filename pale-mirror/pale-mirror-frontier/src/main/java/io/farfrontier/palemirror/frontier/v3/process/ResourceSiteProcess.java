@@ -139,7 +139,11 @@ public final class ResourceSiteProcess {
             throw new IllegalArgumentException("resource-site player conflict has no active exact harvest intent");
         }
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+        // A player break retires the field job, but traversal-only F0.V has not begun the
+        // non-replayable harvest effect. Keep PREPARED exactly; recovery custody applies only
+        // after a genuinely RUNNING effect.
+        intents.put(intent.id(), intent.status() == PhysicalIntentStatus.PREPARED
+                ? intent : intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.replaceAll((id, lease) -> {
             if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
@@ -158,7 +162,16 @@ public final class ResourceSiteProcess {
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
         reduceConflict(state, conflict.siteId(), conflict);
-        return List.of(new ProposedEvent(conflict.siteId(), conflict));
+        // The accepted player disposition retires the one engine-owned continuation in the same
+        // transaction.  Leaving its exact due action behind is not harmless bookkeeping: after
+        // conflict it would remain a durable false claim that the field worker may resume.
+        return job == null
+                ? List.of(new ProposedEvent(conflict.siteId(), conflict))
+                : List.of(new ProposedEvent(conflict.siteId(), conflict), new ProposedEvent(conflict.siteId(),
+                        new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())));
     }
 }

@@ -176,7 +176,7 @@ function terminalProjections() {
 
 function crashWindows() {
   return [
-    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_handoff'],
+    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_prepared'],
     ['physical_effect_visible_before_typed_observation', 'frontier.resource_site_harvest_progressed'],
     ['typed_observation_durable_before_next_process_checkpoint', 'frontier.resource_site_harvest_progressed'],
     ['hot_checkpoint_durable_before_drain_release', 'frontier.resource_site_harvest_hot_traversal_advanced'],

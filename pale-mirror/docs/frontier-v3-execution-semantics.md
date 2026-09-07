@@ -49,6 +49,19 @@ cooldowns, wounds, target commitments or keyed random opportunities. Repeated
 arrival/departure must confer no systematic advantage over declared calibration
 bounds; one final endpoint comparison is insufficient proof.
 
+Canonical recovery discriminators are part of that exact comparison. In
+particular, a durable `PhysicalIntent` status and its observation binding are
+not disposable HOT implementation detail: `RUNNING` asserts that a
+non-replayable effect may have begun and changes restart reconciliation. A
+traversal-only scene cannot use that status as a loaded-world readiness bit.
+Until the owning effect capability is admitted, neutral acquisition,
+checkpoint and release retain the same intent lifecycle as COLD; after it is
+admitted, only the effect owner crosses the durable-before-effect boundary.
+This restriction gates only the physical effect. A registered traversal HOT
+driver still commits an observed due edge to the same retained cursor and
+engine-owned continuation; otherwise HOT would merely move the representation
+while COLD alone advanced canonical work.
+
 ## 2. Presentation and physical interaction are independent inputs
 
 Presentation demand determines where detailed visible activity is required.
@@ -67,6 +80,16 @@ Zero aggregate presentation demand plus hysteresis permits a release attempt,
 not automatic release. Verify physical eligibility, checkpoint outstanding
 effects and fence the old owner before COLD acquires the affected scope.
 An unloaded serialized replica alone is not an active physical owner.
+
+Native evidence and disposable cleanup are separate causal phases. A
+non-restart lane first authenticates and freezes its terminal semantic
+projection, then obtains the ordinary client-disconnect acknowledgement and
+lets normal demand-loss handling reach a bounded safe checkpoint/release/fence
+before requesting server shutdown. Those cleanup transitions cannot count as
+scenario success or alter the frozen comparison. Restart and crash lanes do not
+drain state that their recovery contract intentionally preserves. In every
+case durable save, exact JVM exit and port closure remain observed lifecycle
+facts rather than inferred consequences of a request or timeout.
 
 ## 3. COLD knowledge is explicit and bounded
 

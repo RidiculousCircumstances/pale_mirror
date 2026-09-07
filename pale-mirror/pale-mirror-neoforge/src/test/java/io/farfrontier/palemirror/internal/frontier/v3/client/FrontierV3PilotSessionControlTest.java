@@ -17,6 +17,91 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FrontierV3PilotSessionControlTest {
     private static final String CONTROL = "pale_mirror.frontier_v3.test_pilot.session_control_directory";
     private static final String MODE = "pale_mirror.frontier_v3.test_pilot.session_mode";
+    private static final String LIFECYCLE = "pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory";
+    private static final String LIFECYCLE_SEGMENT = "pale_mirror.frontier_v3.test_pilot.lifecycle_segment";
+    private static final String LIFECYCLE_TERMINAL = "pale_mirror.frontier_v3.test_pilot.lifecycle_terminal";
+
+    @Test
+    void isolatedTerminalCloseUsesTheSupervisorAuthenticatedStandaloneSegment(@TempDir Path root) throws Exception {
+        Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
+        Files.createDirectory(lifecycle.resolve("staging"));
+        Files.createDirectory(lifecycle.resolve("signals"));
+        String runId = UUID.randomUUID().toString();
+        Files.writeString(lifecycle.resolve("identity.json"), "{\"schema\":1,\"runId\":\"%s\"}\n".formatted(runId), StandardCharsets.UTF_8);
+        String priorLifecycle = System.getProperty(LIFECYCLE);
+        String priorSegment = System.getProperty(LIFECYCLE_SEGMENT);
+        String priorTerminal = System.getProperty(LIFECYCLE_TERMINAL);
+        try {
+            System.setProperty(LIFECYCLE, lifecycle.toString());
+            System.setProperty(LIFECYCLE_SEGMENT, "initial");
+            System.setProperty(LIFECYCLE_TERMINAL, "true");
+            FrontierV3PilotSessionControl.reset();
+            assertEquals("initial", FrontierV3PilotSessionControl.lifecycleSegment());
+            assertTrue(FrontierV3PilotSessionControl.shouldAwaitLifecycleFinalClose());
+            FrontierV3PilotSessionControl.markAwaitingLifecycleFinalClose();
+            assertFalse(FrontierV3PilotSessionControl.requestLifecycleFinalClose());
+            Files.writeString(lifecycle.resolve("close-client-initial.token"), runId + ":initial\n", StandardCharsets.UTF_8);
+            assertTrue(FrontierV3PilotSessionControl.requestLifecycleFinalClose());
+            assertTrue(FrontierV3PilotSessionControl.finalCloseRequested());
+        } finally {
+            FrontierV3PilotSessionControl.reset();
+            restore(LIFECYCLE, priorLifecycle);
+            restore(LIFECYCLE_SEGMENT, priorSegment);
+            restore(LIFECYCLE_TERMINAL, priorTerminal);
+        }
+    }
+
+    @Test
+    void restartSessionKeepsItsResumedSegmentWhenLifecycleCorrelationIsAlsoPresent(@TempDir Path root) throws Exception {
+        Path control = Files.createDirectory(root.resolve("control"));
+        Files.writeString(control.resolve("resumed"), "runner-owned\n", StandardCharsets.UTF_8);
+        Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
+        String priorControl = System.getProperty(CONTROL);
+        String priorLifecycle = System.getProperty(LIFECYCLE);
+        String priorSegment = System.getProperty(LIFECYCLE_SEGMENT);
+        try {
+            System.setProperty(CONTROL, control.toString());
+            System.setProperty(LIFECYCLE, lifecycle.toString());
+            // This is the immutable launch-time initial segment.  It must not override the
+            // runner-owned resumed marker on the one persistent Minecraft client.
+            System.setProperty(LIFECYCLE_SEGMENT, "before_restart");
+            FrontierV3PilotSessionControl.reset();
+            assertEquals("after_restart", FrontierV3PilotSessionControl.lifecycleSegment());
+        } finally {
+            FrontierV3PilotSessionControl.reset();
+            restore(CONTROL, priorControl);
+            restore(LIFECYCLE, priorLifecycle);
+            restore(LIFECYCLE_SEGMENT, priorSegment);
+        }
+    }
+
+    @Test
+    void replacementRestartClientPublishesItsOwnPreparedReceiptRatherThanCollidingWithItsPredecessor(@TempDir Path root) throws Exception {
+        Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
+        Files.createDirectory(lifecycle.resolve("staging"));
+        Path signals = Files.createDirectory(lifecycle.resolve("signals"));
+        Files.writeString(lifecycle.resolve("identity.json"), "{\"schema\":1}\n", StandardCharsets.UTF_8);
+        String priorLifecycle = System.getProperty(LIFECYCLE);
+        String priorSegment = System.getProperty(LIFECYCLE_SEGMENT);
+        try {
+            System.setProperty(LIFECYCLE, lifecycle.toString());
+            System.setProperty(LIFECYCLE_SEGMENT, "before_restart");
+            FrontierV3PilotSessionControl.reset();
+            FrontierV3PilotSessionControl.publishClientPrepared();
+            assertTrue(Files.isRegularFile(signals.resolve("prepared_client_ready-before_restart.json")));
+
+            // A distinct Minecraft JVM starts with fresh process-local control state but shares
+            // the runner-owned lifecycle session after the server recovery.
+            System.setProperty(LIFECYCLE_SEGMENT, "after_restart");
+            FrontierV3PilotSessionControl.reset();
+            FrontierV3PilotSessionControl.publishClientPrepared();
+            assertTrue(Files.isRegularFile(signals.resolve("prepared_client_ready-after_restart.json")));
+        } finally {
+            FrontierV3PilotSessionControl.reset();
+            restore(LIFECYCLE, priorLifecycle);
+            restore(LIFECYCLE_SEGMENT, priorSegment);
+        }
+    }
 
     @Test
     void finalMatrixCloseRequiresTheExactSupervisorToken(@TempDir Path root) throws Exception {

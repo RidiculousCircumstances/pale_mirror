@@ -50,9 +50,10 @@ This order inherits the protocol's exhaustive intervention taxonomy. It MUST
 NOT add routine progress checkpoints, implementation-recipe approvals or
 separate permissions for tests/fixes already inside the declared envelope.
 Historical Gate A/B wording is non-operative when a later revision grants the
-complete outcome. With no evidenced liveness uncertainty, routine checks are
-zero; ten minutes is only the absolute maximum frequency when `LIVENESS`
-actually applies.
+complete outcome. While the order is `EXECUTING`, one bounded `LIVENESS` check
+is mandatory after each ten minutes without an executor event and never more
+frequently. It is limited to collaboration state, exact task-owned process/job
+liveness and a bounded progress marker; it never includes source/diff review.
 
 - Initial grant (Gate A): authorize diagnosis, implementation, local focused
   and full verification, and corrections together. Acknowledgement does not
@@ -71,8 +72,9 @@ actually applies.
   or impasse, final review, explicit user audit or genuine liveness uncertainty.
   Use one protocol reason label. File/helper/algorithm/command preferences are
   not blocking findings and implementation suggestions remain non-binding.
-- Reports by completion or exception; no heartbeat. Routine liveness checks at
-  most once per ten minutes across turns, not automatically every ten minutes.
+- Reports by completion or exception; no executor heartbeat. The engineer
+  performs the mandatory bounded ten-minute liveness check without messaging
+  Terra when collaboration/process evidence is healthy.
 - Apply the protocol's supervisor self-check before every intervention. The
   limit covers status messages and process/diff queries together. No terminal
   progress-only handoff requesting ordinary in-scope continuation permission.

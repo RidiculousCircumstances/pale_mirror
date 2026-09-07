@@ -18,6 +18,12 @@ import java.util.Map;
 final class ResourceSitePhysicalIntentStateSupport {
     private ResourceSitePhysicalIntentStateSupport() { }
 
+    /** Traversal borrows a PREPARED effect request but never begins that effect before F0.2. */
+    static boolean admitsTraversal(PhysicalIntent intent) {
+        return intent != null && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING);
+    }
+
     static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
             validateHarvestBinding(state.resourceSites().site(intent.causeSubjectId()), intent); return;
@@ -38,6 +44,24 @@ final class ResourceSitePhysicalIntentStateSupport {
                 || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent());
+    }
+
+    /**
+     * A player-conflicted traversal-only harvest retains its PREPARED effect request as terminal
+     * custody evidence.  It is deliberately narrower than a generally live intent: the exact
+     * conflicted field and its retained harvest job still own every referenced subject, while no
+     * executor may resume the job.
+     */
+    static boolean ownsPreparedConflictIntent(ResourceSiteState sites, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.status() != PhysicalIntentStatus.PREPARED) return false;
+        ResourceSiteLifecycle lifecycle = sites.sites().get(intent.causeSubjectId());
+        if (lifecycle == null || lifecycle.phase() != ResourceSitePhase.CONFLICT) return false;
+        try {
+            validateHarvestBinding(lifecycle, intent);
+            return true;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ResourceSitePreparationObservation receipt,

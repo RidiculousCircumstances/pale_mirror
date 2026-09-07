@@ -127,6 +127,34 @@ same process-owned cadence transition from the validated continuation that the
 COLD due-action planner would apply. The binding is not a second schedule and
 does not expose the complete queue to model policy.
 
+`PhysicalIntent` lifecycle is canonical recovery state, not scene readiness.
+`PREPARED` records an effect that has not begun; `RUNNING` records that its
+non-replayable physical effect may already have begun and therefore activates
+postcondition inspection and ambiguity handling after restart. A scene may not
+promote an intent merely because its chunks are loaded or a player requests
+presentation. In a traversal-only capability profile, a neutral HOT visit and
+release must retain the same intent kind, status and observation binding as the
+equivalent COLD history. Once an effect-capable slice is admitted, only its
+registered physical-effect owner may enter `RUNNING` at the durable-before-
+effect boundary.
+
+The effect capability and the traversal driver are separate gates. While the
+crop effect is unavailable, observed HOT arrival still advances the same
+process-owned traversal cursor and continuation that COLD would advance; only
+the irreversible crop/output transition stays disabled. A feature flag or
+intent status may not turn a traversal-only HOT scene into a body that moves
+without committing its due semantic checkpoint.
+
+A disposable non-restart proof ends its semantic evidence at the authenticated
+terminal assertion. Cleanup begins only after that boundary: the exact client
+disconnects normally, the server processes ordinary bounded demand loss and a
+safe checkpoint/release/fence, and only then does the supervisor request normal
+Minecraft shutdown. Cleanup state remains separately attributable and cannot
+rewrite the terminal projection. Restart/crash scenarios preserve the exact
+state named by their recovery contract instead. Neither path may replace a
+durable-save receipt with a timeout, forced unload, sleep or test-only canonical
+mutation.
+
 NeoForge implements storage and Minecraft ports. It may submit commands and
 observations and consume projections/intents, but it never receives mutable
 domain collections. Public API types contain stable IDs, enums, fixed-point

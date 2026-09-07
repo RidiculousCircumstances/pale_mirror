@@ -6,7 +6,6 @@ import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -209,6 +208,10 @@ public final class FrontierV3TestPilotClient {
             return;
         }
         if (actions == null || !FrontierV3PilotSessionControl.mayContinueScenarioActions()) return;
+        if (FrontierV3PilotSessionControl.awaitingLifecycleFinalClose()) {
+            FrontierV3PersistentPilotTransport.closeLifecycleIfRequested(minecraft);
+            return;
+        }
         if (FrontierV3PilotSessionControl.awaitingFinalClose()) {
             FrontierV3PersistentPilotTransport.closeIfRequested(minecraft);
             return;
@@ -870,7 +873,7 @@ public final class FrontierV3TestPilotClient {
                     Minecraft.getInstance().level.getGameTime() + CAPTURE_SETTLE_TICKS, false);
         }
         else if (!runningSetup && index >= actions.size()) {
-            completeScenario();
+            FrontierV3TestPilotCompletion.complete(actions.size());
         }
         if (completedAction > 0) {
             JsonObject detail = new JsonObject(); detail.addProperty("actionStep", completedAction); detail.addProperty("actionType", type);
@@ -909,7 +912,7 @@ public final class FrontierV3TestPilotClient {
                 Files.deleteIfExists(ready);
                 captureBarrier = null;
                 PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_captured after={} name={}", barrier.after(), barrier.name());
-                if (index >= actions.size()) completeScenario();
+                if (index >= actions.size()) FrontierV3TestPilotCompletion.complete(actions.size());
             }
         } catch (IOException failure) {
             throw new IllegalStateException("visual frame handshake failed for " + barrier.name(), failure);
@@ -918,57 +921,6 @@ public final class FrontierV3TestPilotClient {
     private static Path captureControlDirectory() {
         String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, "");
         return configured.isBlank() ? null : Path.of(configured);
-    }
-    private static void completeScenario() {
-        String segment = FrontierV3PilotSessionControl.lifecycleSegment();
-        if (FrontierV3PilotSessionControl.expectedCrashSegment()) {
-            // A declared fault can park after the final ordinary player action.  Keep the same
-            // connection idle only for the runner's bounded real-probe/arm wait; publishing a
-            // terminal result or replaying actions would both falsify the crash boundary.
-            if (!FrontierV3PilotSessionControl.expectedLossArmed()) FrontierV3PilotSessionControl.markAwaitingExpectedLossProbe();
-            return;
-        }
-        if (FrontierV3PilotSessionControl.shouldAwaitNextSegment()) {
-            try {
-                String runId = FrontierV3PilotSessionControl.runId();
-                FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
-                FrontierV3PilotSessionControl.markAwaitingResume();
-                PaleMirrorMod.LOGGER.info("PMV3_PILOT session_segment_complete runId={}", runId);
-                // Queue the normal client disconnect after this tick.  Calling it re-entrantly
-                // from the scenario action tick can leave the live network connection open
-                // until server shutdown, which makes a persistent-client restart slower and
-                // fails to prove an ordinary departure.
-                Minecraft minecraft = Minecraft.getInstance();
-                minecraft.execute(() -> {
-                    if (minecraft.getConnection() == null) {
-                        throw new IllegalStateException("persistent pilot has no live connection to close");
-                    }
-                    minecraft.getConnection().getConnection().disconnect(Component.literal("Frontier v3 persistent-pilot restart"));
-                    minecraft.disconnect();
-                });
-                return;
-            } catch (IOException | IllegalArgumentException failure) {
-                throw new IllegalStateException("persistent pilot could not publish its exact restart boundary", failure);
-            }
-        }
-        if (FrontierV3PilotSessionControl.shouldAwaitFinalClose()) {
-            try {
-                FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
-                FrontierV3PilotSessionControl.markAwaitingFinalClose();
-                PaleMirrorMod.LOGGER.info("PMV3_PILOT final_segment_awaiting_supervisor_close runId={}", FrontierV3PilotSessionControl.runId());
-                return;
-            } catch (IOException | IllegalArgumentException failure) {
-                throw new IllegalStateException("persistent pilot could not publish its final matrix boundary", failure);
-            }
-        }
-        try {
-            FrontierV3PilotSessionControl.publishLifecycleSignal("scenario_segment_complete", segment, new JsonObject());
-        } catch (IOException | IllegalArgumentException failure) {
-            throw new IllegalStateException("pilot could not acknowledge terminal scenario segment", failure);
-        }
-        // The outer runner must still receive the server response to the final
-        // read-only assertion before it closes this ordinary client.
-        PaleMirrorMod.LOGGER.info("PMV3_PILOT completed scenario actions={}", actions.size());
     }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
