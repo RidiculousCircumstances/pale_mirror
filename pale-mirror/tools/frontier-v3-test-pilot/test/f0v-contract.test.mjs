@@ -147,14 +147,25 @@ function validContract(family, canonicalOwner) {
       server: { host: '127.0.0.1', port: 25575 }, pilot: { username: 'Pilot' }, setup: [], actions: [] },
     variants: Object.fromEntries(REQUIRED_VARIANTS.map((name) => [name, {
       driver: drivers[name], evidence: ['actor', 'cursor'],
-      actions: [{ type: 'inspect', view: 'summary', id: '' }, { type: 'inspect', view: 'summary', id: '' }],
+      actions: name === 'unload_return'
+        ? Array.from({ length: 6 }, () => ({ type: 'inspect', view: 'summary', id: '' }))
+        : name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two'
+        ? [{ type: 'inspect', view: 'summary', id: '' }, { type: 'wait_until_diagnostic', view: 'summary', id: '',
+          expect: { status: 'ok', claims: { lease: { status: 'HOT' } } }, requireIncreaseAt: 'cursor', timeoutMs: 1_000 }]
+        : [{ type: 'inspect', view: 'summary', id: '' }, { type: 'inspect', view: 'summary', id: '' }],
       ...(drivers[name] === 'SNAPSHOT_WAL' || drivers[name] === 'CRASH_WAL' ? { restartAfterAction: 1 } : {}),
       ...(drivers[name] === 'CRASH_WAL' ? { crashWindows: crashWindows() } : {}),
       ...((name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two') ? { arrivalCheckpoint: {
-        view: 'summary', id: '', path: 'cursor' } } : {}),
+        stage: 'early.approach', view: 'summary', id: '', path: 'cursor', beforeAction: 1, after: 'terminal', minimumAdvance: 1 } } : {}),
+      ...(name === 'unload_return' ? { hotColdCycles: [
+        { enteredHotAction: 1, releasedColdAction: 2, returnedHotAction: 3 },
+        { enteredHotAction: 4, releasedColdAction: 5, returnedHotAction: 6 }
+      ] } : {}),
       assertions: [
+        ...((name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two')
+          ? [{ after: 1, view: 'summary', id: '', expect: { status: 'ok', claims: { lease: null } } }] : []),
         ...(name === 'never_loaded' ? [{ after: 1, view: 'summary', id: '', expect: { status: 'ok', claims: { lease: null } } }] : []),
-        { after: 2, view: 'summary', id: '', expect: {
+        { after: name === 'unload_return' ? 6 : 2, view: 'summary', id: '', expect: {
           status: 'ok', identity: 'actor:test', claims: { owner: 'claim:test', lease: null }, conservation: 64, schedule: 'schedule:test', result: 'RUNNING' } }
       ],
       terminalProjections: terminalProjections(),

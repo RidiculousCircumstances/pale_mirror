@@ -32,20 +32,24 @@ export function validatePersistentMatrixPlan(value) {
       throw new Error('persistent matrix segment is malformed');
     }
     if (segment.final !== (epoch === value.segments.length - 1)) throw new Error('persistent matrix final segment is malformed');
+    if (segment.reuseServer !== undefined && segment.reuseServer !== true) {
+      throw new Error('persistent matrix compatible-case declaration is malformed');
+    }
     seen.add(segment.id);
     if (assigned && (!token(segment.laneId) || !token(segment.originalScenarioId) || !sha256(segment.originalScenarioSha256)
         || !Number.isInteger(segment.originalActionOffset) || segment.originalActionOffset < 0)) {
       throw new Error('assigned persistent matrix segment is malformed');
     }
     if (runtimeAssigned && !sha256(segment.compiledScenarioSha256)) throw new Error('assigned persistent runtime segment compiled identity is malformed');
-    if (runtimeAssigned) exactFields(segment, ['id', 'laneId', 'scenarioId', 'scenarioSha256', 'compiledScenarioSha256', 'originalScenarioId', 'originalScenarioSha256', 'originalActionOffset', 'worldKey', 'actionCount', 'completion', 'final', ...(completion === 'expected_crash' ? ['expectedCrash'] : [])], 'assigned persistent runtime segment');
+    if (runtimeAssigned) exactFields(segment, ['id', 'laneId', 'scenarioId', 'scenarioSha256', 'compiledScenarioSha256', 'originalScenarioId', 'originalScenarioSha256', 'originalActionOffset', 'worldKey', 'actionCount', 'completion', 'final', ...(segment.reuseServer === true ? ['reuseServer'] : []), ...(completion === 'expected_crash' ? ['expectedCrash'] : [])], 'assigned persistent runtime segment');
     if (runtimeAssigned) return Object.freeze({ id: segment.id, laneId: segment.laneId, scenarioId: segment.scenarioId,
       scenarioSha256: segment.scenarioSha256, compiledScenarioSha256: segment.compiledScenarioSha256,
       originalScenarioId: segment.originalScenarioId, originalScenarioSha256: segment.originalScenarioSha256,
       originalActionOffset: segment.originalActionOffset, worldKey: segment.worldKey, actionCount: segment.actionCount,
-      completion, ...(completion === 'expected_crash' ? { expectedCrash: Object.freeze(structuredClone(segment.expectedCrash)) } : {}), final: segment.final });
+      completion, ...(segment.reuseServer === true ? { reuseServer: true } : {}), ...(completion === 'expected_crash' ? { expectedCrash: Object.freeze(structuredClone(segment.expectedCrash)) } : {}), final: segment.final });
     return Object.freeze({ id: segment.id, scenarioId: segment.scenarioId, scenarioSha256: segment.scenarioSha256,
       worldKey: segment.worldKey, actionCount: segment.actionCount, final: segment.final, completion,
+      ...(segment.reuseServer === true ? { reuseServer: true } : {}),
       ...(assigned ? { laneId: segment.laneId, originalScenarioId: segment.originalScenarioId,
         originalScenarioSha256: segment.originalScenarioSha256, compiledScenarioSha256: segment.compiledScenarioSha256,
         originalActionOffset: segment.originalActionOffset } : {}),
@@ -320,7 +324,20 @@ export function validatePersistentMatrixEvidence(plan, evidence) {
     }
     return run;
   });
-  if (new Set(runs.map((run) => run.serverRunId)).size !== runs.length) throw new Error('persistent matrix reuses a server run identity');
+  for (const [epoch, run] of runs.entries()) {
+    const segment = checked.segments[epoch];
+    if (!segment.reuseServer) {
+      if (runs.slice(0, epoch).some((prior) => prior.serverRunId === run.serverRunId || prior.serverPid === run.serverPid)) {
+        throw new Error('persistent matrix reuses a server run identity outside a declared compatible case');
+      }
+      continue;
+    }
+    const predecessor = runs[epoch - 1]; const prior = checked.segments[epoch - 1];
+    if (!predecessor || !prior || prior.completion === 'expected_crash' || predecessor.worldKey !== run.worldKey
+        || predecessor.serverRunId !== run.serverRunId || predecessor.serverPid !== run.serverPid) {
+      throw new Error('persistent matrix compatible case does not retain its exact predecessor server');
+    }
+  }
   const crashSegments = checked.segments.map((segment, epoch) => ({ segment, epoch })).filter(({ segment }) => segment.completion === 'expected_crash');
   if (evidence.crashReceipts.length !== crashSegments.length) throw new Error('persistent matrix crash receipt coverage is incomplete');
   for (const [{ segment, epoch }, receipt] of crashSegments.map((expected, index) => [expected, evidence.crashReceipts[index]])) {
@@ -437,14 +454,21 @@ function expectedLifecycle(plan, runs, clientPid, port) {
     if (!segment.final) {
       const current = runs[epoch]; const next = runs[epoch + 1];
       events.push(event(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, { segment: segment.id }));
-      events.push(event(LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: current.serverRunId, segment: segment.id }));
-      events.push(event(LifecycleBarrier.GAME_PORT_CLOSED, { port, serverRunId: current.serverRunId, segment: segment.id }));
-      events.push(event(LifecycleBarrier.RECOVERY_SERVER_READY, { serverRunId: next.serverRunId, serverPid: next.serverPid, segment: next.segment }));
-      events.push(event(LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, { clientPid, segment: next.segment }));
+      events.push(event(LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, { serverRunId: current.serverRunId, segment: segment.id }));
+      if (plan.segments[epoch + 1].reuseServer) {
+        events.push(event(LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED, { serverRunId: current.serverRunId, segment: next.segment }));
+        events.push(event(LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, { clientPid, segment: next.segment }));
+      } else {
+        events.push(event(LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: current.serverRunId, segment: segment.id }));
+        events.push(event(LifecycleBarrier.GAME_PORT_CLOSED, { port, serverRunId: current.serverRunId, segment: segment.id }));
+        events.push(event(LifecycleBarrier.RECOVERY_SERVER_READY, { serverRunId: next.serverRunId, serverPid: next.serverPid, segment: next.segment }));
+        events.push(event(LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, { clientPid, segment: next.segment }));
+      }
     } else {
       // The final departure is also a normal, typed disconnect. It happens only after the
       // supervisor has authenticated its terminal result and published the close token.
       events.push(event(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, { segment: segment.id }));
+      events.push(event(LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, { serverRunId: runs[epoch].serverRunId, segment: segment.id }));
     }
   }
   events.push(event(LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, { assertionCount: plan.segments.length }));

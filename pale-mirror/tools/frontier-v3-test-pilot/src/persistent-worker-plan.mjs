@@ -68,7 +68,7 @@ export function compileAssignedPersistentMatrix(workerPlan, sourcePlan, { worker
     id: segment.id, laneId: lane.id, scenarioId: segment.scenario.id, scenarioSha256: segment.scenarioSha256,
     originalScenarioId: segment.originalScenarioId, originalScenarioSha256: segment.originalScenarioSha256,
     originalActionOffset: segment.originalActionOffset, worldKey: segment.worldKey, actionCount: segment.actionCount,
-    completion: segment.completion, scenario: structuredClone(segment.scenario), ...(segment.crash === undefined ? {} : { expectedCrash: { ...structuredClone(segment.crash), laneId: lane.id } })
+    completion: segment.completion, ...(segment.reuseServer === true ? { reuseServer: true } : {}), scenario: structuredClone(segment.scenario), ...(segment.crash === undefined ? {} : { expectedCrash: { ...structuredClone(segment.crash), laneId: lane.id } })
   })));
   const core = { schema: 1, kind: ASSIGNED_PERSISTENT_MATRIX_KIND, workerId: checked.source.workerId,
     buildIdentitySha256: checked.source.buildIdentitySha256, source: structuredClone(checked.source),
@@ -80,6 +80,8 @@ export function compileAssignedPersistentMatrix(workerPlan, sourcePlan, { worker
 function compileLane(lane) {
   validateScenario(lane.scenario);
   const worldKey = `lane-${hash(lane.id).slice(0, 24)}`;
+  const batch = compatibleSegments(lane.scenario);
+  if (batch !== null) return lanePlan(lane, worldKey, batch);
   const split = restartSegments(lane.scenario);
   if (split === null) return lanePlan(lane, worldKey, [{ completion: 'terminal', scenario: lane.scenario }]);
   if (split.mode === 'graceful') {
@@ -109,10 +111,11 @@ function lanePlan(lane, worldKey, entries) {
       laneId: lane.id,
       originalScenarioId: lane.scenario.id,
       originalScenarioSha256: lane.scenarioSha256,
-      originalActionOffset: index === 0 ? 0 : lane.scenario.restart?.afterAction,
+      originalActionOffset: entry.originalActionOffset ?? (index === 0 ? 0 : lane.scenario.restart?.afterAction),
       order: index,
       worldKey,
       completion: entry.completion,
+      ...(entry.reuseServer === true ? { reuseServer: true } : {}),
       scenario,
       scenarioSha256: hash(scenario),
       actionCount: scenario.actions.length
@@ -120,6 +123,32 @@ function lanePlan(lane, worldKey, entries) {
     return entry.crash === undefined ? core : { ...core, crash: structuredClone(entry.crash) };
   });
   return { id: lane.id, originalScenarioSha256: lane.scenarioSha256, worldKey, segments };
+}
+
+/** Compiles the one contract-declared same-world, non-restart pair into exact continuations. */
+function compatibleSegments(scenario) {
+  // The immutable F0.V scenario itself declares the early arrival checkpoint and its asserted
+  // prefix.  That is the sole currently admitted reuse case: the distinct later arrival remains
+  // a separate world, and every restart/crash declaration remains fresh by construction.
+  const checkpoint = scenario.f0vArrivalCheckpoint;
+  if (!checkpoint || checkpoint.stage !== 'early.approach') return null;
+  const split = checkpoint.beforeAction;
+  if (!Number.isInteger(split) || scenario.restart !== undefined || split < 1 || split >= scenario.actions.length) {
+    return null;
+  }
+  const segment = (first, end, reuseServer) => {
+    const assertions = scenario.assertions.filter((entry) => Number.isInteger(entry.after) && entry.after > first && entry.after <= end)
+      .map((entry) => ({ ...structuredClone(entry), after: entry.after - first }));
+    if (!assertions.some((entry) => entry.after === end - first)) return undefined;
+    return { completion: 'terminal', reuseServer, originalActionOffset: first, scenario: {
+      ...structuredClone(scenario), id: `${scenario.id}_batch_${reuseServer ? 'two' : 'one'}`,
+      setup: reuseServer ? [] : structuredClone(scenario.setup ?? []), actions: structuredClone(scenario.actions.slice(first, end)), assertions,
+      frames: (scenario.frames ?? []).filter((entry) => Number.isInteger(entry.after) && entry.after > first && entry.after <= end)
+        .map((entry) => ({ ...structuredClone(entry), after: entry.after - first }))
+    } };
+  };
+  const compiled = [segment(0, split, false), segment(split, scenario.actions.length, true)];
+  return compiled.some((entry) => entry === undefined) ? null : compiled;
 }
 
 function hash(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }

@@ -136,12 +136,14 @@ test('persistent matrix requires one exact client through every declared server 
     events.push({ barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: segment.id } });
     if (!segment.final) {
       events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } });
+      events.push({ barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: `server-${index}`, segment: segment.id } });
       events.push({ barrier: LifecycleBarrier.DURABLE_SERVER_SAVE, detail: { serverRunId: `server-${index}`, segment: segment.id } });
       events.push({ barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port: 25575, serverRunId: `server-${index}`, segment: segment.id } });
       events.push({ barrier: LifecycleBarrier.RECOVERY_SERVER_READY, detail: { serverRunId: `server-${index + 1}`, serverPid: 2001 + index, segment: checked.segments[index + 1].id } });
       events.push({ barrier: LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, detail: { clientPid, segment: checked.segments[index + 1].id } });
     } else {
       events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } });
+      events.push({ barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: `server-${index}`, segment: segment.id } });
     }
   }
   events.push({ barrier: LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, detail: { assertionCount: checked.segments.length } });
@@ -153,6 +155,46 @@ test('persistent matrix requires one exact client through every declared server 
   const foreignClient = structuredClone({ clientPid, port: 25575, events, results, serverRuns, crashReceipts: [] });
   foreignClient.events[9].detail.clientPid = 1002;
   assert.throws(() => validatePersistentMatrixEvidence(checked, foreignClient), /diverges/);
+});
+
+test('a declared compatible case retains one exact server only through its reset fence', () => {
+  const checked = structuredClone(plan()); checked.segments[1].worldKey = 'world_alpha'; checked.segments[1].reuseServer = true;
+  const clientPid = 1001; const serverRuns = checked.segments.map((segment, index) => ({ segment: segment.id, worldKey: segment.worldKey,
+    serverRunId: index < 2 ? 'server-0' : `server-${index - 1}`, serverPid: index < 2 ? 2000 : 1999 + index }));
+  const events = [
+    { barrier: LifecycleBarrier.SERVER_RUN_READY, detail: { serverRunId: 'server-0', serverPid: 2000, segment: 'smoke_alpha' } },
+    { barrier: LifecycleBarrier.PREPARED_CLIENT_READY, detail: { clientPid } },
+    { barrier: LifecycleBarrier.CLIENT_CONNECTED_FIXTURE_READY, detail: { clientPid, segment: 'smoke_alpha' } },
+    ...Array.from({ length: checked.segments[0].actionCount }, (_, action) =>
+      ({ barrier: LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, detail: { actionStep: action + 1, segment: 'smoke_alpha' } })),
+    { barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: 'smoke_alpha' } },
+    { barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: 'smoke_alpha' } },
+    { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: 'server-0', segment: 'smoke_alpha' } },
+    { barrier: LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED, detail: { serverRunId: 'server-0', segment: 'restart_before' } },
+    { barrier: LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, detail: { clientPid, segment: 'restart_before' } }
+  ];
+  for (const [index, segment] of checked.segments.slice(1).entries()) {
+    const epoch = index + 1; const run = serverRuns[epoch];
+    events.push(...Array.from({ length: segment.actionCount }, (_, action) =>
+      ({ barrier: LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, detail: { actionStep: action + 1, segment: segment.id } })),
+      { barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: segment.id } },
+      { barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } },
+      { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: run.serverRunId, segment: segment.id } });
+    if (!segment.final) {
+      const next = serverRuns[epoch + 1]; const nextSegment = checked.segments[epoch + 1];
+      events.push({ barrier: LifecycleBarrier.DURABLE_SERVER_SAVE, detail: { serverRunId: run.serverRunId, segment: segment.id } },
+        { barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port: 25575, serverRunId: run.serverRunId, segment: segment.id } },
+        { barrier: LifecycleBarrier.RECOVERY_SERVER_READY, detail: { serverRunId: next.serverRunId, serverPid: next.serverPid, segment: nextSegment.id } },
+        { barrier: LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, detail: { clientPid, segment: nextSegment.id } });
+    }
+  }
+  events.push({ barrier: LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, detail: { assertionCount: checked.segments.length } });
+  const results = checked.segments.map((segment, epoch) => ({ status: 'ok', epoch, segment: segment.id, scenarioSha256: segment.scenarioSha256, terminal: { assertionCount: 1 } }));
+  assert.doesNotThrow(() => validatePersistentMatrixEvidence(checked, { clientPid, port: 25575, events, results, serverRuns, crashReceipts: [] }));
+  const divergent = structuredClone(serverRuns); divergent[1].serverPid++;
+  assert.throws(() => validatePersistentMatrixEvidence(checked, { clientPid, port: 25575, events, results, serverRuns: divergent, crashReceipts: [] }), /compatible case/);
+  const undeclared = structuredClone(checked); delete undeclared.segments[1].reuseServer;
+  assert.throws(() => validatePersistentMatrixEvidence(undeclared, { clientPid, port: 25575, events, results, serverRuns, crashReceipts: [] }), /outside a declared/);
 });
 
 test('final evidence binds all five plan-declared crash receipts including sequential crashes', () => {
@@ -187,8 +229,8 @@ test('final evidence binds all five plan-declared crash receipts including seque
         { barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port, serverRunId: run.serverRunId, segment: segment.id } });
     } else {
       events.push({ barrier: LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, detail: { actionStep: 1, segment: segment.id } }, { barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: segment.id } });
-      if (!segment.final) events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } }, { barrier: LifecycleBarrier.DURABLE_SERVER_SAVE, detail: { serverRunId: run.serverRunId, segment: segment.id } }, { barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port, serverRunId: run.serverRunId, segment: segment.id } });
-      else events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } });
+      if (!segment.final) events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } }, { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: run.serverRunId, segment: segment.id } }, { barrier: LifecycleBarrier.DURABLE_SERVER_SAVE, detail: { serverRunId: run.serverRunId, segment: segment.id } }, { barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port, serverRunId: run.serverRunId, segment: segment.id } });
+      else events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } }, { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: run.serverRunId, segment: segment.id } });
     }
     if (!segment.final) { const next = serverRuns[epoch + 1]; const nextSegment = segments[epoch + 1]; events.push({ barrier: LifecycleBarrier.RECOVERY_SERVER_READY, detail: { serverRunId: next.serverRunId, serverPid: next.serverPid, segment: nextSegment.id } }, { barrier: LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, detail: { clientPid, segment: nextSegment.id } }); }
   }

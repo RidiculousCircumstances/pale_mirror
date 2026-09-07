@@ -50,6 +50,19 @@ test('actual CI assignments compile deterministically without weakening the thre
   }
 });
 
+test('the declared early-arrival continuation is the sole same-world compatible case', async () => {
+  const source = await plan(); const compiled = compilePersistentWorkerPlan(source, 'worker-3', 'correctness-1');
+  const arrival = compiled.lanes.find((lane) => lane.id.endsWith(':arrival_checkpoint_one:single'));
+  assert.ok(arrival); assert.equal(arrival.segments.length, 2);
+  assert.deepEqual(arrival.segments.map((segment) => segment.originalActionOffset), [0, 2]);
+  assert.deepEqual(arrival.segments.map((segment) => segment.reuseServer), [undefined, true]);
+  assert.equal(arrival.segments[1].worldKey, arrival.segments[0].worldKey);
+  assert.deepEqual(arrival.segments[1].scenario.setup, []);
+  for (const lane of compiled.lanes.filter((lane) => lane !== arrival)) {
+    assert.equal(lane.segments.some((segment) => segment.reuseServer), false, lane.id);
+  }
+});
+
 test('assigned runtime plan is compiler-anchored and retains inverse restart offsets', async () => {
   const source = await plan(); const compiled = compilePersistentWorkerPlan(source, 'worker-0', 'correctness-1');
   const runtime = compileAssignedPersistentMatrix(compiled, source, { workerId: 'worker-0', measurementId: 'correctness-1' });

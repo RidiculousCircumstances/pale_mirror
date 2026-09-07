@@ -97,11 +97,22 @@ let pendingCrash = null;
 
 try {
   await orchestratePersistentSegments(plan, source, {
+    activeServer: () => server,
     startServer: async (segment, epoch) => {
       await writeRuntimeScenario(runtimeScenario, segment.loaded);
       server = await startServer(segment, epoch, worlds.get(segment.worldKey));
       await publishPersistentMatrixServerReady(session, epoch, { serverRunId: server.serverRunId, serverPid: server.serverPid, port, worldKey: segment.worldKey, ready: true });
       return server;
+    },
+    reuseServer: async (segment, epoch, active) => {
+      if (active.worldKey !== segment.worldKey) throw new Error(`F0.VA compatible case ${segment.id} changed its disposable world`);
+      await writeRuntimeScenario(runtimeScenario, segment.loaded);
+      active.segment = segment.id; active.epoch = epoch;
+      await publishPersistentMatrixServerReady(session, epoch, { serverRunId: active.serverRunId, serverPid: active.serverPid, port, worldKey: segment.worldKey, ready: true });
+      serverRuns.push({ segment: segment.id, worldKey: segment.worldKey, serverRunId: active.serverRunId, serverPid: active.serverPid });
+      await publishLifecycleBarrier(lifecycle, LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED,
+        { serverRunId: active.serverRunId, segment: segment.id });
+      return active;
     },
     startClient: async () => { client = await startClient(); nativeClientPid = await awaitPreparedClient(preparedClientSegment(source)); },
     releaseCrash: async (crash, active, epoch, segment) => {
@@ -111,12 +122,13 @@ try {
     },
     resume: publishResume,
     expected: async (segment, epoch, active) => { pendingCrash = await runExpectedCrashSegment(segment, epoch, active); server = null; return pendingCrash; },
-    terminal: async (segment, epoch, active, contractSegment) => {
+    terminal: async (segment, epoch, active, contractSegment, nextSegment) => {
       await recordClientSegment(segment, epoch); results.push(await awaitResultOrClient(epoch));
       if (!contractSegment.final) {
         await awaitClientSignal(LifecycleSignal.CLIENT_NORMALLY_DISCONNECTED, segment.id, 300_000, `disconnect for ${segment.id}`);
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, { segment: segment.id });
-        await stopServerWithBarriers(active, segment.id); server = null;
+        if (nextSegment?.reuseServer === true) await awaitNormalDemandLossRelease(active, segment.id, epoch);
+        else { await stopServerWithBarriers(active, segment.id, epoch); server = null; }
       } else {
         await publishPersistentMatrixFinalClose(session, epoch);
         await awaitClientSignal(LifecycleSignal.CLIENT_NORMALLY_DISCONNECTED, segment.id, 300_000, `final disconnect for ${segment.id}`);
@@ -131,13 +143,17 @@ try {
     throw new Error('persistent matrix client manifest is incomplete or foreign');
   }
   validatePersistentClientAssertions(source, clientManifest, assignedPlan?.workerPlan?.lanes);
+  // The client transport acknowledgement precedes actual server player removal.  Make that
+  // server-owned release observable before terminalizing the matrix, then retain the ordinary
+  // shutdown save as cleanup evidence rather than an after-terminal lifecycle event.
+  await awaitNormalDemandLossRelease(server, server.segment, server.epoch);
   await publishLifecycleBarrier(lifecycle, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, { assertionCount: source.length });
   const events = await readLifecycleBarriers(lifecycle);
   const evidence = validatePersistentMatrixEvidence(plan, { clientPid: nativeClientPid, port, events, results, serverRuns, crashReceipts });
   // The terminal client assertion is complete before this normal shutdown; do not manufacture a
   // further matrix barrier after its terminal state. The typed server save signal remains in the
   // retained manifest as cleanup evidence.
-  const finalStop = await stopServerWithoutBarrier(server);
+  const finalStop = await stopServerWithoutBarrier(server, { demandLossReleased: true });
   server = null;
   await writeExclusive(output, `${JSON.stringify({ schema: 1, kind: 'frontier-v3-f0va-persistent-native-matrix', status: 'ok',
     runId, build, lifecycle: { directory: relative(project, lifecycle.directory), identity: lifecycle.identity, events },
@@ -221,6 +237,7 @@ function assignedRuntimePlan(assigned, entries) {
       scenarioSha256: entry.loaded.sha256, compiledScenarioSha256: entry.assigned.scenarioSha256, originalScenarioId: entry.assigned.originalScenarioId,
       originalScenarioSha256: entry.assigned.originalScenarioSha256, originalActionOffset: entry.assigned.originalActionOffset,
       worldKey: entry.worldKey, actionCount: entry.loaded.scenario.actions.length, completion: entry.assigned.completion,
+      ...(entry.assigned.reuseServer === true ? { reuseServer: true } : {}),
       ...(entry.assigned.expectedCrash === undefined ? {} : { expectedCrash: entry.assigned.expectedCrash }), final: epoch === entries.length - 1 })) };
   return Object.freeze({ ...core, contentSha256: sha256Json(core) });
 }
@@ -460,7 +477,8 @@ async function publishResume(epoch) {
   await publishPersistentMatrixResume(session, epoch);
 }
 
-async function stopServerWithBarriers(active, segmentId) {
+async function stopServerWithBarriers(active, segmentId, epoch) {
+  await awaitNormalDemandLossRelease(active, segmentId, epoch);
   await requestRconStop({ port: active.rconPort, password: active.rconPassword });
   await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, active.serverRunId, 90_000);
   await ownedServerExit(active.child, port, 90_000, `F0.VA server ${segmentId}`);
@@ -469,13 +487,30 @@ async function stopServerWithBarriers(active, segmentId) {
   releaseWrapper(active.child);
 }
 
-async function stopServerWithoutBarrier(active) {
+async function stopServerWithoutBarrier(active, { demandLossReleased = false } = {}) {
   if (active === null) throw new Error('F0.VA final server is unavailable');
+  if (!demandLossReleased) await awaitNormalDemandLossRelease(active, active.segment, active.epoch);
   await requestRconStop({ port: active.rconPort, password: active.rconPassword });
   await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, active.serverRunId, 90_000);
   await ownedServerExit(active.child, port, 90_000, 'F0.VA final server');
   releaseWrapper(active.child);
   return Object.freeze({ serverRunId: active.serverRunId, serverPid: active.serverPid, durableSave: true, portClosed: true });
+}
+
+/**
+ * The client acknowledgement proves its own transport boundary, not that the server has
+ * completed removal of that connection.  Admit the server-owned release receipt before RCON
+ * shutdown so a world save never races the final player removal.  The token is nonce-bound to
+ * this exact server JVM; a retained/stale release cannot advance a replacement run.
+ */
+async function awaitNormalDemandLossRelease(active, segmentId, epoch) {
+  if (!Number.isInteger(epoch) || epoch < 0 || epoch > 9999) throw new Error('F0.VA demand-loss epoch is invalid');
+  const sequence = String(epoch).padStart(4, '0'); const suffix = `${active.serverRunId}-${sequence}`;
+  const token = join(lifecycle.directory, `demand-loss-${suffix}.token`);
+  await writeFile(token, `${lifecycle.identity.runId}:${sequence}\n`, { encoding: 'utf8', flag: 'wx' });
+  await awaitLifecycleSignal(lifecycle, LifecycleSignal.NORMAL_DEMAND_LOSS_RELEASE, suffix, 90_000);
+  await publishLifecycleBarrier(lifecycle, LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE,
+    { serverRunId: active.serverRunId, segment: segmentId });
 }
 
 async function stopServerForFailure(active) {
@@ -631,16 +666,27 @@ export async function orchestratePersistentSegments(plan, source, effects) {
   for (const [epoch, segment] of source.entries()) {
     const contractSegment = checked.segments[epoch];
     if (!segment || segment.id !== contractSegment.id) throw new Error('persistent orchestration source is foreign');
-    const active = await effects.startServer(segment, epoch);
+    const active = contractSegment.reuseServer === true
+      ? await effects.reuseServer(segment, epoch, serverForReuse(source, checked, epoch, effects))
+      : await effects.startServer(segment, epoch);
     if (epoch === 0) await effects.startClient();
     else {
       if (crash !== null) { await effects.releaseCrash(crash, active, epoch, segment); crash = null; }
       await effects.resume(epoch);
     }
     if (contractSegment.completion === 'expected_crash') crash = await effects.expected(segment, epoch, active);
-    else await effects.terminal(segment, epoch, active, contractSegment);
+    else await effects.terminal(segment, epoch, active, contractSegment, checked.segments[epoch + 1]);
   }
   if (crash !== null) throw new Error('persistent orchestration has no successor for crash release');
+}
+
+function serverForReuse(source, plan, epoch, effects) {
+  const active = typeof effects.activeServer === 'function' ? effects.activeServer() : undefined;
+  if (epoch < 1 || plan.segments[epoch - 1].completion === 'expected_crash' || source[epoch - 1]?.worldKey !== source[epoch]?.worldKey
+      || !active) {
+    throw new Error('persistent orchestration compatible case has no exact live predecessor');
+  }
+  return active;
 }
 
 function matrixPlan(plan) {

@@ -48,6 +48,31 @@ test('CLI-consumed orchestration keeps one client through two injected crash rel
   assert.equal(clients, 1); assert.deepEqual(effects, ['release:c0:r0', 'resume:1', 'terminal:r0', 'resume:2', 'release:c1:r1', 'resume:3', 'terminal:r1']);
 });
 
+test('CLI orchestration reuses an actual declared same-world continuation only after its reset fence', async () => {
+  const hash = 'b'.repeat(64);
+  const plan = { schema: 1, kind: 'frontier-v3-assigned-persistent-matrix', workerId: 'worker-3', buildIdentitySha256: hash,
+    source: { workerId: 'worker-3', buildIdentitySha256: hash }, workerPlanSha256: hash, contentSha256: hash, workerPlan: {}, segments: [
+      { id: 'arrival-one', laneId: 'arrival', scenarioId: 'arrival-one', scenarioSha256: hash, originalScenarioId: 'arrival', originalScenarioSha256: hash, originalActionOffset: 0, worldKey: 'arrival-world', actionCount: 1, completion: 'terminal', final: false },
+      { id: 'arrival-two', laneId: 'arrival', scenarioId: 'arrival-two', scenarioSha256: hash, originalScenarioId: 'arrival', originalScenarioSha256: hash, originalActionOffset: 2, worldKey: 'arrival-world', actionCount: 1, completion: 'terminal', reuseServer: true, final: true }
+    ] };
+  const source = plan.segments.map((segment) => ({ id: segment.id, worldKey: segment.worldKey }));
+  const trace = []; let active = null;
+  await orchestratePersistentSegments(plan, source, {
+    activeServer: () => active,
+    startServer: async (segment) => { active = { id: `fresh:${segment.id}`, worldKey: segment.worldKey }; trace.push(active.id); return active; },
+    reuseServer: async (segment, epoch, prior) => { trace.push(`reuse:${epoch}:${prior.id}`); assert.equal(prior, active); return prior; },
+    startClient: async () => trace.push('client'), releaseCrash: async () => assert.fail('no crash boundary is compatible'),
+    resume: async (epoch) => trace.push(`resume:${epoch}`), expected: async () => assert.fail('no crash boundary is compatible'),
+    terminal: async (segment, epoch, prior, contract, next) => trace.push(`terminal:${epoch}:${prior.id}:${next?.reuseServer === true}`)
+  });
+  assert.deepEqual(trace, ['fresh:arrival-one', 'client', 'terminal:0:fresh:arrival-one:true', 'reuse:1:fresh:arrival-one', 'resume:1', 'terminal:1:fresh:arrival-one:false']);
+
+  const foreignWorld = structuredClone(plan); foreignWorld.segments[1].worldKey = 'foreign-world';
+  await assert.rejects(orchestratePersistentSegments(foreignWorld, foreignWorld.segments.map((segment) => ({ id: segment.id, worldKey: segment.worldKey })), {
+    activeServer: () => active, startServer: async () => active, reuseServer: async () => active, startClient: async () => {}, releaseCrash: async () => {}, resume: async () => {}, expected: async () => {}, terminal: async () => {}
+  }), /exact live predecessor/);
+});
+
 test('CLI admission reconstructs all four real compiler assignments before orchestration', async () => {
   const contract = JSON.parse(await readFile(new URL('../contracts/resource-site-harvest-f0v.json', import.meta.url), 'utf8'));
   const source = createFourWorkerMatrixPlan(contract, { buildIdentitySha256: 'a'.repeat(64), contractSha256: 'b'.repeat(64) });
@@ -304,10 +329,12 @@ function producerLifecycle(plan, serverRuns, clientPid, port) {
     }
     events.push({ barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: segment.id } });
     if (segment.final) {
-      events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } });
+      events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } },
+        { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: run.serverRunId, segment: segment.id } });
     } else {
       const next = serverRuns[epoch + 1]; const nextSegment = plan.segments[epoch + 1];
       events.push({ barrier: LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, detail: { segment: segment.id } },
+        { barrier: LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, detail: { serverRunId: run.serverRunId, segment: segment.id } },
         { barrier: LifecycleBarrier.DURABLE_SERVER_SAVE, detail: { serverRunId: run.serverRunId, segment: segment.id } },
         { barrier: LifecycleBarrier.GAME_PORT_CLOSED, detail: { port, serverRunId: run.serverRunId, segment: segment.id } },
         { barrier: LifecycleBarrier.RECOVERY_SERVER_READY, detail: { serverRunId: next.serverRunId, serverPid: next.serverPid, segment: nextSegment.id } },

@@ -24,6 +24,7 @@ export const LifecycleBarrier = Object.freeze({
   CLIENT_EXPECTED_LOSS: 'client_expected_loss',
   CLIENT_NORMALLY_DISCONNECTED: 'client_normally_disconnected',
   NORMAL_DEMAND_LOSS_RELEASE: 'normal_demand_loss_release',
+  SAME_SERVER_RESET_ACKNOWLEDGED: 'same_server_reset_acknowledged',
   DURABLE_SERVER_SAVE: 'durable_server_save',
   GAME_PORT_CLOSED: 'game_port_closed',
   RECOVERY_SERVER_READY: 'recovery_server_ready',
@@ -72,6 +73,7 @@ const REPEATABLE = new Set([
   LifecycleBarrier.CLIENT_EXPECTED_LOSS,
   LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED,
   LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE,
+  LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED,
   LifecycleBarrier.DURABLE_SERVER_SAVE,
   LifecycleBarrier.GAME_PORT_CLOSED,
   LifecycleBarrier.RECOVERY_SERVER_READY,
@@ -91,7 +93,8 @@ const NEXT = Object.freeze({
   // the nonce-bound crash controller, but cannot otherwise skip its expected-loss sequence.
   [LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE]: new Set([LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleBarrier.EXPECTED_LOSS_ARMED, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
   [LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED]: new Set([LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
-  [LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE]: new Set([LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED]),
+  [LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE]: new Set([LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
+  [LifecycleBarrier.SAME_SERVER_RESET_ACKNOWLEDGED]: new Set([LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED]),
   [LifecycleBarrier.DURABLE_SERVER_SAVE]: new Set([LifecycleBarrier.GAME_PORT_CLOSED]),
   [LifecycleBarrier.GAME_PORT_CLOSED]: new Set([LifecycleBarrier.RECOVERY_SERVER_READY]),
   [LifecycleBarrier.RECOVERY_SERVER_READY]: new Set([
