@@ -50,7 +50,7 @@ jobs:
           --worker="${{ matrix.worker }}" --job-prefix="F0.2B" --output="$PWD/f02b-artifacts/${{ matrix.worker }}/job.json"
       - name: Declare worker-private Minecraft namespaces
         run: >-
-          node tools/frontier-v3-test-pilot/src/prepare-f0vb-isolation.mjs
+          node tools/frontier-v3-test-pilot/src/prepare-f02b-isolation.mjs
           --workspace="$GITHUB_WORKSPACE" --temp="$RUNNER_TEMP" --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
           --worker="${{ matrix.worker }}" --output="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
       - name: Run one actual isolated Minecraft semantic lane

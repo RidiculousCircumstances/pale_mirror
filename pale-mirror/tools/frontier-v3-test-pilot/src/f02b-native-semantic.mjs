@@ -1,7 +1,12 @@
-import { workerNames } from './f0vb-qualification.mjs';
+import { F0VB_XVFB_PORT_BASE, declaredNamespaces, workerNames } from './f0vb-qualification.mjs';
 
 export const F02B_SCHEMA = 1;
 export const F02B_KIND = 'f02b-reference-container-native-semantic';
+// A normal disposable Minecraft server also owns RCON at gamePort + 1.  The
+// F0.VB listener-only port cadence is consecutive, so it cannot be reused for
+// this matrix without one worker's RCON colliding with its neighbour's game
+// socket.
+export const F02B_PRIVATE_PORT_BASE = 26200;
 const SHA = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const QUALIFICATION = /^[A-Za-z0-9._-]{1,120}$/;
@@ -15,6 +20,13 @@ const LANES = Object.freeze({
 export function laneFor(worker) {
   if (!(worker in LANES)) throw new Error('F0.2B semantic matrix has an unknown worker');
   return LANES[worker];
+}
+
+export function f02bNamespaces(identity) {
+  const base = declaredNamespaces(identity);
+  const index = Number(identity.worker.slice('worker-'.length));
+  const port = F02B_PRIVATE_PORT_BASE + index * 2;
+  return Object.freeze({ ...base, port, display: `:${port - F0VB_XVFB_PORT_BASE}` });
 }
 
 export function assertSemanticEvidence(value, expected = {}) {
@@ -33,7 +45,10 @@ export function assertSemanticEvidence(value, expected = {}) {
     || !value.terminal.replica || !value.terminal.custody) throw new Error('F0.2B evidence has no terminal domain/replica/custody facts');
   assertTerminalFacts(value.lane, value.terminal);
   if (!value.namespaces || typeof value.namespaces !== 'object') throw new Error('F0.2B evidence has no isolated namespaces');
-  for (const field of ['workspace', 'temp', 'gradle', 'cache', 'world', 'process']) if (typeof value.namespaces[field] !== 'string' || !value.namespaces[field].startsWith('/')) throw new Error(`F0.2B evidence has invalid ${field} namespace`);
+  const expectedNamespaces = f02bNamespaces({ workspace: value.namespaces.workspace, temp: value.namespaces.temp.replace(/\/f0vb-[^/]+\/temp$/, ''),
+    runId: value.runId, runAttempt: value.runAttempt, worker: value.worker });
+  for (const field of ['workspace', 'temp', 'gradle', 'cache', 'world', 'process']) if (value.namespaces[field] !== expectedNamespaces[field]) throw new Error(`F0.2B evidence has invalid ${field} namespace`);
+  if (value.namespaces.port !== expectedNamespaces.port || value.namespaces.display !== expectedNamespaces.display) throw new Error('F0.2B evidence has an unsafe native port namespace');
   for (const [key, valueExpected] of Object.entries(expected)) if (valueExpected !== undefined && value[key] !== valueExpected) throw new Error(`F0.2B evidence is foreign or stale for ${key}`);
   return value;
 }
@@ -43,7 +58,7 @@ export function mergeSemanticMatrix(evidence, expected) {
   const checked = evidence.map(value => assertSemanticEvidence(value, expected));
   if (new Set(checked.map(value => value.worker)).size !== workerNames().length) throw new Error('F0.2B merge rejects duplicate workers');
   for (const field of ['jobId', 'runnerId', 'runnerName']) if (new Set(checked.map(value => value[field])).size !== checked.length) throw new Error(`F0.2B merge rejects duplicate ${field}`);
-  for (const field of ['workspace', 'temp', 'gradle', 'cache', 'world', 'process']) if (new Set(checked.map(value => value.namespaces[field])).size !== checked.length) throw new Error('F0.2B merge rejects shared native namespace');
+  for (const field of ['workspace', 'temp', 'gradle', 'cache', 'world', 'process', 'display', 'port']) if (new Set(checked.map(value => value.namespaces[field])).size !== checked.length) throw new Error('F0.2B merge rejects shared native namespace');
   const latestStart = Math.max(...checked.map(value => value.startedAtMillis));
   const earliestFinish = Math.min(...checked.map(value => value.finishedAtMillis));
   if (latestStart >= earliestFinish) throw new Error('F0.2B merge rejects non-overlapping Minecraft launches');

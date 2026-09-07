@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { declaredNamespaces } from '../src/f0vb-qualification.mjs';
-import { laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { f02bNamespaces, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
   workflowRef: 'RidiculousCircumstances/pale_mirror/.github/workflows/f02b-reference-container-semantic.yml@refs/heads/main', runId: 44, runAttempt: 1 });
 
 function evidence(worker, index = Number(worker.at(-1))) {
-  const lane = laneFor(worker); const namespaces = declaredNamespaces({ workspace: `/tmp/f02b/workspace-${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker });
+  const lane = laneFor(worker); const namespaces = f02bNamespaces({ workspace: `/tmp/f02b/workspace-${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker });
   const conflict = lane === 'conflict-restart';
   const replica = conflict
     ? { state: 'CONFLICT', revision: 3, canonicalRevision: 7, conflict: 'FINGERPRINT_MISMATCH', fingerprint: 'sha256:expected', provenance: 'pale-mirror:reference-container:test', observedFingerprint: 'sha256:missing-container:1-depot', observedProvenance: 'missing:container:1-depot' }
@@ -38,6 +37,12 @@ test('F0.2B semantic aggregate requires four immutable native Minecraft lanes', 
   const merged = mergeSemanticMatrix(complete, expected);
   assert.equal(merged.status, 'ok'); assert.equal(merged.overlapMillis, 19_997);
   assert.deepEqual(merged.lanes.map(value => value.lane), ['depot-never-visited', 'depot-visited-unloaded', 'hive-zero-player', 'conflict-restart']);
+});
+
+test('F0.2B reserves adjacent RCON ports outside every other worker game socket', () => {
+  const spaces = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(worker => f02bNamespaces({ workspace: `/tmp/f02b/${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker }));
+  assert.deepEqual(spaces.map(value => value.port), [26200, 26202, 26204, 26206]);
+  assert.equal(new Set(spaces.flatMap(value => [value.port, value.port + 1])).size, 8);
 });
 
 test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and non-native evidence', () => {
