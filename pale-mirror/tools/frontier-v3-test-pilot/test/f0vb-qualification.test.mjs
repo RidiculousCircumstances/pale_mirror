@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -68,7 +68,63 @@ test('F0.VB merge retains a visible incomplete aggregate when worker artifacts a
       '--workflow=RidiculousCircumstances/pale_mirror/.github/workflows/f0vb-native-qualification.yml@refs/heads/main', '--run=44', '--attempt=1'], { stdio: 'pipe' }), /Command failed/);
     const aggregate = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(aggregate.status, 'incomplete');
-    assert.match(aggregate.failure, /missing or extra/);
+    assert.match(aggregate.failure, /missing worker evidence bundle/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('F0.VB artifact bundles retain worker identity and fail closed on invalid layouts', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f0vb-layout-'));
+  const merger = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'merge-f0vb-qualification.mjs');
+  const argumentsFor = output => [merger, `--input=${root}`, `--output=${output}`, `--qualification=${expected.qualificationId}`,
+    `--repository=${expected.repository}`, `--head=${expected.headSha}`, `--workflow-sha=${expected.workflowSha}`,
+    `--workflow=${expected.workflowRef}`, `--run=${expected.runId}`, `--attempt=${expected.runAttempt}`];
+  const writeBundles = async ({ omit, duplicate, foreign, extra } = {}) => {
+    for (const worker of workerNames()) {
+      if (worker === omit) continue;
+      const bundle = join(root, `f0vb-${expected.runId}-${worker}`);
+      await mkdir(bundle, { recursive: true });
+      await writeFile(join(bundle, 'lease.json'), JSON.stringify(evidence(worker)));
+      if (worker === duplicate) {
+        await mkdir(join(bundle, 'duplicate'), { recursive: true });
+        await writeFile(join(bundle, 'duplicate', 'lease.json'), JSON.stringify(evidence(worker)));
+      }
+    }
+    if (foreign) await mkdir(join(root, foreign));
+    if (extra) await writeFile(join(root, extra), '{}');
+  };
+  const run = async (name, expression) => {
+    const output = join(root, `${name}.json`);
+    if (expression) {
+      assert.throws(() => execFileSync('node', argumentsFor(output), { stdio: 'pipe' }), /Command failed/);
+      const aggregate = JSON.parse(await readFile(output, 'utf8'));
+      assert.equal(aggregate.status, 'incomplete');
+      assert.match(aggregate.failure, expression);
+    } else {
+      execFileSync('node', argumentsFor(output), { stdio: 'pipe' });
+      assert.equal(JSON.parse(await readFile(output, 'utf8')).status, 'ok');
+    }
+  };
+  try {
+    await writeBundles();
+    await run('valid');
+    await rm(root, { recursive: true, force: true });
+    await mkdir(root, { recursive: true });
+    await writeBundles({ omit: 'worker-3' });
+    await run('missing', /missing worker evidence bundle/);
+    await rm(root, { recursive: true, force: true });
+    await mkdir(root, { recursive: true });
+    await writeBundles({ duplicate: 'worker-0' });
+    await run('duplicate', /exactly one top-level lease\.json/);
+    await rm(root, { recursive: true, force: true });
+    await mkdir(root, { recursive: true });
+    await writeBundles({ foreign: 'f0vb-45-worker-0' });
+    await run('foreign', /foreign or unexpected evidence bundle/);
+    await rm(root, { recursive: true, force: true });
+    await mkdir(root, { recursive: true });
+    await writeBundles({ extra: 'stray.json' });
+    await run('extra', /unexpected evidence entry/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

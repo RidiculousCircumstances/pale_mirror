@@ -76,7 +76,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: f0vb-${{ github.run_id }}-worker-*
-          merge-multiple: true
           path: pale-mirror/f0vb-evidence
       - name: Write complete or incomplete fail-closed aggregate
         run: >-
