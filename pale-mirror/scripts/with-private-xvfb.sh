@@ -16,7 +16,8 @@ xvfb_bin=${PALE_MIRROR_XVFB:-}
 if [[ -z "$xvfb_bin" ]]; then xvfb_bin=$(command -v Xvfb || true); fi
 [[ -x "$xvfb_bin" ]] || { printf 'private CI display requires Xvfb; set PALE_MIRROR_XVFB to its executable\n' >&2; exit 2; }
 
-runtime_parent=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
+runtime_parent=${FRONTIER_V3_NATIVE_PROCESS_ROOT:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}}
+[[ "$runtime_parent" = /* && -d "$runtime_parent" ]] || { printf 'private CI process root must be an existing absolute directory\n' >&2; exit 64; }
 runtime_dir=$(mktemp -d "$runtime_parent/frontier-v3-private-xvfb.XXXXXX")
 display=:$((port - 25000))
 setsid "$xvfb_bin" "$display" -screen 0 1920x1080x24 -nolisten tcp >"$runtime_dir/xvfb.log" 2>&1 &

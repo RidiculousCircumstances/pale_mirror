@@ -23,7 +23,7 @@ async function main() {
   const root = resolve(values.root ?? '');
   const output = resolve(values.output ?? '');
   const workers = Number(values.workers ?? '');
-  if (!root.startsWith('/') || !output.startsWith(`${root}/`) || workers !== 4) throw new Error('usage: f0vb-capacity-preflight --root=/absolute/task-root --workers=4 --output=/absolute/task-root/receipt.json');
+  if (!root.startsWith('/') || !output.startsWith('/') || workers !== 4) throw new Error('usage: f0vb-capacity-preflight --root=/absolute/task-root --workers=4 --output=/absolute/receipt.json');
   const result = evaluateCapacity({ workers, cpu: availableParallelism(), memAvailableMiB: await availableMemoryMiB(), diskAvailableMiB: await availableDiskMiB(root) });
   const receipt = { schema: 1, kind: 'f0vb-same-host-capacity-preflight', root, host: hostname(), ...result };
   await mkdir(dirname(output), { recursive: true });

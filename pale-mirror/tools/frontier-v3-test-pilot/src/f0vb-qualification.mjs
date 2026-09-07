@@ -7,6 +7,8 @@ const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export const F0VB_EVIDENCE_SCHEMA = 2;
 export const F0VB_EVIDENCE_KIND = 'f0vb-native-lease';
+export const F0VB_PRIVATE_PORT_BASE = 26100;
+export const F0VB_XVFB_PORT_BASE = 25000;
 
 export function workerNames() { return [...WORKERS]; }
 
@@ -28,6 +30,11 @@ export function assertWorkerEvidence(value, expected = {}) {
     throw new Error('F0.VB evidence has an unbounded or invalid millisecond lease interval');
   }
   assertNamespaces(value.namespaces, value.worker);
+  if (!value.consumption || value.consumption.port !== value.namespaces.port || value.consumption.display !== value.namespaces.display
+    || value.consumption.boundHost !== '127.0.0.1' || value.consumption.processMarker !== `${value.namespaces.process}/f0vb-native-lease-${value.consumption.pid}.json`
+    || !Number.isSafeInteger(value.consumption.pid) || value.consumption.pid <= 0) {
+    throw new Error('F0.VB evidence does not bind consumed native isolation');
+  }
   for (const [key, expectedValue] of Object.entries(expected)) {
     if (expectedValue !== undefined && value[key] !== expectedValue) throw new Error(`F0.VB evidence is foreign or stale for ${key}`);
   }
@@ -70,9 +77,10 @@ export function declaredNamespaces({ workspace, temp, runId, runAttempt, worker 
   }
   const index = Number(worker.slice('worker-'.length));
   const root = `${temp}/f0vb-${runId}-${runAttempt}-${worker}`;
+  const port = F0VB_PRIVATE_PORT_BASE + index;
   return Object.freeze({
     workspace, temp: root + '/temp', gradle: root + '/gradle', cache: root + '/cache', world: root + '/world', process: root + '/process',
-    display: `:${260 + index}`, port: 26100 + index
+    display: `:${port - F0VB_XVFB_PORT_BASE}`, port
   });
 }
 
@@ -85,7 +93,12 @@ function assertNamespaces(value, worker) {
     throw new Error('F0.VB evidence has invalid display or port namespace');
   }
   const index = Number(worker.slice('worker-'.length));
-  if (value.display !== `:${260 + index}` || value.port !== 26100 + index) throw new Error('F0.VB evidence has an incomparable assignment namespace');
+  const port = F0VB_PRIVATE_PORT_BASE + index;
+  if (value.display !== `:${port - F0VB_XVFB_PORT_BASE}` || value.port !== port) throw new Error('F0.VB evidence has an incomparable assignment namespace');
+  const root = value.temp.slice(0, -'/temp'.length);
+  if (!root || value.gradle !== `${root}/gradle` || value.cache !== `${root}/cache` || value.world !== `${root}/world` || value.process !== `${root}/process`) {
+    throw new Error('F0.VB evidence has non-deterministic namespace containment');
+  }
 }
 
 function unique(values, field, message) {

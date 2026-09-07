@@ -27,53 +27,44 @@ jobs:
         worker: [worker-0, worker-1, worker-2, worker-3]
     steps:
       - uses: actions/checkout@v4
+      - name: Allocate bounded evidence custody
+        run: mkdir -p "$PWD/f0vb-artifacts/${{ matrix.worker }}"
       - name: Admit bounded same-host capacity
         shell: bash
         run: >-
           node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
-          --root="$RUNNER_TEMP" --workers=4 --output="$RUNNER_TEMP/f0vb-capacity-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.worker }}.json"
+          --root="$RUNNER_TEMP" --workers=4 --output="$PWD/f0vb-artifacts/${{ matrix.worker }}/capacity.json"
       - name: Bind active GitHub job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
           node tools/frontier-v3-test-pilot/src/capture-f0vb-job-identity.mjs
           --repository="${{ github.repository }}" --run="${{ github.run_id }}"
-          --worker="${{ matrix.worker }}" --output="$PWD/f0vb-job-${{ matrix.worker }}.json"
+          --worker="${{ matrix.worker }}" --output="$PWD/f0vb-artifacts/${{ matrix.worker }}/job.json"
       - name: Declare isolated native namespaces
         run: >-
           node tools/frontier-v3-test-pilot/src/prepare-f0vb-isolation.mjs
           --workspace="$GITHUB_WORKSPACE" --temp="$RUNNER_TEMP" --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
-          --worker="${{ matrix.worker }}" --output="$PWD/f0vb-namespaces-${{ matrix.worker }}.json"
+          --worker="${{ matrix.worker }}" --output="$PWD/f0vb-artifacts/${{ matrix.worker }}/namespaces.json"
       - name: Export isolated native namespaces
         run: >-
           node tools/frontier-v3-test-pilot/src/export-f0vb-isolation.mjs
-          --input="$PWD/f0vb-namespaces-${{ matrix.worker }}.json"
-      - name: Prove isolated concurrent worker lease
-        shell: bash
+          --input="$PWD/f0vb-artifacts/${{ matrix.worker }}/namespaces.json"
+      - name: Prove consumed isolated concurrent native lease
         run: |
-          set -euo pipefail
-          case "${{ inputs.qualification_id }}" in *[!A-Za-z0-9._-]*|'') exit 1;; esac
-          case "${RUNNER_TEMP:?}" in /*) ;; *) exit 1;; esac
-          lease="$RUNNER_TEMP/f0vb-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.worker }}"
-          test -d "$lease"
-          started="$(date +%s%3N)"
-          sleep 20
-          finished="$(date +%s%3N)"
-          job_identity="$(tr -d '\n' < "$PWD/f0vb-job-${{ matrix.worker }}.json")"
-          namespaces="$(tr -d '\n' < "$PWD/f0vb-namespaces-${{ matrix.worker }}.json")"
-          node tools/frontier-v3-test-pilot/src/write-f0vb-qualification-evidence.mjs \
-            --output="$PWD/f0vb-${{ matrix.worker }}.json" \
+          scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f0vb-native-lease.mjs \
+            --output="$PWD/f0vb-artifacts/${{ matrix.worker }}/lease.json" \
+            --namespaces="$PWD/f0vb-artifacts/${{ matrix.worker }}/namespaces.json" \
+            --identity="$PWD/f0vb-artifacts/${{ matrix.worker }}/job.json" \
             --worker="${{ matrix.worker }}" --qualification="${{ inputs.qualification_id }}" \
             --repository="${{ github.repository }}" --head="${{ github.sha }}" --workflow-sha="${{ github.workflow_sha }}" \
             --workflow="${{ github.workflow_ref }}" --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}" \
-            --job="$(node -e 'console.log(JSON.parse(process.argv[1]).jobId)' "$job_identity")" \
-            --runner="$(node -e 'console.log(JSON.parse(process.argv[1]).runnerId)' "$job_identity")" \
-            --runner-name="$(node -e 'console.log(JSON.parse(process.argv[1]).runnerName)' "$job_identity")" \
-            --lease="$lease" --started="$started" --finished="$finished" --namespaces="$namespaces"
+            --hold-millis=20000
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: f0vb-${{ github.run_id }}-${{ matrix.worker }}
-          path: pale-mirror/f0vb-${{ matrix.worker }}.json
+          path: pale-mirror/f0vb-artifacts/${{ matrix.worker }}
           if-no-files-found: error
   merge:
     needs: acquire
@@ -81,12 +72,13 @@ jobs:
     runs-on: [self-hosted, pm-native]
     steps:
       - uses: actions/checkout@v4
+      - run: mkdir -p f0vb-evidence
       - uses: actions/download-artifact@v4
         with:
           pattern: f0vb-${{ github.run_id }}-worker-*
           merge-multiple: true
           path: pale-mirror/f0vb-evidence
-      - name: Fail closed merge
+      - name: Write complete or incomplete fail-closed aggregate
         run: >-
           node tools/frontier-v3-test-pilot/src/merge-f0vb-qualification.mjs --input=f0vb-evidence
           --qualification="${{ inputs.qualification_id }}" --repository="${{ github.repository }}"

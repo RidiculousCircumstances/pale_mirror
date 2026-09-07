@@ -15,7 +15,6 @@ const entries = {
   FRONTIER_V3_NATIVE_CACHE_ROOT: namespaces.cache,
   FRONTIER_V3_PILOT_WORLD_ROOT: namespaces.world,
   FRONTIER_V3_PILOT_PORT: String(namespaces.port),
-  FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
-  DISPLAY: namespaces.display
+  FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process
 };
 await appendFile(process.env.GITHUB_ENV, `${Object.entries(entries).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, 'utf8');

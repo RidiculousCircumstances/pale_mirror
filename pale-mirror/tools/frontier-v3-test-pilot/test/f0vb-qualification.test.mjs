@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { evaluateCapacity } from '../src/f0vb-capacity-preflight.mjs';
 import { declaredNamespaces, mergeQualification, workerNames } from '../src/f0vb-qualification.mjs';
 
@@ -10,7 +15,8 @@ const expected = Object.freeze({ qualificationId: 'f0vb-r5-contract', repository
 function evidence(worker, index = Number(worker.at(-1))) {
   return { schema: 2, kind: 'f0vb-native-lease', ...expected, worker, jobId: 100 + index, runnerId: 200 + index,
     runnerName: `pm-f0vb-${index}`, lease: `/tmp/f0vb/${worker}`, startedAtMillis: 1_700_000_000_000 + index,
-    finishedAtMillis: 1_700_000_020_000 + index, namespaces: declaredNamespaces({ workspace: `/tmp/f0vb/workspace-${worker}`, temp: `/tmp/f0vb/${worker}`, runId: 44, runAttempt: 1, worker }) };
+    finishedAtMillis: 1_700_000_020_000 + index, namespaces: declaredNamespaces({ workspace: `/tmp/f0vb/workspace-${worker}`, temp: `/tmp/f0vb/${worker}`, runId: 44, runAttempt: 1, worker }),
+    consumption: { pid: 500 + index, boundHost: '127.0.0.1', port: 26100 + index, display: `:${1100 + index}`, processMarker: `/tmp/f0vb/${worker}/f0vb-44-1-${worker}/process/f0vb-native-lease-${500 + index}.json` } };
 }
 
 test('F0.VB merge accepts one complete comparable four-worker qualification', () => {
@@ -24,13 +30,13 @@ test('F0.VB merge accepts one complete comparable four-worker qualification', ()
 test('F0.VB merge fails closed for missing, duplicate, stale, foreign and incomparable evidence', () => {
   const complete = workerNames().map(evidence);
   assert.throws(() => mergeQualification(complete.slice(0, 3), expected), /missing or extra/);
-  const duplicate = complete.map(copy); duplicate[3].worker = 'worker-2'; duplicate[3].namespaces = { ...declaredNamespaces({ workspace: '/tmp/f0vb/workspace-duplicate', temp: '/tmp/f0vb/duplicate', runId: 44, runAttempt: 1, worker: 'worker-2' }) };
+  const duplicate = complete.map(copy); duplicate[3].worker = 'worker-2'; duplicate[3].namespaces = { ...declaredNamespaces({ workspace: '/tmp/f0vb/workspace-duplicate', temp: '/tmp/f0vb/duplicate', runId: 44, runAttempt: 1, worker: 'worker-2' }) }; duplicate[3].consumption = { pid: 503, boundHost: '127.0.0.1', port: 26102, display: ':1102', processMarker: '/tmp/f0vb/duplicate/f0vb-44-1-worker-2/process/f0vb-native-lease-503.json' };
   assert.throws(() => mergeQualification(duplicate, expected), /duplicate or incomplete/);
   const stale = complete.map(copy); stale[0].runAttempt = 2;
   assert.throws(() => mergeQualification(stale, expected), /foreign or stale/);
   const foreign = complete.map(copy); foreign[1].headSha = 'b'.repeat(40); foreign[1].workflowSha = 'b'.repeat(40);
   assert.throws(() => mergeQualification(foreign, expected), /foreign or stale/);
-  const sharedNamespace = complete.map(copy); sharedNamespace[3].namespaces.cache = sharedNamespace[2].namespaces.cache;
+  const sharedNamespace = complete.map(copy); sharedNamespace[3].namespaces.workspace = sharedNamespace[2].namespaces.workspace;
   assert.throws(() => mergeQualification(sharedNamespace, expected), /shared isolation namespace/);
 });
 
@@ -38,11 +44,11 @@ test('F0.VB evidence rejects malformed timestamps and cross-worker namespace ass
   const complete = workerNames().map(evidence);
   complete[0].finishedAtMillis = complete[0].startedAtMillis + 120_001;
   assert.throws(() => mergeQualification(complete, expected), /unbounded/);
-  const wrongDisplay = workerNames().map(evidence).map(copy); wrongDisplay[1].namespaces.display = ':260';
+  const wrongDisplay = workerNames().map(evidence).map(copy); wrongDisplay[1].namespaces.display = ':260'; wrongDisplay[1].consumption.display = ':260';
   assert.throws(() => mergeQualification(wrongDisplay, expected), /incomparable assignment namespace/);
 });
 
-function copy(value) { return { ...value, namespaces: { ...value.namespaces } }; }
+function copy(value) { return { ...value, namespaces: { ...value.namespaces }, consumption: { ...value.consumption } }; }
 
 test('same-host capacity admission requires four CPU slots and bounded memory and disk', () => {
   assert.deepEqual(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8192, diskAvailableMiB: 20480 }),
@@ -50,4 +56,20 @@ test('same-host capacity admission requires four CPU slots and bounded memory an
   assert.equal(evaluateCapacity({ workers: 4, cpu: 3, memAvailableMiB: 8192, diskAvailableMiB: 20480 }).admitted, false);
   assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8191, diskAvailableMiB: 20480 }).admitted, false);
   assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8192, diskAvailableMiB: 20479 }).admitted, false);
+});
+
+test('F0.VB merge retains a visible incomplete aggregate when worker artifacts are missing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f0vb-incomplete-'));
+  const output = join(root, 'merge.json');
+  const merger = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'merge-f0vb-qualification.mjs');
+  try {
+    assert.throws(() => execFileSync('node', [merger, `--input=${root}`, `--output=${output}`, '--qualification=f0vb-r6-test',
+      '--repository=RidiculousCircumstances/pale_mirror', `--head=${sha}`, `--workflow-sha=${sha}`,
+      '--workflow=RidiculousCircumstances/pale_mirror/.github/workflows/f0vb-native-qualification.yml@refs/heads/main', '--run=44', '--attempt=1'], { stdio: 'pipe' }), /Command failed/);
+    const aggregate = JSON.parse(await readFile(output, 'utf8'));
+    assert.equal(aggregate.status, 'incomplete');
+    assert.match(aggregate.failure, /missing or extra/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
