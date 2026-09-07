@@ -11,21 +11,21 @@ final class FrontierV3TraversalScheduleGate {
     private FrontierV3TraversalScheduleGate() { }
 
     /**
-     * The physical executor runs before the canonical engine advances one server turn. A due
-     * action at {@code instant + 1} is therefore the one it may satisfy; a missing, duplicate,
-     * or later action gives the loaded observer no progress authority.
+     * An observed body may consume the one retained continuation before its due turn.  That
+     * consumes rather than creates the shared COLD action and preserves its due-derived next
+     * cadence, so a loaded visit cannot introduce a second clock or gain unbound authority.
      */
-    static boolean traversalCheckpointDue(CheckpointImage checkpoint, SubjectId jobId) {
-        return dueBinding(checkpoint, jobId).isPresent();
+    static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId jobId) {
+        return binding(checkpoint, jobId).isPresent();
     }
 
-    /** A physically arrived next cell is necessary, but the schedule turn is the sole authority. */
+    /** A physically arrived exact next cell and its one engine binding are both necessary. */
     static boolean shouldCommitObservedTraversal(CheckpointImage checkpoint, SubjectId jobId, boolean atExactNextCell) {
-        return atExactNextCell && traversalCheckpointDue(checkpoint, jobId);
+        return atExactNextCell && traversalCheckpointBound(checkpoint, jobId);
     }
 
-    static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId jobId) {
-        try { return Optional.of(FrontierV3ContinuationBinding.requireDueNextTurn(checkpoint, jobId,
+    static Optional<ScheduledAction> binding(CheckpointImage checkpoint, SubjectId jobId) {
+        try { return Optional.of(FrontierV3ContinuationBinding.require(checkpoint, jobId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)); }
         catch (IllegalArgumentException rejected) { return Optional.empty(); }
     }

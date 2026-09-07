@@ -158,7 +158,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 // canonical step. A different body position remains a player/world conflict
                 // and is never direct-line repaired.
                 if (atTraversalSurface(worker, target)) {
-                    var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                    var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
                     // The F0.V effect gate closes only the irreversible crop/output path.
                     // A loaded arrival is still the observed form of the one retained
                     // traversal action: consume its exact engine binding so HOT advances the
@@ -177,12 +177,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 return;
             }
             if (atTraversalSurface(worker, target)) {
-                // A loaded body may reach an edge well before the canonical work turn.  HOT
-                // observation is evidence for that same retained turn, not authority to add an
-                // extra traversal cadence.  The sole cold-progress schedule remains the shared
-                // clock for both drivers; on its next due engine turn the accepted observation
-                // atomically advances the one cursor and the normal planner reschedules it.
-                var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                // A loaded body may reach an edge before the retained COLD action is due.  Its
+                // exact observed arrival consumes that one bound action immediately; the
+                // reducer reschedules from the action's existing due instant, never arrival
+                // time, so HOT advances the shared cursor without adding a cadence.
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
                 if (binding.isPresent()) {
                     submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
                             checkpoint(job, lease, worker), binding.orElseThrow());

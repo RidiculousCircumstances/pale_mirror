@@ -24,11 +24,4 @@ final class FrontierV3ContinuationBinding {
         return matches.getFirst();
     }
 
-    static ScheduledAction requireDueNextTurn(CheckpointImage checkpoint, SubjectId subject, String kind) {
-        ScheduledAction action = require(checkpoint, subject, kind);
-        if (action.dueAt().ticks() > Math.addExact(checkpoint.instant().ticks(), 1L)) {
-            throw new IllegalArgumentException("continuation binding is not due on the next engine turn");
-        }
-        return action;
-    }
 }

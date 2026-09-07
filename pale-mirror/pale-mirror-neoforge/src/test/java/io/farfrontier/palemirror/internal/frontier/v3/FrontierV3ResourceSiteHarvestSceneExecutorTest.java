@@ -24,34 +24,34 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     private static final SubjectId JOB = new SubjectId("job:test");
 
     @Test
-    void hotTraversalMayCommitOnlyOnTheSharedColdDueTurn() {
-        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointDue(checkpoint(100L, 102L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointDue(checkpoint(100L, 101L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointDue(checkpoint(100L, 100L), JOB));
-        assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), JOB, true));
+    void observedHotTraversalConsumesTheOneSharedContinuationBeforeItsDueTurn() {
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), JOB));
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), JOB));
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 100L), JOB));
+        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), JOB, true));
         assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, false));
         assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, true));
     }
 
     @Test
-    void missingOrAmbiguousColdTurnCannotGrantHotProgressAuthority() {
-        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointDue(emptyCheckpoint(100L), JOB));
+    void missingOrAmbiguousContinuationCannotGrantHotProgressAuthority() {
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(emptyCheckpoint(100L), JOB));
         CheckpointImage duplicate = new CheckpointImage(new WorldId("frontier:test"), new Revision(1L), new SimInstant(100L), new byte[0], List.of(
                 action(101L), action(101L)), List.of());
-        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointDue(duplicate, JOB));
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(duplicate, JOB));
     }
 
     @Test
-    void typedBindingRejectsMissingDuplicateAndLaterActionBeforeHotAuthority() {
+    void typedBindingRejectsMissingAndDuplicateActionsButRetainsTheExactFutureAction() {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(emptyCheckpoint(100L), JOB,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
         CheckpointImage duplicate = new CheckpointImage(new WorldId("frontier:test"), new Revision(1L), new SimInstant(100L), new byte[0], List.of(
                 action(101L), action(102L)), List.of());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(duplicate, JOB,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.requireDueNextTurn(checkpoint(100L, 102L), JOB,
+        assertEquals(action(102L), FrontierV3ContinuationBinding.require(checkpoint(100L, 102L), JOB,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
-        assertEquals(action(101L), FrontierV3ContinuationBinding.requireDueNextTurn(checkpoint(100L, 101L), JOB,
+        assertEquals(action(101L), FrontierV3ContinuationBinding.require(checkpoint(100L, 101L), JOB,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
     }
 
