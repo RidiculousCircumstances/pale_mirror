@@ -22,13 +22,13 @@ jobs:
             port: 26100
             variants: never_loaded,arrival_checkpoint_one
           - worker: worker-1
-            port: 26101
+            port: 26110
             variants: arrival_checkpoint_two,unload_return
           - worker: worker-2
-            port: 26102
+            port: 26120
             variants: player_intervention,graceful_restart
           - worker: worker-3
-            port: 26103
+            port: 26130
             variants: abrupt_restart,neutral_observer_differential
     env:
       FRONTIER_V3_PILOT_PORT: ${{ matrix.port }}
@@ -44,7 +44,9 @@ jobs:
       - name: Run immutable assigned native variants
         run: |
           export FRONTIER_V3_NATIVE_PROCESS_ROOT="$RUNNER_TEMP/f01-${{ github.run_id }}-${{ matrix.worker }}"
+          export GRADLE_USER_HOME="$RUNNER_TEMP/f01-${{ github.run_id }}-${{ matrix.worker }}-gradle"
           mkdir -p "$FRONTIER_V3_NATIVE_PROCESS_ROOT"
+          mkdir -p "$GRADLE_USER_HOME"
           IFS=, read -r -a variants <<< '${{ matrix.variants }}'
           for variant in "${variants[@]}"; do
             scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f0v-matrix.mjs \

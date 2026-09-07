@@ -14,10 +14,19 @@ const expected = new Map([
 ]);
 const aggregate = { schema: 1, kind: 'frontier-v3-f01-paired-harvest-native-matrix', status: 'incomplete', headSha: values.head, runId: Number(values.run), workers: [] };
 try {
+  const bundles = await readdir(root, { withFileTypes: true });
+  const expectedBundles = new Set([...expected.keys()].map(worker => `f01-${values.run}-${worker}`));
+  if (bundles.length !== expectedBundles.size
+      || bundles.some(entry => !entry.isDirectory() || !expectedBundles.has(entry.name))) {
+    throw new Error('F0.1 merge requires exactly the four expected worker evidence bundles');
+  }
   for (const [worker, variants] of expected) {
-    const matches = (await readdir(root, { recursive: true })).filter(name => name.endsWith(`${worker}/matrix.json`));
-    if (matches.length !== 1) throw new Error(`F0.1 merge requires exactly one matrix report for ${worker}`);
-    const report = JSON.parse(await readFile(resolve(root, matches[0]), 'utf8'));
+    const bundle = `f01-${values.run}-${worker}`;
+    const entries = await readdir(resolve(root, bundle), { withFileTypes: true });
+    if (entries.filter(entry => entry.isFile() && entry.name === 'matrix.json').length !== 1) {
+      throw new Error(`F0.1 merge requires exactly one top-level matrix report for ${worker}`);
+    }
+    const report = JSON.parse(await readFile(resolve(root, bundle, 'matrix.json'), 'utf8'));
     if (report.error || !report.build || report.build.sourceCommit !== values.head) throw new Error(`F0.1 matrix report is stale or failed for ${worker}`);
     const actual = report.variants?.map(entry => entry.variant).sort();
     if (JSON.stringify(actual) !== JSON.stringify([...variants].sort()) || report.variants.some(entry => entry.runs.some(run => run.status !== 'passed'))) {
