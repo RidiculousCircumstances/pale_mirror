@@ -94,7 +94,7 @@ final class FrontierV3PilotLifecycleSignal {
             }
             JsonObject detail = new JsonObject(); detail.addProperty("serverRunId", runId); detail.addProperty("serverPid", ProcessHandle.current().pid());
             JsonObject signal = new JsonObject(); signal.addProperty("schema", 1); signal.addProperty("signal", kind);
-            signal.addProperty("suffix", runId); signal.add("identity", identity); signal.add("detail", detail);
+            signal.addProperty("suffix", suffix); signal.add("identity", identity); signal.add("detail", detail);
             Path signals = directory.resolve("signals");
             if (!Files.isDirectory(signals)) throw new IOException("pilot lifecycle signal directory is unavailable");
             FrontierV3LifecycleFilePublisher.publish(directory.resolve("staging"),
