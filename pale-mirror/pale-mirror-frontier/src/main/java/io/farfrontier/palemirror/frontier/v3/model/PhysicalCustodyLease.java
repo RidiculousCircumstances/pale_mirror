@@ -18,8 +18,8 @@ public record PhysicalCustodyLease(SubjectId scopeId, SubjectId objectId, Subjec
     }
     public boolean live() { return status != PhysicalCustodyLeaseStatus.RELEASED; }
     public PhysicalCustodyLease checkpoint(long canonicalRevision, long replicaRevision) {
-        if (status != PhysicalCustodyLeaseStatus.ACQUIRED || canonicalRevision < expectedCanonicalRevision || replicaRevision < expectedReplicaRevision) throw new IllegalArgumentException("custody checkpoint is stale");
-        return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, canonicalRevision, replicaRevision,
+        if (status != PhysicalCustodyLeaseStatus.ACQUIRED || canonicalRevision != expectedCanonicalRevision || replicaRevision != expectedReplicaRevision) throw new IllegalArgumentException("custody checkpoint fence is stale or forged");
+        return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, expectedCanonicalRevision, expectedReplicaRevision,
                 PhysicalCustodyLeaseStatus.CHECKPOINTED, null);
     }
     public PhysicalCustodyLease unresolved(PhysicalCustodyUnresolvedReason reason) {
@@ -28,8 +28,9 @@ public record PhysicalCustodyLease(SubjectId scopeId, SubjectId objectId, Subjec
                 PhysicalCustodyLeaseStatus.UNRESOLVED, Objects.requireNonNull(reason, "unresolved reason"));
     }
     public PhysicalCustodyLease release(long canonicalRevision, long replicaRevision) {
-        if (!live() || status == PhysicalCustodyLeaseStatus.UNRESOLVED || canonicalRevision < expectedCanonicalRevision || replicaRevision < expectedReplicaRevision) throw new IllegalArgumentException("custody release is stale or unresolved");
-        return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, canonicalRevision, replicaRevision,
+        if (!live() || status == PhysicalCustodyLeaseStatus.UNRESOLVED || canonicalRevision != expectedCanonicalRevision
+                || replicaRevision != expectedReplicaRevision) throw new IllegalArgumentException("custody release fence is stale, forged, or unresolved");
+        return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, expectedCanonicalRevision, expectedReplicaRevision,
                 PhysicalCustodyLeaseStatus.RELEASED, null);
     }
 }

@@ -30,11 +30,11 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     private static final class Observed extends Base {
         @Override public String type() { return "frontier.physical_replica_observed"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
-            ReplicaObserved value = (ReplicaObserved) payload; subject(output, value.objectId()); output.writeLong(value.expectedReplicaRevision());
+            ReplicaObserved value = (ReplicaObserved) payload; subject(output, value.objectId()); output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
             FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance()); output.writeLong(value.observedCanonicalRevision());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaObserved(
-                subject(input), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), input.readLong())); }
+                subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), input.readLong())); }
     }
     private static final class Acquired extends Base {
         @Override public String type() { return "frontier.physical_custody_acquired"; }
@@ -51,10 +51,13 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     private static final class Unresolved extends Base {
         @Override public String type() { return "frontier.physical_custody_unresolved"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
-            CustodyUnresolved value = (CustodyUnresolved) payload; subject(output, value.scopeId()); output.writeLong(value.expectedEpoch()); output.writeByte(value.reason().wireTag());
+            CustodyUnresolved value = (CustodyUnresolved) payload;
+            subject(output, value.scopeId()); output.writeLong(value.expectedEpoch());
+            output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
+            output.writeByte(value.reason().wireTag());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes,
-                input -> new CustodyUnresolved(subject(input), input.readLong(), readReason(input.readUnsignedByte()))); }
+                input -> new CustodyUnresolved(subject(input), input.readLong(), input.readLong(), input.readLong(), readReason(input.readUnsignedByte()))); }
     }
     private static final class Released extends Base {
         @Override public String type() { return "frontier.physical_custody_released"; }
@@ -65,13 +68,13 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     }
     private static void writeReplica(DataOutputStream output, PhysicalReplicaRecord value) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, value.objectId()); FrontierWorldPayloadCodecs.writeString(output, value.semanticKind());
-        output.writeLong(value.emittedCanonicalRevision()); output.writeLong(value.observedCanonicalRevision());
+        output.writeLong(value.emittedCanonicalRevision()); output.writeLong(value.observedCanonicalRevision()); output.writeLong(value.replicaRevision());
         FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance()); output.writeByte(value.state().wireTag());
     }
     private static PhysicalReplicaRecord readReplica(DataInputStream input) throws IOException {
         var object = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
-        long emitted = input.readLong(); long observed = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input); String provenance = FrontierWorldPayloadCodecs.readString(input);
-        return new PhysicalReplicaRecord(object, kind, emitted, observed, fingerprint, provenance, readReplicaState(input.readUnsignedByte()));
+        long emitted = input.readLong(); long observed = input.readLong(); long replicaRevision = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input); String provenance = FrontierWorldPayloadCodecs.readString(input);
+        return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, readReplicaState(input.readUnsignedByte()));
     }
     private static void writeLease(DataOutputStream output, PhysicalCustodyLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.scopeId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.objectId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.providerId());

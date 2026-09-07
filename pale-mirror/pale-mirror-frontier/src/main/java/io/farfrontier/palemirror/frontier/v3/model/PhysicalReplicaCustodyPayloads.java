@@ -13,11 +13,11 @@ public final class PhysicalReplicaCustodyPayloads {
         public ReplicaDeclared { Objects.requireNonNull(replica, "replica"); }
         @Override public String type() { return "frontier.physical_replica_declared"; }
     }
-    public record ReplicaObserved(SubjectId objectId, long expectedReplicaRevision, String fingerprint, String provenance,
+    public record ReplicaObserved(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision, String fingerprint, String provenance,
                                   long observedCanonicalRevision) implements FrontierPayload {
         public ReplicaObserved {
             Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(fingerprint, "fingerprint"); Objects.requireNonNull(provenance, "provenance");
-            if (expectedReplicaRevision < 0 || observedCanonicalRevision < 0) throw new IllegalArgumentException("replica observation revision is invalid");
+            if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || observedCanonicalRevision < 0) throw new IllegalArgumentException("replica observation revision is invalid");
         }
         @Override public String type() { return "frontier.physical_replica_observed"; }
     }
@@ -32,8 +32,12 @@ public final class PhysicalReplicaCustodyPayloads {
         @Override public String type() { return "frontier.physical_custody_checkpointed"; }
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }
-    public record CustodyUnresolved(SubjectId scopeId, long expectedEpoch, PhysicalCustodyUnresolvedReason reason) implements FrontierPayload {
-        public CustodyUnresolved { Objects.requireNonNull(scopeId, "scope id"); Objects.requireNonNull(reason, "reason"); if (expectedEpoch < 1) throw new IllegalArgumentException("custody epoch is invalid"); }
+    public record CustodyUnresolved(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                    PhysicalCustodyUnresolvedReason reason) implements FrontierPayload {
+        public CustodyUnresolved {
+            Objects.requireNonNull(scopeId, "scope id"); Objects.requireNonNull(reason, "reason");
+            if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1) throw new IllegalArgumentException("custody fence is invalid");
+        }
         @Override public String type() { return "frontier.physical_custody_unresolved"; }
     }
     public record CustodyReleased(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,

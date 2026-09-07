@@ -15,8 +15,19 @@ import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyState;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -47,6 +58,34 @@ class FrontierFileStoreTest {
         assertEquals(0L, store.compact(WORLD, new Revision(1L)).retainedTransactionCount());
         assertEquals(snapshot, store.recover(WORLD).checkpoint().orElseThrow());
         assertTrue(store.recover(WORLD).walTail().isEmpty());
+    }
+
+    @Test
+    void fileStoreRecoversReplicaCustodySnapshotAndFencedWalTransition(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:replica-file-store");
+        SubjectId object = new SubjectId("container:file-store-a"), scope = new SubjectId("scope:file-store-a"), provider = new SubjectId("provider:file-store-a");
+        PhysicalReplicaCustodyState custody = PhysicalReplicaCustodyState.empty()
+                .declare(PhysicalReplicaRecord.expected(object, "container.depot", 10L, "sha256:a", "owned:genesis"))
+                .observe(object, 10L, 1L, "sha256:a", "owned:genesis", 10L)
+                .acquire(new PhysicalCustodyLease(scope, object, provider, 1L, 10L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        FrontierWorldState snapshotState = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L))
+                .withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        TransactionId transactionId = new TransactionId("transaction:replica-file-store");
+        CustodyReleased released = new CustodyReleased(scope, 1L, 10L, 2L);
+        TransactionRecord transaction = new TransactionRecord(transactionId, world, new Revision(1L), new SimInstant(1L), List.of(
+                new FrontierEvent(1, new EventId("event:replica-file-store"), transactionId, world, new Revision(1L), new SimInstant(1L),
+                        scope, CauseChain.root(new CommandId("command:replica-file-store")), released)));
+        FrontierFileStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        store.installSnapshot(new SnapshotRecord(new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO,
+                new FrontierWorldStateCodec().encode(snapshotState), List.of(), List.of()), 0L));
+        store.append(transaction, Durability.DURABLE_BEFORE_EFFECT);
+
+        var recovered = store.recover(world);
+        FrontierWorldState hydrated = new FrontierWorldStateCodec().decode(recovered.checkpoint().orElseThrow().checkpoint().canonicalState());
+        assertEquals(transaction, recovered.walTail().getFirst());
+        FrontierWorldState replayed = FrontierWorldProcessCatalog.reduce("replica-custody", hydrated, recovered.walTail().getFirst().events().getFirst());
+        assertEquals(PhysicalCustodyLeaseStatus.RELEASED, replayed.replicaCustody().custodyByScope().get(scope).status());
+        assertEquals(2L, replayed.replicaCustody().custodyByScope().get(scope).expectedReplicaRevision());
     }
 
     @Test

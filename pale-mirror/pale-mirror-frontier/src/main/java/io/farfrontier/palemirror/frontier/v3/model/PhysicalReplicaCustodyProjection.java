@@ -8,7 +8,7 @@ import java.util.Optional;
 /** Immutable diagnostic-only view; it exposes no mutation or physical-world truth. */
 public record PhysicalReplicaCustodyProjection(List<Entry> entries) {
     public PhysicalReplicaCustodyProjection { entries = List.copyOf(entries); }
-    public record Entry(SubjectId objectId, String semanticKind, long emittedCanonicalRevision, long observedCanonicalRevision,
+    public record Entry(SubjectId objectId, String semanticKind, long emittedCanonicalRevision, long observedCanonicalRevision, long replicaRevision,
                         String fingerprint, String provenance, PhysicalReplicaState replicaState, Optional<SubjectId> scopeId,
                         Optional<SubjectId> providerId, Optional<Long> authorityEpoch, Optional<PhysicalCustodyLeaseStatus> custodyStatus,
                         Optional<PhysicalCustodyUnresolvedReason> unresolvedReason) {

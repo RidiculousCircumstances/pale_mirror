@@ -32,9 +32,13 @@ public final class FrontierWorldProjectionCompiler {
         return new PhysicalReplicaCustodyProjection(state.replicaCustody().replicas().values().stream().sorted(java.util.Comparator.comparing(PhysicalReplicaRecord::objectId))
                 .map(replica -> {
                     PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().values().stream()
-                            .filter(value -> value.objectId().equals(replica.objectId())).findFirst().orElse(null);
+                            .filter(value -> value.objectId().equals(replica.objectId()))
+                            .sorted(java.util.Comparator.comparing(PhysicalCustodyLease::live).reversed()
+                                    .thenComparing(java.util.Comparator.comparingLong(PhysicalCustodyLease::authorityEpoch).reversed())
+                                    .thenComparing(PhysicalCustodyLease::scopeId))
+                            .findFirst().orElse(null);
                     return new PhysicalReplicaCustodyProjection.Entry(replica.objectId(), replica.semanticKind(), replica.emittedCanonicalRevision(),
-                            replica.observedCanonicalRevision(), replica.fingerprint(), replica.provenance(), replica.state(),
+                            replica.observedCanonicalRevision(), replica.replicaRevision(), replica.fingerprint(), replica.provenance(), replica.state(),
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.scopeId()),
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.providerId()),
                             lease == null ? java.util.Optional.empty() : java.util.Optional.of(lease.authorityEpoch()),

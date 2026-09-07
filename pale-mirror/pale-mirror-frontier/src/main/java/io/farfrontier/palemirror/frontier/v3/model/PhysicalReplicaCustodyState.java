@@ -25,6 +25,12 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
             if (!entry.getKey().equals(entry.getValue().scopeId()) || !replicas.containsKey(entry.getValue().objectId())) {
                 throw new IllegalArgumentException("custody must retain one indexed known replica scope");
             }
+            PhysicalReplicaRecord replica = replicas.get(entry.getValue().objectId());
+            if (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
+                    || entry.getValue().expectedCanonicalRevision() != replica.observedCanonicalRevision()
+                    || entry.getValue().expectedReplicaRevision() != replica.replicaRevision()) {
+                throw new IllegalArgumentException("custody must exactly fence retained replica evidence");
+            }
         }
         for (PhysicalCustodyLease left : custodyByScope.values()) for (PhysicalCustodyLease right : custodyByScope.values()) {
             if (left == right || !left.live() || !right.live()) continue;
@@ -44,37 +50,49 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas); next.put(replica.objectId(), replica);
         return new PhysicalReplicaCustodyState(next, custodyByScope);
     }
-    public PhysicalReplicaCustodyState observe(SubjectId objectId, long expectedReplicaRevision, String fingerprint, String provenance, long observedRevision) {
+    public PhysicalReplicaCustodyState observe(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                               String fingerprint, String provenance, long observedRevision) {
         PhysicalReplicaRecord current = requireReplica(objectId);
-        if (current.observedCanonicalRevision() != expectedReplicaRevision) throw new IllegalArgumentException("replica observation revision is stale");
-        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas); next.put(objectId, current.observe(fingerprint, provenance, observedRevision));
+        if (current.state() != PhysicalReplicaState.EXPECTED || current.replicaRevision() != expectedReplicaRevision || current.emittedCanonicalRevision() != expectedCanonicalRevision
+                || custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(objectId))) {
+            throw new IllegalArgumentException("replica observation revision is stale or custody is live");
+        }
+        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
+        next.put(objectId, current.observe(expectedCanonicalRevision, fingerprint, provenance, observedRevision));
         return new PhysicalReplicaCustodyState(next, custodyByScope);
     }
     public PhysicalReplicaCustodyState acquire(PhysicalCustodyLease requested) {
         Objects.requireNonNull(requested, "custody lease");
         if (requested.status() != PhysicalCustodyLeaseStatus.ACQUIRED || requested.unresolvedReason() != null) throw new IllegalArgumentException("custody must start acquired");
         PhysicalReplicaRecord replica = requireReplica(requested.objectId());
-        if (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT || replica.observedCanonicalRevision() != requested.expectedReplicaRevision()) {
+        if (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT || replica.observedCanonicalRevision() != requested.expectedCanonicalRevision()
+                || replica.replicaRevision() != requested.expectedReplicaRevision()) {
             throw new IllegalArgumentException("custody requires the exact current replica evidence");
         }
         PhysicalCustodyLease prior = custodyByScope.get(requested.scopeId());
         if (prior != null && (prior.live() || requested.authorityEpoch() <= prior.authorityEpoch())) throw new IllegalArgumentException("custody scope is already live or reuses its epoch");
+        if (custodyByScope.values().stream().anyMatch(lease -> lease.objectId().equals(requested.objectId())
+                && requested.authorityEpoch() <= lease.authorityEpoch())) throw new IllegalArgumentException("custody object reuses its epoch");
         if (custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(requested.objectId()))) throw new IllegalArgumentException("custody scope overlaps a live object scope");
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(requested.scopeId(), requested);
         return new PhysicalReplicaCustodyState(replicas, next);
     }
     public PhysicalReplicaCustodyState checkpoint(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
+        requireExactEvidence(lease, canonicalRevision, replicaRevision);
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.checkpoint(canonicalRevision, replicaRevision));
         return new PhysicalReplicaCustodyState(replicas, next);
     }
-    public PhysicalReplicaCustodyState unresolved(SubjectId scopeId, long expectedEpoch, PhysicalCustodyUnresolvedReason reason) {
+    public PhysicalReplicaCustodyState unresolved(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
+                                                  long expectedReplicaRevision, PhysicalCustodyUnresolvedReason reason) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
+        requireExactEvidence(lease, expectedCanonicalRevision, expectedReplicaRevision);
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.unresolved(reason));
         return new PhysicalReplicaCustodyState(replicas, next);
     }
     public PhysicalReplicaCustodyState release(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
+        requireExactEvidence(lease, canonicalRevision, replicaRevision);
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.release(canonicalRevision, replicaRevision));
         return new PhysicalReplicaCustodyState(replicas, next);
     }
@@ -87,5 +105,13 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         PhysicalCustodyLease lease = custodyByScope.get(Objects.requireNonNull(scopeId, "scope id"));
         if (lease == null || !lease.live() || lease.authorityEpoch() != expectedEpoch) throw new IllegalArgumentException("custody epoch is stale or unavailable");
         return lease;
+    }
+    private void requireExactEvidence(PhysicalCustodyLease lease, long canonicalRevision, long replicaRevision) {
+        PhysicalReplicaRecord replica = requireReplica(lease.objectId());
+        if (canonicalRevision != lease.expectedCanonicalRevision() || replicaRevision != lease.expectedReplicaRevision()
+                || replica.state() != PhysicalReplicaState.OBSERVED_CURRENT || replica.observedCanonicalRevision() != canonicalRevision
+                || replica.replicaRevision() != replicaRevision) {
+            throw new IllegalArgumentException("custody replica fence is stale or forged");
+        }
     }
 }

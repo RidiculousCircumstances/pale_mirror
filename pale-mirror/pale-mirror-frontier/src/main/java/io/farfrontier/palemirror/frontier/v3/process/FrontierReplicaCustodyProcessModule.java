@@ -16,12 +16,16 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
         try {
             return switch (command.payload()) {
                 case ReplicaDeclared declared -> { state.replicaCustody().declare(declared.replica()); yield accepted(declared.replica().objectId(), declared); }
-                case ReplicaObserved observed -> { state.replicaCustody().observe(observed.objectId(), observed.expectedReplicaRevision(),
+                case ReplicaObserved observed -> { state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(), observed.expectedReplicaRevision(),
                         observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()); yield accepted(observed.objectId(), observed); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
                 case CustodyCheckpointed checkpointed -> { state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(),
                         checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()); yield accepted(checkpointed.scopeId(), checkpointed); }
-                case CustodyUnresolved unresolved -> { state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(), unresolved.reason()); yield accepted(unresolved.scopeId(), unresolved); }
+                case CustodyUnresolved unresolved -> {
+                    state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
+                            unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason());
+                    yield accepted(unresolved.scopeId(), unresolved);
+                }
                 case CustodyReleased released -> { state.replicaCustody().release(released.scopeId(), released.expectedEpoch(),
                         released.expectedCanonicalRevision(), released.expectedReplicaRevision()); yield accepted(released.scopeId(), released); }
                 default -> FrontierWorldCommandPlanner.rejected("replica custody process does not admit command: " + command.payload().type());
@@ -32,10 +36,12 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
         try {
             return switch (event.payload()) {
                 case ReplicaDeclared declared -> replace(state, state.replicaCustody().declare(declared.replica()));
-                case ReplicaObserved observed -> replace(state, state.replicaCustody().observe(observed.objectId(), observed.expectedReplicaRevision(), observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()));
+                case ReplicaObserved observed -> replace(state, state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(),
+                        observed.expectedReplicaRevision(), observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()));
                 case CustodyAcquired acquired -> replace(state, state.replicaCustody().acquire(acquired.lease()));
                 case CustodyCheckpointed checkpointed -> replace(state, state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(), checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()));
-                case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(), unresolved.reason()));
+                case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
+                        unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason()));
                 case CustodyReleased released -> replace(state, state.replicaCustody().release(released.scopeId(), released.expectedEpoch(), released.expectedCanonicalRevision(), released.expectedReplicaRevision()));
                 default -> throw new IllegalArgumentException("replica custody process does not own event: " + event.payload().type());
             };

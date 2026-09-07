@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 129; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 130; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -119,7 +119,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, state.replicas().size());
         for (PhysicalReplicaRecord replica : state.replicas().values().stream().sorted(Comparator.comparing(PhysicalReplicaRecord::objectId)).toList()) {
             writeString(output, replica.objectId().value()); writeString(output, replica.semanticKind());
-            output.writeLong(replica.emittedCanonicalRevision()); output.writeLong(replica.observedCanonicalRevision());
+            output.writeLong(replica.emittedCanonicalRevision()); output.writeLong(replica.observedCanonicalRevision()); output.writeLong(replica.replicaRevision());
             writeString(output, replica.fingerprint()); writeString(output, replica.provenance()); output.writeByte(replica.state().wireTag());
         }
         writeCount(output, state.custodyByScope().size());
@@ -133,10 +133,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static PhysicalReplicaCustodyState readReplicaCustody(DataInputStream input) throws IOException {
         Map<SubjectId, PhysicalReplicaRecord> replicas = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId object = new SubjectId(readString(input)); String semanticKind = readString(input); long emitted = input.readLong(); long observed = input.readLong();
+            SubjectId object = new SubjectId(readString(input)); String semanticKind = readString(input); long emitted = input.readLong(); long observed = input.readLong(); long replicaRevision = input.readLong();
             String fingerprint = readString(input); String provenance = readString(input); int state = input.readUnsignedByte();
             PhysicalReplicaState lifecycle = replicaState(state);
-            if (replicas.put(object, new PhysicalReplicaRecord(object, semanticKind, emitted, observed, fingerprint, provenance, lifecycle)) != null) {
+            if (replicas.put(object, new PhysicalReplicaRecord(object, semanticKind, emitted, observed, replicaRevision, fingerprint, provenance, lifecycle)) != null) {
                 throw new IllegalArgumentException("duplicate physical replica identity");
             }
         }
