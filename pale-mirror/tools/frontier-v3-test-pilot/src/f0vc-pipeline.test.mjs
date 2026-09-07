@@ -6,12 +6,13 @@ import { join } from 'node:path';
 import { mergeDirectory, mergeEvidence, preflight } from './f0vc-pipeline.mjs';
 import { runtimeTargetFor } from './f0vc-prepared-runtime.mjs';
 import { preparedClientSegment } from './run-f0va-persistent-matrix.mjs';
+import { liftSegmentDiagnostics } from './run-ci-matrix-shard.mjs';
 
 const runtime = 'a'.repeat(64);
 function plan() { return { schema: 1, kind: 'frontier-v3-f0vc-preflight', runtimeContentSha256: runtime, runId: 77,
   expectedArtifacts: ['f0vc-77-worker-0', 'f0vc-77-worker-1', 'f0vc-77-worker-2', 'f0vc-77-worker-3'],
   workers: [0, 1, 2, 3].map((index) => ({ worker: `worker-${index}`, runtimeContentSha256: runtime, namespace: `/tmp/f0vc-${index}`,
-    port: 26300 + index, display: `:${1300 + index}`, world: `world-${index}`, cases: index === 0
+    port: 26300 + index * 2, display: `:${1300 + index}`, world: `world-${index}`, cases: index === 0
       ? [{ id: 'smoke-a', lifecycle: 'batch', world: 'world-0' }, { id: 'smoke-b', lifecycle: 'batch', world: 'world-0' }]
       : [{ id: `restart-${index}`, lifecycle: 'isolated', world: `lane-${index}` }] })) }; }
 function evidence(value = plan()) { return value.workers.map((entry, index) => ({ worker: entry.worker, status: 'success', runtimeContentSha256: runtime,
@@ -21,6 +22,8 @@ test('F0.VC admits only four isolated workers and declared same-world batches', 
   assert.equal(preflight(plan()).workers.length, 4);
   const bad = plan(); bad.workers[1].port = bad.workers[0].port;
   assert.throws(() => preflight(bad), /assignment/);
+  const overlappingRcon = plan(); overlappingRcon.workers[1].port = overlappingRcon.workers[0].port + 1;
+  assert.throws(() => preflight(overlappingRcon), /assignment/);
   const crossWorld = plan(); crossWorld.workers[0].cases[1].world = 'foreign';
   assert.throws(() => preflight(crossWorld), /reuse/);
 });
@@ -59,4 +62,11 @@ test('F0.VC waits for the client preparation signal bound to the initial immutab
   assert.equal(preparedClientSegment([{ id: 'segment-immutable-0' }]), 'segment-immutable-0');
   assert.throws(() => preparedClientSegment([]), /initial client segment/);
   assert.throws(() => preparedClientSegment([{ id: '' }]), /initial client segment/);
+});
+
+test('F0.VC retains action checkpoints outside diagnostic payloads for declared arrival evidence', () => {
+  assert.deepEqual(liftSegmentDiagnostics([{ actionStep: 2, value: { kind: 'process', id: 'job' } }], 3), [
+    { observed: { actionStep: 5, value: { kind: 'process', id: 'job' } } }
+  ]);
+  assert.throws(() => liftSegmentDiagnostics([{ actionStep: 0, value: {} }], 0), /checkpoint/);
 });

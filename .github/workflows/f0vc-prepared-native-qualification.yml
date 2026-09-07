@@ -105,7 +105,7 @@ jobs:
         run: |
           node tools/frontier-v3-test-pilot/src/f0vc-pipeline.mjs --mode=preflight --plan=build/f0vc/producer/preflight.json
           worker_index="${{ matrix.worker }}"; worker_index="${worker_index#worker-}"
-          export FRONTIER_V3_PILOT_PORT="$((26300 + worker_index))"
+          export FRONTIER_V3_PILOT_PORT="$((26300 + worker_index * 2))"
           export DISPLAY=":$((1300 + worker_index))"
           printf 'FRONTIER_V3_PILOT_PORT=%s\nDISPLAY=%s\n' "$FRONTIER_V3_PILOT_PORT" "$DISPLAY" >> "$GITHUB_ENV"
       - name: Run one prepared actual-Minecraft semantic shard

@@ -14,14 +14,15 @@ export function preflight(plan) {
       || !Array.isArray(plan.workers) || plan.workers.length !== 4 || !Array.isArray(plan.expectedArtifacts) || plan.expectedArtifacts.length !== 4) {
     throw new Error('F0.VC preflight plan is malformed');
   }
-  const seen = new Set(); const namespaces = new Set(); const ports = new Set(); const displays = new Set(); const worlds = new Set();
+  const seen = new Set(); const namespaces = new Set(); const endpoints = new Set(); const displays = new Set(); const worlds = new Set();
   for (const entry of plan.workers) {
     if (!entry || !WORKERS.includes(entry.worker) || seen.has(entry.worker) || entry.runtimeContentSha256 !== plan.runtimeContentSha256
         || typeof entry.namespace !== 'string' || !entry.namespace.startsWith('/') || namespaces.has(entry.namespace)
-        || !Number.isInteger(entry.port) || entry.port < 1024 || ports.has(entry.port) || typeof entry.display !== 'string' || !/^:[0-9]+$/.test(entry.display) || displays.has(entry.display)
+        || !Number.isInteger(entry.port) || entry.port < 1024 || entry.port >= 65535 || endpoints.has(entry.port) || endpoints.has(entry.port + 1)
+        || typeof entry.display !== 'string' || !/^:[0-9]+$/.test(entry.display) || displays.has(entry.display)
         || typeof entry.world !== 'string' || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(entry.world) || worlds.has(entry.world)
         || !Array.isArray(entry.cases) || entry.cases.length < 1 || entry.cases.length > 32) throw new Error('F0.VC preflight worker assignment is malformed');
-    seen.add(entry.worker); namespaces.add(entry.namespace); ports.add(entry.port); displays.add(entry.display); worlds.add(entry.world);
+    seen.add(entry.worker); namespaces.add(entry.namespace); endpoints.add(entry.port); endpoints.add(entry.port + 1); displays.add(entry.display); worlds.add(entry.world);
     const caseIds = new Set(); for (const item of entry.cases) {
       if (!item || typeof item.id !== 'string' || caseIds.has(item.id) || !['isolated', 'batch'].includes(item.lifecycle)
           || typeof item.world !== 'string' || (item.lifecycle === 'batch' && item.world !== entry.world)

@@ -249,11 +249,14 @@ function validateProjectionEvidence(declarations, evidence, label) {
   }));
 }
 function validateArrivalEvidence(expected, actual) {
-  if (!actual || actual.view !== expected.view || actual.id !== expected.id || actual.path !== expected.path
-      || !Number.isSafeInteger(actual.value) || actual.value < 0) {
+  if (!actual || actual.stage !== expected.stage || actual.view !== expected.view || actual.id !== expected.id || actual.path !== expected.path
+      || actual.beforeAction !== expected.beforeAction || actual.minimumAdvance !== expected.minimumAdvance
+      || !Number.isSafeInteger(actual.before) || actual.before < 0 || !Number.isSafeInteger(actual.after)
+      || actual.after < actual.before + expected.minimumAdvance) {
     throw new Error('CI shard arrival evidence does not match immutable declaration');
   }
-  return Object.freeze({ view: actual.view, id: actual.id, path: actual.path, value: actual.value });
+  return Object.freeze({ stage: actual.stage, view: actual.view, id: actual.id, path: actual.path,
+    beforeAction: actual.beforeAction, before: actual.before, after: actual.after, minimumAdvance: actual.minimumAdvance });
 }
 function requireAbsent(value, error) { if (value !== undefined) throw new Error(error); return undefined; }
 function requireCrossLaneEvidence(plan, lanes) {

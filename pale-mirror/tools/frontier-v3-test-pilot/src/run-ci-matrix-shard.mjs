@@ -66,9 +66,7 @@ export async function main(argumentsValue = process.argv.slice(2)) {
     }
     const diagnostics = reports.flatMap((reportSegment) => {
       const planned = segments.find((segment) => segment.id === reportSegment.id);
-      return reportSegment.diagnostics.map((item) => ({ observed: { value: {
-        ...item.value, pilotActionStep: item.actionStep + planned.originalActionOffset
-      } } }));
+      return liftSegmentDiagnostics(reportSegment.diagnostics, planned.originalActionOffset);
     });
     lanes.push(Object.freeze({ id: lane.id, ...evidenceFromManifest(lane, { status: 'ok', diagnostics }), report: relative(project, runnerOutput) }));
   }
@@ -99,6 +97,19 @@ export function requireWorkerIdentity(actual, expected) {
   if (!/^worker-[0-3]$/.test(actual ?? '') || actual !== expected) {
     throw new Error('CI native shard worker identity does not match its immutable plan assignment');
   }
+}
+
+/** Preserve the observed action checkpoint outside the diagnostic payload, where f0v-matrix reads it. */
+export function liftSegmentDiagnostics(diagnostics, originalActionOffset) {
+  if (!Array.isArray(diagnostics) || !Number.isSafeInteger(originalActionOffset) || originalActionOffset < 0) {
+    throw new Error('CI native lane diagnostics are malformed');
+  }
+  return diagnostics.map((item) => {
+    if (!Number.isSafeInteger(item?.actionStep) || item.actionStep < 1 || !item.value || typeof item.value !== 'object') {
+      throw new Error('CI native lane diagnostic checkpoint is malformed');
+    }
+    return Object.freeze({ observed: Object.freeze({ actionStep: item.actionStep + originalActionOffset, value: item.value }) });
+  });
 }
 
 export function parse(argumentsValue) {

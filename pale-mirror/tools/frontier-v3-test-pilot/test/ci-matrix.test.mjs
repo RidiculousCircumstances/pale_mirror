@@ -91,16 +91,16 @@ test('CI timing gate requires the measured 2.5x ratio and excludes weaker claims
 test('aggregate rejects altered portable evidence and requires cross-lane relations after JSON round-trip', async () => {
   const plan = createFourWorkerMatrixPlan(await contract(), { buildIdentitySha256: hash('a'), contractSha256: hash('b') });
   const results = JSON.parse(JSON.stringify(plan.shards.map((shard) => result(plan, shard))));
-  assert.equal(mergeFourWorkerMatrix(plan, results).crossLane.arrivalCheckpoints.first.value <
-    mergeFourWorkerMatrix(plan, results).crossLane.arrivalCheckpoints.second.value, true);
+  assert.equal(mergeFourWorkerMatrix(plan, results).crossLane.arrivalCheckpoints.first.after <
+    mergeFourWorkerMatrix(plan, results).crossLane.arrivalCheckpoints.second.after, true);
   const divergent = structuredClone(results);
   const cold = divergent.flatMap((entry) => entry.lanes).find((lane) => lane.id.endsWith(':neutral_observer_differential:cold'));
   cold.differential[0].values['identity.job'] = 'foreign';
   assert.throws(() => mergeFourWorkerMatrix(plan, divergent), /diverged/);
   const equalArrival = structuredClone(results);
   const arrivals = equalArrival.flatMap((entry) => entry.lanes).filter((lane) => lane.arrival !== undefined);
-  arrivals[1].arrival.value = arrivals[0].arrival.value;
-  assert.throws(() => mergeFourWorkerMatrix(plan, equalArrival), /distinct retained/);
+  arrivals[1].arrival.before = arrivals[0].arrival.before;
+  assert.throws(() => mergeFourWorkerMatrix(plan, equalArrival), /ordered retained/);
   const wrongPath = structuredClone(results);
   wrongPath[0].lanes[0].terminal.identity.paths = ['foreign'];
   assert.throws(() => validateCiShardResult(plan, wrongPath[0]), /immutable declaration/);
@@ -128,7 +128,7 @@ test('aggregate rejects altered portable evidence and requires cross-lane relati
     assert.throws(() => validateCiShardResult(plan, wrongDifferential), /immutable declaration/);
   }
   const nonIntegralArrival = structuredClone(results.find((entry) => entry.lanes.some((lane) => lane.arrival !== undefined)));
-  nonIntegralArrival.lanes.find((lane) => lane.arrival !== undefined).arrival.value = 1.5;
+  nonIntegralArrival.lanes.find((lane) => lane.arrival !== undefined).arrival.after = 1.5;
   assert.throws(() => validateCiShardResult(plan, nonIntegralArrival), /arrival evidence/);
   const legacySchema = structuredClone(results[0]); legacySchema.schema = 1;
   assert.throws(() => validateCiShardResult(plan, legacySchema), /malformed, foreign, failed or incomplete/);
@@ -323,7 +323,10 @@ function manifestForLane(lane) {
     setPath(value, arrival.path, lane.variant === 'arrival_checkpoint_one' ? 1 : 2);
     diagnostics.set(key, value);
   }
-  return { status: 'ok', diagnostics: [...diagnostics.values()].map((value) => ({ observed: { value } })) };
+  const checkpoints = arrival === undefined ? [] : [{ observed: { actionStep: arrival.beforeAction, value: {
+    ...structuredClone(diagnostics.get(`${arrival.view}\u0000${arrival.id}`)), cursor: { index: lane.variant === 'arrival_checkpoint_one' ? 0 : 1 }
+  } }}];
+  return { status: 'ok', diagnostics: [...checkpoints, ...diagnostics.values().map((value) => ({ observed: { value } }))] };
 }
 function declaredValue(lane, path) { return `${lane.family}:${lane.variant}:${path}`; }
 function setPath(target, path, value) {
