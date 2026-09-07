@@ -32,7 +32,6 @@ jobs:
             variants: abrupt_restart,neutral_observer_differential
     env:
       FRONTIER_V3_PILOT_PORT: ${{ matrix.port }}
-      FRONTIER_V3_NATIVE_PROCESS_ROOT: ${{ runner.temp }}/f01-${{ github.run_id }}-${{ matrix.worker }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -44,6 +43,7 @@ jobs:
           node-version: '22'
       - name: Run immutable assigned native variants
         run: |
+          export FRONTIER_V3_NATIVE_PROCESS_ROOT="$RUNNER_TEMP/f01-${{ github.run_id }}-${{ matrix.worker }}"
           mkdir -p "$FRONTIER_V3_NATIVE_PROCESS_ROOT"
           IFS=, read -r -a variants <<< '${{ matrix.variants }}'
           for variant in "${variants[@]}"; do
