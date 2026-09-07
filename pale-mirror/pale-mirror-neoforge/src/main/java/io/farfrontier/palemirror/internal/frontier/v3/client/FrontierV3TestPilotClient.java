@@ -80,8 +80,12 @@ public final class FrontierV3TestPilotClient {
         String configured = System.getProperty(SCENARIO_PROPERTY, "");
         if (configured.isBlank()) return;
         try {
-            FrontierV3PilotSessionControl.publishClientPrepared();
             FrontierV3PilotSessionControl.onLogin(Path.of(configured));
+            // Matrix preparation is itself lifecycle evidence and therefore needs the
+            // authenticated epoch/segment from the immutable descriptor first.  Publishing
+            // it before onLogin leaves the first real connection without a segment and turns
+            // a valid prepared runtime into a false lifecycle failure.
+            FrontierV3PilotSessionControl.publishClientPrepared();
             FrontierV3PilotSessionControl.bindActiveConnection(event.getConnection());
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();

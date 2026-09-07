@@ -17,6 +17,7 @@ import { awaitWithin, childExitCancellation } from './deadline-watchdog.mjs';
 import { verifiedPrivateDisplayEnvironment, verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
 import { terminateOwnedProcessGroup } from './owned-process-group.mjs';
 import { compileAssignedPersistentMatrix } from './persistent-worker-plan.mjs';
+import { prepareNativeWorld } from './prepare-f0vc-native-world.mjs';
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -102,7 +103,7 @@ try {
       await publishPersistentMatrixServerReady(session, epoch, { serverRunId: server.serverRunId, serverPid: server.serverPid, port, worldKey: segment.worldKey, ready: true });
       return server;
     },
-    startClient: async () => { client = await startClient(); nativeClientPid = await awaitPreparedClient(); },
+    startClient: async () => { client = await startClient(); nativeClientPid = await awaitPreparedClient(preparedClientSegment(source)); },
     releaseCrash: async (crash, active, epoch, segment) => {
       const release = await publishPersistentMatrixExpectedCrashRelease(session, crash.epoch, crash.proof, { serverRunId: active.serverRunId,
         serverPid: active.serverPid, worldKey: segment.worldKey, segment: segment.id, scenarioSha256: matrixSegment(plan, epoch).scenarioSha256 });
@@ -270,17 +271,23 @@ async function startServer(segment, epoch, world) {
   const run = randomUUID(); const crash = segment.assigned?.expectedCrash;
   const directory = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-server', world.name);
   if (!world.prepared) {
-    const prepare = spawn(gradle, [':pale-mirror-neoforge:prepareFrontierV3PilotServerWorld', '--offline', '--no-daemon',
-      `-PfrontierV3PilotWorld=${world.name}`, `-PfrontierV3PilotSeed=${segment.loaded.scenario.isolation.seed}`,
-      `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotRconPort=${port + 1}`,
-      `-PfrontierV3PilotUsername=${segment.loaded.scenario.pilot.username}`, '-PfrontierV3PilotReset=true',
-      `-PfrontierV3PilotRunId=${run}`, `-PfrontierV3PilotProfile=${segment.loaded.scenario.server.profile ?? defaultPilotProfile()}`,
-      `-PfrontierV3PilotViewDistance=${segment.loaded.scenario.server.viewDistance ?? 10}`,
-      ...(crash === undefined ? [] : [`-PfrontierV3PilotCrashBoundary=${crash.boundary}`, `-PfrontierV3PilotCrashOwner=${crash.owner}`,
-        `-PfrontierV3PilotCrashRevision=${crash.expectedRevision}`, `-PfrontierV3PilotCrashPayload=${crash.payloadType}`])], {
-      cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_RCON_PASSWORD: world.password }, stdio: 'inherit'
-    });
-    if (await exited(prepare) !== 0) throw new Error(`F0.VA world preparation failed for ${segment.id}`);
+    if (process.env.FRONTIER_V3_F0VC_PREPARED_RUNTIME === 'true') {
+      await prepareNativeWorld({ world: world.name, seed: segment.loaded.scenario.isolation.seed, port, rconPort: port + 1,
+        password: world.password, username: segment.loaded.scenario.pilot.username,
+        profile: segment.loaded.scenario.server.profile ?? defaultPilotProfile(), viewDistance: segment.loaded.scenario.server.viewDistance ?? 10 });
+    } else {
+      const prepare = spawn(gradle, [':pale-mirror-neoforge:prepareFrontierV3PilotServerWorld', '--offline', '--no-daemon',
+        `-PfrontierV3PilotWorld=${world.name}`, `-PfrontierV3PilotSeed=${segment.loaded.scenario.isolation.seed}`,
+        `-PfrontierV3PilotPort=${port}`, `-PfrontierV3PilotRconPort=${port + 1}`,
+        `-PfrontierV3PilotUsername=${segment.loaded.scenario.pilot.username}`, '-PfrontierV3PilotReset=true',
+        `-PfrontierV3PilotRunId=${run}`, `-PfrontierV3PilotProfile=${segment.loaded.scenario.server.profile ?? defaultPilotProfile()}`,
+        `-PfrontierV3PilotViewDistance=${segment.loaded.scenario.server.viewDistance ?? 10}`,
+        ...(crash === undefined ? [] : [`-PfrontierV3PilotCrashBoundary=${crash.boundary}`, `-PfrontierV3PilotCrashOwner=${crash.owner}`,
+          `-PfrontierV3PilotCrashRevision=${crash.expectedRevision}`, `-PfrontierV3PilotCrashPayload=${crash.payloadType}`])], {
+        cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_RCON_PASSWORD: world.password }, stdio: 'inherit'
+      });
+      if (await exited(prepare) !== 0) throw new Error(`F0.VA world preparation failed for ${segment.id}`);
+    }
     world.prepared = true;
   } else {
     try { if (!(await stat(directory)).isDirectory()) throw new Error('not a directory'); }
@@ -346,8 +353,8 @@ async function startClient() {
   return child;
 }
 
-async function awaitPreparedClient() {
-  const signal = await awaitClientSignal(LifecycleSignal.PREPARED_CLIENT_READY, 'client', 300_000, 'native client preparation');
+async function awaitPreparedClient(segment) {
+  const signal = await awaitClientSignal(LifecycleSignal.PREPARED_CLIENT_READY, segment, 300_000, 'native client preparation');
   if (!Number.isSafeInteger(signal.detail.clientPid) || signal.detail.clientPid <= 1) {
     throw new Error('F0.VA native client preparation signal lacks its exact JVM PID');
   }
@@ -534,6 +541,13 @@ async function writeExclusive(path, contents) {
   catch (error) { if (error?.code === 'EEXIST') throw new Error(`refusing to overwrite immutable F0.VA evidence: ${basename(path)}`); throw error; }
 }
 })();
+
+/** The client binds preparation to its first immutable matrix descriptor, never a synthetic label. */
+export function preparedClientSegment(source) {
+  const segment = source?.[0]?.id;
+  if (typeof segment !== 'string' || segment.length === 0) throw new Error('persistent matrix has no initial client segment');
+  return segment;
+}
 
 /** Exported bounded probe seam: real server/client exits and every subscription are observed. */
 export async function awaitExpectedCrashBoundary(active, declaration, timeoutMs, cancellation, clientChild) {

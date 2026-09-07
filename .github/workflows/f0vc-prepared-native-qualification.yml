@@ -1,0 +1,163 @@
+name: F0.VC prepared four-worker native qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      qualification_id:
+        description: Immutable F0.VC qualification identity.
+        required: true
+        type: string
+      task_root:
+        description: Dedicated ephemeral /home/rd/proj/pm-f0vc-* runtime root.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    working-directory: pale-mirror
+
+jobs:
+  producer:
+    name: F0.VC producer
+    runs-on: [self-hosted, pm-native]
+    outputs:
+      runtime_content_sha256: ${{ steps.runtime.outputs.content_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Admit four isolated native slots before preparation
+        run: >-
+          node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
+          --root="${{ inputs.task_root }}" --workers=4 --output="$PWD/build/f0vc/producer/capacity.json"
+      - name: Build, package, and prepare the one candidate runtime
+        run: |
+          node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=build/f0vc/producer/prepared-build.json
+          ./gradlew :pale-mirror-neoforge:verifyPackagedJar --offline --no-daemon
+      - name: Stage content-addressed immutable runtime
+        id: runtime
+        run: |
+          node tools/frontier-v3-test-pilot/src/f0vc-prepared-runtime.mjs --mode=prepare --store="${{ inputs.task_root }}" --output=build/f0vc/producer/runtime.json --prepared=build/f0vc/producer/prepared-build.json
+          printf 'content_sha256=%s\n' "$(node -p "JSON.parse(require('fs').readFileSync('build/f0vc/producer/runtime.json')).contentSha256")" >> "$GITHUB_OUTPUT"
+      - name: Compile immutable native semantic matrix and structural plan
+        run: |
+          node tools/frontier-v3-test-pilot/src/write-ci-matrix-plan.mjs --prepared=build/f0vc/producer/prepared-build.json --output=build/f0vc/producer/matrix.json
+          node tools/frontier-v3-test-pilot/src/write-f0vc-preflight.mjs --runtime=build/f0vc/producer/runtime.json --run="${{ github.run_id }}" --root="${{ inputs.task_root }}" --output=build/f0vc/producer/preflight.json
+          node tools/frontier-v3-test-pilot/src/f0vc-pipeline.mjs --mode=preflight --plan=build/f0vc/producer/preflight.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f0vc-${{ github.run_id }}-producer
+          path: pale-mirror/build/f0vc/producer
+          if-no-files-found: error
+
+  native:
+    name: F0.VC ${{ matrix.worker }}
+    needs: producer
+    runs-on: [self-hosted, pm-native]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - worker: worker-0
+          - worker: worker-1
+          - worker: worker-2
+          - worker: worker-3
+    env:
+      FRONTIER_V3_PILOT_WORKER_ID: ${{ matrix.worker }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: f0vc-${{ github.run_id }}-producer
+          path: pale-mirror/build/f0vc/producer
+      - name: Bind active job and runner identity
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$PWD/build/f0vc/consumer/${{ matrix.worker }}"
+          node tools/frontier-v3-test-pilot/src/capture-f0vb-job-identity.mjs \
+            --repository="${{ github.repository }}" --run="${{ github.run_id }}" --worker="${{ matrix.worker }}" \
+            --job-prefix="F0.VC" --output="$PWD/build/f0vc/consumer/${{ matrix.worker }}/job.json"
+      - name: Reject structural defects before Minecraft
+        run: |
+          node tools/frontier-v3-test-pilot/src/f0vc-pipeline.mjs --mode=preflight --plan=build/f0vc/producer/preflight.json
+          worker_index="${{ matrix.worker }}"; worker_index="${worker_index#worker-}"
+          export FRONTIER_V3_PILOT_PORT="$((26300 + worker_index))"
+          export DISPLAY=":$((1300 + worker_index))"
+          printf 'FRONTIER_V3_PILOT_PORT=%s\nDISPLAY=%s\n' "$FRONTIER_V3_PILOT_PORT" "$DISPLAY" >> "$GITHUB_ENV"
+      - name: Run one prepared actual-Minecraft semantic shard
+        run: |
+          mkdir -p "${{ inputs.task_root }}/workers/${{ matrix.worker }}"
+          export FRONTIER_V3_NATIVE_PROCESS_ROOT="${{ inputs.task_root }}/workers/${{ matrix.worker }}"
+          scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f0vc-native-worker.mjs \
+            --runtime=build/f0vc/producer/runtime.json --preflight=build/f0vc/producer/preflight.json \
+            --matrix=build/f0vc/producer/matrix.json --worker=${{ matrix.worker }} \
+            --output=build/f0vc/consumer/${{ matrix.worker }}/native.json
+      - name: Retain terminal worker evidence on every terminal state
+        if: always()
+        run: >-
+          node tools/frontier-v3-test-pilot/src/write-f0vc-worker-evidence.mjs
+          --plan=build/f0vc/producer/preflight.json --worker=${{ matrix.worker }} --status=${{ job.status }}
+          --result=build/f0vc/consumer/${{ matrix.worker }}/native.json
+          --job=build/f0vc/consumer/${{ matrix.worker }}/job.json
+          --output=build/f0vc/consumer/${{ matrix.worker }}/worker.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f0vc-${{ github.run_id }}-${{ matrix.worker }}
+          path: pale-mirror/build/f0vc/consumer/${{ matrix.worker }}
+          if-no-files-found: warn
+
+  merge:
+    name: F0.VC fail-closed evidence merge
+    needs: [producer, native]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: f0vc-${{ github.run_id }}-producer
+          path: pale-mirror/build/f0vc/producer
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: f0vc-${{ github.run_id }}-worker-*
+          path: pale-mirror/build/f0vc/evidence
+      - name: Write complete or explicit incomplete aggregate
+        run: >-
+          node tools/frontier-v3-test-pilot/src/write-f0vc-merge.mjs
+          --plan=build/f0vc/producer/preflight.json --input=build/f0vc/evidence --output=build/f0vc/merge.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f0vc-${{ github.run_id }}-merge
+          path: pale-mirror/build/f0vc
+          if-no-files-found: warn
