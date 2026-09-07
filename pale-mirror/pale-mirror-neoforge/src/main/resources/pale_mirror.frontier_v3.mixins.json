@@ -5,6 +5,7 @@
   "mixins": [
     "FrontierV3GameTestSliceMixin",
     "FrontierV3CargoCarrierMinecartMixin",
-    "FrontierV3VehicleEntityMixin"
+    "FrontierV3VehicleEntityMixin",
+    "FrontierV3PlayerActionMixin"
   ]
 }

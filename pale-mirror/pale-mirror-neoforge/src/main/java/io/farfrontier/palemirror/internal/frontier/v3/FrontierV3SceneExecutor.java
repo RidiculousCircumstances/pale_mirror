@@ -627,6 +627,12 @@ final class FrontierV3SceneExecutor {
      * selection and this release pass; those dead bodies are no longer release candidates.
      */
     static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease) {
+        release(level, runtime, selectedLease, java.util.Optional.empty());
+    }
+
+    /** Generic lifecycle release; an enforced descriptor may supply one exact engine action binding. */
+    static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease,
+                        java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
@@ -642,7 +648,7 @@ final class FrontierV3SceneExecutor {
             // chunk return before a new scene is permitted to materialize.
             if (observed != null) {
                 FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released_unloaded", lease,
-                        releaseUnloaded(runtime, lease, observed));
+                        releaseUnloaded(runtime, lease, observed, binding));
             }
             // A restart deliberately has no volatile observation. Keep DRAINING visible until a
             // normal player/world load permits full physical postcondition inspection.
@@ -665,21 +671,27 @@ final class FrontierV3SceneExecutor {
             positions.add(new SceneMemberPosition(member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), new FixedScalar(health)));
         }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease,
-                releaseLoaded(runtime, lease, positions));
+                releaseLoaded(runtime, lease, positions, binding));
     }
 
     /** Volatile observation is discarded only after the canonical release transaction accepted it. */
     private static CommandResult releaseUnloaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
-                                                 List<SceneMemberPosition> observed) {
-        CommandResult result = submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed));
+                                                 List<SceneMemberPosition> observed,
+                                                 java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
+        CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release-unloaded", lease.id().value(),
+                        new SceneLeaseReleased(lease.id(), observed), action))
+                .orElseGet(() -> submit(runtime, "scene-release-unloaded", lease.id().value(), new SceneLeaseReleased(lease.id(), observed)));
         if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
         return result;
     }
 
     /** A rejected release retains its same observation for diagnosis; it is never rewritten or guessed. */
     private static CommandResult releaseLoaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
-                                               List<SceneMemberPosition> positions) {
-        CommandResult result = submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions));
+                                               List<SceneMemberPosition> positions,
+                                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
+        CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
+                        new SceneLeaseReleased(lease.id(), positions), action))
+                .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), new SceneLeaseReleased(lease.id(), positions)));
         if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
         return result;
     }

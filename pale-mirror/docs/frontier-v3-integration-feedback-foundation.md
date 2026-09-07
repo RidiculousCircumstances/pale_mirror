@@ -92,6 +92,17 @@ Start with the preserved `ResourceSiteHarvestJob`; the API must be
 reusable by later duration processes without adding type branches to the
 harness.
 
+The reference process is exercised only through capabilities admitted by the
+current ordered F0 slice. Before F0.2, resource-site harvest is traversal-only:
+COLD and HOT may advance the same retained worker/process cursor, but neither
+mode may commit an irreversible crop transition, output quantity or spendable
+capacity. Any preserved implementation of HOT crop progression remains WIP and
+must fail closed or stay unreachable in the accepted F0.V/F0.1 profile until
+F0.2 supplies independent physical eligibility, bounded knowledge and deferred
+aftermath. This is not permission to delete that WIP or to substitute a fake
+process; it prevents an out-of-order HOT-only capability from making neutral
+observation change history.
+
 Treat the result as an internal Process/Scene SDK, not as a harvest helper or a
 new public mod API. A closed inventory may register stable family keys and typed
 descriptors, but generic lifecycle execution, contract matrix, scenario
@@ -139,6 +150,18 @@ and any unbounded adapter. An incompatible retained descriptor fails before
 recovery/execution; changing retained meaning requires an explicit migration
 and golden old-byte proof rather than silent rebinding to the current adapter.
 
+The descriptor owns the meaning and cadence of exactly one logical process
+continuation, while the engine schedule remains its only durable timing record.
+HOT admission/checkpoint/release therefore uses a typed engine-owned binding to
+the exact current `ScheduledAction`, including its ID, kind, subject, due
+instant, ordering fields and applicable descriptor/authority version. The
+binding is validated atomically with the state and schedule effects; it is not
+copied into the domain aggregate or scene lease as another queue. Missing,
+duplicate, stale or mismatched bindings fail closed. A release that performs no
+semantic work preserves the action byte-for-byte, and a HOT semantic checkpoint
+uses the same cadence transition from the bound action as the COLD planner;
+neither may derive a replacement deadline from observation or release time.
+
 Player demand is one server-side aggregate input, never one lease per player.
 Two or more observers of the same process/front must retain one lease, one set
 of physical identities, one schedule and unchanged canonical progress rate. A
@@ -180,6 +203,17 @@ Cover these durable boundaries where applicable:
 - HOT checkpoint durable, before drain/release;
 - release durable, before resumed COLD execution.
 
+Applicability follows the admitted process capability, not the presence of
+unfinished implementation code. For the pre-F0.2 traversal-only harvest
+vertical, native abrupt evidence covers lease acquisition, the retained HOT
+checkpoint and release before resumed COLD execution. The controller and its
+schema/negative tests still recognize the complete boundary vocabulary, but
+`physical_effect_visible_before_typed_observation` and
+`typed_observation_durable_before_next_process_checkpoint` become native
+harvest requirements only in F0.2, when irreversible crop/output progression
+is admitted. A generated F0.V contract that arms those two windows for the
+traversal-only profile is invalid rather than evidence of extra completeness.
+
 The boundary signal must be deterministic and attributable. Do not approximate
 it with a sleep followed by `SIGKILL`. After restart, assert exactly one of:
 current binding reclaimed, safely checkpointed lease fenced and COLD resumed,
@@ -211,6 +245,22 @@ outcome distributions through the predeclared versioned calibration contract,
 not per-run equality. Include frequent hand-offs during partial work/cooldown,
 not only arrival and final output. Physical paths and hit sequences are not
 compared. Descriptor/comparator changes invalidate affected cached acceptance.
+
+Equivalent terminal conditions include the same exact canonical `SimInstant`.
+Cross-run alignment uses one bounded absolute target admitted by the server
+thread against its current checkpoint and executed by the ordinary due-action
+engine. A client-derived relative tick count is invalid because command-delivery
+ticks can advance one lane before the request is applied. An already-crossed,
+unbounded or physically unsafe target fails the run; the harness may not alter a
+cursor, schedule or comparator value to manufacture equality.
+
+The differential compares the complete admitted semantic projection. In the
+pre-F0.2 traversal-only harvest profile this means exact identity, ownership,
+schedule, retained cursor/unfinished work and zero irreversible crop/output
+progress in both lanes. Allowing HOT to complete crops while COLD cannot is a
+real mode-switch acceleration; changing expected values or omitting
+conservation cannot make it green. F0.2 replaces the shared zero with shared
+causally valid consequence progress and its physical reconciliation evidence.
 
 ## F0.V.4 — one-build, one-client restart runner
 
@@ -285,8 +335,15 @@ turns timing noise into a false product defect.
   set, does not accelerate progress, cannot drain while one observer remains
   and releases exactly once after zero demand, hysteresis and safe physical
   custody closure;
-- graceful and abrupt crash boundaries are deterministic, attributable and
-  prove no duplicate/lost authority;
+- every HOT cursor checkpoint and release proves one exact engine-owned
+  continuation binding; missing/duplicate/stale bindings fail, a no-work
+  release preserves the retained action exactly, and no schedule deadline is
+  reconstructed from physical-observation or release time;
+- graceful and every currently applicable abrupt crash boundary are
+  deterministic, attributable and prove no duplicate/lost authority; the
+  controller's complete boundary vocabulary is schema/negative-tested, while
+  native effect/observation windows remain explicitly owned by F0.2 until that
+  capability is admitted;
 - one vertical contract supplies the required F0.1 scenario variants without
   a canonical mutation API;
 - one restart proof uses one prepared build identity and one persistent native

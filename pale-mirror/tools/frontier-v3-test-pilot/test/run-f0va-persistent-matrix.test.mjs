@@ -60,17 +60,18 @@ test('CLI admission reconstructs all four real compiler assignments before orche
   }
 });
 
-test('compiled worker3 split lanes retain mandatory original terminal evidence at the real consumer', async () => {
-  const evidence = await compiledEvidence('worker-3');
-  assert.deepEqual(evidence.assigned.workerPlan.lanes.map((lane) => lane.segments.map((segment) => segment.originalActionOffset)), [[0, 4], [0, 3]]);
+test('compiled crash split retains mandatory original terminal evidence at the real consumer', async () => {
+  const evidence = await compiledEvidence('worker-0');
+  assert.deepEqual(evidence.assigned.workerPlan.lanes.filter((lane) => lane.segments.length > 1)
+    .map((lane) => lane.segments.map((segment) => segment.originalActionOffset)), [[0, 5]]);
   assert.doesNotThrow(() => validatePersistentClientAssertions(evidence.source, evidence.clientManifest, evidence.assigned.workerPlan.lanes));
 });
 
 test('compiled assigned lanes retain COLD progress and reject missing, inconsistent, foreign, or incomplete original evidence', async () => {
-  const cold = await compiledEvidence('worker-2');
+  const cold = await compiledEvidenceContaining((segment) => segment.loaded.scenario.f0vColdProgress !== undefined);
   assert.doesNotThrow(() => validatePersistentClientAssertions(cold.source, cold.clientManifest, cold.assigned.workerPlan.lanes));
   const coldSource = cold.source.find((segment) => segment.loaded.scenario.f0vColdProgress !== undefined);
-  assert.ok(coldSource, 'compiled worker-2 is expected to retain the COLD lane');
+  assert.ok(coldSource, 'one compiled worker is expected to retain the COLD lane');
 
   const missing = structuredClone(cold); const missingCold = missing.source.find((segment) => segment.id === coldSource.id);
   delete missingCold.loaded.scenario.f0vTerminalProjections;
@@ -88,7 +89,7 @@ test('compiled assigned lanes retain COLD progress and reject missing, inconsist
 });
 
 test('compiled split final readers reject missing or false terminal observations and insufficient COLD advance', async () => {
-  const split = await compiledEvidence('worker-3');
+  const split = await compiledEvidenceContaining((segment) => segment.assigned.completion === 'recovered_terminal');
   const recovered = split.source.find((segment) => segment.assigned.completion === 'recovered_terminal');
   const recoveredReport = split.clientManifest.segments.find((segment) => segment.id === recovered.id);
   const terminal = recoveredReport.diagnostics.find((entry) => entry.actionStep === recovered.loaded.scenario.actions.length);
@@ -103,7 +104,7 @@ test('compiled split final readers reject missing or false terminal observations
     result: { ...terminal.value.result, complete: true } } });
   assert.throws(() => validatePersistentClientAssertions(falseTerminal.source, falseTerminal.clientManifest, falseTerminal.assigned.workerPlan.lanes), /terminal assertion is absent or false/);
 
-  const cold = await compiledEvidence('worker-2'); const coldSource = cold.source.find((segment) => segment.loaded.scenario.f0vColdProgress !== undefined);
+  const cold = await compiledEvidenceContaining((segment) => segment.loaded.scenario.f0vColdProgress !== undefined); const coldSource = cold.source.find((segment) => segment.loaded.scenario.f0vColdProgress !== undefined);
   const coldReport = cold.clientManifest.segments.find((segment) => segment.id === coldSource.id);
   const coldAfter = coldReport.diagnostics.find((entry) => entry.actionStep === coldSource.loaded.scenario.f0vColdProgress.after);
   coldAfter.value.cursor.index = 1;
@@ -111,7 +112,7 @@ test('compiled split final readers reject missing or false terminal observations
 });
 
 test('compiled split original membership rejects offset drift, duplicate membership, and cross-lane segments', async () => {
-  const evidence = await compiledEvidence('worker-3');
+  const evidence = await compiledEvidenceContaining((segment) => segment.assigned.completion === 'recovered_terminal');
   const wrongOffset = structuredClone(evidence); wrongOffset.source[1].assigned.originalActionOffset++;
   assert.throws(() => validatePersistentClientAssertions(wrongOffset.source, wrongOffset.clientManifest, wrongOffset.assigned.workerPlan.lanes), /foreign|inconsistent/);
 
@@ -123,15 +124,16 @@ test('compiled split original membership rejects offset drift, duplicate members
   assert.throws(() => validatePersistentClientAssertions(crossLane.source, crossLane.clientManifest, crossLane.assigned.workerPlan.lanes), /incomplete|foreign/);
 });
 
-test('genuine worker3 composition counts every authenticated runtime assertion while retaining only terminal result records', async () => {
+test('genuine crash-worker composition counts every authenticated runtime assertion while retaining only terminal result records', async () => {
   const composition = await compiledWorker3FinalEvidence();
-  assert.equal(composition.source.length, 4);
-  assert.equal(composition.evidence.results.length, 3);
+  assert.equal(composition.source.length, composition.runtimePlan.segments.length);
+  assert.equal(composition.evidence.results.length, composition.runtimePlan.segments.filter((segment) => segment.completion !== 'expected_crash').length);
   assert.equal(composition.evidence.crashReceipts.length, 1);
   assert.doesNotThrow(() => validatePersistentClientAssertions(composition.source, composition.clientManifest, composition.assigned.workerPlan.lanes));
-  assert.equal(validatePersistentMatrixEvidence(composition.runtimePlan, composition.evidence).segmentCount, 4);
+  assert.equal(validatePersistentMatrixEvidence(composition.runtimePlan, composition.evidence).segmentCount, composition.runtimePlan.segments.length);
 
-  for (const count of [3, 5]) {
+  const expectedAssertions = composition.evidence.events.at(-1).detail.assertionCount;
+  for (const count of [expectedAssertions - 1, expectedAssertions + 1]) {
     const invalid = structuredClone(composition.evidence);
     invalid.events.at(-1).detail.assertionCount = count;
     assert.throws(() => validatePersistentMatrixEvidence(composition.runtimePlan, invalid), /diverges/);
@@ -231,8 +233,16 @@ async function compiledEvidence(workerId) {
   })) } };
 }
 
+async function compiledEvidenceContaining(predicate) {
+  for (const workerId of ['worker-0', 'worker-1', 'worker-2', 'worker-3']) {
+    const evidence = await compiledEvidence(workerId);
+    if (evidence.source.some(predicate)) return evidence;
+  }
+  throw new Error('no compiled worker retained the required declared lane');
+}
+
 async function compiledWorker3FinalEvidence() {
-  const { assigned, source, clientManifest } = await compiledEvidence('worker-3');
+  const { assigned, source, clientManifest } = await compiledEvidence('worker-0');
   const core = { schema: 1, kind: 'frontier-v3-assigned-persistent-matrix', workerId: assigned.workerId,
     buildIdentitySha256: assigned.buildIdentitySha256, source: assigned.source, workerPlanSha256: assigned.workerPlanSha256,
     compiledContentSha256: assigned.contentSha256, segments: assigned.segments.map((segment, epoch) => ({

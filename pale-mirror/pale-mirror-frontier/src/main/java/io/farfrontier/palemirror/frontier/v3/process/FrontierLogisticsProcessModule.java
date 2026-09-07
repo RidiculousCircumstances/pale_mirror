@@ -134,7 +134,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     private static CommandPlan planSceneReleased(FrontierWorldState state, FrontierCommand command, SceneLeaseReleased released) {
         SceneLease lease = state.sceneLeases().get(released.leaseId());
         if (lease == null) return FrontierWorldCommandPlanner.rejected("scene lease is unknown");
-        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.releaseEvents(state, lease, command.submittedAt().ticks(), released)); }
+        try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.releaseEvents(state, lease, command.submittedAt().ticks(), released,
+                command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action))); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 

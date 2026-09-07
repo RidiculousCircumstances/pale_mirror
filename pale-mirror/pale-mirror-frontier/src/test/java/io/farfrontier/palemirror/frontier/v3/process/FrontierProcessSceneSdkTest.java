@@ -203,20 +203,23 @@ class FrontierProcessSceneSdkTest {
                     new ResourceSiteHarvestSceneCause(job.id()), crop, instant(engine), revision(engine).value(), SceneLeaseStatus.PREPARED,
                     List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state(engine).bootstrap().worldId(), job.workerId()))),
                     java.util.Map.of(job.workerId(), body), Set.of(job.workerId()), Optional.empty());
-            engine = submit(engine, new ResourceSiteHarvestSceneLeasePrepared(lease));
+            engine = submitBound(engine, new ResourceSiteHarvestSceneLeasePrepared(lease),
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
             return context.with(submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
         }
         @Override public HarvestContext hotCheckpoint(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site());
             SceneLease lease = activeHarvestLease(state(engine), job);
-            return context.with(submit(engine, new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(),
-                    job.nextTraversalSurface().standingBody(), job.traversalCursor() + 1)));
+            return context.with(submitBound(engine, new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(),
+                    job.nextTraversalSurface().standingBody(), job.traversalCursor() + 1),
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())));
         }
         @Override public HarvestContext releaseToCold(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
             engine = submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             ActorLocation actor = state(engine).actorLocations().get(job.workerId());
-            return context.with(submit(engine, new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())))));
+            return context.with(submitBound(engine, new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health()))),
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())));
         }
         @Override public HarvestContext snapshotWalRecovery(HarvestContext context) { assertRecovery(context.engine()); return context; }
         @Override public FrontierProcessSceneSdk.SemanticCheckpoint checkpoint(HarvestContext context) {
@@ -227,13 +230,15 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectStaleObservation(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job);
-            assertRejected(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), state(context.engine()).actorLocations().get(job.workerId()).body(), job.traversalCursor()));
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), state(context.engine()).actorLocations().get(job.workerId()).body(), job.traversalCursor()),
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
             return rejected(context, "stale harvest checkpoint");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectSecondCursor(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job); int skipped = job.traversalCursor() + 2;
             if (skipped >= job.traversal().linearCorridorSurfaces().size()) skipped = 0;
-            assertRejected(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), job.nextTraversalSurface().standingBody(), skipped));
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), job.nextTraversalSurface().standingBody(), skipped),
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
             return rejected(context, "skipped harvest checkpoint");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectDuplicateSchedule(HarvestContext context) {
@@ -248,7 +253,8 @@ class FrontierProcessSceneSdkTest {
             ResourceSiteHarvestJob job = harvest(context); SceneLease current = activeHarvestLease(state(context.engine()), job);
             SceneLease duplicate = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-duplicate"), state(context.engine()).bootstrap().worldId(), new ResourceSiteHarvestSceneCause(job.id()),
                     current.handoffPosition(), instant(context.engine()), revision(context.engine()).value(), SceneLeaseStatus.PREPARED, current.members(), current.memberPositions(), current.ambientHandoffActorIds(), Optional.empty());
-            assertRejected(context.engine(), new ResourceSiteHarvestSceneLeasePrepared(duplicate)); return rejected(context, "concurrent harvest lease");
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestSceneLeasePrepared(duplicate),
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())); return rejected(context, "concurrent harvest lease");
         }
         @Override public FrontierProcessSceneSdk.ProcessOwnedIntervention<HarvestContext> interventionOwnedByProcess(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
@@ -409,11 +415,29 @@ class FrontierProcessSceneSdkTest {
                 + (result instanceof CommandResult.Rejected rejected ? rejected.rejection().detail() : result));
         assertTransactionCodecs(context); return context.afterCommand();
     }
+    /** Uses the exact engine action observed at this canonical revision; the SDK owns no shadow queue. */
+    private static EngineContext submitBound(EngineContext context, FrontierPayload payload, ScheduledAction action) {
+        FrontierCanonicalState<FrontierWorldState> canonical = context.engine().canonicalState(); CommandId id = new CommandId("command:f0v-sdk-" + context.nextCommand());
+        CommandResult result = context.engine().submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, canonical.worldId(), canonical.revision(), canonical.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload,
+                Optional.of(new EngineScheduleBinding(canonical.revision(), action))));
+        assertInstanceOf(CommandResult.Accepted.class, result, () -> "production bound command rejected: " + payload.type() + " / "
+                + (result instanceof CommandResult.Rejected rejected ? rejected.rejection().detail() : result));
+        assertTransactionCodecs(context); return context.afterCommand();
+    }
     private static void assertRejected(EngineContext context, FrontierPayload payload) {
         FrontierCanonicalState<FrontierWorldState> before = context.engine().canonicalState(); CommandId id = new CommandId("command:f0v-sdk-rejected-" + context.nextCommand());
         CommandResult result = context.engine().submit(new FrontierCommand(1, id, before.worldId(), before.revision(), before.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload));
         assertInstanceOf(CommandResult.Rejected.class, result, () -> "production command unexpectedly accepted: " + payload.type());
         assertEquals(before, context.engine().canonicalState(), "rejected observation may not install a canonical mutation");
+    }
+    private static void assertRejectedBound(EngineContext context, FrontierPayload payload, ScheduledAction action) {
+        FrontierCanonicalState<FrontierWorldState> before = context.engine().canonicalState(); CommandId id = new CommandId("command:f0v-sdk-rejected-" + context.nextCommand());
+        CommandResult result = context.engine().submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, before.worldId(), before.revision(), before.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload,
+                Optional.of(new EngineScheduleBinding(before.revision(), action))));
+        assertInstanceOf(CommandResult.Rejected.class, result, () -> "production bound command unexpectedly accepted: " + payload.type());
+        assertEquals(before, context.engine().canonicalState(), "rejected bound observation may not install a canonical mutation");
     }
     private static void assertRecovery(EngineContext context) {
         CheckpointImage current = context.engine().checkpoint();

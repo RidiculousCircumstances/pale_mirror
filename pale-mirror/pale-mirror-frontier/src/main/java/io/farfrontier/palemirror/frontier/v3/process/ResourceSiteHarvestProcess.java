@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalInt;
 
 /**
@@ -33,6 +34,15 @@ public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
 
     private ResourceSiteHarvestProcess() { }
+
+    /**
+     * F0.V and F0.1 establish only the shared retained traversal.  A crop transition changes
+     * both the physical field and the canonical output path, so accepting it while COLD has no
+     * matching consequence would make ordinary observation an accelerator.  F0.2 owns the
+     * physical-eligibility, confirmation and deferred-aftermath counterpart that can open this
+     * boundary; preserving the payload/reducer code here does not make it admissible early.
+     */
+    public static boolean irreversibleCropEffectsAdmitted() { return false; }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
         if (task.kind() != StrategicTaskKind.HARVEST_RESOURCE_SITE || task.resourceSiteTarget().isEmpty()) {
@@ -74,6 +84,24 @@ public final class ResourceSiteHarvestProcess {
                 COLD_PROGRESS_KIND, 1);
     }
 
+    /** Descriptor-owned validation of the one engine action that may continue this field job. */
+    public static void requireContinuationBinding(ResourceSiteHarvestJob job, ScheduledAction action) {
+        Objects.requireNonNull(job, "resource-site harvest job");
+        Objects.requireNonNull(action, "resource-site harvest continuation binding");
+        ScheduledAction expected = coldProgress(job, action.dueAt().ticks());
+        if (!expected.equals(action)) {
+            throw new IllegalArgumentException("resource-site harvest binding is not its exact cold continuation");
+        }
+    }
+
+    /** The HOT checkpoint uses the same retained due action and cadence transition as COLD. */
+    public static ProposedEvent advanceBoundContinuation(FrontierWorldState state, ResourceSiteHarvestJob job, ScheduledAction action) {
+        Objects.requireNonNull(state, "resource-site harvest continuation state");
+        requireContinuationBinding(job, action);
+        long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+        return reschedule(action, coldProgress(job, nextDue));
+    }
+
     /**
      * Advances only the retained pedestrian approach while no harvest scene owns the worker.
      * Reaching a crop station is deliberately a physical-effect boundary, not permission to
@@ -82,15 +110,23 @@ public final class ResourceSiteHarvestProcess {
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteHarvestJob job = activeJob(state, action.subject());
         if (job == null || !action.id().equals(coldProgress(job, action.dueAt().ticks()).id())) return List.of();
+        // A player-admitted conflict retains this job only as terminal causal evidence.  Its
+        // already-durable COLD action must be consumed without a successor; otherwise a stale
+        // scheduler turn could recreate field-work after the sole player disposition.
+        if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING) return List.of();
         long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
         if (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())) {
-            return List.of(reschedule(action, coldProgress(job, nextDue)));
+            // The current engine action is also the HOT checkpoint's only binding.  Advancing its
+            // due instant while the scene owns the worker makes a physically observed arrival
+            // wait for an unrelated new cadence turn, so preserve it byte-for-byte until the
+            // HOT command either consumes the semantic step or the scene releases it.
+            return List.of(reschedule(action, action));
         }
         // An ambient lease is already a physical-authority hand-off in progress.  Even a
         // PREPARED body cannot coexist with speculative COLD cursor movement: the registered
         // HOT behavior must either adopt that exact body or leave the retained cursor intact.
         if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
-            return List.of(reschedule(action, coldProgress(job, nextDue)));
+            return List.of(reschedule(action, action));
         }
         // Keep the stable due action while the worker is waiting at the next semantic
         // crop station. A later HOT lease can therefore fence/reschedule this exact action

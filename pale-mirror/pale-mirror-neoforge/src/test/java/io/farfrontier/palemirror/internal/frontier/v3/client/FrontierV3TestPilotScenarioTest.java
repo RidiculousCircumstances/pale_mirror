@@ -44,6 +44,12 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
                 "expect":[],"timeoutMs":180000}]}"""));
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
+                "expect":{"growthStage":7},"requireIncreaseAt":"growthEpoch","timeoutMs":180000}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
+                "expect":{"growthStage":7},"requireIncreaseAt":"growth epoch","timeoutMs":180000}]}"""));
     }
 
     @Test
@@ -120,6 +126,15 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsOnlyBoundedPositiveAbsoluteFastForwardTargets() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward_to_instant","targetInstant":24623,"timeoutMs":180000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"fast_forward_to_instant","targetInstant":0,"timeoutMs":180000}]}"""));
+    }
+
+    @Test
     void requiresAllCanonicalIdentitiesForADomainHarvestResult() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_harvest_result","siteId":"site:1-wheat-field",
@@ -160,6 +175,16 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsAReadOnlyNamedSiteAnchorForOrdinaryPlayerIntervention() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"lastCrop"}}}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"unpublished"}}}]}"""));
+    }
+
+    @Test
     void dynamicVisitAnchorUsesTheBoundedVisitTimeoutWhenNoActionTimeoutExists() {
         assertEquals(120_000L, FrontierV3TestPilotTimeouts.resolutionTimeoutMillis(JsonParser.parseString("""
                 {"type":"visit","dimension":"pale_mirror:frontier_graybox","position":{"x":1,"y":65,"z":2},"settleMs":1000}
@@ -185,8 +210,11 @@ class FrontierV3TestPilotScenarioTest {
                 {"type":"open_container","position":{"diagnostic":{"view":"container","id":"container:1-depot","field":"position"}},"timeoutMs":10000},
                 {"type":"look","at":{"diagnostic":{"view":"scene","id":"job:production-example","field":"productionCurrent"}}}]}""");
         assertEquals(5, parsed.actionCount());
+        FrontierV3TestPilotScenario.Parsed intervention = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}""");
+        assertEquals(1, intervention.actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
-                {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}"""));
+                {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"unpublished"}}}]}"""));
     }
 
     @Test

@@ -522,8 +522,11 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
+            if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING) {
+                return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
+            }
             return new SceneReleasePlan(owner(state, lease), released,
-                    new SceneContinuation.ResumeResourceSiteHarvest(job.id(), Math.addExact(submittedAt, 1L)));
+                    new SceneContinuation.ResumeResourceSiteHarvest(job.id()));
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());

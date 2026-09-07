@@ -11,12 +11,16 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /** Advances a canonical field by COLD server time; projection never gates its food economy. */
 public final class ResourceSiteProcess {
@@ -118,7 +122,39 @@ public final class ResourceSiteProcess {
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED || lifecycle.phase() == ResourceSitePhase.CONFLICT) return state;
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted()));
+        ResourceSiteLifecycle conflicted = lifecycle.conflicted();
+        if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
+            return state.withResourceSites(state.resourceSites().replace(conflicted));
+        }
+
+        // A player-observed field loss is one authoritative disposition, not an invitation for
+        // the field worker or its intent to continue.  Install every consequence in the same
+        // aggregate transition: after this returns there is no nonterminal harvest intent whose
+        // canonical subjects were just retired, and no HOT scene can reinterpret the break.
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow();
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        if (intent == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                || !intent.causeSubjectId().equals(lifecycle.siteId())
+                || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
+            throw new IllegalArgumentException("resource-site player conflict has no active exact harvest intent");
+        }
+        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
+        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.replaceAll((id, lease) -> {
+            if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                    || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())) return lease;
+            return switch (lease.status()) {
+                case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(SceneLeaseStatus.DRAINING);
+                case PREPARED -> lease.withStatus(SceneLeaseStatus.CONFLICT);
+                default -> lease;
+            };
+        });
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .resourceSites(state.resourceSites().replace(conflicted))
+                .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
+                .physicalIntents(intents)
+                .sceneLeases(leases));
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {

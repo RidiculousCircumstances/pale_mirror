@@ -87,8 +87,8 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
         @Override public Kind kind() { return Kind.BLOCK_ROUTE_PATROL; }
     }
 
-    /** A released field worker resumes the same retained COLD cursor and schedule ID. */
-    record ResumeResourceSiteHarvest(SubjectId jobId, long dueAt) implements SceneContinuation {
+    /** A released field worker retains its engine-owned COLD continuation unchanged. */
+    record ResumeResourceSiteHarvest(SubjectId jobId) implements SceneContinuation {
         public ResumeResourceSiteHarvest { Objects.requireNonNull(jobId, "resource-site harvest job"); }
         @Override public Kind kind() { return Kind.RESUME_RESOURCE_SITE_HARVEST; }
     }

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -89,14 +90,41 @@ public final class KernelCodec {
             writeString(output, command.actor().value());
             writeCauses(output, command.causes());
             writePayload(output, command.payload(), codecs);
+            if (command.schemaVersion() >= FrontierCommand.SCHEMA_VERSION) {
+                output.writeBoolean(command.scheduleBinding().isPresent());
+                if (command.scheduleBinding().isPresent()) {
+                    EngineScheduleBinding bound = command.scheduleBinding().orElseThrow();
+                    output.writeLong(bound.checkpointRevision().value());
+                    byte[] binding = encodeScheduledAction(bound.action());
+                    output.writeInt(binding.length);
+                    output.write(binding);
+                }
+            }
         });
     }
 
     public static FrontierCommand decodeCommand(byte[] encoded, PayloadCodecs codecs) {
-        return decode(encoded, COMMAND_MAGIC, input -> new FrontierCommand(
-                input.readInt(), new CommandId(readString(input)), new WorldId(readString(input)),
-                new Revision(input.readLong()), new SimInstant(input.readLong()), new SubjectId(readString(input)),
-                readCauses(input), readPayload(input, codecs)));
+        return decode(encoded, COMMAND_MAGIC, input -> {
+            int schema = input.readInt();
+            CommandId id = new CommandId(readString(input));
+            WorldId world = new WorldId(readString(input));
+            Revision revision = new Revision(input.readLong());
+            SimInstant submittedAt = new SimInstant(input.readLong());
+            SubjectId actor = new SubjectId(readString(input));
+            CauseChain causes = readCauses(input);
+            FrontierPayload payload = readPayload(input, codecs);
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding> binding = java.util.Optional.empty();
+            if (schema >= FrontierCommand.SCHEMA_VERSION) {
+                if (input.readBoolean()) {
+                    Revision boundRevision = new Revision(input.readLong());
+                    int length = input.readInt();
+                    if (length < 1 || length > MAX_PAYLOAD_BYTES) throw new IllegalArgumentException("invalid schedule binding length");
+                    binding = java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding(boundRevision,
+                            decodeScheduledAction(input.readNBytes(length))));
+                }
+            }
+            return new FrontierCommand(schema, id, world, revision, submittedAt, actor, causes, payload, binding);
+        });
     }
 
     public static byte[] encodeEvent(FrontierEvent event, PayloadCodecs codecs) {

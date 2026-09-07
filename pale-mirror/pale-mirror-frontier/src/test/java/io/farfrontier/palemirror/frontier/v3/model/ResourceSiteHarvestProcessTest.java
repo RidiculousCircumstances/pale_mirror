@@ -13,23 +13,40 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteHarvestProcessTest {
+    @Test
+    void f0vReferenceRejectsIrreversibleCropAdmissionUntilF0v2OwnsTheCounterpart() {
+        assertFalse(ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted(),
+                "the F0.V/F0.1 reference must not let HOT observation complete a crop before COLD has an owned counterpart");
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        CommandId commandId = new CommandId("command:site-harvest-f0v2-gate");
+        FrontierCommand command = new FrontierCommand(1, commandId, hot.state().bootstrap().worldId(), new Revision(1L),
+                new SimInstant(22_302L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
+                new ResourceSiteHarvestProgressed(hot.job().id(), 1));
+        assertTrue(FrontierWorldProcessCatalog.planCommand("resource-sites", hot.state(), command) instanceof CommandPlan.Rejected,
+                "a forged HOT crop observation must fail before event/WAL admission while the F0.2 counterpart is unavailable");
+    }
+
     @Test
     void fieldApproachRetainsFarmlandSupportRatherThanThePassThroughCropLayer() {
         FrontierWorldState state = initial();
@@ -197,6 +214,21 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void hotLeaseRetainsItsExactEngineContinuationUntilObservedCheckpointOrRelease() {
+        HotHarvest hot = hotHarvestAfterColdSteps(1);
+        ScheduledAction retained = ResourceSiteHarvestProcess.coldProgress(hot.job(), 22_301L);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> deferred =
+                ResourceSiteHarvestProcess.planColdProgress(hot.state(), retained);
+
+        assertEquals(1, deferred.size(), "a HOT owner may fence COLD but must not create a second deadline");
+        ScheduleEffect.Rescheduled rescheduled = assertInstanceOf(ScheduleEffect.Rescheduled.class, deferred.getFirst().payload());
+        assertEquals(retained.id(), rescheduled.scheduleId());
+        assertEquals(retained, rescheduled.replacement(),
+                "HOT arrival must bind the current due action; only its observed semantic checkpoint may apply cadence");
+    }
+
+    @Test
     void hotCheckpointAtomicallyPersistsTheExactJobLeaseAndFarmerBodyThroughSnapshotAndWalReplay() {
         HotHarvest hot = hotHarvestAfterColdSteps(2);
         ResourceSiteHarvestJob before = hot.job();
@@ -206,8 +238,12 @@ class ResourceSiteHarvestProcessTest {
 
         assertEquals(checkpoint, FrontierWorldRuntimeDefinition.payloadCodecs().decode(checkpoint.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(checkpoint)), "the WAL checkpoint has one stable typed codec");
-        assertTrue(hotCheckpointPlan(hot.state(), "accepted", checkpoint) instanceof CommandPlan.Accepted,
+        CommandPlan.Accepted accepted = assertInstanceOf(CommandPlan.Accepted.class, hotCheckpointPlan(hot.state(), "accepted", checkpoint),
                 "command admission validates the complete exact HOT causal checkpoint before it persists an event");
+        ScheduleEffect.Rescheduled continued = assertInstanceOf(ScheduleEffect.Rescheduled.class, accepted.events().get(1).payload());
+        assertEquals(ResourceSiteHarvestProcess.coldProgress(before, 22_301L).id(), continued.scheduleId());
+        assertEquals(22_301L + hot.state().bootstrap().ruleset().cadence().resourceHarvestRetryInterval(),
+                continued.replacement().dueAt().ticks(), "HOT uses the same bound COLD cadence, never observation time");
 
         FrontierWorldState snapshot = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hot.state()));
         FrontierEvent event = new FrontierEvent(1, new EventId("event:site-harvest-hot-checkpoint"),
@@ -263,10 +299,14 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState draining = checkpointed.transitionSceneLease(firstHot.lease().id(), SceneLeaseStatus.DRAINING);
         SceneLeaseReleased released = new SceneLeaseReleased(firstHot.lease().id(), List.of(new SceneMemberPosition(afterHot.workerId(), firstObserved,
                 draining.actorLocations().get(afterHot.workerId()).condition().health())));
+        ScheduledAction retained = ResourceSiteHarvestProcess.coldProgress(afterHot, 22_350L);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining,
-                draining.sceneLeases().get(firstHot.lease().id()), 22_350L, released);
-        assertTrue(continuation.get(1).payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled,
-                "release returns the original job's stable COLD schedule, not a new scene process");
+                draining.sceneLeases().get(firstHot.lease().id()), 22_350L, released, Optional.of(retained));
+        assertEquals(List.of(released), continuation.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).toList(),
+                "release has no semantic step and must leave the exact engine action untouched");
+        assertThrows(IllegalArgumentException.class, () -> FrontierSceneContinuationPlanner.releaseEvents(draining,
+                draining.sceneLeases().get(firstHot.lease().id()), 22_350L, released, Optional.empty()),
+                "missing engine binding must fail closed instead of recreating a release-time deadline");
         FrontierWorldState releasedState = draining.releaseSceneLease(firstHot.lease().id(), released.members());
         ResourceSiteHarvestJob coldJob = (ResourceSiteHarvestJob) releasedState.resourceSites().site(firstHot.site()).activeWork().orElseThrow();
         assertEquals(firstObserved, releasedState.actorLocations().get(coldJob.workerId()).body());
@@ -414,11 +454,12 @@ class ResourceSiteHarvestProcessTest {
         SceneLeaseReleased released = new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), observedBetweenRetainedSurfaces,
                 draining.actorLocations().get(job.workerId()).condition().health())));
 
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining, lease, 22_220L, released);
+        ScheduledAction retained = ResourceSiteHarvestProcess.coldProgress(job, 22_220L);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining, lease, 22_220L, released,
+                Optional.of(retained));
 
-        assertEquals(List.of(new SubjectId("settlement:1"), job.id()), continuation.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::subject).toList());
+        assertEquals(List.of(new SubjectId("settlement:1")), continuation.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::subject).toList());
         assertEquals(released, continuation.getFirst().payload());
-        assertTrue(continuation.get(1).payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled);
         FrontierWorldState releasedState = draining.releaseSceneLease(lease.id(), released.members());
         assertEquals(SceneLeaseStatus.CLOSED, releasedState.sceneLeases().get(lease.id()).status());
         assertEquals(workerBody, releasedState.actorLocations().get(job.workerId()).body(),
@@ -518,6 +559,35 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(ResourceSitePhase.CONFLICT, afterDeath.resourceSites().site(site).phase());
         assertEquals(StrategicTaskStatus.BLOCKED, afterDeath.strategicPlans().tasks().get(task.id()).status());
         assertEquals(ActorLifeStatus.DEAD, afterDeath.actorLocations().get(job.workerId()).condition().status());
+    }
+
+    @Test
+    void playerFieldBreakAdmissionAtomicallyRetiresTheExactHarvestOwner() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        BlockPosition crop = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site()).cropSlots().getFirst();
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop, "player:contract");
+        CommandId commandId = new CommandId("command:site-harvest-player-break");
+        FrontierCommand command = new FrontierCommand(1, commandId, hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(22_302L),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), observed);
+
+        assertTrue(FrontierWorldProcessCatalog.planCommand("resource-sites", hot.state(), command) instanceof CommandPlan.Accepted,
+                "the trusted physical owner must durably admit the player observation before vanilla may mutate the cell");
+        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(hot.state(), hot.site(), observed);
+
+        assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, conflicted.physicalIntents().get(job.intentId()).status(),
+                "the retired harvest cannot retain a nonterminal canonical-subject claim");
+        assertEquals(StrategicTaskStatus.BLOCKED, conflicted.strategicPlans().tasks().get(job.taskId()).status());
+        assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(hot.lease().id()).status(),
+                "the former HOT worker has no second physical interpretation after admission");
+        assertTrue(ResourceSiteHarvestProcess.planColdProgress(conflicted, ResourceSiteHarvestProcess.coldProgress(job, 22_303L)).isEmpty(),
+                "a retained pre-conflict COLD action is consumed rather than resurrecting the conflicted harvest");
+        SceneLeaseReleased released = new SceneLeaseReleased(hot.lease().id(), List.of(new SceneMemberPosition(job.workerId(),
+                hot.lease().memberPosition(job.workerId()), hot.state().actorLocations().get(job.workerId()).condition().health())));
+        assertTrue(FrontierSceneBehaviors.releasePlan(conflicted, conflicted.sceneLeases().get(hot.lease().id()), 22_303L, released)
+                        .continuation() instanceof SceneContinuation.None,
+                "releasing the drained worker cannot reschedule a harvest after the accepted player conflict");
     }
 
     @Test
@@ -717,8 +787,12 @@ class ResourceSiteHarvestProcessTest {
     private static CommandPlan hotCheckpointPlan(FrontierWorldState state, String suffix,
                                                   ResourceSiteHarvestHotTraversalAdvanced checkpoint) {
         CommandId commandId = new CommandId("command:site-harvest-hot-" + suffix);
-        FrontierCommand command = new FrontierCommand(1, commandId, state.bootstrap().worldId(), new Revision(1L),
-                new SimInstant(22_301L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), checkpoint);
+        ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
+                new ResourceSiteHarvestSceneCause(checkpoint.jobId()));
+        ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        FrontierCommand command = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId, state.bootstrap().worldId(), new Revision(1L),
+                new SimInstant(22_301L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), checkpoint,
+                Optional.of(new EngineScheduleBinding(new Revision(1L), action)));
         return FrontierWorldProcessCatalog.planCommand("resource-sites", state, command);
     }
 

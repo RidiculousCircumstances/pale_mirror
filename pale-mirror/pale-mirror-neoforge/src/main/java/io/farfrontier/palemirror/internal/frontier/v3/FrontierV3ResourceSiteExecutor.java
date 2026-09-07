@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -75,24 +76,16 @@ final class FrontierV3ResourceSiteExecutor {
         if (target == null) return BlockBreakObservation.UNMANAGED;
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(target.site().id());
-        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return BlockBreakObservation.UNMANAGED;
-        if (!matchesClaim(level, target.site(), claim)) {
-            recordPlayerConflict(level, runtime, ledger, target.site(), firstMismatchClaim(level, target.site(), claim).orElse(canonical(position)), cause);
-            return BlockBreakObservation.UNMANAGED;
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(target.site().id());
+        if (lifecycle.phase() == ResourceSitePhase.DESTROYED || lifecycle.phase() == ResourceSitePhase.CONFLICT) return BlockBreakObservation.UNMANAGED;
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !matchesClaim(level, target.site(), claim)) {
+            BlockPosition observed = claim == null ? canonical(position)
+                    : firstMismatchClaim(level, target.site(), claim).orElse(canonical(position));
+            return recordPlayerConflict(level, runtime, ledger, target.site(), observed, cause)
+                    ? BlockBreakObservation.ACCEPTED : BlockBreakObservation.REJECTED;
         }
-        try {
-            io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-            CommandId id = new CommandId("executor:resource-site-break-r" + checkpoint.revision().value() + "-p" + position.asLong());
-            CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
-                    new ResourceSiteConflictObserved(target.site().id(), canonical(position), cause))).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-            if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
-            FrontierV3DiagnosticTrace.record(level.getServer(), cause, "resource_site_conflict", target.site().id(), result);
-            ledger.conflict(target.site().id());
-            return BlockBreakObservation.ACCEPTED;
-        } catch (RuntimeException rejected) {
-            return BlockBreakObservation.REJECTED;
-        }
+        return recordPlayerConflict(level, runtime, ledger, target.site(), canonical(position), cause)
+                ? BlockBreakObservation.ACCEPTED : BlockBreakObservation.REJECTED;
     }
 
     static boolean blocksNativeCropGrowth(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level, BlockPos position) {
@@ -369,8 +362,8 @@ final class FrontierV3ResourceSiteExecutor {
     }
 
     /** A player-caused mismatch needs the same trace evidence as the already-missing direct-break branch. */
-    private static void recordPlayerConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                             FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPosition position, String cause) {
+    static boolean recordPlayerConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                        FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPosition position, String cause) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
@@ -379,7 +372,11 @@ final class FrontierV3ResourceSiteExecutor {
         if (result instanceof CommandResult.Accepted) {
             ledger.conflict(site.id());
             FrontierV3DiagnosticTrace.record(level.getServer(), cause, "resource_site_conflict", site.id(), result);
+        } else if (result instanceof CommandResult.Rejected rejected) {
+            PaleMirrorMod.LOGGER.info("PMV3_PLAYER_BREAK resource-disposition={} detail={}",
+                    rejected.rejection().code(), rejected.rejection().detail());
         }
+        return result instanceof CommandResult.Accepted;
     }
 
     record Target(ResourceSite site, PhysicalIntent intent) { }

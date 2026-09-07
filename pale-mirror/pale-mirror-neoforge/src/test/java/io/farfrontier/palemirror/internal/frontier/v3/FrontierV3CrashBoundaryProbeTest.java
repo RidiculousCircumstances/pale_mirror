@@ -8,13 +8,10 @@ import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
-import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
@@ -135,13 +132,15 @@ class FrontierV3CrashBoundaryProbeTest {
     }
 
     @Test
-    void typedPrepareMatchesTheArmedJobRatherThanItsSettlementEventSubject() {
+    void typedLeaseHandoffMatchesTheArmedJobRatherThanItsSettlementEventSubject() {
         String job = "job:site-harvest-crash";
         FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, job,
                 FrontierV3CrashBoundaryProbe.LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION,
-                "frontier.resource_site_harvest_scene_lease_prepared")::get, ignored -> { });
+                "frontier.resource_site_harvest_scene_lease_handoff")::get, ignored -> { });
 
-        assertTrue(probe.matches(prepare(7L, "settlement:crash", job, "lease:crash")));
+        assertFalse(probe.matches(prepare(7L, "settlement:crash", job, "lease:crash")),
+                "a pre-provider PREPARED record is not the traversal lease handoff");
+        assertTrue(probe.matches(handoff(7L, "settlement:crash", job, "lease:crash")));
     }
 
     @Test
@@ -233,20 +232,21 @@ class FrontierV3CrashBoundaryProbeTest {
 
         probe = releaseProbe(7L, job);
         assertFalse(probe.matches(prepare(6L, "settlement:crash", job, "lease:crash")));
-        assertFalse(probe.matches(release(7L, "settlement:crash", "job:site-harvest-other", "lease:crash")), "foreign job continuation must fail");
+        assertTrue(probe.matches(release(7L, "settlement:crash", "job:site-harvest-other", "lease:crash")),
+                "a no-work release carries no second schedule subject; the previously durable exact lease remains the owner witness");
 
         probe = releaseProbe(7L, job);
         assertFalse(probe.matches(prepare(6L, "settlement:crash", job, "lease:crash")));
         TransactionRecord malformed = withEvents(release(7L, "settlement:crash", job, "lease:crash"), List.of(
                 release(7L, "settlement:crash", job, "lease:crash").events().get(0),
-                release(7L, "settlement:crash", job, "lease:crash").events().get(1),
-                event(7L, 2, "settlement:crash", new TestPayload("frontier.unrelated"))));
+                event(7L, 1, "settlement:crash", new TestPayload("frontier.unrelated"))));
         assertFalse(probe.matches(malformed), "extra facts cannot complete a release witness");
         assertFalse(probe.matches(release(7L, "settlement:crash", job, "lease:crash")), "malformed candidate clears the witness");
 
         probe = releaseProbe(7L, job);
         assertFalse(probe.matches(prepare(6L, "settlement:crash", job, "lease:crash")));
-        assertFalse(probe.matches(withDueAt(release(7L, "settlement:crash", job, "lease:crash"), 9L)), "wrong continuation due time must fail");
+        assertFalse(probe.matches(withUnexpectedSchedule(release(7L, "settlement:crash", job, "lease:crash"))),
+                "a release that constructs any schedule effect must fail");
     }
 
     @Test
@@ -498,11 +498,7 @@ class FrontierV3CrashBoundaryProbeTest {
     private static TransactionRecord release(long revision, String settlement, String job, String lease) {
         SceneLease sceneLease = lease(revision - 1L, job, lease);
         SceneLeaseReleased released = new SceneLeaseReleased(sceneLease.id(), List.of(new SceneMemberPosition(worker(), body(), FixedScalar.whole(20))));
-        ScheduledAction replacement = new ScheduledAction(new ScheduleId("schedule:resource-site-harvest-cold-progress-"
-                + job.substring("job:".length())), new SimInstant(revision + 1L), 0, new SubjectId(job),
-                ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
-        return transaction(revision, List.of(event(revision, 0, settlement, released), event(revision, 1, job,
-                new ScheduleEffect.Rescheduled(replacement.id(), replacement))));
+        return transaction(revision, List.of(event(revision, 0, settlement, released)));
     }
 
     private static FrontierV3CrashBoundaryProbe releaseProbe(long revision, String job) {
@@ -536,14 +532,10 @@ class FrontierV3CrashBoundaryProbeTest {
         return new TransactionRecord(original.id(), new WorldId(world), original.revision(), original.instant(), original.events());
     }
 
-    private static TransactionRecord withDueAt(TransactionRecord original, long dueAt) {
+    private static TransactionRecord withUnexpectedSchedule(TransactionRecord original) {
         FrontierEvent release = original.events().getFirst();
-        ScheduleEffect.Rescheduled prior = (ScheduleEffect.Rescheduled) original.events().get(1).payload();
-        ScheduledAction replacement = new ScheduledAction(prior.replacement().id(), new SimInstant(dueAt), prior.replacement().priority(),
-                prior.replacement().subject(), prior.replacement().kind(), prior.replacement().weight());
-        FrontierEvent continuation = event(original.revision().value(), 1, original.events().get(1).subject().value(),
-                new ScheduleEffect.Rescheduled(replacement.id(), replacement));
-        return withEvents(original, List.of(release, continuation));
+        return withEvents(original, List.of(release, event(original.revision().value(), 1, "job:site-harvest-crash",
+                new TestPayload("kernel.schedule_rescheduled"))));
     }
 
     private static FrontierEvent event(long revision, int ordinal, String owner, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.AdvanceResult;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -51,6 +52,30 @@ class InMemoryFrontierEngineTest {
         assertEquals(2, projection.value());
         assertEquals(new Revision(1L), projection.revision());
         assertEquals(1, engine.transactions().size());
+    }
+
+    @Test
+    void exactContinuationBindingRejectsMissingAndStaleEngineActionsWithoutMutation() {
+        ScheduledAction current = scheduled("schedule:bound", "settlement:a", 10L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(current), false);
+        CommandId missingId = new CommandId("command:bound-missing");
+        ScheduledAction missing = scheduled("schedule:bound-missing", "settlement:a", 10L, 1);
+        FrontierCommand absent = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, missingId, WORLD, Revision.ZERO,
+                SimInstant.ZERO, SUBJECT, CauseChain.root(missingId), new Delta(1), Optional.of(new EngineScheduleBinding(Revision.ZERO, missing)));
+        assertRejected(engine.submit(absent), RejectionCode.STALE_SCHEDULE_BINDING);
+        assertEquals(Revision.ZERO, engine.projection(ProjectionQuery.summary()).revision());
+        assertEquals(List.of(current), engine.scheduledActions());
+
+        CommandId acceptedId = new CommandId("command:bound-accepted");
+        FrontierCommand accepted = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, acceptedId, WORLD, Revision.ZERO,
+                SimInstant.ZERO, SUBJECT, CauseChain.root(acceptedId), new Delta(1), Optional.of(new EngineScheduleBinding(Revision.ZERO, current)));
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(accepted));
+        CommandId staleId = new CommandId("command:bound-stale");
+        FrontierCommand stale = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, staleId, WORLD, new Revision(1L),
+                SimInstant.ZERO, SUBJECT, CauseChain.root(staleId), new Delta(1), Optional.of(new EngineScheduleBinding(Revision.ZERO, current)));
+        assertRejected(engine.submit(stale), RejectionCode.STALE_SCHEDULE_BINDING);
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).value());
+        assertEquals(List.of(current), engine.scheduledActions());
     }
 
     @Test
@@ -177,6 +202,29 @@ class InMemoryFrontierEngineTest {
         assertTrue(engine.scheduledActions().isEmpty());
         assertEquals(List.of("kernel.schedule_cancelled"), engine.transactions().getFirst().events().stream()
                 .map(event -> event.payload().type()).toList());
+    }
+
+    @Test
+    void heldDueContinuationNeverWritesHistoricalTimeAfterAnInterveningPhysicalCommand() {
+        ScheduledAction held = scheduled("schedule:held", "settlement:held", 5L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Rescheduled(due.id(), due))),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(held));
+
+        engine.advanceTo(new SimInstant(10L), new WorkBudget(1, 1));
+        CommandId commandId = new CommandId("command:physical-after-hold");
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, commandId, WORLD, new Revision(1L),
+                new SimInstant(10L), SUBJECT, CauseChain.root(commandId), new Delta(1))));
+        engine.advanceTo(new SimInstant(11L), new WorkBudget(1, 1));
+
+        assertEquals(List.of(new SimInstant(5L), new SimInstant(10L), new SimInstant(10L)),
+                engine.transactions().stream().map(TransactionRecord::instant).toList());
+        assertEquals(3, new RecoveryImage(WORLD, Optional.empty(), engine.transactions()).walTail().size(),
+                "a retained due action may not make a recoverable WAL move backwards");
     }
 
     @Test

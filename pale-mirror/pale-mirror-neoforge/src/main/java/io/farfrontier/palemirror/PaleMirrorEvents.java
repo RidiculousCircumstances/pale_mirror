@@ -92,6 +92,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.clearPlayerBreakDispositions(event.getServer());
         AmbientSpawnThrottle.clear();
         PaleMirrorPlayerPresentation.clear(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.stop(event.getServer());
@@ -268,9 +269,29 @@ public final class PaleMirrorEvents {
     }
 
     /** A declared graybox interaction slot contributes its exact source fact before Minecraft removes the cube. */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onFrontierPlayerBreakAdmission(PlayerInteractEvent.LeftClickBlock event) {
+        if (event.isCanceled() || !(event.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof net.minecraft.server.level.ServerLevel level)) return;
+        // This server-side left-click callback is emitted by vanilla's block-action handler
+        // before it mutates the physical cell. It is the durable admission point for the
+        // normal client action; the later BreakEvent may only execute this disposition.
+        if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.acceptedPlayerBreak(level, event.getPos(), player)) return;
+        io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.PlayerBreakDisposition disposition =
+                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observePlayerBreakPacket(level, event.getPos(), player);
+        PaleMirrorMod.LOGGER.info("PMV3_PLAYER_BREAK boundary=server-left-click disposition={}", disposition);
+        if (disposition == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.PlayerBreakDisposition.REJECTED) {
+            event.setCanceled(true);
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(level, event.getPos()));
+            PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:unrecorded-physical-change");
+        }
+    }
+
+    /** A declared graybox interaction slot contributes its exact source fact before Minecraft removes the cube. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onFrontierBlockBreak(BlockEvent.BreakEvent event) {
         if (!event.isCanceled() && event.getPlayer() instanceof ServerPlayer player && player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.acceptedPlayerBreak(level, event.getPos(), player)) return;
             if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
                 SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(player.getServer());
                 if (source.activated()) source.observeBlockBreakWithReceipt(level, event.getPos(), "player:" + player.getUUID())
@@ -481,6 +502,7 @@ public final class PaleMirrorEvents {
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (!event.isCanceled() && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             if (event.getPlayer() instanceof ServerPlayer player) {
+                if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.consumeAcceptedPlayerBreak(level, event.getPos(), player)) return;
                 if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.rejectBlockBreak(level, event.getPos(), player)) {
                     event.setCanceled(true);
                     PaleMirrorPlayerPresentation.actionRejected(player, "frontier-v3:unrecorded-physical-change");

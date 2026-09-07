@@ -28,6 +28,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 /**
  * Closed process-side companion to {@link FrontierSceneBehaviors}.
@@ -42,25 +44,32 @@ public final class FrontierSceneContinuationPlanner {
     private FrontierSceneContinuationPlanner() { }
 
     public static List<ProposedEvent> releaseEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
-                                                    SceneLeaseReleased released) {
+                                                    SceneLeaseReleased released, Optional<ScheduledAction> binding) {
         SceneReleasePlan plan = FrontierSceneBehaviors.releasePlan(state, lease, submittedAt, released);
-        return events(state, plan.owner(), plan.released(), plan.continuation(), submittedAt);
+        return events(state, plan.owner(), plan.released(), plan.continuation(), submittedAt, binding);
+    }
+
+    /** Callers without an enforced continuation binding retain the existing generic lifecycle path. */
+    public static List<ProposedEvent> releaseEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
+                                                    SceneLeaseReleased released) {
+        return releaseEvents(state, lease, submittedAt, released, Optional.empty());
     }
 
     public static List<ProposedEvent> recoveryUnresolvedEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
                                                                SceneLeaseRecoveryUnresolved unresolved) {
         SceneRecoveryPlan plan = FrontierSceneBehaviors.recoveryUnresolvedPlan(state, lease, unresolved);
-        return events(state, plan.owner(), plan.unresolved(), plan.continuation(), submittedAt);
+        return events(state, plan.owner(), plan.unresolved(), plan.continuation(), submittedAt, Optional.empty());
     }
 
     private static List<ProposedEvent> events(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner,
-                                              FrontierPayload lifecycleFact, SceneContinuation continuation, long submittedAt) {
+                                              FrontierPayload lifecycleFact, SceneContinuation continuation, long submittedAt,
+                                              Optional<ScheduledAction> binding) {
         Objects.requireNonNull(state, "scene continuation state");
         Objects.requireNonNull(owner, "scene continuation owner");
         Objects.requireNonNull(lifecycleFact, "scene lifecycle fact");
         ContinuationHandler handler = HANDLERS.get(Objects.requireNonNull(continuation, "scene continuation").kind());
         if (handler == null) throw new IllegalStateException("unregistered scene continuation: " + continuation.kind());
-        List<ProposedEvent> tail = handler.events(state, continuation, submittedAt);
+        List<ProposedEvent> tail = handler.events(state, continuation, submittedAt, binding);
         if (tail.isEmpty()) return List.of(new ProposedEvent(owner, lifecycleFact));
         java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>(tail.size() + 1);
         events.add(new ProposedEvent(owner, lifecycleFact));
@@ -94,12 +103,13 @@ public final class FrontierSceneContinuationPlanner {
 
     private interface ContinuationHandler {
         SceneContinuation.Kind kind();
-        List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt);
+        List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt,
+                                   Optional<ScheduledAction> binding);
     }
 
     private static final class NoneHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.NONE; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.None)) throw invalid(continuation, kind());
             return List.of();
         }
@@ -107,7 +117,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeOperationHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_OPERATION; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeOperation resume)) throw invalid(continuation, kind());
             RouteOperation operation = requireOperation(state, resume.operationId());
             return List.of(new ProposedEvent(operation.settlementId(), new ScheduleEffect.Created(
@@ -117,7 +127,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class FailOperationHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.FAIL_OPERATION; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.FailOperation failure)) throw invalid(continuation, kind());
             return SupplyOperationProcess.failed(state, requireOperation(state, failure.operationId()), failure.reason(), submittedAt);
         }
@@ -125,7 +135,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeEngagementHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_ENGAGEMENT; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeEngagement resume)) throw invalid(continuation, kind());
             RouteEngagement engagement = state.strategicPlans().routeEngagements().get(resume.engagementId());
             if (engagement == null) throw new IllegalArgumentException("scene continuation has no route engagement");
@@ -136,7 +146,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeSettlementAssaultHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_SETTLEMENT_ASSAULT; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeSettlementAssault resume)) throw invalid(continuation, kind());
             SettlementAssault assault = state.strategicPlans().settlementAssaults().get(resume.assaultId());
             if (assault == null) throw new IllegalArgumentException("scene continuation has no settlement assault");
@@ -147,7 +157,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class FinalizeProductionWorkHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.FINALIZE_PRODUCTION_WORK; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.FinalizeProductionWork finalize)) throw invalid(continuation, kind());
             ProductionJob job = state.productionJobs().get(finalize.jobId());
             if (job == null) throw new IllegalArgumentException("production scene finalization has no active job");
@@ -157,7 +167,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeProductionCompletionHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_PRODUCTION_COMPLETION; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeProductionCompletion resume)) throw invalid(continuation, kind());
             ProductionJob job = state.productionJobs().get(resume.jobId());
             if (job == null || !job.workProgress().terminalEffectEligible()) {
@@ -173,7 +183,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeRoutePatrolHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_ROUTE_PATROL; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeRoutePatrol resume)) throw invalid(continuation, kind());
             RoutePatrol patrol = state.strategicPlans().routePatrols().get(resume.taskId());
             if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene continuation has no active route patrol");
@@ -183,7 +193,7 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class BlockRoutePatrolHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.BLOCK_ROUTE_PATROL; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt, Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.BlockRoutePatrol block)) throw invalid(continuation, kind());
             RoutePatrol patrol = state.strategicPlans().routePatrols().get(block.taskId());
             if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene recovery has no active route patrol");
@@ -194,12 +204,16 @@ public final class FrontierSceneContinuationPlanner {
 
     private static final class ResumeResourceSiteHarvestHandler implements ContinuationHandler {
         @Override public SceneContinuation.Kind kind() { return SceneContinuation.Kind.RESUME_RESOURCE_SITE_HARVEST; }
-        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt) {
+        @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt,
+                                                    Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeResourceSiteHarvest resume)) throw invalid(continuation, kind());
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
                     new ResourceSiteHarvestSceneCause(resume.jobId()));
-            io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction replacement = ResourceSiteHarvestProcess.coldProgress(job, resume.dueAt());
-            return List.of(new ProposedEvent(job.id(), new ScheduleEffect.Rescheduled(replacement.id(), replacement)));
+            ResourceSiteHarvestProcess.requireContinuationBinding(job, binding.orElseThrow(
+                    () -> new IllegalArgumentException("resource-site harvest release has no engine schedule binding")));
+            // A drain performs no semantic traversal. The validated engine action remains in its
+            // queue untouched, so its identity and bytes cannot be reconstructed from release time.
+            return List.of();
         }
     }
 

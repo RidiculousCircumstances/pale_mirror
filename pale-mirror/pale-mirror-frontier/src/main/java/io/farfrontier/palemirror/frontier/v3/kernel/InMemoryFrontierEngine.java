@@ -178,6 +178,11 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (!revision.equals(command.expectedRevision())) {
             return rejected(command, RejectionCode.STALE_REVISION, "command expected revision does not match canonical revision");
         }
+        if (command.scheduleBinding().isPresent() && (!revision.equals(command.scheduleBinding().orElseThrow().checkpointRevision())
+                || !schedules.containsExact(command.scheduleBinding().orElseThrow().action()))) {
+            return rejected(command, RejectionCode.STALE_SCHEDULE_BINDING,
+                    "command schedule binding no longer matches the engine-owned action");
+        }
         if (receipts.size() == limits.maxReceipts()) {
             return rejected(command, RejectionCode.RECEIPT_CAPACITY_EXHAUSTED, "receipt retention capacity is full");
         }
@@ -242,7 +247,12 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
                 events.addAll(planned);
                 CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
-                completed.add(commit(CauseChain.root(cause), action.dueAt(), events, Optional.empty()));
+                // A held physical continuation can deliberately retain an already-due action
+                // until its owner observes or releases the physical work.  Its dueAt remains
+                // the sole deadline/ordering fact, but an eventual durable disposition occurs
+                // at the current canonical instant; writing the historical dueAt here would
+                // make the WAL move backwards after an intervening physical command.
+                completed.add(commit(CauseChain.root(cause), laterOf(instant, action.dueAt()), events, Optional.empty()));
             } catch (RuntimeException error) {
                 status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(
                         new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error)));
@@ -329,6 +339,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.TRANSACTION, kind, owner)) {
             return commitMeasured(causes, eventInstant, proposed, acceptedCommandReceipt);
         }
+    }
+
+    private static SimInstant laterOf(SimInstant first, SimInstant second) {
+        return first.compareTo(second) >= 0 ? first : second;
     }
 
     private TransactionId commitMeasured(CauseChain causes, SimInstant eventInstant, List<ProposedEvent> proposed,

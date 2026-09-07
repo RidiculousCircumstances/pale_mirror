@@ -21,6 +21,7 @@ export function materializeF0vMatrix(contract) {
 /** Compares only explicit read-only terminal projections, never physical trajectories or timing. */
 export function compareDifferential(contractEntry, coldManifest, hotColdManifest) {
   if (contractEntry.driver !== 'COLD_VS_HOT_COLD') throw new Error('only a declared differential may be compared');
+  requireAbsoluteDifferentialAlignment(contractEntry, coldManifest, hotColdManifest);
   return compareDifferentialEvidence(contractEntry, extractDeclaredProjections(coldManifest, contractEntry.scenario.f0vDifferential, 'differential'),
     extractDeclaredProjections(hotColdManifest, contractEntry.scenario.f0vDifferential, 'differential'));
 }
@@ -70,6 +71,50 @@ export function finalizeMatrixEntry(entry, runs, { selectedLane = false } = {}) 
       evidence: extractDeclaredProjections(runs[0].result, entry.scenario.f0vDifferential, 'differential') }) });
   }
   return Object.freeze({ differential: compareDifferential(entry, cold.result, hotCold.result) });
+}
+
+/**
+ * Extends a COLD differential lane by the exact elapsed canonical instants
+ * observed in its HOT/COLD peer. This does not normalize or omit any compared
+ * value: both final diagnostics are still compared byte-for-byte over the
+ * complete declared projection, including full schedule entries. The delta is
+ * discovered from a checked-in read-only anchor, never hard-coded as a timing
+ * guess in the contract.
+ */
+export function targetColdDifferentialScenario(entry, coldScenario, hotColdManifest) {
+  if (entry?.driver !== 'COLD_VS_HOT_COLD' || !entry.differentialAlignment || coldScenario?.f0vExecutionLane !== 'cold') {
+    throw new Error('semantic time alignment requires a declared COLD/HOT differential pair');
+  }
+  const alignment = entry.differentialAlignment;
+  const terminal = diagnostic(hotColdManifest, alignment.view, alignment.id);
+  const targetInstant = atPath(terminal, alignment.instantPath);
+  if (!Number.isSafeInteger(targetInstant) || targetInstant < 1) {
+    throw new Error('F0.V differential absolute target is absent or invalid');
+  }
+  const terminalInspections = distinctInspectionCount(coldScenario.f0vTerminalProjections);
+  if (terminalInspections < 1 || terminalInspections >= coldScenario.actions.length) {
+    throw new Error('F0.V differential COLD lane lacks terminal inspections for semantic alignment');
+  }
+  const terminalStart = coldScenario.actions.length - terminalInspections;
+  const actions = [
+    ...coldScenario.actions.slice(0, terminalStart),
+    { type: 'fast_forward_to_instant', targetInstant, timeoutMs: 180_000 },
+    ...coldScenario.actions.slice(terminalStart)
+  ];
+  return Object.freeze({ ...structuredClone(coldScenario), actions: Object.freeze(actions),
+    assertions: Object.freeze(coldScenario.assertions.map((assertion) => assertion.after === terminalStart + terminalInspections
+      ? Object.freeze({ ...assertion, after: actions.length }) : structuredClone(assertion))),
+    f0vAbsoluteTarget: Object.freeze({ view: alignment.view, id: alignment.id, instantPath: alignment.instantPath, targetInstant }) });
+}
+
+function requireAbsoluteDifferentialAlignment(entry, coldManifest, hotColdManifest) {
+  const alignment = entry.differentialAlignment;
+  if (!alignment) throw new Error('F0.V differential lacks an absolute target declaration');
+  const hotInstant = atPath(diagnostic(hotColdManifest, alignment.view, alignment.id), alignment.instantPath);
+  const coldInstant = atPath(diagnostic(coldManifest, alignment.view, alignment.id), alignment.instantPath);
+  if (!Number.isSafeInteger(hotInstant) || !Number.isSafeInteger(coldInstant) || hotInstant !== coldInstant) {
+    throw new Error(`F0.V differential terminal instants diverged: COLD=${coldInstant} HOT/COLD=${hotInstant}`);
+  }
 }
 
 /** Verifies that the normal client runner retained each declared terminal domain assertion. */
@@ -180,6 +225,11 @@ function matches(actual, expected) {
 
 function expectedPath(value, path) {
   return atPath(value, path);
+}
+
+function distinctInspectionCount(projections) {
+  if (!Array.isArray(projections)) return 0;
+  return new Set(projections.map((projection) => `${projection?.view}\u0000${projection?.id}`)).size;
 }
 
 function requireDeclaredProjectionEvidence(declarations, evidence, label) {

@@ -512,8 +512,13 @@ class FrontierV3DiagnosticJsonTest {
                 checkpoint.revision().value(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED, members,
                 io.farfrontier.palemirror.frontier.v3.model.SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT);
+        var historical = SceneLease.forCause(new SceneLeaseId("lease:diagnostic-production-r-1"), checkpoint.worldId(),
+                lease.cause(), lease.handoffPosition(), new SimInstant(0L), 0L, SceneLeaseStatus.CLOSED, lease.members(),
+                lease.memberPositions(), lease.ambientHandoffActorIds(), Optional.empty());
+        FrontierWorldState withHistoricalReceipt = hot.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
+                .sceneLeases(java.util.Map.of(historical.id(), historical, lease.id(), hot.sceneLeases().get(lease.id()))));
 
-        String scene = FrontierV3DiagnosticJson.render("scene", candidate.jobId().value(), checkpoint, hot, Optional.empty());
+        String scene = FrontierV3DiagnosticJson.render("scene", candidate.jobId().value(), checkpoint, withHistoricalReceipt, Optional.empty());
 
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"PRODUCTION_WORK\""));
         assertTrue(scene.contains("\"productionJob\":\"" + candidate.jobId().value() + "\"")
@@ -521,6 +526,8 @@ class FrontierV3DiagnosticJsonTest {
                 "a named workshop job must retain its own public scene identity rather than inherit an unrelated scene family");
         assertTrue(scene.contains("\"productionFutureBody\":"),
                 "a route-obstruction pilot may inspect one immutable future worker body without selecting that worker");
+        assertTrue(scene.contains("\"leaseId\":\"" + lease.id().value() + "\"") && scene.contains("\"leaseStatus\":\"HOT\""),
+                "a current scene diagnostic must prefer the live lease over an equally-owned closed receipt");
         runtime.shutdown();
     }
 

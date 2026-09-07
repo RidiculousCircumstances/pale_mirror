@@ -40,6 +40,12 @@ public final class ScheduledActionQueue {
         return action.equals(ordered.isEmpty() ? null : ordered.first());
     }
 
+    /** Exact immutable membership check used by an engine-owned continuation binding. */
+    public boolean containsExact(ScheduledAction action) {
+        Objects.requireNonNull(action, "scheduled action");
+        return action.equals(byId.get(action.id()));
+    }
+
     /**
      * Prepares one atomic schedule transition without cloning the whole future-work index.
      * The caller may commit the transition only after the matching canonical transaction is

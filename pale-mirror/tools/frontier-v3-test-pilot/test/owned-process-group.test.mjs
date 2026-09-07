@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
-import { terminateOwnedProcessGroup } from '../src/owned-process-group.mjs';
+import {
+  requiresExactChildTerminationAfterGracefulFailure,
+  terminateOwnedProcessGroup
+} from '../src/owned-process-group.mjs';
+
+test('failed graceful cleanup retains exact-child authority after a closed game port', () => {
+  assert.equal(requiresExactChildTerminationAfterGracefulFailure({ gracefulStopFailed: true, childExited: false }), true);
+  assert.equal(requiresExactChildTerminationAfterGracefulFailure({ gracefulStopFailed: true, childExited: true }), false);
+  assert.equal(requiresExactChildTerminationAfterGracefulFailure({ gracefulStopFailed: false, childExited: false }), false);
+  assert.throws(() => requiresExactChildTerminationAfterGracefulFailure({ gracefulStopFailed: 'yes', childExited: false }),
+    /cleanup disposition is malformed/);
+});
 
 test('owned detached cleanup terminates the wrapper and its native descendant', { skip: process.platform !== 'linux' }, async () => {
   const wrapper = spawn('/bin/sh', ['-c', 'sleep 300 & echo $!; wait'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });

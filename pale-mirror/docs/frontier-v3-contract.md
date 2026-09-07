@@ -110,6 +110,23 @@ aggregate internals:
 | `PhysicalObservation` | Deduplicated evidence of the actual Minecraft result, including changed blocks, entities and items. |
 | `FrontierStore` | Append/recover transactions, snapshots, schedules, physical leases and bounded receipts. |
 
+`ScheduledAction` is the sole durable timing record. It remains in the
+engine-owned schedule portion of `CheckpointImage`; a process aggregate owns
+its meaning, cadence and legal replacement policy but does not copy `dueAt` or
+queue contents into `FrontierWorldState` or a scene lease. A HOT/COLD hand-off
+uses a typed engine-owned continuation binding: an immutable exact view of the
+current schedule identity, kind, subject, due instant, ordering fields and
+process/authority version. The engine validates that binding and all resulting
+schedule effects in the same transaction as the process cursor or lease change.
+Missing, duplicate, stale or mismatched continuation evidence fails closed.
+
+A release that commits no semantic process step preserves the bound
+`ScheduledAction` exactly; it may not reconstruct a replacement from release or
+observation time. A HOT checkpoint that does commit a semantic step applies the
+same process-owned cadence transition from the validated continuation that the
+COLD due-action planner would apply. The binding is not a second schedule and
+does not expose the complete queue to model policy.
+
 NeoForge implements storage and Minecraft ports. It may submit commands and
 observations and consume projections/intents, but it never receives mutable
 domain collections. Public API types contain stable IDs, enums, fixed-point
@@ -219,7 +236,12 @@ There is no indivisible daily phase and no loop over every object each tick.
   skipped interval. `/time` changes presentation time only and do not advance
   the simulation.
 - Operator fast-forward invokes the same due-action engine and event rules; it
-  is not a second fast simulation or a daily shortcut.
+  is not a second fast simulation or a daily shortcut. A bounded verification
+  request may name an absolute target `SimInstant`, but that target is admitted
+  and evaluated only on the server thread against the current canonical
+  checkpoint. Delivery latency never becomes extra requested progress: the
+  engine reaches the exact target or rejects an already-crossed, unbounded or
+  physically unsafe request visibly.
 - Work budgets may defer execution to a later server tick but may not reorder,
   merge or discard due actions. Simulation lag is measured and visible.
 - If a known due action has become obsolete because a prior durable fact changed

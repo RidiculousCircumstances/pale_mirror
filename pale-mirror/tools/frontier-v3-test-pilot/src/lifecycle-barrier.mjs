@@ -83,7 +83,10 @@ const NEXT = Object.freeze({
   [LifecycleBarrier.CRASH_CONTROLLER_FIRED]: new Set([LifecycleBarrier.OWNED_SERVER_EXIT]),
   [LifecycleBarrier.OWNED_SERVER_EXIT]: new Set([LifecycleBarrier.CLIENT_EXPECTED_LOSS]),
   [LifecycleBarrier.CLIENT_EXPECTED_LOSS]: new Set([LifecycleBarrier.GAME_PORT_CLOSED]),
-  [LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE]: new Set([LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
+  // A release boundary is server-owned: the ordinary client can finish and disconnect before
+  // the server durably releases its HOT lease.  That exact completed segment may therefore arm
+  // the nonce-bound crash controller, but cannot otherwise skip its expected-loss sequence.
+  [LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE]: new Set([LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleBarrier.EXPECTED_LOSS_ARMED, LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
   [LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED]: new Set([LifecycleBarrier.DURABLE_SERVER_SAVE, LifecycleBarrier.GAME_PORT_CLOSED, LifecycleBarrier.RECOVERY_SERVER_READY, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE]),
   [LifecycleBarrier.DURABLE_SERVER_SAVE]: new Set([LifecycleBarrier.GAME_PORT_CLOSED]),
   [LifecycleBarrier.GAME_PORT_CLOSED]: new Set([LifecycleBarrier.RECOVERY_SERVER_READY]),
@@ -97,7 +100,12 @@ const NEXT = Object.freeze({
 
 export async function createLifecycleBarrierSession(root, identity) {
   const checked = validateIdentity(identity);
-  const directory = resolve(root, checked.sessionId);
+  const parent = resolve(root);
+  const directory = resolve(parent, checked.sessionId);
+  // A clean adopted checkout legitimately has no generated scenario root yet.  Create only
+  // that declared parent, while retaining the non-recursive session creation as the collision
+  // fence for one exact lifecycle identity.
+  await mkdir(parent, { recursive: true });
   await mkdir(directory, { recursive: false });
   await mkdir(eventsDirectory(directory));
   await mkdir(signalsDirectory(directory));
@@ -180,6 +188,36 @@ export async function awaitLifecycleBarrier(session, barrier, timeoutMs, predica
     if (!await change.wait) break;
   }
   throw new Error(`lifecycle barrier ${barrier} was not acknowledged within ${timeoutMs}ms`);
+}
+
+/**
+ * Returns the one client JVM that a lifecycle journal has already bound to a
+ * declared segment.  A supervisor may use this only for its own expected-loss
+ * cleanup; a Node wrapper PID, a later replacement client, or an untyped
+ * journal entry is never an eligible target.
+ */
+export function exactLifecycleClientPid(entry, segment) {
+  requireSignalSuffix(segment);
+  if (!entry || entry.barrier !== LifecycleBarrier.PREPARED_CLIENT_READY
+      || !entry.detail || entry.detail.segment !== segment
+      || !Number.isSafeInteger(entry.detail.clientPid) || entry.detail.clientPid <= 1) {
+    throw new Error('lifecycle prepared client acknowledgement is foreign, stale or malformed');
+  }
+  return entry.detail.clientPid;
+}
+
+/**
+ * Admits a clean pilot exit before a server-side crash rendezvous only after
+ * the exact client segment has durably acknowledged completion. The server may
+ * still need to complete an observer-free hysteresis before its own boundary.
+ */
+export function exactLifecycleCompletedSegment(entry, segment) {
+  requireSignalSuffix(segment);
+  if (!entry || entry.barrier !== LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE
+      || !entry.detail || entry.detail.segment !== segment) {
+    throw new Error('lifecycle completed segment acknowledgement is foreign, stale or malformed');
+  }
+  return entry;
 }
 
 /**

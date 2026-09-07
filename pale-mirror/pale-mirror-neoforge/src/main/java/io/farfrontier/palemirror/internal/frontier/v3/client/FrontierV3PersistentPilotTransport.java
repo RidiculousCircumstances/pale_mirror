@@ -47,4 +47,11 @@ final class FrontierV3PersistentPilotTransport {
             throw new IllegalStateException("persistent pilot reconnect control is invalid", failure);
         }
     }
+
+    /**
+     * A normal client disconnect can briefly retain its last LocalPlayer while the network
+     * connection is already gone.  The session boundary is transport ownership, not a stale
+     * presentation object: otherwise a resumed persistent pilot can idle forever after the
+     * runner has admitted its replacement server.
+     */
 }

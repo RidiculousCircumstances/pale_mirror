@@ -20,6 +20,15 @@ public final class PaleMirrorCommandGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-fast-forward-command", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void v3AbsoluteAdvanceIsPresentInTheRegisteredCommandTree(GameTestHelper helper) {
+        var root = PaleMirrorCommandRegistrar.commandTree().build();
+        var v3 = root.getChild("v3");
+        helper.assertTrue(v3 != null && v3.getChild("advance_to") != null,
+                "the v3 absolute advance command must remain in the completed tree after its branch is attached");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-diagnostics-command", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void v3RouteConstructionDiagnosticIsPresentInTheRegisteredCommandTree(GameTestHelper helper) {
         var root = PaleMirrorCommandRegistrar.commandTree().build();

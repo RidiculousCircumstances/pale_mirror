@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'fast_forward_to_instant', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -223,8 +223,13 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 1 || action.timeoutMs > MAX_FAST_FORWARD_TIMEOUT_MS)) {
         throw new Error(`fast_forward needs ticks 1..24000 and timeoutMs 1..${MAX_FAST_FORWARD_TIMEOUT_MS}`);
       }
+      if (action.type === 'fast_forward_to_instant' && (!Number.isSafeInteger(action.targetInstant) || action.targetInstant < 1
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 1 || action.timeoutMs > MAX_FAST_FORWARD_TIMEOUT_MS)) {
+        throw new Error(`fast_forward_to_instant needs targetInstant >=1 and timeoutMs 1..${MAX_FAST_FORWARD_TIMEOUT_MS}`);
+      }
       if (action.type === 'wait_until_diagnostic' && (!validDiagnosticIdentity(action) || !action.expect || typeof action.expect !== 'object'
-          || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
+          || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000
+          || (action.requireIncreaseAt !== undefined && !validDiagnosticPath(action.requireIncreaseAt)))) {
         throw new Error('wait_until_diagnostic needs a read-only view, predicate and timeoutMs 0..300000');
       }
       if (action.type === 'wait_until_harvest_result' && (!requiredId(action.siteId, 'site:') || !requiredId(action.intentId, 'intent:')
@@ -285,7 +290,7 @@ export function scenarioDeadlineMs(scenario) {
 
 function actionBudgetMs(action) {
   if (action.type === 'wait') return action.ms;
-  if (action.type === 'fast_forward') return action.timeoutMs;
+  if (action.type === 'fast_forward' || action.type === 'fast_forward_to_instant') return action.timeoutMs;
   if (Number.isInteger(action.timeoutMs)) return action.timeoutMs;
   if (action.type === 'visit') return VISIT_TIMEOUT_MS;
   if (action.type === 'inspect') return INSPECT_TIMEOUT_MS;
@@ -327,9 +332,12 @@ export function restartSegments(scenario) {
 function segment(scenario, first, end, setup, includeFirstBoundary) {
   const inRange = (after) => includeFirstBoundary ? after >= first && after <= end : after > first && after <= end;
   const rebase = (entry) => ({ ...entry, after: entry.after - first });
+  // A crash declaration belongs to the outer, exact server-JVM boundary.  A split half is a
+  // runnable ordinary-client scenario, so retaining it would make the schema demand an abrupt
+  // restart that this half deliberately does not own.
+  const { restart, crash, ...runnable } = scenario;
   return {
-    ...scenario,
-    restart: undefined,
+    ...runnable,
     setup,
     actions: scenario.actions.slice(first, end),
     assertions: (scenario.assertions ?? []).filter(({ after }) => inRange(after)).map(rebase),
@@ -341,6 +349,8 @@ function validDiagnosticIdentity(value) {
   return ['summary', 'performance', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance'].includes(value.view) || Boolean(value.id));
 }
+
+function validDiagnosticPath(value) { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*){0,7}$/.test(value); }
 
 function requiredId(value, prefix) { return typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length; }
 
@@ -371,7 +381,7 @@ function validResolvablePosition(value) {
   const reference = value?.diagnostic;
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
-    && ((reference.view === 'site' && requiredId(reference.id, 'site:') && reference.field === 'firstCrop')
+    && ((reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'process' && requiredId(reference.id, 'job:') && reference.field === 'cursor.retainedBody')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')

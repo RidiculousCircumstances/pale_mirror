@@ -11,7 +11,7 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "command", "inspect", "look", "look_nearest_entity",
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "fast_forward_to_instant", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -60,7 +60,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("look_operation") && !validOperationLook(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
-                            || !action.get("expect").isJsonObject() || !timeout(action, 300_000L))) ||
+                            || !action.get("expect").isJsonObject() || !timeout(action, 300_000L) || !validOptionalIncreasePath(action))) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
                     (type.equals("assert_fixture") && !validFixture(action)) ||
@@ -72,11 +72,13 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
                     (type.equals("fast_forward") && (!wholeTicks(action, 24_000L) || !positiveTimeout(action, 180_000L))) ||
+                    (type.equals("fast_forward_to_instant") && (!wholeTarget(action) || !positiveTimeout(action, 180_000L))) ||
                     (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("look") && !resolvablePosition(action, action.has("at") ? "at" : "position")) ||
-                    ((type.equals("walk") || type.equals("break")) && !position(action)) ||
+                    (type.equals("walk") && !position(action)) ||
+                    (type.equals("break") && !resolvablePosition(action, "position")) ||
                     (type.equals("wait_until_block") && !resolvablePosition(action, "position"))) {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
@@ -111,6 +113,19 @@ final class FrontierV3TestPilotScenario {
         if (!action.has("view") || !action.has("id") || !action.get("view").isJsonPrimitive() || !action.get("id").isJsonPrimitive()) return false;
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString();
         return FrontierV3DiagnosticView.accepts(view, id);
+    }
+
+    private static boolean validOptionalIncreasePath(JsonObject action) {
+        if (!action.has("requireIncreaseAt")) return true;
+        return action.get("requireIncreaseAt").isJsonPrimitive()
+                && action.get("requireIncreaseAt").getAsString().matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*){0,7}");
+    }
+
+    private static boolean wholeTarget(JsonObject action) {
+        if (!action.has("targetInstant") || !action.get("targetInstant").isJsonPrimitive()
+                || !action.get("targetInstant").getAsJsonPrimitive().isNumber()) return false;
+        try { return action.get("targetInstant").getAsLong() > 0L; }
+        catch (NumberFormatException ignored) { return false; }
     }
 
     private static boolean timeout(JsonObject action, long maximum) {
@@ -264,7 +279,8 @@ final class FrontierV3TestPilotScenario {
         if (reference == null || reference.entrySet().size() != 3 || !reference.has("view") || !reference.has("id") || !reference.has("field")
                 || !reference.get("view").isJsonPrimitive() || !reference.get("id").isJsonPrimitive() || !reference.get("field").isJsonPrimitive()) return false;
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
-        return (view.equals("site") && requiredId(reference, "id", "site:") && diagnosticField.equals("firstCrop"))
+        return (view.equals("site") && requiredId(reference, "id", "site:")
+                && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop")))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("process") && requiredId(reference, "id", "job:") && diagnosticField.equals("cursor.retainedBody"))
                 || (view.equals("scene") && requiredId(reference, "id", "job:")

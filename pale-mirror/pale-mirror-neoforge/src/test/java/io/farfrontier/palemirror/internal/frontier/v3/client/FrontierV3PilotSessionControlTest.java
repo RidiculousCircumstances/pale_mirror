@@ -133,6 +133,39 @@ class FrontierV3PilotSessionControlTest {
         }
     }
 
+    @Test
+    void ordinaryRestartReconnectRetainsExactlyOnePredecessorThroughConnectScreenCleanup(@TempDir Path root) throws Exception {
+        Path control = Files.createDirectory(root.resolve("control"));
+        String runId = UUID.randomUUID().toString();
+        Files.writeString(control.resolve("run-id"), runId + "\n", StandardCharsets.UTF_8);
+        Path scenario = root.resolve("scenario.json");
+        Files.writeString(scenario, "{\"id\":\"restart_scenario\"}\n", StandardCharsets.UTF_8);
+        String previousControl = System.getProperty(CONTROL);
+        String previousMode = System.getProperty(MODE);
+        try {
+            System.setProperty(CONTROL, control.toString());
+            System.clearProperty(MODE);
+            FrontierV3PilotSessionControl.reset();
+            FrontierV3PilotSessionControl.onLogin(scenario);
+            Object predecessor = new Object();
+            FrontierV3PilotSessionControl.bindActiveConnection(predecessor);
+            FrontierV3PilotSessionControl.markAwaitingResume();
+            Files.writeString(control.resolve("resume"), runId + "\n", StandardCharsets.UTF_8);
+
+            FrontierV3PilotSessionControl.requestReconnect("127.0.0.1:25575");
+            assertTrue(FrontierV3PilotSessionControl.reconnectInFlight());
+            FrontierV3PilotSessionControl.executeReconnectTransportDeparture(() ->
+                    assertTrue(FrontierV3PilotSessionControl.expectedReconnectPredecessorDeparture(predecessor),
+                            "the ordinary restart cleanup must not reset the session before its replacement login"));
+            assertFalse(FrontierV3PilotSessionControl.expectedReconnectPredecessorDeparture(null),
+                    "the null callback exception is limited to ConnectScreen's synchronous cleanup");
+        } finally {
+            FrontierV3PilotSessionControl.reset();
+            restore(CONTROL, previousControl);
+            restore(MODE, previousMode);
+        }
+    }
+
     private static void restore(String name, String value) {
         if (value == null) System.clearProperty(name);
         else System.setProperty(name, value);

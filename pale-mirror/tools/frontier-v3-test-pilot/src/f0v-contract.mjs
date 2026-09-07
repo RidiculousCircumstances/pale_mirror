@@ -13,6 +13,10 @@ const SEMANTIC_CRASH_BOUNDARIES = Object.freeze([
   'hot_checkpoint_durable_before_drain_release',
   'release_durable_before_cold_resumption'
 ]);
+const PHYSICAL_EFFECT_CRASH_BOUNDARIES = Object.freeze([
+  'physical_effect_visible_before_typed_observation',
+  'typed_observation_durable_before_next_process_checkpoint'
+]);
 
 /**
  * Process-neutral declarative F0.V vertical contract. A family owns its identities, ordinary
@@ -39,7 +43,9 @@ export function validateF0vContract(contract) {
     validateColdProgress(name, contract.variants[name]);
     if (contract.variants[name].driver === 'COLD_VS_HOT_COLD') {
       validateDifferentialRequirements(contract.declaration, contract.variants[name].differential);
-      requireMatchingProjectionVocabulary(contract.declaration, contract.variants[name].terminalProjections, contract.variants[name].differential);
+      requireMatchingProjectionVocabulary(contract.declaration, contract.variants[name].terminalProjections, contract.variants[name].differential,
+        contract.variants[name].alignment);
+      validateDifferentialAlignment(contract.scenario, contract.variants[name]);
     }
   }
   return deepFreeze(structuredClone(contract));
@@ -71,6 +77,8 @@ export function composeF0vScenarioMatrix(contract) {
       driver: variant.driver,
       evidence: Object.freeze([...variant.evidence]),
       crashWindows: variant.crashWindows === undefined ? Object.freeze([]) : Object.freeze(structuredClone(variant.crashWindows)),
+      deferredCrashWindows: variant.deferredCrashWindows === undefined ? Object.freeze([]) : Object.freeze(structuredClone(variant.deferredCrashWindows)),
+      ...(variant.alignment === undefined ? {} : { differentialAlignment: Object.freeze(structuredClone(variant.alignment)) }),
       scenario: deepFreeze(scenario),
       differential
     });
@@ -98,7 +106,7 @@ function composeVariantScenario(contract, name, variant, lane = undefined, crash
       // A HOT/COLD lane may append ordinary evidence actions after the common process actions.
       // Keep the declaration stable by resolving `terminal` only after that lane is composed;
       // otherwise the HOT lane would accidentally assert an earlier COLD diagnostic.
-      after: assertion.after === 'terminal' || assertion.after === variant.actions.length ? terminalAfter : assertion.after })),
+      after: assertion.after === 'terminal' ? terminalAfter : assertion.after })),
     frames: structuredClone(variant.frames ?? []),
     // The scenario language remains generic; this retained declaration tells the native matrix
     // which terminal *semantic* claims must be demonstrated, instead of counting an arbitrary
@@ -107,6 +115,7 @@ function composeVariantScenario(contract, name, variant, lane = undefined, crash
     ...(variant.arrivalCheckpoint === undefined ? {} : { f0vArrivalCheckpoint: structuredClone(variant.arrivalCheckpoint) }),
     ...(variant.coldProgress === undefined ? {} : { f0vColdProgress: composeColdProgress(variant.coldProgress, terminalAfter) }),
     ...(variant.driver === 'COLD_VS_HOT_COLD' ? { f0vDifferential: structuredClone(variant.differential) } : {}),
+    ...(variant.driver === 'COLD_VS_HOT_COLD' ? { f0vDifferentialAlignment: structuredClone(variant.alignment) } : {}),
     ...(crash === undefined ? {} : { crash: structuredClone(crash) })
   };
   const restartMode = RESTART_MODE[variant.driver];
@@ -156,8 +165,10 @@ function validateVariant(name, variant) {
   if (variant.driver === 'COLD_VS_HOT_COLD') validateDifferential(variant.differential);
   else if (variant.differential !== undefined || variant.lanes !== undefined) throw new Error(`non-differential F0.V variant cannot declare differential lanes: ${name}`);
   if (variant.driver === 'COLD_VS_HOT_COLD') validateDifferentialLanes(variant.lanes);
-  if (variant.driver === 'CRASH_WAL') validateCrashWindows(variant.crashWindows);
-  else if (variant.crashWindows !== undefined) throw new Error(`non-crash F0.V variant cannot declare crash windows: ${name}`);
+  if (variant.driver === 'CRASH_WAL') validateCrashWindows(variant.crashWindows, variant.deferredCrashWindows);
+  else if (variant.crashWindows !== undefined || variant.deferredCrashWindows !== undefined) {
+    throw new Error(`non-crash F0.V variant cannot declare crash windows: ${name}`);
+  }
 }
 
 /**
@@ -251,6 +262,24 @@ function validateDifferentialLanes(value) {
 }
 
 /**
+ * HOT observation consumes real simulation instants while COLD continues. The
+ * differential therefore names one terminal canonical instant. The runner asks
+ * the server-thread mutation lane to admit that exact absolute target; it never
+ * derives a client-relative delta or writes a process cursor/schedule.
+ */
+function validateDifferentialAlignment(baseScenario, variant) {
+  const alignment = variant.alignment;
+  if (!alignment || typeof alignment.view !== 'string' || typeof alignment.id !== 'string'
+      || !validPath(alignment.instantPath)) {
+    throw new Error('F0.V differential lacks a semantic time alignment declaration');
+  }
+  if (!variant.differential.some((projection) => projection.view === alignment.view && projection.id === alignment.id
+      && projection.paths.includes(alignment.instantPath))) {
+    throw new Error('F0.V differential absolute target must be a declared comparison projection');
+  }
+}
+
+/**
  * A fixed wait is allowed only when elapsed gameplay time itself is the asserted product rule.
  * Lifecycle, event delivery and materialization readiness must use their typed barriers instead.
  */
@@ -267,12 +296,17 @@ function validateGameplayElapsedWaits(scope, actions) {
   }
 }
 
-function validateCrashWindows(value) {
-  if (!Array.isArray(value) || value.length !== SEMANTIC_CRASH_BOUNDARIES.length
-      || value.map((entry) => entry?.boundary).sort().join(',') !== [...SEMANTIC_CRASH_BOUNDARIES].sort().join(',')) {
+function validateCrashWindows(value, deferred = undefined) {
+  const active = Array.isArray(value) ? value : [];
+  const parked = deferred === undefined ? [] : deferred;
+  if (!Array.isArray(value) || !Array.isArray(parked)
+      || [...active, ...parked].map((entry) => entry?.boundary).sort().join(',') !== [...SEMANTIC_CRASH_BOUNDARIES].sort().join(',')) {
     throw new Error('F0.V abrupt restart must cover every semantic crash window exactly once');
   }
-  for (const window of value) {
+  if (parked.some((window) => !PHYSICAL_EFFECT_CRASH_BOUNDARIES.includes(window?.boundary))) {
+    throw new Error('F0.V may defer only physical-effect crash windows to F0.2');
+  }
+  for (const window of [...active, ...parked]) {
     if (!window || window.phase !== 'before_restart' || !SEMANTIC_CRASH_BOUNDARIES.includes(window.boundary)
         || !stableToken(window.owner) || !stableToken(window.payloadType)
         || !validCrashRevision(window.expectedRevision)
@@ -344,12 +378,13 @@ function requireTerminalCoverage(projections, variant, name) {
   }
 }
 
-function requireMatchingProjectionVocabulary(declaration, expected, actual) {
+function requireMatchingProjectionVocabulary(declaration, expected, actual, alignment) {
   for (const projection of expected) {
     const candidate = actual.find((entry) => entry.invariant === projection.invariant);
     if (candidate === undefined || candidate.view !== projection.view || candidate.id !== projection.id
         || !projection.paths.every((path) => candidate.paths.includes(path))
-        || candidate.paths.some((path) => !allowedDifferentialPath(declaration, projection, path))) {
+        || candidate.paths.some((path) => !allowedDifferentialPath(declaration, projection, path)
+          && !(path === alignment?.instantPath && candidate.view === alignment.view && candidate.id === alignment.id))) {
       throw new Error(`F0.V differential must use the declared terminal semantic projection: ${projection.invariant}`);
     }
   }

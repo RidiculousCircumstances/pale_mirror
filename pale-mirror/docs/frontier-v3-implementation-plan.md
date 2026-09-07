@@ -215,7 +215,9 @@ effect family, execute F0 from
    historical-materialization authority.
 2. **F0.1 — one process, two drivers.** Close V3-AUD-043 through MAT-001 with
    never-loaded, arrive-mid-process, unload/return, intervention and crash
-   evidence over one process cursor.
+   evidence over one process cursor. Its admitted reference behavior is
+   traversal-only in both modes: preserve but do not enable irreversible HOT
+   crop/output WIP before F0.2.
 3. **F0.2 — replica custody and deferred aftermath.** Separate persistent
    physical replicas from temporary authority, remove permanent `ACTIVE`
    economic branching and make COLD consequences produce bounded idempotent
@@ -851,6 +853,13 @@ This gate changes ownership, not game balance: HOT remains real-time Minecraft
 execution and COLD remains bounded event-driven semantic progress. Completion
 requires a source guard or composition test that prevents a new duration
 process from registering only one driver.
+
+Until F0.2, “advance harvest” in this gate means advancement of the exact
+worker/process traversal cursor and retained unfinished work only. HOT and COLD
+must both reject irreversible crop completion and output creation. Native
+effect-visible/typed-observation crash windows and causally deferred physical
+realization activate with F0.2; their premature presence in an F0.V/F0.1
+scenario is an ordering defect, not additional evidence.
 
 Before Wave 6 can claim a process complete, classify and prove it under
 `docs/frontier-v3-materialization-completeness.md`. In particular, an exact

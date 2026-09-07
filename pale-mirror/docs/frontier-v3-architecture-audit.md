@@ -659,6 +659,17 @@ effects, environmental frontiers and ambient custody retain their distinct
 intent/frontier/presence boundaries instead of being forced through a work
 scene.
 
+Here schedule ownership is semantic, not duplicate storage. The engine-owned
+`ScheduledAction` inside the canonical checkpoint remains the sole durable
+deadline/ordering fact. The process descriptor defines its meaning and cadence;
+HOT lifecycle transactions bind to an exact typed view of that entry and the
+engine validates state plus schedule effects atomically. `FrontierWorldState`,
+`SceneLease` and the model behavior registry do not copy the queue. A release
+without semantic progress preserves the current action exactly, while a HOT
+cursor checkpoint advances cadence from that action under the same rule as
+COLD. Missing, duplicate, stale or mismatched bindings fail closed rather than
+being reconstructed from release time.
+
 F0.V native-matrix evidence on 2026-09-04 exposed a separate pre-existing
 integration defect that must not be concealed by choosing a different
 fixture. `FrontierV3ResourceSiteHarvestSceneExecutor` obtains the globally

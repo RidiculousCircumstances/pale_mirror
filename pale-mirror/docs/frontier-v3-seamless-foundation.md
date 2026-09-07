@@ -429,6 +429,12 @@ matrix, deterministic test-only crash boundaries, generated semantic scenario
 matrix, one-build/one-client restart runner and bounded automatic failure
 bundle. Preserve the active harvest WIP throughout.
 
+F0.V uses the capability boundary of the slice it precedes. The reference
+harvest remains traversal-only through F0.1: both drivers may move the same
+retained cursor, but neither may complete a crop or mint output before F0.2.
+Preserved HOT crop-effect WIP is not acceptance evidence and stays fail-closed
+or unreachable rather than granting observation a production advantage.
+
 Exit:
 
 - the reference harvest contract catches missing/duplicate ownership,
@@ -440,6 +446,13 @@ Exit:
   25 percent is advisory and retained 22.52 percent is sufficient for this
   optimization; do not spend native runs chasing that difference;
 - test-only fault/fixture controls are absent from the production JAR;
+- neutral COLD and HOT/COLD lanes are exactly equal over the admitted
+  traversal projection, and the native crash matrix arms only lease,
+  checkpoint and release boundaries applicable before F0.2;
+- the process descriptor owns schedule meaning while one engine-owned
+  `ScheduledAction` remains the only durable deadline; HOT checkpoint/release
+  validates its exact continuation binding atomically, and a release without a
+  semantic step cannot reconstruct or shift that action;
 - the ledger explicitly resumes F0.1 only after the F0.V gate is recorded.
 
 ### F0.1 — process/execution ownership reference
@@ -456,6 +469,13 @@ Complete V3-AUD-043 through MAT-001:
 - return displays the later current state without restart, disappearance or
   replay. Irreversible crop/output progress remains an F0.2 deferred-aftermath
   responsibility; F0.1 must not close that gap with a hidden direct mutation.
+
+The same restriction applies symmetrically to HOT. A loaded worker may visibly
+traverse and reach the retained work station in F0.1, but an observed crop
+transition is not accepted into canonical progress until F0.2 owns its physical
+eligibility, confirmation and deferred counterpart. Existing effect code is
+preserved for that later slice; it is not enabled merely because the player is
+present.
 
 Required evidence:
 

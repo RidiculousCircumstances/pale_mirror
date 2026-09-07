@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, newLifecycleIdentity, openLifecycleBarrierSession, publishLifecycleBarrier, readLifecycleBarriers } from '../src/lifecycle-barrier.mjs';
+import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, openLifecycleBarrierSession, publishLifecycleBarrier, readLifecycleBarriers } from '../src/lifecycle-barrier.mjs';
 
 const BUILD = 'a'.repeat(64);
 
@@ -27,6 +27,26 @@ test('versioned lifecycle barriers preserve an exact identity and a monotonic no
   assert.equal(events.length, 12);
   assert.equal((await awaitLifecycleBarrier(session, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, 50)).detail.assertions, 2);
   assert.equal((await openLifecycleBarrierSession(session.directory, session.identity)).identity.nonce, session.identity.nonce);
+});
+
+test('a clean crash-pilot exit is admissible only after its exact segment completion', () => {
+  const completed = { barrier: LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, detail: { segment: 'before_restart' } };
+  assert.equal(exactLifecycleCompletedSegment(completed, 'before_restart'), completed);
+  assert.throws(() => exactLifecycleCompletedSegment({ ...completed, detail: { segment: 'after_restart' } }, 'before_restart'),
+    /foreign, stale or malformed/);
+  assert.throws(() => exactLifecycleCompletedSegment({ ...completed, barrier: LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE }, 'before_restart'),
+    /foreign, stale or malformed/);
+});
+
+test('a fresh generated scenario parent is created without weakening exact session collision rejection', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'pmv3-lifecycle-parent-'));
+  const root = join(parent, 'generated', 'scenarios');
+  const identity = newLifecycleIdentity({ buildIdentitySha256: BUILD, workerId: 'local-worker',
+    runId: '00000000-0000-0000-0000-000000000011', scenarioId: 'f0v-parent', segmentId: 'fresh-parent',
+    nonce: '00000000-0000-0000-0000-000000000013', sessionId: '00000000-0000-0000-0000-000000000014' });
+  const session = await createLifecycleBarrierSession(root, identity);
+  assert.equal((await readFile(join(session.directory, 'identity.json'), 'utf8')).includes(identity.runId), true);
+  await assert.rejects(createLifecycleBarrierSession(root, identity), /EEXIST/);
 });
 
 test('lifecycle permits server readiness before the prepared persistent client without weakening later order', async () => {
@@ -54,6 +74,23 @@ test('typed abrupt lifecycle is repeatable without inventing normal disconnect o
   const events = await readLifecycleBarriers(session);
   assert.equal(events.some((event) => event.barrier === LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED), false);
   assert.equal(events.some((event) => event.barrier === LifecycleBarrier.DURABLE_SERVER_SAVE), false);
+});
+
+test('a completed ordinary segment may arm only its server-owned release crash sequence', async () => {
+  const session = await fresh('release-after-completion');
+  for (const [barrier, detail] of [
+    [LifecycleBarrier.SERVER_RUN_READY, { serverPid: 11 }], [LifecycleBarrier.PREPARED_CLIENT_READY, { clientPid: 12, segment: 'before_restart' }],
+    [LifecycleBarrier.CLIENT_CONNECTED_FIXTURE_READY, { clientPid: 12, segment: 'before_restart' }],
+    [LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, { actionStep: 4, segment: 'before_restart' }],
+    [LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, { segment: 'before_restart' }],
+    [LifecycleBarrier.EXPECTED_LOSS_ARMED, { clientPid: 12, serverPid: 11, segment: 'before_restart' }],
+    [LifecycleBarrier.CRASH_CONTROLLER_FIRED, { serverPid: 11, segment: 'before_restart' }],
+    [LifecycleBarrier.OWNED_SERVER_EXIT, { serverPid: 11, segment: 'before_restart' }],
+    [LifecycleBarrier.CLIENT_EXPECTED_LOSS, { clientPid: 12, segment: 'before_restart' }],
+    [LifecycleBarrier.GAME_PORT_CLOSED, { port: 25575, serverPid: 11, segment: 'before_restart' }]
+  ]) await publishLifecycleBarrier(session, barrier, detail);
+  await assert.rejects(publishLifecycleBarrier(session, LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED,
+    { segment: 'before_restart' }), /out of order/);
 });
 
 test('independent supervisor processes serialize complete lifecycle publications before assigning sequence IDs', async () => {
@@ -195,6 +232,15 @@ test('expected-loss Java signal envelopes retain the exact lifecycle identity', 
     }));
     assert.equal((await awaitLifecycleSignal(session, signal, suffix, 50)).signal, signal);
   }
+});
+
+test('expected-loss cleanup accepts only the direct client JVM from its exact prepared segment', () => {
+  const prepared = { barrier: LifecycleBarrier.PREPARED_CLIENT_READY,
+    detail: { clientPid: 4321, segment: 'before_restart' } };
+  assert.equal(exactLifecycleClientPid(prepared, 'before_restart'), 4321);
+  assert.throws(() => exactLifecycleClientPid({ ...prepared, detail: { clientPid: 4321, segment: 'after_restart' } }, 'before_restart'), /foreign, stale or malformed/);
+  assert.throws(() => exactLifecycleClientPid({ ...prepared, detail: { clientPid: 1, segment: 'before_restart' } }, 'before_restart'), /foreign, stale or malformed/);
+  assert.throws(() => exactLifecycleClientPid({ ...prepared, barrier: LifecycleBarrier.SERVER_RUN_READY }, 'before_restart'), /foreign, stale or malformed/);
 });
 
 async function fresh(segmentId) {

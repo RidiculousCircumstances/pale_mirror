@@ -1,6 +1,20 @@
 import { awaitWithin } from './deadline-watchdog.mjs';
 
 /**
+ * A runner-created child remains its cleanup responsibility after a failed
+ * graceful stop even when Minecraft has already released the game listener.
+ * The listener is an observation, not proof that the JVM has exited: RCON and
+ * world-save threads can still be live. Callers must supply their exact child;
+ * this function never authorizes process discovery.
+ */
+export function requiresExactChildTerminationAfterGracefulFailure({ gracefulStopFailed, childExited }) {
+  if (typeof gracefulStopFailed !== 'boolean' || typeof childExited !== 'boolean') {
+    throw new Error('owned child cleanup disposition is malformed');
+  }
+  return gracefulStopFailed && !childExited;
+}
+
+/**
  * Stops only a runner-created detached process group.  Native launchers can fork a JVM beneath
  * their Node wrapper, so killing the wrapper PID alone is not cleanup ownership.
  */

@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.farfrontier.palemirror.domain.StoryAudienceId;
@@ -55,6 +56,16 @@ final class PaleMirrorCommandRegistrar {
                     }
                     context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward for " + ticks + " tick(s)."), true);
                     return ticks;
+                })));
+        v3.then(Commands.literal("advance_to").requires(source -> source.hasPermission(4))
+                .then(Commands.argument("instant", LongArgumentType.longArg(1L)).executes(context -> {
+                    long instant = LongArgumentType.getLong(context, "instant");
+                    if (!FrontierV3ServerLifecycle.requestFastForwardTo(context.getSource().getServer(), instant)) {
+                        context.getSource().sendFailure(Component.literal("Frontier v3 rejected the absolute fast-forward target: it is crossed, unbounded, physically unsafe, or another request is active."));
+                        return 0;
+                    }
+                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward to canonical instant " + instant + "."), true);
+                    return 1;
                 })));
         // Attach the finished mutable v3 branch only after every child is present. Brigadier
         // copies a child branch when it is attached, so attaching it earlier would omit advance.

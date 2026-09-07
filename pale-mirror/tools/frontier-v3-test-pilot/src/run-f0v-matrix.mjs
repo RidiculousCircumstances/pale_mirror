@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireTerminalEvidence } from './f0v-matrix.mjs';
+import { targetColdDifferentialScenario, finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireTerminalEvidence } from './f0v-matrix.mjs';
 import { loadScenario } from './scenario.mjs';
 import { fingerprintPreparedBuild, fingerprintPreparedSource, requirePreparedF0vBuild } from './prepared-build.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
@@ -52,16 +52,26 @@ try {
   for (const entry of selectedMatrix) {
     const runs = [];
     const failedLanes = [];
-    const executions = requestedLane === undefined ? entry.executions : entry.executions.filter((execution) => execution.lane === requestedLane);
+    const executions = requestedLane === undefined ? [...entry.executions] : entry.executions.filter((execution) => execution.lane === requestedLane);
+    // A full local differential runs HOT/COLD first, then asks the server-side
+    // mutation lane to hold COLD at the measured absolute terminal instant. Isolated single-lane work remains
+    // explicitly pending aggregate evidence and never invents a counterpart.
+    if (requestedLane === undefined && entry.driver === 'COLD_VS_HOT_COLD') {
+      executions.sort((left, right) => left.lane === 'hot_cold' ? -1 : right.lane === 'hot_cold' ? 1 : 0);
+    }
     if (executions.length === 0) {
       if (requestedVariant !== undefined) throw new Error(`F0.V variant ${requestedVariant} has no declared lane ${requestedLane}`);
       continue;
     }
     for (const execution of executions) {
       await requirePreparedF0vBuild(project, build);
+      const previousHotCold = entry.driver === 'COLD_VS_HOT_COLD' && execution.lane === 'cold'
+        ? runs.find((run) => run.lane === 'hot_cold' && run.status === 'passed') : undefined;
+      const executionScenario = previousHotCold === undefined ? execution.scenario
+        : targetColdDifferentialScenario(entry, execution.scenario, previousHotCold.result);
       const scenarioPath = resolve(root, `${entry.variant}-${execution.lane}.json`);
       const manifestPath = resolve(root, `${entry.variant}-${execution.lane}.manifest.json`);
-      await writeFile(scenarioPath, `${JSON.stringify(execution.scenario, null, 2)}\n`, 'utf8');
+      await writeFile(scenarioPath, `${JSON.stringify(executionScenario, null, 2)}\n`, 'utf8');
       const code = await child(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), 'run-isolated-scenario.mjs'), scenarioPath, manifestPath], {
         cwd: project,
         env: { ...process.env, FRONTIER_V3_GRADLE: gradle, FRONTIER_V3_PREPARED_BUILD_IDENTITY: identityPath },
@@ -79,7 +89,7 @@ try {
       }
       await requirePreparedF0vBuild(project, build);
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-      requireTerminalEvidence(execution.scenario, manifest);
+      requireTerminalEvidence(executionScenario, manifest);
       if (JSON.stringify(manifest.build) !== JSON.stringify(build)) throw new Error(`F0.V matrix build identity mismatch: ${entry.variant}/${execution.lane}`);
       const coldProgress = requireColdProgress(execution.scenario, manifest);
       runs.push({ lane: execution.lane, scenario: relative(project, scenarioPath), manifest: relative(project, manifestPath), status: 'passed', result: manifest,

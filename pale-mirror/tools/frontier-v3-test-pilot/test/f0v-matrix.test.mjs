@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { compareDifferential, finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireTerminalEvidence } from '../src/f0v-matrix.mjs';
+import { targetColdDifferentialScenario, compareDifferential, finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireTerminalEvidence } from '../src/f0v-matrix.mjs';
 
 const contract = {
   schema: 3, family: 'frontier.test-duration', canonicalOwner: 'TestOwner',
@@ -27,14 +27,14 @@ test('matrix materializes declared lanes and compares every required differentia
   ]);
   const manifest = { diagnostics: [
     { value: { kind: 'summary', id: '', owner: 'actor:test', identity: 'actor:test', claims: { owner: 1, lease: null }, conserved: 64, conservation: 64,
-      schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), result: 'done' } }
+      schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), instant: 112, result: 'done' } }
   ] };
   assert.deepEqual(compareDifferential(differential, manifest, manifest).map((entry) => entry.invariant),
     ['identity', 'claims', 'conservation', 'schedule', 'result']);
   assert.throws(() => compareDifferential(differential, manifest, { diagnostics: [{ value: { kind: 'summary', id: '', owner: 'actor:test', identity: 'actor:test', claims: { owner: 1, lease: null },
-    conservation: 64, schedule: { entries: [{ id: 'schedule:test', dueAt: 11, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), result: 'done' } }] }), /schedule diverged/);
+    conservation: 64, schedule: { entries: [{ id: 'schedule:test', dueAt: 11, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), instant: 112, result: 'done' } }] }), /schedule diverged/);
   assert.throws(() => compareDifferential(differential, manifest, { diagnostics: [{ value: { kind: 'summary', id: '', owner: 'actor:test', identity: 'actor:test', claims: { owner: 1, lease: null },
-    conservation: 64, schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(8), result: 'done' } }] }), /result diverged at cursor.index/);
+    conservation: 64, schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(8), instant: 112, result: 'done' } }] }), /result diverged at cursor.index/);
 });
 
 test('selected differential evidence is explicitly pending while a complete local pair still compares', () => {
@@ -47,6 +47,21 @@ test('selected differential evidence is explicitly pending while a complete loca
     assert.throws(() => finalizeMatrixEntry(differential, [{ lane, result: manifest }]), /incomplete/);
   }
   assert.equal(finalizeMatrixEntry(differential, [{ lane: 'cold', result: manifest }, { lane: 'hot_cold', result: manifest }]).differential.length, 5);
+});
+
+test('cold alignment carries the HOT terminal absolute instant to a server-authoritative target action', () => {
+  const entry = materializeF0vMatrix(contract).find((value) => value.variant === 'neutral_observer_differential');
+  const cold = entry.executions.find((execution) => execution.lane === 'cold').scenario;
+  const hot = { diagnostics: [{ observed: { actionStep: 3, value: { ...diagnostic(), instant: 112 } } }] };
+  const aligned = targetColdDifferentialScenario(entry, cold, hot);
+  assert.deepEqual(aligned.f0vAbsoluteTarget, { view: 'summary', id: '', instantPath: 'instant', targetInstant: 112 });
+  assert.deepEqual(aligned.actions.at(-2), { type: 'fast_forward_to_instant', targetInstant: 112, timeoutMs: 180_000 });
+  assert.equal(aligned.assertions.at(-1).after, aligned.actions.length);
+  assert.throws(() => targetColdDifferentialScenario(entry, cold, { diagnostics: [
+    { observed: { actionStep: 3, value: { ...diagnostic(), instant: 0 } } }
+  ] }), /absent or invalid/);
+  assert.throws(() => compareDifferential(entry, { diagnostics: [{ value: { ...diagnostic(), instant: 111 } }] },
+    { diagnostics: [{ value: { ...diagnostic(), instant: 112 } }] }), /terminal instants diverged/);
 });
 
 test('actual runner call site replaces the former single-half dereference with declared pending evidence', async () => {
@@ -118,7 +133,7 @@ function variant(name) {
     driver, evidence: ['actor', 'cursor'], actions: [{ type: 'inspect', view: 'summary', id: '' }, { type: 'inspect', view: 'summary', id: '' }],
     assertions: [
       ...(name === 'never_loaded' ? [{ after: 1, view: 'summary', id: '', expect: { status: 'ok', claims: { lease: null } } }] : []),
-      { after: 2, view: 'summary', id: '', expect: { status: 'ok', identity: 'actor:test', claims: { owner: 1, lease: null },
+      { after: 'terminal', view: 'summary', id: '', expect: { status: 'ok', identity: 'actor:test', claims: { owner: 1, lease: null },
         conservation: 64, schedule: 's:1', result: 'done', residents: 1 } }
     ],
     terminalProjections: [
@@ -134,12 +149,12 @@ function variant(name) {
       retainedBodyPath: 'cursor.retainedBody', actorBodyPath: 'cursor.actorBody', leasePath: 'claims.lease', minimumAdvance: 1 } } : {}),
     ...((name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two') ? { arrivalCheckpoint: {
       view: 'summary', id: '', path: 'cursor' } } : {}),
-    ...(driver === 'COLD_VS_HOT_COLD' ? { differential: [
+    ...(driver === 'COLD_VS_HOT_COLD' ? { alignment: { view: 'summary', id: '', instantPath: 'instant' }, differential: [
       { invariant: 'identity', view: 'summary', id: '', paths: ['identity'] },
       { invariant: 'claims', view: 'summary', id: '', paths: ['claims'] },
       { invariant: 'conservation', view: 'summary', id: '', paths: ['conservation'] },
       { invariant: 'schedule', view: 'summary', id: '', paths: ['schedule', 'schedule.entries'] },
-      { invariant: 'result', view: 'summary', id: '', paths: ['result', 'cursor.index', 'cursor.retainedBody', 'cursor.actorBody'] }
+      { invariant: 'result', view: 'summary', id: '', paths: ['instant', 'result', 'cursor.index', 'cursor.retainedBody', 'cursor.actorBody'] }
     ], lanes: { cold: { setup: [], actions: [] }, hot_cold: { setup: [], actions: [{ type: 'inspect', view: 'summary', id: '' }] } } } : {})
   };
 }
@@ -151,12 +166,12 @@ function bodyCursor(index) {
 
 function diagnostic() {
   return { kind: 'summary', id: '', owner: 'actor:test', identity: 'actor:test', claims: { owner: 1, lease: null }, conserved: 64, conservation: 64,
-    schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), result: 'done' };
+    schedule: { entries: [{ id: 'schedule:test', dueAt: 10, kind: 'test', weight: 1 }] }, cursor: bodyCursor(7), instant: 112, result: 'done' };
 }
 
 function crashWindows() {
   return [
-    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_prepared'],
+    ['lease_recorded_before_physical_materialization', 'frontier.resource_site_harvest_scene_lease_handoff'],
     ['physical_effect_visible_before_typed_observation', 'frontier.resource_site_harvest_progressed'],
     ['typed_observation_durable_before_next_process_checkpoint', 'frontier.resource_site_harvest_progressed'],
     ['hot_checkpoint_durable_before_drain_release', 'frontier.resource_site_harvest_hot_traversal_advanced'],

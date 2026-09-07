@@ -96,6 +96,16 @@ For every duration-bearing process, exactly one pure canonical aggregate owns:
 - schedules, causal correlation, result and abandonment policy;
 - all economic and combat consequences.
 
+This is logical process ownership, not permission to duplicate the scheduler.
+The sole durable `ScheduledAction` and `dueAt` remain in the engine-owned
+schedule portion of the checkpoint. Scene admission, a HOT semantic checkpoint
+and release must bind to and atomically validate an exact typed view of that
+entry. The model registry continues to choose semantic policy from domain state
+and does not receive the complete queue. A release with no semantic work keeps
+the entry unchanged; a HOT step uses the same cadence transition from the
+validated entry as COLD. Never reconstruct process timing from observation or
+release time.
+
 A NeoForge executor never mutates that aggregate. It submits a typed
 observation that is validated against the process revision and authority epoch.
 Minecraft blocks, entity NBT, a scene record, a client camera and a diagnostic

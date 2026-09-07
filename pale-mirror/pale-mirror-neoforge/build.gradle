@@ -1054,7 +1054,8 @@ def writeFrontierV3PilotPreparedLaunchManifest = tasks.register('writeFrontierV3
     dependsOn tasks.named('classes'), tasks.named('pilotClasses'),
             project(':pale-mirror-api').tasks.named('jar'), project(':pale-mirror-domain').tasks.named('jar'),
             project(':pale-mirror-frontier').tasks.named('jar'),
-            tasks.named('writeFrontierV3PilotServerLegacyClasspath'), tasks.named('writeFrontierV3PilotClientLegacyClasspath')
+            tasks.named('writeFrontierV3PilotServerLegacyClasspath'), tasks.named('writeFrontierV3PilotClientLegacyClasspath'),
+            tasks.named('prepareFrontierV3PilotClientRun'), tasks.named('prepareFrontierV3PilotServerRun')
     doLast {
         def launcher = frontierV3PilotPreparedJava.get().executablePath.asFile.absolutePath
         def relative = { file -> frontierV3PilotRootDirectory.toPath().relativize(file.toPath()).toString() }
@@ -1120,10 +1121,6 @@ tasks.register('prepareFrontierV3PilotNativeEnvironment') {
     description = 'Prepares the disposable pilot server and client before writing their one-build native launch identity.'
     dependsOn tasks.named('prepareFrontierV3PilotClientRun'), tasks.named('prepareFrontierV3PilotServerRun'),
             writeFrontierV3PilotPreparedLaunchManifest, tasks.named('jar')
-}
-writeFrontierV3PilotPreparedLaunchManifest.configure {
-    mustRunAfter tasks.named('prepareFrontierV3PilotClientRun')
-    mustRunAfter tasks.named('prepareFrontierV3PilotServerRun')
 }
 
 tasks.register('clientSmoke', Exec) {

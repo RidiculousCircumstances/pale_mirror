@@ -51,6 +51,8 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
   assert.doesNotThrow(() => validateScenario(diagnosticWait));
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], expect: [] }] }), /wait_until_diagnostic/);
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
+  assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor.index' }] }));
+  assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor index' }] }), /wait_until_diagnostic/);
 });
 
 test('native pilot recognizes the distinct read-only route construction and maintenance views', () => {
@@ -211,6 +213,21 @@ test('an armed crash names one exact durable boundary and cannot broaden an abru
   assert.deepEqual(pilotCrashBoundary('PMV3_CRASH_BOUNDARY runId=00000000-0000-0000-0000-000000000017 boundary=hot_checkpoint_durable_before_drain_release owner=site:4-wheat-field revision=17 payload=frontier.resource_site_harvest_hot_traversal_advanced',
     '00000000-0000-0000-0000-000000000017'), { runId: '00000000-0000-0000-0000-000000000017', boundary: 'hot_checkpoint_durable_before_drain_release',
     owner: 'site:4-wheat-field', revision: 17, payloadType: 'frontier.resource_site_harvest_hot_traversal_advanced' });
+  assert.deepEqual(pilotCrashBoundary('PMV3_CRASH_BOUNDARY runId=00000000-0000-0000-0000-000000000017 boundary=release_durable_before_cold_resumption owner=job:site-harvest-4-wheat-field-1 revision=19 payload=frontier.scene_lease_released_v2',
+    '00000000-0000-0000-0000-000000000017'), { runId: '00000000-0000-0000-0000-000000000017', boundary: 'release_durable_before_cold_resumption',
+    owner: 'job:site-harvest-4-wheat-field-1', revision: 19, payloadType: 'frontier.scene_lease_released_v2' });
+});
+
+test('restart split keeps the crash authority only at its outer exact JVM boundary', () => {
+  const recoverable = { ...scenario, actions: [{ type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }], assertions: [], frames: [],
+    restart: { mode: 'abrupt', afterAction: 1 }, crash: { phase: 'before_restart', boundary: 'hot_checkpoint_durable_before_drain_release',
+      owner: 'site:4-wheat-field', payloadType: 'frontier.resource_site_harvest_hot_traversal_advanced', expectedRevision: 17 } };
+  assert.doesNotThrow(() => validateScenario(recoverable));
+  const segments = restartSegments(recoverable);
+  assert.equal(Object.hasOwn(segments.before, 'crash'), false);
+  assert.equal(Object.hasOwn(segments.after, 'crash'), false);
+  assert.doesNotThrow(() => validateScenario(segments.before));
+  assert.doesNotThrow(() => validateScenario(segments.after));
 });
 
 test('stepped-route recovery binds each physical-loss assertion to its producing diagnostic action', async () => {

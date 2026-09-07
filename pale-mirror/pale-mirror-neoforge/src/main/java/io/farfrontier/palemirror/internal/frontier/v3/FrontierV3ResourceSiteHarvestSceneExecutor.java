@@ -12,6 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTravers
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
@@ -49,9 +51,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         FrontierResourceSiteHarvestSceneSupport.Candidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) {
-            submit(runtime, "resource-site-harvest-scene-prepare", lease.id().value(), new ResourceSiteHarvestSceneLeasePrepared(lease));
+            submitBound(runtime, "resource-site-harvest-scene-prepare", lease.id().value(), new ResourceSiteHarvestSceneLeasePrepared(lease),
+                    binding(runtime, work.jobId()));
         } else {
-            handoff(level, runtime, state, lease);
+            handoff(level, runtime, state, lease, binding(runtime, work.jobId()));
         }
         return true;
     }
@@ -74,7 +77,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
-            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease);
+            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease,
+                    Optional.of(binding(runtime, FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId())));
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -100,7 +104,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
      * not an ambient drain followed by a replacement body at a historical grid cell.
      */
     private static void handoff(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                FrontierWorldState state, SceneLease lease) {
+                                FrontierWorldState state, SceneLease lease, ScheduledAction binding) {
         List<SceneMemberPosition> captures = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             AmbientActorLease ambient = state.ambientLeases().get(member.actorId());
@@ -118,8 +122,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             SceneLease captured = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
                     .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_handoff", captured,
-                    submit(runtime, "resource-site-harvest-scene-handoff", lease.id().value(),
-                            new ResourceSiteHarvestSceneLeaseHandoff(captured, captures)));
+                    submitBound(runtime, "resource-site-harvest-scene-handoff", lease.id().value(),
+                            new ResourceSiteHarvestSceneLeaseHandoff(captured, captures), binding));
         }
     }
 
@@ -149,17 +153,30 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var target = job.nextTraversalSurface();
             if (!atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
                 // The physical edge can arrive one entity tick before the canonical command
-                // records its cursor.  Accept only that exact next node; a different body
-                // position remains a player/world conflict and is never direct-line repaired.
+                // records its cursor. It is still only evidence for the shared due turn: an
+                // early arrival waits at that exact next node rather than gaining a HOT-only
+                // canonical step. A different body position remains a player/world conflict
+                // and is never direct-line repaired.
                 if (atTraversalSurface(worker, target)) {
-                    submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                            checkpoint(job, lease, worker));
+                    var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                    if (binding.isPresent()) {
+                        submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
+                                checkpoint(job, lease, worker), binding.orElseThrow());
+                    }
                 } else conflict(level, runtime, lease, "field-work-cursor-body-mismatch");
                 return;
             }
             if (atTraversalSurface(worker, target)) {
-                submit(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                        checkpoint(job, lease, worker));
+                // A loaded body may reach an edge well before the canonical work turn.  HOT
+                // observation is evidence for that same retained turn, not authority to add an
+                // extra traversal cadence.  The sole cold-progress schedule remains the shared
+                // clock for both drivers; on its next due engine turn the accepted observation
+                // atomically advances the one cursor and the normal planner reschedules it.
+                var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                if (binding.isPresent()) {
+                    submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
+                            checkpoint(job, lease, worker), binding.orElseThrow());
+                }
             } else {
                 moveToTraversalSurface(level, worker, target);
             }
@@ -168,6 +185,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!job.atCurrentCropStation() || !atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
             conflict(level, runtime, lease, "field-work-station-mismatch"); return;
         }
+        // The F0.V/F0.1 reference is deliberately traversal-only in both modes.  Keep the
+        // retained crop-effect path below intact for the F0.2 ownership cut, but do not let a
+        // loaded observer turn it into canonical crop/output progress before COLD can carry the
+        // matching consequence and aftermath contract.
+        if (!ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted()) return;
         if (job.progress().hasPendingCrop()) {
             if (!observePreparedCrop(level, state, job, crop)) {
                 conflict(level, runtime, lease, "pending-crop-postcondition"); return;
@@ -206,6 +228,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()),
                 job.traversalCursor() + 1);
     }
+
 
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_conflict:" + reason, lease,
@@ -261,5 +284,18 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static io.farfrontier.palemirror.frontier.v3.api.CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                                     String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.api.CommandResult submitBound(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                                         String phase, String id,
+                                                                                         io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload,
+                                                                                         ScheduledAction binding) {
+        return FrontierV3CommandSubmission.submitBound(runtime, phase, id, payload, binding);
+    }
+
+    private static ScheduledAction binding(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId) {
+        return FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), jobId,
+                ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);
     }
 }

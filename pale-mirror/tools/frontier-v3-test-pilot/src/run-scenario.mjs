@@ -296,7 +296,11 @@ function exited(child) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child.exitCode ?? 1);
   let observed = EXIT_CODES.get(child);
   if (observed === undefined) {
-    observed = new Promise((resolveExit) => child.once('exit', (code) => resolveExit(code ?? 1)));
+    // The Gradle/Minecraft child can emit its final lifecycle line after its process `exit`
+    // event but before its stdout/stderr streams close.  Treat this runner as complete only
+    // after those streams have drained, otherwise a persistent restart can publish its typed
+    // reconnect acknowledgement too late for the outer lifecycle supervisor to consume it.
+    observed = new Promise((resolveExit) => child.once('close', (code) => resolveExit(code ?? 1)));
     EXIT_CODES.set(child, observed);
   }
   return observed;

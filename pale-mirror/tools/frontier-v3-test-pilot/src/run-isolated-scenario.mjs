@@ -14,7 +14,8 @@ import { writeFailureBundle } from './failure-bundle.mjs';
 import { createCrashController } from './crash-controller.mjs';
 import { fingerprintPreparedBuild, fingerprintPreparedSource, requirePreparedF0vBuild } from './prepared-build.mjs';
 import { preparedLaunch } from './prepared-launch.mjs';
-import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, newLifecycleIdentity, publishLifecycleBarrier } from './lifecycle-barrier.mjs';
+import { requiresExactChildTerminationAfterGracefulFailure } from './owned-process-group.mjs';
+import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, publishLifecycleBarrier, readLifecycleBarriers } from './lifecycle-barrier.mjs';
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
@@ -134,6 +135,12 @@ try {
     await writeScenario(sessionScenario, recovery.before);
     await requirePreparedF0vBuild(project, buildIdentity);
     const persistentPilot = startPersistentPilot(sourcePath, output, sessionScenario, sessionDirectory);
+    // The persistent-pilot wrapper is a Node supervisor; only the Minecraft client's own
+    // prepared barrier identifies the JVM that later reconnects.  Keep that identity before
+    // accepting its after-restart acknowledgement so a wrapper exit cannot masquerade as a
+    // missing client lifecycle transition.
+    const preparedClient = await awaitLifecycleBarrierFromPilot(LifecycleBarrier.PREPARED_CLIENT_READY, 300_000, persistentPilot,
+      (entry) => entry.detail.segment === 'before_restart');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, 300_000, persistentPilot,
       (entry) => entry.detail.segment === 'before_restart');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, 300_000, persistentPilot,
@@ -159,7 +166,7 @@ try {
     await writeFile(resolve(sessionDirectory, 'resumed'), `${runId}\n`, 'utf8');
     await writeFile(resolve(sessionDirectory, 'resume'), `${runId}\n`, 'utf8');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, 300_000, persistentPilot,
-      (entry) => entry.detail.clientPid === persistentPilot.child.pid);
+      (entry) => entry.detail.clientPid === preparedClient.detail.clientPid);
     await finishPersistentPilot(persistentPilot, clientSegments);
     console.log('PMV3_ISOLATED recovery=after-complete client=persistent');
     recoveryMetadata = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction,
@@ -377,10 +384,23 @@ async function runPilotUntilCrash(scenarioFile, manifest, server, clientSegments
     cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_PROFILE: 'lite', FRONTIER_V3_GRADLE: gradle,
       FRONTIER_V3_PREPARED_BUILD_IDENTITY: preparedIdentityPath,
       FRONTIER_V3_PILOT_LIFECYCLE_CONTROL_DIRECTORY: lifecycle.directory,
-      FRONTIER_V3_PILOT_LIFECYCLE_SEGMENT: segment }, stdio: 'inherit'
+      FRONTIER_V3_PILOT_LIFECYCLE_SEGMENT: segment,
+      // A CRASH_WAL before-half cannot publish the final terminal barrier: a
+      // server-owned release may happen after the ordinary player leaves, and
+      // the supervisor must still arm its exact expected-loss sequence.
+      FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL: 'false' }, stdio: 'inherit'
   });
   try {
-    const observation = await waitForCrashBoundary(server, pilot, crash, 300_000);
+    const observation = await waitForCrashBoundary(server, pilot, crash, segment, 300_000);
+    // The probe parks the server at this durable boundary.  Bind the visible client only now,
+    // after its ordinary action checkpoints have reached the journal: this preserves the
+    // lifecycle ordering while preventing a disconnected-screen JVM from becoming a timeout.
+    // The PID is the direct Minecraft child, never the Node wrapper or a replacement client.
+    const preparedClient = await awaitLifecycleBarrier(lifecycle, LifecycleBarrier.PREPARED_CLIENT_READY, 300_000,
+      (entry) => entry.detail.segment === segment);
+    const clientPid = exactLifecycleClientPid(preparedClient, segment);
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.EXPECTED_LOSS_ARMED,
+      { clientPid, serverPid: server.serverPid, segment });
     const controller = createCrashController({ runId: server.serverRunId, boundary: crash.boundary, owner: crash.owner,
       // The probe is already parked at the exact boundary.  Adopt its recorded atomic revision
       // before PID termination instead of guessing a global-world revision in the contract.
@@ -389,9 +409,16 @@ async function runPilotUntilCrash(scenarioFile, manifest, server, clientSegments
       ...(crash.expectedAuthorityEpoch === undefined ? {} : { expectedAuthorityEpoch: crash.expectedAuthorityEpoch }),
       serverPid: server.serverPid });
     const fired = controller.fire(observation);
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CRASH_CONTROLLER_FIRED,
+      { serverPid: server.serverPid, segment });
     await ownedServerExit(server, port, 45_000, `crash controller fired for exact JVM ${server.serverPid}`);
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.OWNED_SERVER_EXIT,
+      { serverPid: server.serverPid, segment });
     releaseWrapper(server.child);
+    stopExpectedCrashClient(clientPid);
     const code = await exitWithin(pilot, 45_000, 'crash-disconnected native pilot');
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CLIENT_EXPECTED_LOSS, { clientPid, segment });
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port, serverPid: server.serverPid, segment });
     timing.end(phase, { exitCode: code, expectedCrash: true, boundary: crash.boundary });
     clientSegments.push({ segment, manifest, expectedCrash: true, exitCode: code, crash: { ...fired, observation } });
     return Object.freeze({ ...fired, observation, pilotExitCode: code });
@@ -407,8 +434,9 @@ function crashForServer(reset) {
   return scenario.crash.phase === (reset ? 'before_restart' : 'after_restart') ? scenario.crash : undefined;
 }
 
-async function waitForCrashBoundary(server, pilot, crash, timeoutMs) {
+async function waitForCrashBoundary(server, pilot, crash, segment, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
+  let pilotCompletedSegment = false;
   while (Date.now() < deadline) {
     const revision = server.outputRevision();
     const observation = pilotCrashBoundary(server.output(), server.serverRunId);
@@ -420,19 +448,27 @@ async function waitForCrashBoundary(server, pilot, crash, timeoutMs) {
       }
       return observation;
     }
-    if (pilot.exitCode !== null || pilot.signalCode !== null) {
-      throw new Error(`native pilot exited before the declared durable crash boundary (${pilot.exitCode ?? pilot.signalCode})`);
+    if (!pilotCompletedSegment && (pilot.exitCode !== null || pilot.signalCode !== null)) {
+      const exit = pilot.exitCode ?? pilot.signalCode;
+      if (exit !== 0) throw new Error(`native pilot exited before the declared durable crash boundary (${exit})`);
+      // A release boundary is server-owned and can occur after an ordinary
+      // player leaves. A bare wrapper exit never substitutes for a journaled
+      // completion of the exact action segment.
+      exactLifecycleCompletedSegment(await awaitLifecycleBarrier(lifecycle, LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE,
+        Math.max(1, deadline - Date.now()), (entry) => entry.detail.segment === segment), segment);
+      pilotCompletedSegment = true;
+      continue;
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     const watchdog = deadlineWatchdog(remaining,
       `server did not announce declared durable crash boundary ${crash.boundary} within ${timeoutMs}ms`);
-    const pilotExit = childExitWatch(pilot);
+    const pilotExit = pilotCompletedSegment ? undefined : childExitWatch(pilot);
     try {
-      await Promise.race([server.outputAfter(revision), pilotExit.wait, watchdog.wait]);
+      await Promise.race([server.outputAfter(revision), ...(pilotExit === undefined ? [] : [pilotExit.wait]), watchdog.wait]);
     } finally {
       watchdog.close();
-      pilotExit.close();
+      pilotExit?.close();
     }
   }
   throw new Error(`server did not announce declared durable crash boundary ${crash.boundary} within ${timeoutMs}ms`);
@@ -475,16 +511,13 @@ async function awaitLifecycleBarrierFromPilot(barrier, timeoutMs, pilot, predica
       exit.wait.then((code) => ({ kind: 'exited', code }))
     ]);
     if (first.kind === 'acknowledged') return first.value;
-    // The runner serializes typed signal consumption before it appends a journal entry. A normal
-    // client can exit immediately after emitting its final signal while the supervisor flushes
-    // that validated entry. Give the exact acknowledgement a bounded protocol drain.
-    try {
-      return await awaitWithin(acknowledgement, 1_000,
-        `persistent pilot exited before lifecycle barrier ${barrier} (${first.code})`);
-    } catch (error) {
-      if (String(error?.message ?? error).includes('persistent pilot exited before lifecycle barrier')) throw error;
-      throw new Error(`persistent pilot exited before lifecycle barrier ${barrier} (${first.code}): ${String(error?.message ?? error)}`);
-    }
+    // The Node wrapper can observe its child `exit` before its final filesystem-watch callback
+    // runs. Read the immutable journal once directly: it is the exact protocol fact, whereas a
+    // watch notification is only a wake-up hint. Do not turn this into a longer timeout or infer
+    // progress from log output; an absent typed acknowledgement remains a failure.
+    const persisted = (await readLifecycleBarriers(lifecycle)).find((entry) => entry.barrier === barrier && predicate(entry));
+    if (persisted !== undefined) return persisted;
+    throw new Error(`persistent pilot exited before lifecycle barrier ${barrier} (${first.code})`);
   } finally {
     exit.close();
   }
@@ -560,7 +593,14 @@ async function stopServerForCleanup(server, serverPort) {
     // disposable JVM alive. A later scenario must not inherit its port or its loaded world.
     // This fallback has no listener/name scan: it can affect only the nonce-announced JVM that
     // this runner created. The original graceful-stop failure still reaches the caller.
-    if (await portOpen(serverPort)) killIfPresent(server.serverPid);
+    // Minecraft can close its game listener before its save/RCON threads have
+    // exited. A closed listener is not an ownership release. The PID is the
+    // nonce-announced JVM created by this runner, so only that exact child is
+    // terminated after the normal stop path failed.
+    if (requiresExactChildTerminationAfterGracefulFailure({
+      gracefulStopFailed: true,
+      childExited: server.child.exitCode !== null || server.child.signalCode !== null
+    })) killIfPresent(server.serverPid);
     await ownedServerExit(server, serverPort, 45_000, `disposable v3 cleanup could not stop its exact JVM after graceful failure: ${failure.message}`);
     releaseWrapper(server.child);
     throw failure;
@@ -607,6 +647,11 @@ function killIfPresent(pid) {
 function terminateIfPresent(pid) {
   try { process.kill(pid, 'SIGTERM'); }
   catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not terminate exact disposable process ${pid}: ${failure}`); }
+}
+function stopExpectedCrashClient(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error('expected-crash client lacks its exact JVM identity');
+  try { process.kill(pid, 'SIGINT'); }
+  catch (failure) { if (failure.code !== 'ESRCH') throw new Error(`could not stop exact expected-crash client ${pid}: ${failure}`); }
 }
 async function ownedServerExit(server, serverPort, timeoutMs, label) {
   await exitWithin(server.child, timeoutMs, label);

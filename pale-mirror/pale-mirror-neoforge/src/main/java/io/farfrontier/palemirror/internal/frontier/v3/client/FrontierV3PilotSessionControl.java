@@ -109,7 +109,7 @@ final class FrontierV3PilotSessionControl {
     }
 
     static boolean expectedReconnectPredecessorDeparture(Object observedConnection) {
-        if (!enabled() || !matrix() || !reconnectInFlight || reconnectPredecessorConnection == null) return false;
+        if (!enabled() || !reconnectInFlight || reconnectPredecessorConnection == null) return false;
         if (observedConnection != null) return observedConnection == reconnectPredecessorConnection;
         return reconnectTransportDeparturePrepared;
     }
@@ -122,7 +122,7 @@ final class FrontierV3PilotSessionControl {
      * unidentifiable cleanup.
      */
     static void prepareReconnectTransportDeparture() {
-        if (!enabled() || !matrix() || !reconnectInFlight || reconnectPredecessorConnection == null
+        if (!enabled() || !reconnectInFlight || reconnectPredecessorConnection == null
                 || activeConnection != reconnectPredecessorConnection || reconnectTransportDepartureStarted) {
             throw new IllegalStateException("persistent pilot reconnect predecessor is unavailable");
         }

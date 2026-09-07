@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandReceipt;
+import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -43,6 +44,15 @@ class KernelEnvelopeCodecTest {
         byte[] transactionBytes = KernelCodec.encodeTransaction(transaction, CODECS);
         transactionBytes[4] = 1;
         assertThrows(IllegalArgumentException.class, () -> KernelCodec.decodeTransaction(transactionBytes, CODECS));
+    }
+
+    @Test
+    void boundCommandRoundTripsTheCompleteEngineAction() {
+        ScheduledAction action = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:bound"),
+                new SimInstant(9L), 3, SUBJECT, "process.codec", 2);
+        FrontierCommand command = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, COMMAND_ID, WORLD, Revision.ZERO,
+                new SimInstant(4L), SUBJECT, CauseChain.root(COMMAND_ID), new Delta(7), Optional.of(new EngineScheduleBinding(Revision.ZERO, action)));
+        assertEquals(command, KernelCodec.decodeCommand(KernelCodec.encodeCommand(command, CODECS), CODECS));
     }
 
     @Test

@@ -68,14 +68,28 @@ The first supported action set is deliberately small:
 - wait until the client actually has the named block, or fail with the observed
   block state rather than relying on a guessed delay;
 - break a block and issue a read-only v3 inspection;
-- wait for an ordinary server tick interval.
+- wait for an ordinary server tick interval;
+- request the existing bounded operator fast-forward to an exact canonical
+  target when a differential or recovery proof must sample two runs at one
+  `SimInstant`.
+
+That last item is test time control, not player-causality evidence. The runner
+may obtain the target from a prior read-only diagnostic, but it may not turn a
+client-observed elapsed interval into a second relative advance: ordinary
+network/command-delivery ticks would then change the result. The server thread
+admits the absolute target against its current checkpoint, uses the ordinary
+due-action engine and physical-safety fence, and either stops exactly at the
+target or fails visibly if it is already crossed or outside the declared bound.
+It never writes a cursor, schedule or expected terminal value directly.
 
 Native container/inventory/death paths are the next pilot slice. They remain
 deliberately unclaimed until each has a real-server proof; the old Mineflayer
 implementation cannot supply that proof against the required NeoForge handshake.
 
 No evidence-bearing pilot action may call a Pale Mirror mutation command,
-submit a domain payload or write world files. The runner may issue only
+submit a domain payload or write world files. The declared operator
+fast-forward above is the sole time-control exception and cannot itself prove
+player causality or a domain outcome. The runner may otherwise issue only
 `/pale_mirror v3 inspect` between steps through its temporary operator account;
 that read is recorded as diagnostic evidence, never as an action result. A
 scenario that needs a world mutation names it as server setup and cannot use

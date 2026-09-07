@@ -31,6 +31,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -189,19 +190,23 @@ final class FrontierV3DiagnosticJson {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         ActorLocation actor = state.actorLocations().get(job.workerId());
-        var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .filter(value -> FrontierSceneBehaviors.resourceSiteHarvest(value).jobId().equals(job.id()))
-                .sorted(java.util.Comparator.comparing(value -> value.id().value())).toList();
+        // A released harvest remains in the durable registry as a receipt.  It must not hide a
+        // later PREPARED/HOT retry for the same job merely because its historical lease id sorts
+        // first: F0.V's process view reports the current ownership fact, not an archive index.
+        SceneLease lease = currentLease(state, job.id());
         var schedules = checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id()))
                 .sorted().limit(4).toList();
         String scheduleEntries = schedules.stream().map(value -> "{\"id\":\"" + quote(value.id().value())
                 + "\",\"dueAt\":" + value.dueAt().ticks() + ",\"kind\":\"" + quote(value.kind())
                 + "\",\"weight\":" + value.weight() + "}").reduce((left, right) -> left + "," + right)
                 .map(value -> "[" + value + "]").orElse("[]");
-        String leaseValue = lease.isEmpty() ? "null" : "{\"id\":\"" + quote(lease.getFirst().id().value())
-                + "\",\"status\":\"" + lease.getFirst().status() + "\",\"revision\":" + lease.getFirst().revision()
-                + ",\"members\":" + lease.getFirst().members().size() + ",\"body\":"
-                + (lease.getFirst().memberPosition(job.workerId()) == null ? "null" : position(lease.getFirst().memberPosition(job.workerId()))) + "}";
+        // A CLOSED receipt remains available through the scene diagnostic, but it is no longer
+        // a current process claim.  Exposing it here would turn an already released observer
+        // hand-off into a false HOT/COLD semantic difference.
+        String leaseValue = lease == null || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? "null" : "{\"id\":\"" + quote(lease.id().value())
+                + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
+                + ",\"members\":" + lease.members().size() + ",\"body\":"
+                + (lease.memberPosition(job.workerId()) == null ? "null" : position(lease.memberPosition(job.workerId()))) + "}";
         String intentStatus = intent == null ? "MISSING" : intent.status().name();
         String actorBody = actor == null ? "null" : position(actor.body());
         int cursorLength = job.traversal().linearCorridorSurfaces().size();
@@ -232,7 +237,8 @@ final class FrontierV3DiagnosticJson {
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
-                + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst()) + "}";
+                + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst())
+                + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
     }
 
     private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {

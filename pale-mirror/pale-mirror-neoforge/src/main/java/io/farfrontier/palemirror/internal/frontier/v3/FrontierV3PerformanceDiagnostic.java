@@ -17,19 +17,26 @@ final class FrontierV3PerformanceDiagnostic {
         return render(checkpoint, metrics, 0);
     }
 
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining) {
+        return render(checkpoint, metrics, fastForwardRemaining, null, null);
+    }
+
     /**
      * Includes the one bounded operator-time request as a read-only progress value.  A pilot
      * must not treat the command packet acknowledgement as completion while the server is still
      * advancing the canonical clock in slices.
      */
-    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining) {
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
         StringBuilder value = new StringBuilder("{\"schema\":1,\"kind\":\"performance\",\"id\":\"\",\"revision\":")
                 .append(checkpoint.revision().value()).append(",\"status\":\"ok\",\"droppedAttributions\":")
                 .append(metrics.droppedAttributions()).append(",\"stageCount\":").append(metrics.stages().size()).append(",\"queueCount\":")
-                .append(metrics.queues().size()).append(",\"fastForwardRemaining\":").append(fastForwardRemaining).append(",\"stages\":[");
+                .append(metrics.queues().size()).append(",\"fastForwardRemaining\":").append(fastForwardRemaining)
+                .append(",\"fastForwardTarget\":").append(fastForwardTarget == null ? "null" : fastForwardTarget)
+                .append(",\"fastForwardTargetStatus\":\"").append(fastForwardFailure == null ? (fastForwardTarget == null ? "NONE" : (fastForwardRemaining == 0 ? "HELD" : "ADVANCING")) : "REJECTED")
+                .append("\",\"fastForwardFailure\":").append(fastForwardFailure == null ? "null" : "\"" + quote(fastForwardFailure) + "\"").append(",\"stages\":[");
         appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues());
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append("]}").toString());
     }

@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -36,7 +35,7 @@ final class FrontierV3CrashBoundaryProbe {
     static final String HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE = "hot_checkpoint_durable_before_drain_release";
     static final String RELEASE_DURABLE_BEFORE_COLD_RESUMPTION = "release_durable_before_cold_resumption";
     private static final java.util.Map<String, String> DURABLE_PAYLOADS = java.util.Map.of(
-            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, "frontier.resource_site_harvest_scene_lease_prepared",
+            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, "frontier.resource_site_harvest_scene_lease_handoff",
             TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT, "frontier.resource_site_harvest_progressed",
             HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, "frontier.resource_site_harvest_hot_traversal_advanced",
             RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, "frontier.scene_lease_released_v2");
@@ -65,7 +64,15 @@ final class FrontierV3CrashBoundaryProbe {
     }
 
     static FrontierV3CrashBoundaryProbe fromSystemProperties() {
-        return from(property -> System.getProperty(property, ""), value -> PaleMirrorMod.LOGGER.info("{}", value));
+        return from(property -> System.getProperty(property, ""), value -> {
+            // The supervising crash controller owns a pipe, not the asynchronous game log.
+            // Flush the exact nonce-bound rendezvous before parking the server thread: otherwise
+            // a logger drain can be stalled behind the intentionally parked tick and turn an
+            // observed durable boundary into a watchdog crash rather than the declared JVM kill.
+            System.out.println(value);
+            System.out.flush();
+            PaleMirrorMod.LOGGER.info("{}", value);
+        });
     }
 
     static FrontierV3CrashBoundaryProbe from(Function<String, String> properties, Consumer<String> marker) {
@@ -226,38 +233,34 @@ final class FrontierV3CrashBoundaryProbe {
             if (!DURABLE_PAYLOADS.containsKey(boundary)) return false;
             if (LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION.equals(boundary)) {
                 return (revision == -1L || transaction.revision().value() == revision) && transaction.events().stream()
-                        .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestSceneLeasePrepared prepared
-                                && FrontierSceneBehaviors.isResourceSiteHarvest(prepared.lease())
-                                && owner.equals(FrontierSceneBehaviors.resourceSiteHarvest(prepared.lease()).jobId().value()));
+                        // The traversal-only profile records a durable scene handoff, rather than
+                        // a crop effect.  It is the first record that binds the exact job lease to
+                        // its physical provider, so it is the attributable lease-before-effect
+                        // rendezvous.  A predecessor PREPARED record alone is not that handoff.
+                        .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestSceneLeaseHandoff handoff
+                                && FrontierSceneBehaviors.isResourceSiteHarvest(handoff.lease())
+                                && owner.equals(FrontierSceneBehaviors.resourceSiteHarvest(handoff.lease()).jobId().value()));
             }
             return (revision == -1L || transaction.revision().value() == revision) && transaction.events().stream().anyMatch(this::matches);
         }
 
         private ReleaseAssessment assessRelease(TransactionRecord transaction, LeaseWitness witness) {
             FrontierEvent release = transaction.events().stream().filter(event -> event.payload() instanceof SceneLeaseReleased).findFirst().orElse(null);
-            boolean jobContinuation = transaction.events().stream().anyMatch(event -> event.subject().equals(witness.job())
-                    && event.payload() instanceof ScheduleEffect.Rescheduled);
             if (release == null || !release.payload().type().equals(payload)) return ReleaseAssessment.NONE;
             if (!(release.payload() instanceof SceneLeaseReleased released)) return ReleaseAssessment.NONE;
-            boolean concernsWitness = released.leaseId().equals(witness.leaseId()) || jobContinuation;
-            if (!concernsWitness) return ReleaseAssessment.NONE;
+            if (!released.leaseId().equals(witness.leaseId())) {
+                return transaction.worldId().equals(witness.worldId()) && release.subject().equals(witness.owner())
+                        ? ReleaseAssessment.CONTRADICTORY : ReleaseAssessment.NONE;
+            }
             if (revision != -1L && transaction.revision().value() != revision) return ReleaseAssessment.CONTRADICTORY;
             if (!transaction.worldId().equals(witness.worldId()) || !released.leaseId().equals(witness.leaseId()) || !release.subject().equals(witness.owner())) {
                 return ReleaseAssessment.CONTRADICTORY;
             }
-            if (transaction.events().size() != 2 || transaction.events().getFirst() != release) return ReleaseAssessment.CONTRADICTORY;
-            FrontierEvent continuation = transaction.events().get(1);
-            if (!continuation.subject().equals(witness.job()) || !(continuation.payload() instanceof ScheduleEffect.Rescheduled rescheduled)
-                    || !rescheduled.scheduleId().equals(rescheduled.replacement().id())
-                    || !rescheduled.replacement().subject().equals(witness.job())
-                    || !ResourceSiteHarvestProcess.COLD_PROGRESS_KIND.equals(rescheduled.replacement().kind())
-                    || !rescheduled.replacement().id().value().equals("schedule:resource-site-harvest-cold-progress-"
-                            + owner.substring("job:".length()))
-                    || rescheduled.replacement().priority() != 0 || rescheduled.replacement().weight() != 1
-                    || rescheduled.replacement().dueAt().ticks() != Math.addExact(transaction.instant().ticks(), 1L)) {
-                return ReleaseAssessment.CONTRADICTORY;
-            }
-            return ReleaseAssessment.MATCH;
+            // A no-work release has already supplied the exact engine binding at command
+            // admission.  Its durable transaction changes only lease custody; emitting a
+            // schedule replacement here would manufacture a second deadline from release time.
+            return transaction.events().size() == 1 && transaction.events().getFirst() == release
+                    ? ReleaseAssessment.MATCH : ReleaseAssessment.CONTRADICTORY;
         }
         private boolean matchesPhysical(PhysicalCropEffect effect, long currentRevision) {
             return PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary) && (revision == -1L || revision == currentRevision)
