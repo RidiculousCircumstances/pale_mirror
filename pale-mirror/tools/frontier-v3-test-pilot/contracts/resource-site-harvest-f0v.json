@@ -1,4 +1,6 @@
 {
+  "matrixLabel": "F0.1",
+  "matrixKind": "frontier-v3-f01-paired-harvest-native-matrix",
   "schema": 3,
   "family": "frontier.resource-site-harvest",
   "canonicalOwner": "ResourceSiteHarvestJob",

@@ -19,34 +19,38 @@ if (options.some((option) => !option.startsWith('--variant=') && !option.startsW
     || ['--variant=', '--lane=', '--prepared-identity=', '--output-root='].some((prefix) => options.filter((option) => option.startsWith(prefix)).length > 1)) {
   throw new Error('F0.V matrix accepts at most one --variant, --lane, --prepared-identity and --output-root option');
 }
-if (!process.env.DISPLAY) throw new Error('an F0.V native matrix requires one visible DISPLAY=:0 pilot');
+if (!process.env.DISPLAY) throw new Error('a native matrix requires one visible DISPLAY=:0 pilot');
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const source = resolve(project, contractPath);
 const contract = JSON.parse(await readFile(source, 'utf8'));
+const matrixLabel = typeof contract.matrixLabel === 'string' && /^F0(?:\.\d+|\.V)$/.test(contract.matrixLabel)
+  ? contract.matrixLabel : 'F0.V';
+const matrixKind = typeof contract.matrixKind === 'string' && /^frontier-v3-[a-z0-9-]+-native-matrix$/.test(contract.matrixKind)
+  ? contract.matrixKind : 'frontier-v3-f0v-native-matrix';
 const matrix = materializeF0vMatrix(contract);
 const selectedMatrix = requestedVariant === undefined ? matrix : matrix.filter((entry) => entry.variant === requestedVariant);
-if (selectedMatrix.length === 0) throw new Error(`F0.V matrix has no declared variant ${requestedVariant}`);
-if (requestedLane !== undefined && !/^[A-Za-z0-9_.:-]{1,127}$/.test(requestedLane)) throw new Error('F0.V matrix lane is invalid');
-if (requestedLane !== undefined && requestedVariant === undefined) throw new Error('F0.V matrix --lane requires one declared --variant');
+if (selectedMatrix.length === 0) throw new Error(`${matrixLabel} matrix has no declared variant ${requestedVariant}`);
+if (requestedLane !== undefined && !/^[A-Za-z0-9_.:-]{1,127}$/.test(requestedLane)) throw new Error(`${matrixLabel} matrix lane is invalid`);
+if (requestedLane !== undefined && requestedVariant === undefined) throw new Error(`${matrixLabel} matrix --lane requires one declared --variant`);
 const runId = randomUUID();
 const root = outputRootArgument === undefined
   ? resolve(project, `build/frontier-v3-scenarios/f0v-${basename(source, '.json')}-${runId}`)
-  : containedBuildPath(outputRootArgument, 'F0.V matrix output root');
+  : containedBuildPath(outputRootArgument, `${matrixLabel} matrix output root`);
 const identityPath = resolve(root, 'prepared-build.json');
 const reportPath = resolve(root, 'matrix.json');
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
-await absent(root, 'F0.V matrix output root');
+await absent(root, `${matrixLabel} matrix output root`);
 await mkdir(root, { recursive: true });
 let build;
-const report = { schema: 1, kind: 'frontier-v3-f0v-native-matrix', runId, contract: relative(project, source),
+const report = { schema: 1, kind: matrixKind, runId, contract: relative(project, source),
   selectedVariant: requestedVariant ?? null, selectedLane: requestedLane ?? null, build: null, variants: [] };
 const arrivalCheckpoints = new Map();
 const failedVariants = [];
 try {
   build = preparedIdentityArgument === undefined
     ? await prepare(project, gradle)
-    : await preparedIdentity(containedBuildPath(preparedIdentityArgument, 'F0.V prepared identity'));
+    : await preparedIdentity(containedBuildPath(preparedIdentityArgument, `${matrixLabel} prepared identity`));
   report.build = build;
   await writeFile(identityPath, `${JSON.stringify(build, null, 2)}\n`, 'utf8');
   for (const entry of selectedMatrix) {
@@ -60,7 +64,7 @@ try {
       executions.sort((left, right) => left.lane === 'hot_cold' ? -1 : right.lane === 'hot_cold' ? 1 : 0);
     }
     if (executions.length === 0) {
-      if (requestedVariant !== undefined) throw new Error(`F0.V variant ${requestedVariant} has no declared lane ${requestedLane}`);
+      if (requestedVariant !== undefined) throw new Error(`${matrixLabel} variant ${requestedVariant} has no declared lane ${requestedLane}`);
       continue;
     }
     for (const execution of executions) {
@@ -78,7 +82,7 @@ try {
         stdio: 'inherit'
       });
       if (code !== 0) {
-        const failure = `F0.V matrix native lane failed: ${entry.variant}/${execution.lane} (${code})`;
+        const failure = `${matrixLabel} matrix native lane failed: ${entry.variant}/${execution.lane} (${code})`;
         runs.push({ lane: execution.lane, scenario: relative(project, scenarioPath), manifest: relative(project, manifestPath), status: 'failed', failure });
         failedLanes.push(failure);
         // Matrix lanes and variants use independent disposable worlds. A failed lane is
@@ -90,7 +94,7 @@ try {
       await requirePreparedF0vBuild(project, build);
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
       requireTerminalEvidence(executionScenario, manifest);
-      if (JSON.stringify(manifest.build) !== JSON.stringify(build)) throw new Error(`F0.V matrix build identity mismatch: ${entry.variant}/${execution.lane}`);
+      if (JSON.stringify(manifest.build) !== JSON.stringify(build)) throw new Error(`${matrixLabel} matrix build identity mismatch: ${entry.variant}/${execution.lane}`);
       const coldProgress = requireColdProgress(execution.scenario, manifest);
       runs.push({ lane: execution.lane, scenario: relative(project, scenarioPath), manifest: relative(project, manifestPath), status: 'passed', result: manifest,
         ...(coldProgress === undefined ? {} : { coldProgress }) });
@@ -107,7 +111,7 @@ try {
     report.variants.push({ id: entry.id, variant: entry.variant, driver: entry.driver,
       terminalInvariants: entry.declaration.terminalInvariants, runs: runs.map(({ result, ...metadata }) => metadata), differential });
     if (entry.variant === 'arrival_checkpoint_one' || entry.variant === 'arrival_checkpoint_two') {
-      if (runs.length !== 1) throw new Error(`F0.V arrival variant has an unexpected execution count: ${entry.variant}`);
+      if (runs.length !== 1) throw new Error(`${matrixLabel} arrival variant has an unexpected execution count: ${entry.variant}`);
       arrivalCheckpoints.set(entry.variant, requireArrivalCheckpoint(entry, runs[0].result));
     }
     if (arrivalCheckpoints.size === 2) {
@@ -118,7 +122,7 @@ try {
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   }
   if (failedVariants.length > 0) {
-    throw new Error(`F0.V matrix native failures after all independent lanes completed: ${failedVariants.join('; ')}`);
+    throw new Error(`${matrixLabel} matrix native failures after all independent lanes completed: ${failedVariants.join('; ')}`);
   }
   console.log(JSON.stringify({ status: 'ok', report: reportPath }));
 } catch (failure) {
@@ -136,11 +140,11 @@ async function prepare(projectDirectory, gradleExecutable) {
     ':pale-mirror-neoforge:verifyPackagedJar', ':pale-mirror-neoforge:writeFrontierV3PilotServerLegacyClasspath',
     ':pale-mirror-neoforge:writeFrontierV3PilotClientLegacyClasspath', ':pale-mirror-neoforge:writeFrontierV3PilotPreparedLaunchManifest'],
   { cwd: projectDirectory, env: process.env, stdio: 'inherit' });
-  if (code !== 0) throw new Error(`F0.V matrix prepared build failed (${code})`);
+  if (code !== 0) throw new Error(`native matrix prepared build failed (${code})`);
   const libs = resolve(projectDirectory, 'pale-mirror-neoforge/build/libs');
   const jars = (await readdir(libs)).filter((name) => /^[a-z0-9_-]+-.*\.jar$/i.test(name)
     && !name.includes('-sources') && !name.includes('-javadoc')).sort();
-  if (jars.length !== 1) throw new Error(`F0.V matrix expected one packaged artifact, found ${jars.join(', ') || 'none'}`);
+  if (jars.length !== 1) throw new Error(`native matrix expected one packaged artifact, found ${jars.join(', ') || 'none'}`);
   const git = promisify(execFile);
   const [commit, status] = await Promise.all([
     git('git', ['rev-parse', 'HEAD'], { cwd: projectDirectory }).then((value) => value.stdout.trim()),

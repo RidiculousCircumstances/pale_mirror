@@ -27,7 +27,8 @@ try {
       throw new Error(`F0.1 merge requires exactly one top-level matrix report for ${worker}`);
     }
     const report = JSON.parse(await readFile(resolve(root, bundle, 'matrix.json'), 'utf8'));
-    if (report.error || !report.build || report.build.sourceCommit !== values.head) throw new Error(`F0.1 matrix report is stale or failed for ${worker}`);
+    if (report.kind !== 'frontier-v3-f01-paired-harvest-native-matrix'
+        || report.error || !report.build || report.build.sourceCommit !== values.head) throw new Error(`F0.1 matrix report is stale or failed for ${worker}`);
     const actual = report.variants?.map(entry => entry.variant).sort();
     if (JSON.stringify(actual) !== JSON.stringify([...variants].sort()) || report.variants.some(entry => entry.runs.some(run => run.status !== 'passed'))) {
       throw new Error(`F0.1 matrix report is incomplete for ${worker}`);

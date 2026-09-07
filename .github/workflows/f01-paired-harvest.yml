@@ -44,16 +44,22 @@ jobs:
       - name: Run immutable assigned native variants
         run: |
           export FRONTIER_V3_NATIVE_PROCESS_ROOT="$RUNNER_TEMP/f01-${{ github.run_id }}-${{ matrix.worker }}"
-          export GRADLE_USER_HOME="$RUNNER_TEMP/f01-${{ github.run_id }}-${{ matrix.worker }}-gradle"
+          export GRADLE_USER_HOME="$RUNNER_TEMP/f01-${{ matrix.worker }}-gradle"
           mkdir -p "$FRONTIER_V3_NATIVE_PROCESS_ROOT"
           mkdir -p "$GRADLE_USER_HOME"
           IFS=, read -r -a variants <<< '${{ matrix.variants }}'
+          status=0
           for variant in "${variants[@]}"; do
-            scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f0v-matrix.mjs \
+            if ! scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f0v-matrix.mjs \
               tools/frontier-v3-test-pilot/contracts/resource-site-harvest-f0v.json \
-              --variant="$variant" --output-root="build/f01-native/${{ matrix.worker }}/$variant"
+              --variant="$variant" --output-root="build/f01-native/${{ matrix.worker }}/$variant"; then
+              status=1
+            fi
           done
-          node -e 'const fs=require("fs"),path=require("path"); const root="build/f01-native/${{ matrix.worker }}"; const reports=fs.readdirSync(root).map(variant=>JSON.parse(fs.readFileSync(path.join(root,variant,"matrix.json")))); fs.writeFileSync(path.join(root,"matrix.json"),JSON.stringify({build:reports[0].build,variants:reports.flatMap(report=>report.variants)}));'
+          node tools/frontier-v3-test-pilot/src/aggregate-f01-worker.mjs \
+            --input="build/f01-native/${{ matrix.worker }}" --variants='${{ matrix.variants }}' \
+            --output="build/f01-native/${{ matrix.worker }}/matrix.json"
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

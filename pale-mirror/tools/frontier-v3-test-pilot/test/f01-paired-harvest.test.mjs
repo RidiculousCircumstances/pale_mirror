@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const monorepo = resolve(project, '..');
 const merger = resolve(project, 'tools/frontier-v3-test-pilot/src/merge-f01-paired-harvest.mjs');
+const workerAggregator = resolve(project, 'tools/frontier-v3-test-pilot/src/aggregate-f01-worker.mjs');
 const head = 'a'.repeat(40);
 const run = 71;
 const assignments = new Map([
@@ -19,7 +20,7 @@ const assignments = new Map([
 ]);
 
 function report(variants, sourceCommit = head) {
-  return { build: { sourceCommit }, variants: variants.map(variant => ({ variant, runs: [{ status: 'passed' }] })) };
+  return { kind: 'frontier-v3-f01-paired-harvest-native-matrix', build: { sourceCommit }, variants: variants.map(variant => ({ variant, runs: [{ status: 'passed' }] })) };
 }
 
 async function writeEvidence(root, options = {}) {
@@ -72,6 +73,29 @@ test('F0.1 merge accepts only exact worker bundles and retains incomplete diagno
 test('F0.1 workflow reserves a disjoint server/RCON pair and Gradle home per native worker', async () => {
   const workflow = await readFile(resolve(monorepo, '.github/workflows/f01-paired-harvest.yml'), 'utf8');
   for (const port of [26100, 26110, 26120, 26130]) assert.match(workflow, new RegExp(`port: ${port}`));
-  assert.match(workflow, /GRADLE_USER_HOME="\$RUNNER_TEMP\/f01-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-gradle"/);
+  assert.match(workflow, /GRADLE_USER_HOME="\$RUNNER_TEMP\/f01-\$\{\{ matrix\.worker \}\}-gradle"/);
   assert.match(workflow, /FRONTIER_V3_NATIVE_PROCESS_ROOT="\$RUNNER_TEMP\/f01-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}"/);
+  assert.match(workflow, /status=0/);
+  assert.match(workflow, /aggregate-f01-worker\.mjs/);
+  assert.match(workflow, /exit "\$status"/);
+});
+
+test('F0.1 worker aggregate retains a declared missing or failed variant', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f01-worker-'));
+  try {
+    await mkdir(join(root, 'never_loaded'), { recursive: true });
+    const failed = report(['never_loaded']);
+    failed.error = 'native failure retained';
+    await writeFile(join(root, 'never_loaded', 'matrix.json'), JSON.stringify(failed));
+    const output = join(root, 'matrix.json');
+    execFileSync('node', [workerAggregator, `--input=${root}`, '--variants=never_loaded,arrival_checkpoint_one', `--output=${output}`], { stdio: 'pipe' });
+    const aggregate = JSON.parse(await readFile(output, 'utf8'));
+    assert.equal(aggregate.kind, 'frontier-v3-f01-paired-harvest-native-matrix');
+    assert.match(aggregate.error, /native failure retained/);
+    assert.match(aggregate.error, /arrival_checkpoint_one: report unavailable/);
+    assert.deepEqual(aggregate.variants.map(entry => entry.variant), ['never_loaded', 'arrival_checkpoint_one']);
+    assert.equal(aggregate.variants[1].runs[0].status, 'failed');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
