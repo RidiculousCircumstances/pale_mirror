@@ -99,7 +99,7 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
-    void exactMatureFieldReservesOneNamedWheatStackUntilItsPhysicalReceipt() {
+    void exactMatureFieldReservesOneNamedWheatStackAndDefersItsReceiptUntilF0v2() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
@@ -126,23 +126,15 @@ class ResourceSiteHarvestProcessTest {
                 "the traversal-only profile may acquire a HOT cursor lease without beginning its crop effect");
         assertTrue(FrontierSceneAdmission.reservedFromGenericAmbient(harvesting, started.job().workerId()),
                 "the PREPARED traversal candidate keeps its exact worker out of unrelated ambient admission");
-        harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).isPresent(),
-                "a retained RUNNING effect remains a recovery-relevant scene candidate for the later effect-capable profile");
 
         harvesting = completeHarvestWork(harvesting, site, started.job());
+        FrontierWorldState completedTraversal = harvesting;
         ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> completion = ResourceSiteHarvestProcess.planTransition(harvesting, prepared.intent(), confirmed, 22_200L);
-        assertEquals(3, completion.size());
-        FrontierWorldState complete = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        complete = StrategicObjectiveProcess.reduceTaskTransition(complete, new SubjectId("settlement:1"), (StrategicTaskTransition) completion.get(1).payload());
-        assertEquals(ResourceSitePhase.GROWING, complete.resourceSites().site(site).phase());
-        assertEquals(output, complete.inventory().items().get(output.id()));
-        assertEquals(PhysicalIntentStatus.CONFIRMED, complete.physicalIntents().get(prepared.intent().id()).status());
-        assertEquals(receipt, complete.physicalObservations().get(receipt.id()));
-        assertEquals(StrategicTaskStatus.COMPLETED, complete.strategicPlans().tasks().get(task.id()).status());
-        assertTrue(new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(complete)).inventory().items().containsKey(output.id()));
+        assertThrows(IllegalStateException.class, () -> ResourceSiteHarvestProcess.planTransition(completedTraversal, prepared.intent(), confirmed, 22_200L),
+                "F0.1 must reject even a complete observed crop receipt until F0.2 owns the irreversible consequence");
+        assertFalse(harvesting.inventory().items().containsKey(output.id()));
+        assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
     }
 
     @Test

@@ -269,6 +269,9 @@ public final class ResourceSiteHarvestProcess {
             return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.BLOCKED));
         }
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
+        if (!irreversibleCropEffectsAdmitted()) {
+            throw new IllegalStateException("resource-site harvest output confirmation is deferred to the F0.2 effect owner");
+        }
         if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest output cannot complete before every crop is observed");
         ResourceSiteLifecycle next = lifecycle.harvested();
         return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(lifecycle.siteId(),
