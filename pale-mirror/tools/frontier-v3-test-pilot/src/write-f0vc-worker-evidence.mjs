@@ -15,7 +15,7 @@ async function main() {
   const jobId = job?.jobId ?? job?.id;
   const status = reported === 'success' && result.status === 'ok' && Number.isSafeInteger(jobId) && jobId > 0 ? 'success' : reported === 'success' ? 'failure' : reported;
   await writeWorkerEvidence({ output: resolve(values.output), worker: values.worker, status, runtimeContentSha256: plan.runtimeContentSha256,
-    namespace: worker.namespace, port: worker.port, display: worker.display, world: worker.world, artifact: `f0vc-${plan.runId}-${worker.worker}`,
+    namespace: worker.namespace, port: worker.port, display: worker.display, matrixPlanSha256: worker.matrixPlanSha256, assignmentContentSha256: worker.assignmentContentSha256, artifact: `f0vc-${plan.runId}-${worker.worker}`,
     ...(jobId === undefined ? {} : { jobId }), result: job === undefined ? { status: 'failed', reason: 'job identity unavailable', nativeResult: result } : result });
 }
 

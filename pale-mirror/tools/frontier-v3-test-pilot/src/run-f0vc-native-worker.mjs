@@ -5,6 +5,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { consumeRuntime } from './f0vc-prepared-runtime.mjs';
 import { preflight } from './f0vc-pipeline.mjs';
+import { validateFourWorkerMatrixPlan } from './ci-matrix.mjs';
+import { compilePersistentWorkerPlan } from './persistent-worker-plan.mjs';
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
@@ -15,6 +17,12 @@ async function main() {
   const plan = preflight(JSON.parse(await readFile(resolve(project, values.preflight ?? ''), 'utf8')));
   const assignment = plan.workers.find((entry) => entry.worker === worker); if (!assignment) throw new Error('F0.VC worker is not assigned by immutable preflight');
   if (process.env.FRONTIER_V3_PILOT_PORT !== String(assignment.port) || process.env.DISPLAY !== assignment.display) throw new Error('F0.VC worker native namespace is foreign');
+  const matrixArtifact = JSON.parse(await readFile(resolve(project, values.matrix ?? ''), 'utf8'));
+  const matrix = validateFourWorkerMatrixPlan(matrixArtifact.plan);
+  if (matrix.planSha256 !== assignment.matrixPlanSha256
+      || compilePersistentWorkerPlan(matrix, worker, 'correctness-1').contentSha256 !== assignment.assignmentContentSha256) {
+    throw new Error('F0.VC worker executable assignment is foreign to immutable preflight');
+  }
   const runtime = JSON.parse(await readFile(resolve(project, values.runtime ?? ''), 'utf8'));
   if (runtime.contentSha256 !== plan.runtimeContentSha256 || typeof runtime.manifest !== 'string') throw new Error('F0.VC worker runtime receipt is foreign');
   const started = Date.now();

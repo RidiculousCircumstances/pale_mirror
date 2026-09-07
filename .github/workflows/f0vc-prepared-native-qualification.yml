@@ -53,7 +53,7 @@ jobs:
       - name: Compile immutable native semantic matrix and structural plan
         run: |
           node tools/frontier-v3-test-pilot/src/write-ci-matrix-plan.mjs --prepared=build/f0vc/producer/prepared-build.json --output=build/f0vc/producer/matrix.json
-          node tools/frontier-v3-test-pilot/src/write-f0vc-preflight.mjs --runtime=build/f0vc/producer/runtime.json --run="${{ github.run_id }}" --root="${{ inputs.task_root }}" --output=build/f0vc/producer/preflight.json
+          node tools/frontier-v3-test-pilot/src/write-f0vc-preflight.mjs --runtime=build/f0vc/producer/runtime.json --matrix=build/f0vc/producer/matrix.json --run="${{ github.run_id }}" --root="${{ inputs.task_root }}" --output=build/f0vc/producer/preflight.json
           node tools/frontier-v3-test-pilot/src/f0vc-pipeline.mjs --mode=preflight --plan=build/f0vc/producer/preflight.json
       - uses: actions/upload-artifact@v4
         if: always()

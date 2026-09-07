@@ -14,19 +14,19 @@ export function preflight(plan) {
       || !Array.isArray(plan.workers) || plan.workers.length !== 4 || !Array.isArray(plan.expectedArtifacts) || plan.expectedArtifacts.length !== 4) {
     throw new Error('F0.VC preflight plan is malformed');
   }
-  const seen = new Set(); const namespaces = new Set(); const endpoints = new Set(); const displays = new Set(); const worlds = new Set();
+  const seen = new Set(); const namespaces = new Set(); const endpoints = new Set(); const displays = new Set(); const worlds = new Set(); const matrices = new Set();
   for (const entry of plan.workers) {
     if (!entry || !WORKERS.includes(entry.worker) || seen.has(entry.worker) || entry.runtimeContentSha256 !== plan.runtimeContentSha256
         || typeof entry.namespace !== 'string' || !entry.namespace.startsWith('/') || namespaces.has(entry.namespace)
         || !Number.isInteger(entry.port) || entry.port < 1024 || entry.port >= 65535 || endpoints.has(entry.port) || endpoints.has(entry.port + 1)
         || typeof entry.display !== 'string' || entry.display !== `:${entry.port - 25000}` || displays.has(entry.display)
-        || typeof entry.world !== 'string' || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(entry.world) || worlds.has(entry.world)
+        || !SHA.test(entry.matrixPlanSha256 ?? '') || matrices.size > 0 && !matrices.has(entry.matrixPlanSha256) || !SHA.test(entry.assignmentContentSha256 ?? '')
+        || !Array.isArray(entry.worlds) || entry.worlds.length < 1 || new Set(entry.worlds).size !== entry.worlds.length
         || !Array.isArray(entry.cases) || entry.cases.length < 1 || entry.cases.length > 32) throw new Error('F0.VC preflight worker assignment is malformed');
-    seen.add(entry.worker); namespaces.add(entry.namespace); endpoints.add(entry.port); endpoints.add(entry.port + 1); displays.add(entry.display); worlds.add(entry.world);
+    seen.add(entry.worker); namespaces.add(entry.namespace); endpoints.add(entry.port); endpoints.add(entry.port + 1); displays.add(entry.display); matrices.add(entry.matrixPlanSha256);
     const caseIds = new Set(); for (const item of entry.cases) {
-      if (!item || typeof item.id !== 'string' || caseIds.has(item.id) || !['isolated', 'batch'].includes(item.lifecycle)
-          || typeof item.world !== 'string' || (item.lifecycle === 'batch' && item.world !== entry.world)
-          || (item.lifecycle === 'isolated' && item.world === entry.world && entry.cases.length > 1)) throw new Error('F0.VC preflight case reuse is incompatible');
+      if (!item || typeof item.id !== 'string' || caseIds.has(item.id) || !entry.worlds.includes(item.world)
+          || !Array.isArray(item.completions) || item.completions.length < 1) throw new Error('F0.VC preflight case assignment is malformed');
       caseIds.add(item.id);
     }
   }
@@ -46,7 +46,8 @@ export function mergeEvidence(plan, evidence) {
       const assignment = expected.get(item?.worker);
       const validJob = Number.isSafeInteger(item?.jobId) && item.jobId > 0;
       if (!assignment || workers.has(item.worker) || !JOB_STATUS.has(item.status) || item.runtimeContentSha256 !== checked.runtimeContentSha256
-          || item.namespace !== assignment.namespace || item.port !== assignment.port || item.display !== assignment.display || item.world !== assignment.world
+          || item.namespace !== assignment.namespace || item.port !== assignment.port || item.display !== assignment.display
+          || item.matrixPlanSha256 !== assignment.matrixPlanSha256 || item.assignmentContentSha256 !== assignment.assignmentContentSha256
           || item.artifact !== `f0vc-${checked.runId}-${item.worker}` || (item.status === 'success' && !validJob)) throw new Error('foreign, duplicate or incomparable worker evidence');
       if (item.status !== 'success' || !item.result || item.result.status !== 'ok') throw new Error(`worker ${item.worker} did not produce successful fresh native evidence`);
       workers.add(item.worker);
@@ -56,13 +57,13 @@ export function mergeEvidence(plan, evidence) {
   } catch (failure) { return Object.freeze({ ...base, status: 'incomplete', failure: String(failure?.message ?? failure), availableWorkers: Array.isArray(evidence) ? evidence.map((item) => item?.worker).filter(Boolean).sort() : [] }); }
 }
 
-export async function writeWorkerEvidence({ output, worker, status, runtimeContentSha256, namespace, port, display, world, artifact, jobId, result }) {
+export async function writeWorkerEvidence({ output, worker, status, runtimeContentSha256, namespace, port, display, matrixPlanSha256, assignmentContentSha256, artifact, jobId, result }) {
   if (!WORKERS.includes(worker) || !JOB_STATUS.has(status) || !SHA.test(runtimeContentSha256 ?? '') || typeof namespace !== 'string' || !namespace.startsWith('/')
-      || !Number.isInteger(port) || typeof display !== 'string' || typeof world !== 'string' || typeof artifact !== 'string'
+      || !Number.isInteger(port) || typeof display !== 'string' || !SHA.test(matrixPlanSha256 ?? '') || !SHA.test(assignmentContentSha256 ?? '') || typeof artifact !== 'string'
       || (status === 'success' && (!Number.isSafeInteger(jobId) || jobId <= 0))
       || (jobId !== undefined && jobId !== null && (!Number.isSafeInteger(jobId) || jobId <= 0))) throw new Error('F0.VC worker evidence inputs are malformed');
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, `${JSON.stringify({ schema: 1, kind: 'frontier-v3-f0vc-worker-evidence', worker, status, runtimeContentSha256, namespace, port, display, world, artifact,
+  await writeFile(output, `${JSON.stringify({ schema: 1, kind: 'frontier-v3-f0vc-worker-evidence', worker, status, runtimeContentSha256, namespace, port, display, matrixPlanSha256, assignmentContentSha256, artifact,
     ...(jobId === undefined || jobId === null ? {} : { jobId }), result }, null, 2)}\n`, { flag: 'wx' });
 }
 
