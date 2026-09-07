@@ -21,8 +21,9 @@ const child = spawn('./gradlew', [':pale-mirror-neoforge:jar', ':pale-mirror-neo
   cwd: process.cwd(), env: { ...process.env, GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_REFERENCE_WORLD_ROOT: namespaces.world,
     FRONTIER_V3_REFERENCE_LANE: lane, DISPLAY: namespaces.display }, stdio: ['ignore', 'pipe', 'pipe']
 });
-child.stdout.pipe(stream); child.stderr.pipe(stream);
+child.stdout.pipe(stream, { end: false }); child.stderr.pipe(stream, { end: false });
 const code = await new Promise((resolveExit, rejectExit) => { child.once('error', rejectExit); child.once('exit', resolveExit); });
+stream.end();
 await closed;
 const finishedAtMillis = Date.now(); const transcript = await readFile(log, 'utf8');
 if (code !== 0 || !transcript.includes("Launching target 'forgeserverdev'") || !transcript.includes(`Running test batch 'pm-frontier-v3-reference-${lane}:0'`)
