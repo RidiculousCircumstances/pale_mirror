@@ -195,6 +195,15 @@ class FrontierProcessSceneSdkTest {
                     new PhysicalObservationId("observation:f0v-sdk-confirmation"), job.intentId(), job.siteId(), job.workerId(), output, 64);
             assertRejected(engine, new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
             assertEquals(PhysicalIntentStatus.PREPARED, state(engine).physicalIntents().get(job.intentId()).status());
+            assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind(),
+                    "closed F0.2 commands must reject locally without quarantining the active engine");
+            ScheduledAction retained = scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id());
+            int cursor = job.traversalCursor();
+            engine = advance(engine, retained.dueAt(), 8);
+            assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind(),
+                    "the same engine must remain available for an independent valid COLD command");
+            assertEquals(cursor + 1, FrontierProcessSceneSdkTest.harvest(engine, site).traversalCursor(),
+                    "the valid COLD edge must follow local rejection without recovery or a fork");
             return new HarvestContext(engine, site);
         }
         @Override public HarvestContext coldAdvance(HarvestContext context) {

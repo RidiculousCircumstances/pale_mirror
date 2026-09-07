@@ -11,12 +11,13 @@ final class FrontierV3TraversalScheduleGate {
     private FrontierV3TraversalScheduleGate() { }
 
     /**
-     * An observed body may consume the one retained continuation before its due turn.  That
-     * consumes rather than creates the shared COLD action and preserves its due-derived next
-     * cadence, so a loaded visit cannot introduce a second clock or gain unbound authority.
+     * An observed body may consume only the one retained continuation at its ordinary due
+     * turn.  A physical arrival may occur earlier, but it remains observation evidence until
+     * the same edge that could have admitted COLD; HOT therefore cannot gain canonical time
+     * merely because a player presented the field early.
      */
     static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId jobId) {
-        return binding(checkpoint, jobId).isPresent();
+        return dueBinding(checkpoint, jobId).isPresent();
     }
 
     /** A physically arrived exact next cell and its one engine binding are both necessary. */
@@ -28,5 +29,10 @@ final class FrontierV3TraversalScheduleGate {
         try { return Optional.of(FrontierV3ContinuationBinding.require(checkpoint, jobId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)); }
         catch (IllegalArgumentException rejected) { return Optional.empty(); }
+    }
+
+    /** The exact binding remains available for admission/release; only progress consumes due work. */
+    static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId jobId) {
+        return binding(checkpoint, jobId).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
     }
 }

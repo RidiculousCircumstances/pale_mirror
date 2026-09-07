@@ -24,13 +24,14 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     private static final SubjectId JOB = new SubjectId("job:test");
 
     @Test
-    void observedHotTraversalConsumesTheOneSharedContinuationBeforeItsDueTurn() {
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), JOB));
+    void observedHotTraversalConsumesTheOneSharedContinuationOnlyAtItsDueTurn() {
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), JOB));
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), JOB));
         assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 100L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), JOB, true));
+        assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), JOB, true));
         assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, false));
-        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, true));
+        assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, true));
+        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 100L), JOB, true));
     }
 
     @Test

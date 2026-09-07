@@ -141,7 +141,7 @@ export function requireTerminalEvidence(scenario, manifest) {
   }
 }
 
-/** Exact retained checkpoint value used only to prove two declared arrival stages differ. */
+/** Exact retained checkpoint value used to prove ordered arrivals on one shared continuation. */
 export function requireArrivalCheckpoint(entry, manifest) {
   const projection = entry?.scenario?.f0vArrivalCheckpoint;
   if (projection === undefined) return undefined;
@@ -157,8 +157,10 @@ export function requireArrivalCheckpoint(entry, manifest) {
 /** The pair belongs to the aggregate owner when its variants run in separate shards. */
 export function requireDistinctArrivalCheckpoints(first, second) {
   if (!first || !second || first.view !== second.view || first.id !== second.id || first.path !== second.path
-      || first.stage === second.stage || first.after === second.after) {
-    throw new Error('F0.V arrival checkpoints do not prove two distinct retained process stages');
+      || first.stage !== 'early.approach' || second.stage !== 'later.approach'
+      || first.before >= first.after || second.before >= second.after
+      || second.before !== first.after) {
+    throw new Error('F0.V arrival checkpoints do not prove one ordered retained early-to-later process relation');
   }
   return Object.freeze({ first: Object.freeze(structuredClone(first)), second: Object.freeze(structuredClone(second)) });
 }

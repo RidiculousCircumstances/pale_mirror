@@ -131,7 +131,7 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState completedTraversal = harvesting;
         ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        assertThrows(IllegalStateException.class, () -> ResourceSiteHarvestProcess.planTransition(completedTraversal, prepared.intent(), confirmed, 22_200L),
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planTransition(completedTraversal, prepared.intent(), confirmed, 22_200L),
                 "F0.1 must reject even a complete observed crop receipt until F0.2 owns the irreversible consequence");
         assertFalse(harvesting.inventory().items().containsKey(output.id()));
         assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());

@@ -270,7 +270,10 @@ public final class ResourceSiteHarvestProcess {
         }
         if ((transition.status() == PhysicalIntentStatus.RUNNING || transition.status() == PhysicalIntentStatus.CONFIRMED)
                 && !irreversibleCropEffectsAdmitted()) {
-            throw new IllegalStateException("resource-site harvest physical execution is deferred to the F0.2 effect owner");
+            // This is well-formed but unavailable F0.2 work, not canonical corruption.  It
+            // must return through the ordinary command-policy rejection path so the same
+            // ACTIVE engine can accept later independent F0.1 work.
+            throw new IllegalArgumentException("resource-site harvest physical execution is deferred to the F0.2 effect owner");
         }
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
         if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest output cannot complete before every crop is observed");
