@@ -4,7 +4,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeDirectory, mergeEvidence, preflight } from './f0vc-pipeline.mjs';
-import { runtimeTargetFor } from './f0vc-prepared-runtime.mjs';
+import { rewriteConsumerText, runtimeTargetFor } from './f0vc-prepared-runtime.mjs';
 import { preparedClientSegment } from './run-f0va-persistent-matrix.mjs';
 import { liftSegmentDiagnostics } from './run-ci-matrix-shard.mjs';
 
@@ -60,6 +60,13 @@ test('F0.VC preserves launcher member names and Gradle-cache topology in a priva
   assert.equal(runtimeTargetFor('/producer/.gradle/caches/modules-2/files-2.1/org.example/demo/1.0/a1/demo-1.0.jar', roots),
     '.f0vc-runtime/gradle/caches/modules-2/files-2.1/org.example/demo/1.0/a1/demo-1.0.jar');
   assert.throws(() => runtimeTargetFor('/outside/demo-1.0.jar', roots), /declared project or Gradle runtime roots/);
+});
+
+test('F0.VC remaps both listed members and producer-root launcher paths into a consumer view', () => {
+  const producer = '/producer/pale-mirror'; const consumer = '/consumer/pale-mirror';
+  const paths = new Map([[`${producer}/build/moddev/args.txt`, `${consumer}/build/moddev/args.txt`]]);
+  assert.equal(rewriteConsumerText(`-DgameDir=${producer}/build/runs -args ${producer}/build/moddev/args.txt`, paths, producer, consumer),
+    `-DgameDir=${consumer}/build/runs -args ${consumer}/build/moddev/args.txt`);
 });
 
 test('F0.VC waits for the client preparation signal bound to the initial immutable segment', () => {

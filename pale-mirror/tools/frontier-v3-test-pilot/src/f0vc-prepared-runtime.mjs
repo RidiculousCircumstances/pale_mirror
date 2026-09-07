@@ -73,8 +73,7 @@ export async function consumeRuntime({ manifest, worker, output, workspace = pro
     map.set(entry.source, target);
   }
   for (const entry of source.inputs.filter((value) => value.text)) {
-    const target = map.get(entry.source); let text = await readFile(target, 'utf8');
-    for (const [from, to] of [...map.entries()].sort(([a], [b]) => b.length - a.length)) text = text.split(from).join(to);
+    const target = map.get(entry.source); const text = rewriteConsumerText(await readFile(target, 'utf8'), map, source.producerProject, root);
     if (text.includes(source.producerProject)) throw new Error('F0.VC consumer launch input still references producer workspace');
     await writeFile(target, text, { flag: 'w' });
   }
@@ -163,6 +162,12 @@ export function runtimeTargetFor(sourcePath, { projectRoot = project, gradleRoot
   if (inside(checkedProject, source)) return relative(checkedProject, source);
   if (inside(checkedGradle, source)) return `.f0vc-runtime/gradle/${relative(checkedGradle, source)}`;
   throw new Error(`F0.VC producer launch input escapes the declared project or Gradle runtime roots: ${source}`);
+}
+
+export function rewriteConsumerText(text, paths, producerProject, consumerProject) {
+  let rewritten = text;
+  for (const [from, to] of [...paths.entries()].sort(([a], [b]) => b.length - a.length)) rewritten = rewritten.split(from).join(to);
+  return rewritten.split(producerProject).join(consumerProject);
 }
 
 async function runtimeEnvironment() {

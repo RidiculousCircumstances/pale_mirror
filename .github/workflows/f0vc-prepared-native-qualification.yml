@@ -66,6 +66,9 @@ jobs:
     name: F0.VC ${{ matrix.worker }}
     needs: producer
     runs-on: [self-hosted, pm-native]
+    defaults:
+      run:
+        working-directory: f0vc-consumer-${{ matrix.worker }}/pale-mirror
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -81,6 +84,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: f0vc-consumer-${{ matrix.worker }}
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -92,7 +96,7 @@ jobs:
         continue-on-error: true
         with:
           name: f0vc-${{ github.run_id }}-producer
-          path: pale-mirror/build/f0vc/producer
+          path: f0vc-consumer-${{ matrix.worker }}/pale-mirror/build/f0vc/producer
       - name: Bind active job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -128,7 +132,7 @@ jobs:
         if: always()
         with:
           name: f0vc-${{ github.run_id }}-${{ matrix.worker }}
-          path: pale-mirror/build/f0vc/consumer/${{ matrix.worker }}
+          path: f0vc-consumer-${{ matrix.worker }}/pale-mirror/build/f0vc/consumer/${{ matrix.worker }}
           if-no-files-found: warn
 
   merge:
