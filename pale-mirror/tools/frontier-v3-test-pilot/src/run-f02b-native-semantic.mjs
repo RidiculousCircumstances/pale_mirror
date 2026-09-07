@@ -13,7 +13,7 @@ const lane = laneFor(values.worker);
 if (!output.startsWith(`${process.cwd()}/`) || !log.startsWith(`${process.cwd()}/`) || values.lane !== lane) throw new Error('F0.2B semantic invocation is malformed');
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const startedAtMillis = Date.now();
-const child = spawn('./gradlew', [':pale-mirror-neoforge:runFrontierV3ReferenceGameTestServer', '--no-daemon'], {
+const child = spawn('./gradlew', [':pale-mirror-neoforge:jar', ':pale-mirror-neoforge:runFrontierV3ReferenceGameTestServer', '--no-daemon'], {
   cwd: process.cwd(), env: { ...process.env, GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_REFERENCE_WORLD_ROOT: namespaces.world,
     FRONTIER_V3_REFERENCE_LANE: lane, DISPLAY: namespaces.display }, stdio: ['ignore', 'pipe', 'pipe']
 });
