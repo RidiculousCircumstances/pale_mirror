@@ -3,7 +3,7 @@ import { createWriteStream } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
-import { assertSemanticEvidence, F02B_KIND, F02B_SCHEMA, laneFor } from './f02b-native-semantic.mjs';
+import { assertNativeTranscript, assertSemanticEvidence, F02B_KIND, F02B_SCHEMA, laneFor } from './f02b-native-semantic.mjs';
 
 const values = Object.fromEntries(process.argv.slice(2).map(value => { const [key, entry] = value.slice(2).split('=', 2); return [key, entry]; }));
 const namespaces = JSON.parse(await readFile(resolve(values.namespaces ?? ''), 'utf8'));
@@ -32,8 +32,8 @@ await Promise.all([stdoutDrained, stderrDrained]);
 stream.end();
 await closed;
 const finishedAtMillis = Date.now(); const transcript = await readFile(log, 'utf8');
-if (code !== 0 || !transcript.includes("Launching target 'forgeserverdev'") || !transcript.includes(`Running test batch 'pm-frontier-v3-reference-${lane}:0'`)
-  || !transcript.includes('All 1 required test passed :)') || !transcript.includes('BUILD SUCCESSFUL')) throw new Error('F0.2B native semantic GameTest did not complete its declared lane');
+if (code !== 0) throw new Error('F0.2B native semantic GameTest did not complete its declared lane');
+assertNativeTranscript(transcript, lane);
 const jar = (await readdir(resolve('pale-mirror-neoforge/build/libs'))).filter(name => name.endsWith('.jar') && !name.endsWith('-sources.jar')).sort().at(-1);
 if (!jar) throw new Error('F0.2B native semantic launch produced no distributable jar');
 const jarSha256 = createHash('sha256').update(await readFile(resolve('pale-mirror-neoforge/build/libs', jar))).digest('hex');

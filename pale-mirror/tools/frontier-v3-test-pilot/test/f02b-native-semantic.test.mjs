@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { declaredNamespaces } from '../src/f0vb-qualification.mjs';
-import { laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { assertNativeTranscript, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -31,4 +31,12 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(duplicate, expected), /duplicate workers/);
   const nonNative = complete.map(value => ({ ...value })); nonNative[1].launchTarget = 'node';
   assert.throws(() => mergeSemanticMatrix(nonNative, expected), /no completed native semantic assertion/);
+});
+
+test('F0.2B native transcript requires the exact completed NeoForge lane', () => {
+  const lane = laneFor('worker-2');
+  const passed = "Launching target 'forgeserverdev'\nRunning test batch 'pm-frontier-v3-reference-hive-zero-player:0'\nAll 1 required tests passed :)\nBUILD SUCCESSFUL";
+  assert.doesNotThrow(() => assertNativeTranscript(passed, lane));
+  assert.throws(() => assertNativeTranscript(passed.replace('tests', 'test'), lane), /did not complete/);
+  assert.throws(() => assertNativeTranscript(passed.replace('forgeserverdev', 'node'), lane), /did not complete/);
 });

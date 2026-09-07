@@ -17,6 +17,16 @@ export function laneFor(worker) {
   return LANES[worker];
 }
 
+export function assertNativeTranscript(transcript, lane) {
+  if (typeof transcript !== 'string'
+    || !transcript.includes("Launching target 'forgeserverdev'")
+    || !transcript.includes(`Running test batch 'pm-frontier-v3-reference-${lane}:0'`)
+    || !transcript.includes('All 1 required tests passed :)')
+    || !transcript.includes('BUILD SUCCESSFUL')) {
+    throw new Error('F0.2B native semantic GameTest did not complete its declared lane');
+  }
+}
+
 export function assertSemanticEvidence(value, expected = {}) {
   if (!value || typeof value !== 'object' || value.schema !== F02B_SCHEMA || value.kind !== F02B_KIND) throw new Error('F0.2B evidence has unknown schema or kind');
   if (laneFor(value.worker) !== value.lane || !QUALIFICATION.test(value.qualificationId ?? '')) throw new Error('F0.2B evidence has an invalid matrix assignment');
