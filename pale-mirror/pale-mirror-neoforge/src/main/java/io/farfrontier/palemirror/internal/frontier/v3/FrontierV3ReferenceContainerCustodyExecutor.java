@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
@@ -27,6 +28,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.ArrayList;
@@ -71,12 +73,22 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
         ChestBlockEntity chest = chestAt(level, position(surface));
         if (replica == null) {
-            // Initial projection remains owned by the generic surface materializer.  This adapter
-            // starts only after a naturally loaded exact chest is present to observe.
-            if (FrontierV3ContainerSurfaceExecutor.activeChest(level, position(surface), containerId) != null) declare(runtime, state, containerId);
+            // Initial projection remains owned by the generic surface materializer.  It can
+            // install and tag the chest before the durable ACTIVE transition is visible to this
+            // adapter.  Declaring in that pre-ACTIVE interval would let a later materializer
+            // turn be mistaken for missing world evidence, so the first replica boundary is
+            // admitted only against a durable active surface and its exact owned chest.
+            if (initialDeclarationReady(surface.status(), FrontierV3ContainerSurfaceExecutor.activeChest(level, position(surface), containerId))) {
+                declare(runtime, state, containerId);
+            }
             return;
         }
         if (replica.state() == PhysicalReplicaState.CONFLICT) return;
+        // A placed chest becomes a block before its block entity is available on the server.
+        // That short normal-world lifecycle window is neither missing evidence nor foreign
+        // evidence; wait until the exact block entity can be classified.  A non-chest block
+        // with no entity is still actual missing evidence below.
+        if (chest == null && level.getBlockState(position(surface)).is(Blocks.CHEST)) return;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
         if (replica.state() == PhysicalReplicaState.EXPECTED) {
             observe(runtime, state, replica, chest);
@@ -200,6 +212,10 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static ContainerSurface selectRoundRobin(List<ContainerSurface> eligible, long tick) {
         if (eligible.isEmpty()) throw new IllegalArgumentException("reference custody has no eligible container");
         return eligible.get((int) Math.floorMod(tick, eligible.size()));
+    }
+
+    static boolean initialDeclarationReady(ContainerSurfaceStatus status, ChestBlockEntity chest) {
+        return status == ContainerSurfaceStatus.ACTIVE && chest != null;
     }
 
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {

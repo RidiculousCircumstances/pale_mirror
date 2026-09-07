@@ -41,6 +41,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 "a legacy owner marker alone cannot manufacture canonical replica provenance");
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, null).provenance().equals("missing:" + depot.value()),
                 "an absent chest remains missing evidence");
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.initialDeclarationReady(ContainerSurfaceStatus.PREPARED, chest)
+                        && FrontierV3ReferenceContainerCustodyExecutor.initialDeclarationReady(ContainerSurfaceStatus.ACTIVE, chest),
+                "a tagged chest cannot become a replica boundary until its surface transition is durably ACTIVE");
         helper.succeed();
     }
 
