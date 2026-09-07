@@ -29,6 +29,11 @@ const scenarioFile = resolve(scenarioPath);
 const runtimeScenarioFile = resolve(process.env.FRONTIER_V3_PILOT_RUNTIME_SCENARIO ?? scenarioFile);
 const output = resolve(project, outputPath);
 const { scenario, sha256 } = await loadScenario(scenarioFile);
+// The persistent-restart supervisor mutates only its disposable runtime copy to
+// install the lane-owned loopback endpoint.  The checked-in scenario remains
+// the assertion contract, but every client connection must consume that exact
+// runtime endpoint rather than falling back to the contract's default port.
+const runtimeScenario = runtimeScenarioFile === scenarioFile ? scenario : (await loadScenario(runtimeScenarioFile)).scenario;
 const sessionControlDirectory = process.env.FRONTIER_V3_PILOT_SESSION_CONTROL_DIRECTORY
   ? resolve(process.env.FRONTIER_V3_PILOT_SESSION_CONTROL_DIRECTORY) : undefined;
 const lifecycleControlDirectory = process.env.FRONTIER_V3_PILOT_LIFECYCLE_CONTROL_DIRECTORY
@@ -270,7 +275,7 @@ function launchViaGradle() {
     `-PfrontierV3PilotScenario=${runtimeScenarioFile}`,
     `-PfrontierV3PilotCaptureControlDirectory=${captureControlDirectory}`,
     `-PfrontierV3PilotUsername=${scenario.pilot.username}`,
-    `-PfrontierV3PilotServer=${scenario.server.host}:${scenario.server.port}`];
+    `-PfrontierV3PilotServer=${runtimeScenario.server.host}:${runtimeScenario.server.port}`];
   if (sessionControlDirectory !== undefined) args.push(`-PfrontierV3PilotSessionControlDirectory=${sessionControlDirectory}`);
   if (lifecycleControlDirectory !== undefined) {
     args.push(`-PfrontierV3PilotLifecycleControlDirectory=${lifecycleControlDirectory}`,
@@ -287,12 +292,12 @@ async function launchPreparedClient() {
   const launch = await preparedLaunch(project, preparedIdentity, 'client', {
     'pale_mirror.frontier_v3.test_pilot.capture_control_directory': captureControlDirectory,
     'pale_mirror.frontier_v3.test_pilot.scenario': runtimeScenarioFile,
-    'pale_mirror.frontier_v3.test_pilot.server': `${scenario.server.host}:${scenario.server.port}`,
+    'pale_mirror.frontier_v3.test_pilot.server': `${runtimeScenario.server.host}:${runtimeScenario.server.port}`,
     'pale_mirror.frontier_v3.test_pilot.session_control_directory': sessionControlDirectory ?? '',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory': lifecycleControlDirectory ?? '',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment(),
     'pale_mirror.frontier_v3.test_pilot.lifecycle_terminal': lifecycleTerminalAssertion ? 'true' : 'false'
-  }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${scenario.server.host}:${scenario.server.port}`]);
+  }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${runtimeScenario.server.host}:${runtimeScenario.server.port}`]);
   try {
     if (!(await stat(launch.cwd)).isDirectory()) throw new Error('not a directory');
   } catch (error) {

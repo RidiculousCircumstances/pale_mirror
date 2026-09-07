@@ -121,6 +121,13 @@ test('persistent restart correlates reconnect to the prepared Minecraft client, 
     'the Node wrapper PID is not the native client identity');
 });
 
+test('persistent restart client consumes the lane-owned runtime endpoint', async () => {
+  const runner = await readFile(new URL('../src/run-scenario.mjs', import.meta.url), 'utf8');
+  assert.match(runner, /const runtimeScenario = runtimeScenarioFile === scenarioFile \? scenario : \(await loadScenario\(runtimeScenarioFile\)\)\.scenario/);
+  assert.match(runner, /frontierV3PilotServer=\$\{runtimeScenario\.server\.host\}:\$\{runtimeScenario\.server\.port\}/);
+  assert.match(runner, /quickPlayMultiplayer', `\$\{runtimeScenario\.server\.host\}:\$\{runtimeScenario\.server\.port\}`/);
+});
+
 test('crash before-halves reserve the terminal lifecycle barrier for recovered evidence', async () => {
   const isolated = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
   assert.match(isolated, /FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL: 'false'/);
