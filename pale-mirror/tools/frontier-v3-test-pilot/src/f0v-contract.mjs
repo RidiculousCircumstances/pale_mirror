@@ -40,6 +40,7 @@ export function validateF0vContract(contract) {
     validateSemanticProjections(contract.variants[name].terminalProjections, `F0.V ${name} terminal projections`);
     requireTerminalCoverage(contract.variants[name].terminalProjections, contract.variants[name], name);
     validateArrivalCheckpoint(name, contract.variants[name]);
+    validateHotColdCycles(name, contract.variants[name]);
     validateColdProgress(name, contract.variants[name]);
     if (contract.variants[name].driver === 'COLD_VS_HOT_COLD') {
       validateDifferentialRequirements(contract.declaration, contract.variants[name].differential);
@@ -112,7 +113,8 @@ function composeVariantScenario(contract, name, variant, lane = undefined, crash
     // which terminal *semantic* claims must be demonstrated, instead of counting an arbitrary
     // status reply as a terminal proof.
     f0vTerminalProjections: structuredClone(variant.terminalProjections),
-    ...(variant.arrivalCheckpoint === undefined ? {} : { f0vArrivalCheckpoint: structuredClone(variant.arrivalCheckpoint) }),
+      ...(variant.arrivalCheckpoint === undefined ? {} : { f0vArrivalCheckpoint: structuredClone(variant.arrivalCheckpoint) }),
+    ...(variant.hotColdCycles === undefined ? {} : { f0vHotColdCycles: structuredClone(variant.hotColdCycles) }),
     ...(variant.coldProgress === undefined ? {} : { f0vColdProgress: composeColdProgress(variant.coldProgress, terminalAfter) }),
     ...(variant.driver === 'COLD_VS_HOT_COLD' ? { f0vDifferential: structuredClone(variant.differential) } : {}),
     ...(variant.driver === 'COLD_VS_HOT_COLD' ? { f0vDifferentialAlignment: structuredClone(variant.alignment) } : {}),
@@ -183,7 +185,9 @@ function validateArrivalCheckpoint(name, variant) {
   }
   if (!required) return;
   const checkpoint = variant.arrivalCheckpoint;
-  if (!checkpoint || typeof checkpoint.view !== 'string' || typeof checkpoint.id !== 'string' || !validPath(checkpoint.path)) {
+  if (!checkpoint || !stableToken(checkpoint.stage) || typeof checkpoint.view !== 'string' || typeof checkpoint.id !== 'string'
+      || !validPath(checkpoint.path) || !Number.isInteger(checkpoint.beforeAction) || checkpoint.beforeAction < 1
+      || checkpoint.after !== 'terminal' || !Number.isSafeInteger(checkpoint.minimumAdvance) || checkpoint.minimumAdvance < 1) {
     throw new Error(`arrival F0.V variant lacks a retained checkpoint projection: ${name}`);
   }
   // The semantic categories have fixed expected values, while an exact cursor is deliberately
@@ -191,6 +195,28 @@ function validateArrivalCheckpoint(name, variant) {
   // be read by the same terminal inspection as one declared semantic projection.
   const terminal = variant.terminalProjections.find((projection) => projection.view === checkpoint.view && projection.id === checkpoint.id);
   if (terminal === undefined) throw new Error(`arrival F0.V checkpoint is not terminally inspected: ${name}`);
+  const before = variant.assertions.find((assertion) => assertion.after === checkpoint.beforeAction
+      && assertion.view === checkpoint.view && assertion.id === checkpoint.id);
+  const observedHotArrival = variant.actions.findIndex((action, index) => index + 1 > checkpoint.beforeAction
+      && action.type === 'wait_until_diagnostic' && action.view === checkpoint.view && action.id === checkpoint.id
+      && action.requireIncreaseAt === checkpoint.path && action.expect?.claims?.lease?.status === 'HOT');
+  if (before === undefined || observedHotArrival < 0) {
+    throw new Error(`arrival F0.V variant does not prove a typed HOT cursor arrival: ${name}`);
+  }
+}
+
+/** Two ordinary HOT→COLD→HOT hand-offs must retain one job, worker, cursor and continuation. */
+function validateHotColdCycles(name, variant) {
+  const required = name === 'unload_return';
+  if (!required && variant.hotColdCycles !== undefined) throw new Error(`only unload_return may declare F0.V hand-off cycles: ${name}`);
+  if (!required) return;
+  const cycles = variant.hotColdCycles;
+  if (!Array.isArray(cycles) || cycles.length < 2 || cycles.length > 8
+      || cycles.some((cycle) => !Number.isInteger(cycle?.enteredHotAction) || !Number.isInteger(cycle?.releasedColdAction)
+        || !Number.isInteger(cycle?.returnedHotAction) || cycle.enteredHotAction < 1 || cycle.enteredHotAction >= cycle.releasedColdAction
+        || cycle.releasedColdAction >= cycle.returnedHotAction || cycle.returnedHotAction > variant.actions.length)) {
+    throw new Error('unload_return F0.V variant lacks two complete HOT/COLD/HOT cycles');
+  }
 }
 
 /**

@@ -187,8 +187,14 @@ class FrontierProcessSceneSdkTest {
                     .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
             EngineContext engine = advance(launch(prepared, List.of(ResourceSiteHarvestProcess.start(task, 22_100L))), new SimInstant(22_100L), 8);
             ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, site);
-            engine = submit(engine, new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
-            assertEquals(PhysicalIntentStatus.RUNNING, state(engine).physicalIntents().get(job.intentId()).status());
+            // F0.1 owns only traversal.  The real physical-command planner must reject both
+            // effect-bearing transitions before either can mutate the durable intent.
+            assertRejected(engine, new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
+            ExactItemStack output = new ExactItemStack(job.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, job.outputSlot());
+            ResourceSiteHarvestObservation receipt = new ResourceSiteHarvestObservation(
+                    new PhysicalObservationId("observation:f0v-sdk-confirmation"), job.intentId(), job.siteId(), job.workerId(), output, 64);
+            assertRejected(engine, new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+            assertEquals(PhysicalIntentStatus.PREPARED, state(engine).physicalIntents().get(job.intentId()).status());
             return new HarvestContext(engine, site);
         }
         @Override public HarvestContext coldAdvance(HarvestContext context) {

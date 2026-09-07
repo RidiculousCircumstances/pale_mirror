@@ -322,6 +322,8 @@ public final class FrontierProcessSceneSdk {
 
         S secondHot = nonNull(descriptor.acquireHot(coldAfterRelease), "second HOT acquisition");
         assertCheckpoint(descriptor, secondHot, true);
+        assertRetainedContinuation(descriptor, descriptor.checkpoint(firstReleased), descriptor.checkpoint(secondHot),
+                "second HOT acquisition did not retain the released process continuation");
         S secondCheckpoint = nonNull(descriptor.hotCheckpoint(secondHot), "second HOT checkpoint");
         assertCheckpoint(descriptor, secondCheckpoint, true);
         S secondReleased = nonNull(descriptor.releaseToCold(secondCheckpoint), "second HOT release");
@@ -387,6 +389,16 @@ public final class FrontierProcessSceneSdk {
                 || !expected.claims().equals(actual.claims()) || !expected.schedules().equals(actual.schedules())
                 || !expected.custodyDigest().equals(actual.custodyDigest())
                 || !expected.canonicalDigest().equals(actual.canonicalDigest())) {
+            throw new AssertionError(message + ": " + descriptor.family());
+        }
+    }
+
+    /** A second HOT lease is a continuation of the same duration process, never a replacement job. */
+    private static void assertRetainedContinuation(Descriptor<?> descriptor, SemanticCheckpoint released,
+                                                   SemanticCheckpoint reacquired, String message) {
+        if (!released.family().equals(reacquired.family()) || !released.ownerId().equals(reacquired.ownerId())
+                || !released.actorId().equals(reacquired.actorId()) || reacquired.cursor() < released.cursor()
+                || !released.schedules().equals(reacquired.schedules()) || !released.custodyDigest().equals(reacquired.custodyDigest())) {
             throw new AssertionError(message + ": " + descriptor.family());
         }
     }

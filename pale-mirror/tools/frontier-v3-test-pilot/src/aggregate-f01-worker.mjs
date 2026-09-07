@@ -9,11 +9,17 @@ const output = resolve(values.output ?? '');
 const variants = (values.variants ?? '').split(',').filter(Boolean);
 if (variants.length === 0 || new Set(variants).size !== variants.length) throw new Error('F0.1 worker aggregate requires distinct assigned variants');
 
-const aggregate = { schema: 1, kind: 'frontier-v3-f01-paired-harvest-native-matrix', build: null, variants: [] };
+const aggregate = { schema: 1, kind: 'frontier-v3-f01-paired-harvest-native-matrix', build: null, contract: null, variants: [] };
 for (const variant of variants) {
   try {
     const report = JSON.parse(await readFile(resolve(root, variant, 'matrix.json'), 'utf8'));
-    if (aggregate.build === null && report.build) aggregate.build = report.build;
+    if (report.kind !== aggregate.kind || !report.build || !report.contract) throw new Error('native variant report lacks its complete identity');
+    if (aggregate.build === null) {
+      aggregate.build = report.build;
+      aggregate.contract = report.contract;
+    } else if (JSON.stringify(aggregate.build) !== JSON.stringify(report.build) || JSON.stringify(aggregate.contract) !== JSON.stringify(report.contract)) {
+      throw new Error('native variant report identity drifted within one worker');
+    }
     const entry = report.variants?.find(candidate => candidate.variant === variant);
     if (!entry) throw new Error('missing declared variant result');
     aggregate.variants.push(entry);

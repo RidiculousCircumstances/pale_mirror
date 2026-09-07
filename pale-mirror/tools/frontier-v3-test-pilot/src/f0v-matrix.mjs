@@ -145,19 +145,54 @@ export function requireTerminalEvidence(scenario, manifest) {
 export function requireArrivalCheckpoint(entry, manifest) {
   const projection = entry?.scenario?.f0vArrivalCheckpoint;
   if (projection === undefined) return undefined;
-  const value = atPath(diagnostic(manifest, projection.view, projection.id), projection.path);
-  if (!Number.isSafeInteger(value) || value < 0) {
+  const before = atPath(diagnosticAt(manifest, projection.beforeAction, projection.view, projection.id), projection.path);
+  const after = atPath(diagnostic(manifest, projection.view, projection.id), projection.path);
+  if (!Number.isSafeInteger(before) || before < 0 || !Number.isSafeInteger(after) || after < before + projection.minimumAdvance) {
     throw new Error(`generated F0.V arrival checkpoint is absent or non-integral: ${entry.variant}`);
   }
-  return Object.freeze({ view: projection.view, id: projection.id, path: projection.path, value });
+  return Object.freeze({ stage: projection.stage, view: projection.view, id: projection.id, path: projection.path,
+    beforeAction: projection.beforeAction, before, after, minimumAdvance: projection.minimumAdvance });
 }
 
 /** The pair belongs to the aggregate owner when its variants run in separate shards. */
 export function requireDistinctArrivalCheckpoints(first, second) {
-  if (!first || !second || first.view !== second.view || first.id !== second.id || first.path !== second.path || first.value === second.value) {
+  if (!first || !second || first.view !== second.view || first.id !== second.id || first.path !== second.path
+      || first.stage === second.stage || first.after === second.after) {
     throw new Error('F0.V arrival checkpoints do not prove two distinct retained process stages');
   }
   return Object.freeze({ first: Object.freeze(structuredClone(first)), second: Object.freeze(structuredClone(second)) });
+}
+
+/** Retains native evidence for two complete HOT→COLD→HOT cycles of one continuation. */
+export function requireHotColdCycles(entry, manifest) {
+  const cycles = entry?.scenario?.f0vHotColdCycles;
+  if (cycles === undefined) return undefined;
+  if (!Array.isArray(cycles) || cycles.length < 2) throw new Error('generated F0.V hand-off cycles are incomplete');
+  let retained;
+  const evidence = cycles.map((cycle) => {
+    const hot = diagnosticAt(manifest, cycle.enteredHotAction, 'process', entry.scenario.f0vTerminalProjections[0].id);
+    const cold = diagnosticAt(manifest, cycle.releasedColdAction, 'process', entry.scenario.f0vTerminalProjections[0].id);
+    const returned = diagnosticAt(manifest, cycle.returnedHotAction, 'process', entry.scenario.f0vTerminalProjections[0].id);
+    if (!hot || !cold || !returned || hot.claims?.lease?.status !== 'HOT' || cold.claims?.lease !== null || returned.claims?.lease?.status !== 'HOT') {
+      throw new Error('generated F0.V hand-off cycle lacks HOT/COLD/HOT observations');
+    }
+    const identity = { job: hot.identity?.job, worker: hot.identity?.worker, schedule: hot.schedule?.entries?.[0]?.id };
+    if (!identity.job || !identity.worker || !identity.schedule || JSON.stringify(identity) !== JSON.stringify({ job: cold.identity?.job,
+      worker: cold.identity?.worker, schedule: cold.schedule?.entries?.[0]?.id }) || JSON.stringify(identity) !== JSON.stringify({ job: returned.identity?.job,
+      worker: returned.identity?.worker, schedule: returned.schedule?.entries?.[0]?.id })) {
+      throw new Error('generated F0.V hand-off cycle replaced its retained continuation');
+    }
+    const cursors = [hot, cold, returned].map(value => value.cursor?.index);
+    if (cursors.some(value => !Number.isSafeInteger(value) || value < 0) || cursors[1] < cursors[0] || cursors[2] < cursors[1]) {
+      throw new Error('generated F0.V hand-off cycle regressed its retained cursor');
+    }
+    if (retained !== undefined && JSON.stringify(retained) !== JSON.stringify(identity)) {
+      throw new Error('generated F0.V hand-off cycles changed job, worker or continuation');
+    }
+    retained = identity;
+    return Object.freeze({ ...cycle, identity: Object.freeze(identity), cursors: Object.freeze(cursors) });
+  });
+  return Object.freeze(evidence);
 }
 
 /**

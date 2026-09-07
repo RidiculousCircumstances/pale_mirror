@@ -86,10 +86,10 @@ test('actual runner call site replaces the former single-half dereference with d
 });
 
 test('arrival comparator requires matching declaration and distinct integral stages', () => {
-  assert.deepEqual(requireDistinctArrivalCheckpoints({ view: 'summary', id: '', path: 'cursor.index', value: 1 },
-    { view: 'summary', id: '', path: 'cursor.index', value: 2 }).first.value, 1);
-  assert.throws(() => requireDistinctArrivalCheckpoints({ view: 'summary', id: '', path: 'cursor.index', value: 1 },
-    { view: 'summary', id: '', path: 'cursor.index', value: 1 }), /distinct/);
+  const first = { stage: 'early', view: 'summary', id: '', path: 'cursor.index', beforeAction: 1, before: 1, after: 2, minimumAdvance: 1 };
+  const second = { stage: 'later', view: 'summary', id: '', path: 'cursor.index', beforeAction: 1, before: 2, after: 3, minimumAdvance: 1 };
+  assert.equal(requireDistinctArrivalCheckpoints(first, second).first.after, 2);
+  assert.throws(() => requireDistinctArrivalCheckpoints(first, { ...second, after: 2 }), /distinct/);
 });
 
 test('declared differential tolerance accepts its bound and rejects a larger deviation', () => {
@@ -130,9 +130,12 @@ test('never-loaded evidence requires a lease-free before/after COLD cursor advan
 
 test('arrival evidence rejects a missing or non-integral retained process checkpoint', () => {
   const first = materializeF0vMatrix(contract).find((entry) => entry.variant === 'arrival_checkpoint_one');
-  assert.deepEqual(requireArrivalCheckpoint(first, { diagnostics: [{ value: { kind: 'summary', id: '', cursor: 7 } }] }),
-    { view: 'summary', id: '', path: 'cursor', value: 7 });
-  assert.throws(() => requireArrivalCheckpoint(first, { diagnostics: [{ value: { kind: 'summary', id: '', cursor: 7.5 } }] }),
+  const terminalAction = first.scenario.actions.length;
+  assert.deepEqual(requireArrivalCheckpoint(first, { diagnostics: [
+    { observed: { actionStep: 1, value: { kind: 'summary', id: '', cursor: { index: 7 } } } },
+    { observed: { actionStep: terminalAction, value: { kind: 'summary', id: '', cursor: { index: 8 } } } }
+  ] }), { stage: 'early', view: 'summary', id: '', path: 'cursor.index', beforeAction: 1, before: 7, after: 8, minimumAdvance: 1 });
+  assert.throws(() => requireArrivalCheckpoint(first, { diagnostics: [{ observed: { actionStep: 1, value: { kind: 'summary', id: '', cursor: { index: 7.5 } } } }] }),
     /non-integral/);
 });
 
@@ -140,9 +143,12 @@ function variant(name) {
   const driver = { never_loaded: 'COLD', arrival_checkpoint_one: 'HOT', arrival_checkpoint_two: 'HOT', unload_return: 'HOT_COLD_HOT',
     player_intervention: 'HOT', graceful_restart: 'SNAPSHOT_WAL', abrupt_restart: 'CRASH_WAL', neutral_observer_differential: 'COLD_VS_HOT_COLD' }[name];
   return {
-    driver, evidence: ['actor', 'cursor'], actions: [{ type: 'inspect', view: 'summary', id: '' }, { type: 'inspect', view: 'summary', id: '' }],
+    driver, evidence: ['actor', 'cursor'], actions: name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two'
+      ? [{ type: 'inspect', view: 'summary', id: '' }, { type: 'wait_until_diagnostic', view: 'summary', id: '', expect: { status: 'ok', claims: { lease: { status: 'HOT' } } }, requireIncreaseAt: 'cursor.index', timeoutMs: 1 }, { type: 'inspect', view: 'summary', id: '' }]
+      : name === 'unload_return' ? Array.from({ length: 6 }, () => ({ type: 'inspect', view: 'summary', id: '' }))
+        : [{ type: 'inspect', view: 'summary', id: '' }, { type: 'inspect', view: 'summary', id: '' }],
     assertions: [
-      ...(name === 'never_loaded' ? [{ after: 1, view: 'summary', id: '', expect: { status: 'ok', claims: { lease: null } } }] : []),
+      ...(name === 'never_loaded' || name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two' ? [{ after: 1, view: 'summary', id: '', expect: { status: 'ok', claims: { lease: null } } }] : []),
       { after: 'terminal', view: 'summary', id: '', expect: { status: 'ok', identity: 'actor:test', claims: { owner: 1, lease: null },
         conservation: 64, schedule: 's:1', result: 'done', residents: 1 } }
     ],
@@ -158,7 +164,9 @@ function variant(name) {
     ...(name === 'never_loaded' ? { coldProgress: { beforeAction: 1, after: 'terminal', view: 'summary', id: '', cursorPath: 'cursor.index',
       retainedBodyPath: 'cursor.retainedBody', actorBodyPath: 'cursor.actorBody', leasePath: 'claims.lease', minimumAdvance: 1 } } : {}),
     ...((name === 'arrival_checkpoint_one' || name === 'arrival_checkpoint_two') ? { arrivalCheckpoint: {
-      view: 'summary', id: '', path: 'cursor' } } : {}),
+      stage: name === 'arrival_checkpoint_one' ? 'early' : 'later', view: 'summary', id: '', path: 'cursor.index', beforeAction: 1, after: 'terminal', minimumAdvance: 1 } } : {}),
+    ...(name === 'unload_return' ? { hotColdCycles: [{ enteredHotAction: 1, releasedColdAction: 2, returnedHotAction: 3 },
+      { enteredHotAction: 3, releasedColdAction: 4, returnedHotAction: 5 }] } : {}),
     ...(driver === 'COLD_VS_HOT_COLD' ? { alignment: { view: 'summary', id: '', instantPath: 'instant' }, differential: [
       { invariant: 'identity', view: 'summary', id: '', paths: ['identity'] },
       { invariant: 'claims', view: 'summary', id: '', paths: ['claims'] },

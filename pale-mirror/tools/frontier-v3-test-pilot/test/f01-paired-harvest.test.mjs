@@ -20,7 +20,19 @@ const assignments = new Map([
 ]);
 
 function report(variants, sourceCommit = head) {
-  return { kind: 'frontier-v3-f01-paired-harvest-native-matrix', build: { sourceCommit }, variants: variants.map(variant => ({ variant, runs: [{ status: 'passed' }] })) };
+  const sha = 'c'.repeat(64);
+  const build = { sourceCommit, sourceDirty: false,
+    sourceContent: { schema: 1, kind: 'frontier-v3-working-content', files: [{ path: 'pale-mirror-frontier/a', state: 'PRESENT', sha256: sha }], sha256: sha },
+    preparedArtifact: { path: 'pale-mirror-neoforge/build/libs/pale-mirror.jar', sha256: sha },
+    launchManifest: { path: 'pale-mirror-neoforge/build/moddev/frontierV3PilotPreparedLaunch.json', sha256: sha },
+    classpaths: Object.fromEntries(['server', 'client'].map(role => [role, { entries: 1, portableSha256: sha, launchEntries: 1, portableLaunchSha256: sha }])),
+    launchInputs: Object.fromEntries(['server', 'client'].map(role => [role, { vmArgs: { portableSha256: sha }, programArgs: { portableSha256: sha } }])) };
+  const arrival = (variant) => variant === 'arrival_checkpoint_one'
+    ? { stage: 'early.approach', view: 'process', id: 'job:site-harvest-4-wheat-field-1', path: 'cursor.index', beforeAction: 3, before: 16, after: 17, minimumAdvance: 1 }
+    : variant === 'arrival_checkpoint_two'
+      ? { stage: 'later.approach', view: 'process', id: 'job:site-harvest-4-wheat-field-1', path: 'cursor.index', beforeAction: 3, before: 19, after: 20, minimumAdvance: 1 } : undefined;
+  return { kind: 'frontier-v3-f01-paired-harvest-native-matrix', contract: { path: 'tools/frontier-v3-test-pilot/contracts/resource-site-harvest-f0v.json', sha256: sha }, build,
+    variants: variants.map(variant => ({ variant, runs: [{ status: 'passed' }], ...(arrival(variant) === undefined ? {} : { arrivalCheckpoint: arrival(variant) }) })) };
 }
 
 async function writeEvidence(root, options = {}) {
@@ -68,6 +80,42 @@ test('F0.1 merge accepts only exact worker bundles and retains incomplete diagno
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('F0.1 merge rejects a missing, duplicate, foreign or non-advancing cross-worker arrival relation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f01-arrival-'));
+  try {
+    for (const [name, mutate, failure] of [
+      ['missing-arrival', (value) => { delete value.variants.find(entry => entry.variant === 'arrival_checkpoint_one').arrivalCheckpoint; }, /observed HOT arrival/],
+      ['duplicate-stage', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_two').arrivalCheckpoint; entry.before = 16; entry.after = 17; }, /distinct retained process stages/],
+      ['foreign-arrival', (value) => { value.variants.find(entry => entry.variant === 'arrival_checkpoint_two').arrivalCheckpoint.id = 'job:foreign'; }, /distinct retained process stages/],
+      ['non-advancing', (value) => { const entry = value.variants.find(item => item.variant === 'arrival_checkpoint_one').arrivalCheckpoint; entry.after = entry.before; }, /observed HOT arrival/]
+    ]) {
+      await writeEvidence(root);
+      const target = join(root, `f01-${run}-worker-${name === 'missing-arrival' || name === 'non-advancing' ? '0' : '1'}`, 'matrix.json');
+      const value = JSON.parse(await readFile(target, 'utf8')); mutate(value); await writeFile(target, JSON.stringify(value));
+      await invoke(root, name, failure);
+      await rm(root, { recursive: true, force: true }); await mkdir(root);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('F0.1 merge rejects recurrence of any source, contract, build or JAR identity drift', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f01-identity-'));
+  try {
+    for (const [name, mutate] of [
+      ['source', (value) => { value.build.sourceContent.sha256 = 'd'.repeat(64); }],
+      ['contract', (value) => { value.contract.sha256 = 'd'.repeat(64); }],
+      ['build', (value) => { value.build.classpaths.server.portableSha256 = 'd'.repeat(64); }],
+      ['jar', (value) => { value.build.preparedArtifact.sha256 = 'd'.repeat(64); }]
+    ]) {
+      await writeEvidence(root);
+      const target = join(root, `f01-${run}-worker-2`, 'matrix.json');
+      const value = JSON.parse(await readFile(target, 'utf8')); mutate(value); await writeFile(target, JSON.stringify(value));
+      await invoke(root, name, /identity drifted/);
+      await rm(root, { recursive: true, force: true }); await mkdir(root);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('F0.1 workflow reserves a disjoint server/RCON pair and Gradle home per native worker', async () => {

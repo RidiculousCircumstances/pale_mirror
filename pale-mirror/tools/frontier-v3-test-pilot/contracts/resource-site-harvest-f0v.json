@@ -60,16 +60,19 @@
     "arrival_checkpoint_one": {
       "driver": "HOT",
       "evidence": ["sameFarmer", "exactLease", "exactBody", "traversalCursor"],
-      "arrivalCheckpoint": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index" },
+      "arrivalCheckpoint": { "stage": "early.approach", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index", "beforeAction": 3, "after": "terminal", "minimumAdvance": 1 },
       "actions": [
         { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
         { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "intentKind": "RESOURCE_SITE_HARVEST", "intentStatus": "PREPARED", "intentObservationId": null } }, "timeoutMs": 90000 },
         { "type": "inspect", "view": "actor", "id": "resident:4-31" },
-        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "requireIncreaseAt": "cursor.index", "timeoutMs": 90000 },
         { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:4-31", "expect": { "status": "ok", "physicalAdmission": { "status": "SCENE_OWNED", "pending": false } }, "timeoutMs": 90000 }
       ],
       "assertions": [
+        { "after": 3, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+          "status": "ok", "claims": { "lease": null }, "result": { "intentStatus": "PREPARED" }
+        } },
         { "after": 6, "view": "actor", "id": "resident:4-31", "expect": {
           "status": "ok", "assignment": "FIELD_HARVEST", "assignmentOwner": "job:site-harvest-4-wheat-field-1", "harvestSceneCandidate": false, "sceneReserved": true,
           "physicalAdmission": { "status": "SCENE_OWNED", "entityUuid": "2e56c7c8-796d-3220-83f0-3d1f28694409", "pending": false }
@@ -92,14 +95,17 @@
     "arrival_checkpoint_two": {
       "driver": "HOT",
       "evidence": ["sameFarmer", "exactLease", "exactBody", "distinctTraversalCursor"],
-      "arrivalCheckpoint": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index" },
+      "arrivalCheckpoint": { "stage": "later.approach", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "path": "cursor.index", "beforeAction": 3, "after": "terminal", "minimumAdvance": 1 },
       "actions": [
         { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
         { "type": "fast_forward", "ticks": 480, "timeoutMs": 180000 },
+        { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" },
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
-        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "requireIncreaseAt": "cursor.index", "timeoutMs": 90000 }
       ],
-      "assertions": [{ "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
+      "assertions": [
+        { "after": 3, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": null }, "result": { "intentStatus": "PREPARED" } } },
+        { "after": "terminal", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": {
         "status": "ok", "identity": { "job": "job:site-harvest-4-wheat-field-1", "worker": "resident:4-31" },
         "claims": { "site": "site:4-wheat-field", "worker": "resident:4-31", "lease": { "status": "HOT", "members": 1 } },
         "conservation": { "outputItem": "item:site-harvest-4-wheat-field-1-wheat", "completedCropSlots": 0, "pendingCropSlot": -1, "totalCropSlots": 64 },
@@ -116,12 +122,21 @@
     "unload_return": {
       "driver": "HOT_COLD_HOT",
       "evidence": ["sameFarmer", "sameEntityUuid", "traversalCursor", "releaseThenReacquire"],
+      "hotColdCycles": [
+        { "enteredHotAction": 3, "releasedColdAction": 6, "returnedHotAction": 8 },
+        { "enteredHotAction": 8, "releasedColdAction": 11, "returnedHotAction": 13 }
+      ],
       "actions": [
         { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
         { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
         { "type": "wait", "ms": 12000, "gameplayElapsedPurpose": "hot_cold_release_hysteresis", "gameplayElapsedJustification": "The retained scene lease must survive its declared no-demand hysteresis before COLD continuation." },
+        { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
+        { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 },
+        { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 1000 },
+        { "type": "wait", "ms": 12000, "gameplayElapsedPurpose": "hot_cold_release_hysteresis", "gameplayElapsedJustification": "The retained scene lease must survive its declared no-demand hysteresis before its second COLD continuation." },
         { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1" },
         { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "process", "id": "job:site-harvest-4-wheat-field-1", "field": "cursor.retainedBody" } }, "settleMs": 1000 },
         { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } }, "timeoutMs": 90000 }

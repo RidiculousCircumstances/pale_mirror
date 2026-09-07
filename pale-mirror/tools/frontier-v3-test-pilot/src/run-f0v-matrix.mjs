@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { targetColdDifferentialScenario, finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireTerminalEvidence } from './f0v-matrix.mjs';
+import { targetColdDifferentialScenario, finalizeMatrixEntry, materializeF0vMatrix, requireArrivalCheckpoint, requireColdProgress, requireDistinctArrivalCheckpoints, requireHotColdCycles, requireTerminalEvidence } from './f0v-matrix.mjs';
 import { loadScenario } from './scenario.mjs';
 import { fingerprintPreparedBuild, fingerprintPreparedSource, requirePreparedF0vBuild } from './prepared-build.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
@@ -23,7 +23,8 @@ if (!process.env.DISPLAY) throw new Error('a native matrix requires one visible 
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const source = resolve(project, contractPath);
-const contract = JSON.parse(await readFile(source, 'utf8'));
+const contractBytes = await readFile(source);
+const contract = JSON.parse(contractBytes.toString('utf8'));
 const matrixLabel = typeof contract.matrixLabel === 'string' && /^F0(?:\.\d+|\.V)$/.test(contract.matrixLabel)
   ? contract.matrixLabel : 'F0.V';
 const matrixKind = typeof contract.matrixKind === 'string' && /^frontier-v3-[a-z0-9-]+-native-matrix$/.test(contract.matrixKind)
@@ -43,7 +44,7 @@ const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 await absent(root, `${matrixLabel} matrix output root`);
 await mkdir(root, { recursive: true });
 let build;
-const report = { schema: 1, kind: matrixKind, runId, contract: relative(project, source),
+const report = { schema: 1, kind: matrixKind, runId, contract: { path: relative(project, source), sha256: createHash('sha256').update(contractBytes).digest('hex') },
   selectedVariant: requestedVariant ?? null, selectedLane: requestedLane ?? null, build: null, variants: [] };
 const arrivalCheckpoints = new Map();
 const failedVariants = [];
@@ -108,12 +109,17 @@ try {
       continue;
     }
     const { differential } = finalizeMatrixEntry(entry, runs, { selectedLane: requestedLane !== undefined });
-    report.variants.push({ id: entry.id, variant: entry.variant, driver: entry.driver,
-      terminalInvariants: entry.declaration.terminalInvariants, runs: runs.map(({ result, ...metadata }) => metadata), differential });
+    const hotColdCycles = requireHotColdCycles(entry, runs[0]?.result);
+    const variantReport = { id: entry.id, variant: entry.variant, driver: entry.driver,
+      terminalInvariants: entry.declaration.terminalInvariants, runs: runs.map(({ result, ...metadata }) => metadata), differential,
+      ...(hotColdCycles === undefined ? {} : { hotColdCycles }) };
     if (entry.variant === 'arrival_checkpoint_one' || entry.variant === 'arrival_checkpoint_two') {
       if (runs.length !== 1) throw new Error(`${matrixLabel} arrival variant has an unexpected execution count: ${entry.variant}`);
-      arrivalCheckpoints.set(entry.variant, requireArrivalCheckpoint(entry, runs[0].result));
+      const checkpoint = requireArrivalCheckpoint(entry, runs[0].result);
+      arrivalCheckpoints.set(entry.variant, checkpoint);
+      variantReport.arrivalCheckpoint = checkpoint;
     }
+    report.variants.push(variantReport);
     if (arrivalCheckpoints.size === 2) {
       const first = arrivalCheckpoints.get('arrival_checkpoint_one');
       const second = arrivalCheckpoints.get('arrival_checkpoint_two');
