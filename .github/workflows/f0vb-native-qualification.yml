@@ -1,0 +1,64 @@
+name: F0.VB four-slot native qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      qualification_id:
+        description: Immutable bounded qualification identity.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    name: F0.VB ${{ matrix.worker }}
+    runs-on: [self-hosted, pm-native]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        worker: [worker-0, worker-1, worker-2, worker-3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove isolated concurrent worker lease
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.qualification_id }}" in *[!A-Za-z0-9._-]*|'') exit 1;; esac
+          case "${RUNNER_TEMP:?}" in /*) ;; *) exit 1;; esac
+          lease="$RUNNER_TEMP/f0vb-${{ github.run_id }}-${{ matrix.worker }}"
+          test ! -e "$lease"
+          mkdir -p "$lease"
+          started="$(date +%s%3N)"
+          sleep 20
+          finished="$(date +%s%3N)"
+          node tools/frontier-v3-test-pilot/src/write-f0vb-qualification-evidence.mjs \
+            --output="$GITHUB_WORKSPACE/f0vb-${{ matrix.worker }}.json" \
+            --worker="${{ matrix.worker }}" --run="${{ github.run_id }}" \
+            --lease="$lease" --started="$started" --finished="$finished"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f0vb-${{ github.run_id }}-${{ matrix.worker }}
+          path: f0vb-${{ matrix.worker }}.json
+          if-no-files-found: error
+  merge:
+    needs: acquire
+    if: always()
+    runs-on: [self-hosted, pm-native]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: f0vb-${{ github.run_id }}-worker-*
+          merge-multiple: true
+          path: f0vb-evidence
+      - name: Fail closed merge
+        run: node tools/frontier-v3-test-pilot/src/merge-f0vb-qualification.mjs --input=f0vb-evidence --run=${{ github.run_id }} --output=f0vb-merge.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f0vb-${{ github.run_id }}-merge
+          path: f0vb-merge.json
+          if-no-files-found: warn
