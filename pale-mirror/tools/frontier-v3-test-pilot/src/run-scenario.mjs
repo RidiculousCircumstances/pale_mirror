@@ -122,6 +122,7 @@ const frameTasks = [];
 const executeFile = promisify(execFile);
 const auditScript = resolve(project, 'scripts/visual-audit-x11.py');
 let complete = false;
+let completedActionStep = 0;
 let failure = null;
 let pilotStartedAt = null;
 let fixtureStarted = false;
@@ -190,6 +191,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     if (completed) {
       if (actionTimingName !== null) { timing.end(actionTimingName); actionTimingName = null; }
       const step = Number(completed[1]) + sessionActionOffset();
+      completedActionStep = Math.max(completedActionStep, step);
       trace('action_completed', { correlation: correlation(runId, step), step });
       const segment = lifecycleSegment();
       lifecycleBarrier(LifecycleBarrier.ACTION_CHECKPOINT_ACKNOWLEDGED, LifecycleSignal.ACTION_CHECKPOINT,
@@ -217,7 +219,8 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
 });
 
 try {
-  await waitForPilot(child, () => failure || (complete && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])
+  await waitForPilot(child, () => failure || ((complete || completedActionStep === (scenario.actions ?? []).length)
+    && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])
     && manifest.frames.length === (scenario.frames ?? []).length), () => pilotStartedAt,
     300_000, scenarioDeadlineMs(scenario));
   if (failure) throw new Error(failure);

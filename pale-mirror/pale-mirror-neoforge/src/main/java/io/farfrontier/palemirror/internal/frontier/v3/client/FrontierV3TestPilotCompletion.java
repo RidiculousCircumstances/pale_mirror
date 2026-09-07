@@ -36,7 +36,6 @@ final class FrontierV3TestPilotCompletion {
                         throw new IllegalStateException("persistent pilot has no live connection to close");
                     }
                     minecraft.getConnection().getConnection().disconnect(Component.literal("Frontier v3 persistent-pilot restart"));
-                    minecraft.disconnect();
                 });
                 return;
             } catch (IOException | IllegalArgumentException failure) {
