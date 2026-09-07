@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: pale-mirror
+
 jobs:
   acquire:
     name: F0.VB ${{ matrix.worker }}
@@ -35,13 +39,13 @@ jobs:
           sleep 20
           finished="$(date +%s%3N)"
           node tools/frontier-v3-test-pilot/src/write-f0vb-qualification-evidence.mjs \
-            --output="$GITHUB_WORKSPACE/f0vb-${{ matrix.worker }}.json" \
+            --output="$PWD/f0vb-${{ matrix.worker }}.json" \
             --worker="${{ matrix.worker }}" --run="${{ github.run_id }}" \
             --lease="$lease" --started="$started" --finished="$finished"
       - uses: actions/upload-artifact@v4
         with:
           name: f0vb-${{ github.run_id }}-${{ matrix.worker }}
-          path: f0vb-${{ matrix.worker }}.json
+          path: pale-mirror/f0vb-${{ matrix.worker }}.json
           if-no-files-found: error
   merge:
     needs: acquire
@@ -53,12 +57,12 @@ jobs:
         with:
           pattern: f0vb-${{ github.run_id }}-worker-*
           merge-multiple: true
-          path: f0vb-evidence
+          path: pale-mirror/f0vb-evidence
       - name: Fail closed merge
         run: node tools/frontier-v3-test-pilot/src/merge-f0vb-qualification.mjs --input=f0vb-evidence --run=${{ github.run_id }} --output=f0vb-merge.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: f0vb-${{ github.run_id }}-merge
-          path: f0vb-merge.json
+          path: pale-mirror/f0vb-merge.json
           if-no-files-found: warn
