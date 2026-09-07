@@ -12,18 +12,22 @@ const runtime = 'a'.repeat(64);
 function plan() { return { schema: 1, kind: 'frontier-v3-f0vc-preflight', runtimeContentSha256: runtime, runId: 77,
   expectedArtifacts: ['f0vc-77-worker-0', 'f0vc-77-worker-1', 'f0vc-77-worker-2', 'f0vc-77-worker-3'],
   workers: [0, 1, 2, 3].map((index) => ({ worker: `worker-${index}`, runtimeContentSha256: runtime, namespace: `/tmp/f0vc-${index}`,
-    port: 26300 + index * 2, display: `:${1300 + index}`, world: `world-${index}`, cases: index === 0
+    port: 26300 + index * 2, display: `:${1300 + index * 2}`, world: `world-${index}`, cases: index === 0
       ? [{ id: 'smoke-a', lifecycle: 'batch', world: 'world-0' }, { id: 'smoke-b', lifecycle: 'batch', world: 'world-0' }]
       : [{ id: `restart-${index}`, lifecycle: 'isolated', world: `lane-${index}` }] })) }; }
 function evidence(value = plan()) { return value.workers.map((entry, index) => ({ worker: entry.worker, status: 'success', runtimeContentSha256: runtime,
   namespace: entry.namespace, port: entry.port, display: entry.display, world: entry.world, artifact: `f0vc-77-${entry.worker}`, jobId: index + 1, result: { status: 'ok' } })); }
 
 test('F0.VC admits only four isolated workers and declared same-world batches', () => {
-  assert.equal(preflight(plan()).workers.length, 4);
+  const admitted = preflight(plan());
+  assert.equal(admitted.workers.length, 4);
+  assert.equal(admitted.workers[3].display, ':1306');
   const bad = plan(); bad.workers[1].port = bad.workers[0].port;
   assert.throws(() => preflight(bad), /assignment/);
   const overlappingRcon = plan(); overlappingRcon.workers[1].port = overlappingRcon.workers[0].port + 1;
   assert.throws(() => preflight(overlappingRcon), /assignment/);
+  const foreignDisplay = plan(); foreignDisplay.workers[1].display = ':1301';
+  assert.throws(() => preflight(foreignDisplay), /assignment/);
   const crossWorld = plan(); crossWorld.workers[0].cases[1].world = 'foreign';
   assert.throws(() => preflight(crossWorld), /reuse/);
 });

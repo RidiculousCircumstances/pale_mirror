@@ -14,7 +14,7 @@ async function main() {
     throw new Error('usage: write-f0vc-preflight --runtime=build/receipt.json --run=<id> --root=/home/rd/proj/pm-f0vc-* --output=build/f0vc/plan.json');
   }
   const workers = [0, 1, 2, 3].map((index) => ({ worker: `worker-${index}`, runtimeContentSha256: receipt.contentSha256,
-    namespace: `${root}/workers/worker-${index}`, port: 26300 + index * 2, display: `:${1300 + index}`, world: `f0vc-world-${index}`,
+    namespace: `${root}/workers/worker-${index}`, port: 26300 + index * 2, display: `:${1300 + index * 2}`, world: `f0vc-world-${index}`,
     cases: index === 0 ? [{ id: 'disposable-smoke-alpha', lifecycle: 'batch', world: 'f0vc-world-0' }, { id: 'disposable-smoke-beta', lifecycle: 'batch', world: 'f0vc-world-0' }]
       : [{ id: index === 3 ? 'abrupt-recovery' : 'graceful-recovery', lifecycle: 'isolated', world: `f0vc-lane-${index}` }] }));
   const value = preflight({ schema: 1, kind: 'frontier-v3-f0vc-preflight', runtimeContentSha256: receipt.contentSha256, runId,

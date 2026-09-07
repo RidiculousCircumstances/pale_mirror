@@ -19,7 +19,7 @@ export function preflight(plan) {
     if (!entry || !WORKERS.includes(entry.worker) || seen.has(entry.worker) || entry.runtimeContentSha256 !== plan.runtimeContentSha256
         || typeof entry.namespace !== 'string' || !entry.namespace.startsWith('/') || namespaces.has(entry.namespace)
         || !Number.isInteger(entry.port) || entry.port < 1024 || entry.port >= 65535 || endpoints.has(entry.port) || endpoints.has(entry.port + 1)
-        || typeof entry.display !== 'string' || !/^:[0-9]+$/.test(entry.display) || displays.has(entry.display)
+        || typeof entry.display !== 'string' || entry.display !== `:${entry.port - 25000}` || displays.has(entry.display)
         || typeof entry.world !== 'string' || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(entry.world) || worlds.has(entry.world)
         || !Array.isArray(entry.cases) || entry.cases.length < 1 || entry.cases.length > 32) throw new Error('F0.VC preflight worker assignment is malformed');
     seen.add(entry.worker); namespaces.add(entry.namespace); endpoints.add(entry.port); endpoints.add(entry.port + 1); displays.add(entry.display); worlds.add(entry.world);
