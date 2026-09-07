@@ -32,7 +32,7 @@ public final class FrontierV3GameTestSlice {
             case "reference-depot-visited-unloaded" -> batchName.equals("pm-frontier-v3-reference-depot-visited-unloaded");
             case "reference-hive-zero-player" -> batchName.equals("pm-frontier-v3-reference-hive-zero-player");
             case "reference-conflict-restart" -> batchName.equals("pm-frontier-v3-reference-conflict-restart");
-            case "reference-all", "all" -> batchName.startsWith("pm-frontier-v3-reference-");
+            case "reference-all" -> batchName.startsWith("pm-frontier-v3-reference-");
             default -> throw new IllegalArgumentException("unsupported Frontier v3 GameTest slice: " + configuredSlice);
         };
     }

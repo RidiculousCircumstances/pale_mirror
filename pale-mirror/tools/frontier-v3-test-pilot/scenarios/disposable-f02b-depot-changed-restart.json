@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "disposable_f02b_depot_changed_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "settlement-provision" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -343, "y": 65, "z": -328 }, "settleMs": 1500 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 60000 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_container", "item": "minecraft:wheat", "count": 64, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_MISMATCH" } }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
+  ],
+  "restart": {
+    "mode": "abrupt",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -343, "y": 65, "z": -328 }, "settleMs": 1500 }
+    ]
+  },
+  "assertions": [
+    { "after": 4, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_MISMATCH" } } },
+    { "after": 5, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_MISMATCH" } } }
+  ]
+}

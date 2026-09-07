@@ -40,6 +40,16 @@ export class PhaseTiming {
     if (this.#open.size !== 0) throw new Error(`timing phases left open: ${[...this.#open.keys()].join(', ')}`);
     return Object.freeze({ totalMillis: elapsedMillis(this.#started, process.hrtime.bigint()), phases: Object.freeze([...this.#entries]), ...checkedDetail(detail) });
   }
+
+  /**
+   * Failure bundles are emitted while their outer cleanup phase is still open.
+   * Capture completed timing facts without pretending that cleanup completed or
+   * letting diagnostic serialization replace the original causal failure.
+   */
+  snapshot(detail = {}) {
+    return Object.freeze({ totalMillis: elapsedMillis(this.#started, process.hrtime.bigint()), phases: Object.freeze([...this.#entries]),
+      open: Object.freeze([...this.#open.keys()]), ...checkedDetail(detail) });
+  }
 }
 
 export function elapsedMillis(started, finished = process.hrtime.bigint()) {

@@ -22,12 +22,14 @@
     { "type": "assert_visible_board", "text": "GANGLION", "position": { "x": 432, "y": 66, "z": 429 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "inspect", "view": "hive", "id": "hive:frontier" },
     { "type": "inspect", "view": "intent", "id": "intent:hive-growth-biomass-1" },
-    { "type": "inspect", "view": "actor", "id": "bioform:east-grown-1" }
+    { "type": "inspect", "view": "actor", "id": "bioform:east-grown-1" },
+    { "type": "inspect", "view": "container", "id": "container:hive-east-store" }
   ],
   "assertions": [
     { "after": 7, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1, "infectionCells": 19 } },
     { "after": 8, "view": "intent", "id": "intent:hive-growth-biomass-1", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } },
-    { "after": 9, "view": "actor", "id": "bioform:east-grown-1", "expect": { "status": "ok", "actorKind": "BIOFORM", "role": "GUARD", "life": "ALIVE" } }
+    { "after": 9, "view": "actor", "id": "bioform:east-grown-1", "expect": { "status": "ok", "actorKind": "BIOFORM", "role": "GUARD", "life": "ALIVE" } },
+    { "after": 10, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],
   "frames": [
     { "after": 6, "name": "grown-hive-heart" }

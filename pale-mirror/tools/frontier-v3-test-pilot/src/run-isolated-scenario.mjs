@@ -204,7 +204,7 @@ try {
       const decodedWalTail = await decodeWalTail(disposableWorld);
       const diagnosticSnapshots = await retainedDiagnostics([output, beforeRestartManifest]);
       const bundle = await writeFailureBundle({ project, output, scenarioPath: sourcePath, runId,
-        timing: timing.finish({ runner: 'isolated-native', status: 'failed' }), failure: terminalFailure, serverLog,
+        timing: timing.snapshot({ runner: 'isolated-native', status: 'failed' }), failure: terminalFailure, serverLog,
         clientLog, tracePath: output.replace(/\.json$/i, '') + '.pmv3.jsonl', worldDirectory: disposableWorld,
         build: buildIdentity, crash: crashEvidence,
         process: { world, port, serverRunId: server?.serverRunId ?? lastServerAttempt?.serverRunId ?? null,
@@ -385,6 +385,16 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment)
   const code = await exited(pilot);
   timing.end(phase, { exitCode: code });
   if (code !== 0) throw new Error(`isolated native pilot exited with ${code}`);
+  // A nonterminal before-restart segment deliberately leaves final assertions to the recovery
+  // half, so the client wrapper has no reason to append its own terminal disconnect barrier.
+  // Its ordinary exit is nevertheless the exact demand-loss predecessor; record it once here
+  // before asking the server to release custody.  A terminal segment has already recorded the
+  // same barrier from its authenticated client acknowledgement and is left unchanged.
+  const barriers = await readLifecycleBarriers(lifecycle);
+  if (barriers.at(-1)?.barrier !== LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED) {
+    await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED,
+      { clientPid: pilot.pid, segment });
+  }
   // Terminal semantics are frozen before the runner writes this nonce.  The server can now
   // observe its ordinary demand-loss hysteresis/release without a client or a cleanup RCON
   // request racing that ownership boundary.

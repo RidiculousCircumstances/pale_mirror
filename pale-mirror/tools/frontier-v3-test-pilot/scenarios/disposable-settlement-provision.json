@@ -19,7 +19,8 @@
     { "type": "look", "at": { "x": -340, "y": 67, "z": -330 } },
     { "type": "assert_visible_board", "text": "FOOD SECURE", "position": { "x": -340, "y": 67, "z": -330 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "inspect", "view": "settlement", "id": "settlement:1" },
-    { "type": "inspect", "view": "intent", "id": "intent:settlement-provision-1-2-0" }
+    { "type": "inspect", "view": "intent", "id": "intent:settlement-provision-1-2-0" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
   ],
   "restart": {
     "mode": "graceful",
@@ -34,7 +35,8 @@
   },
   "assertions": [
     { "after": 5, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "SECURE", "available": 27, "required": 37, "fulfilled": 37, "nourished": 37, "hungry": 0, "starving": 0, "intent": "" } } },
-    { "after": 6, "view": "intent", "id": "intent:settlement-provision-1-2-0", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } }
+    { "after": 6, "view": "intent", "id": "intent:settlement-provision-1-2-0", "expect": { "status": "ok", "intentStatus": "CONFIRMED" } },
+    { "after": 7, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],
   "frames": [
     { "after": 4, "name": "northwatch-food-secure" }

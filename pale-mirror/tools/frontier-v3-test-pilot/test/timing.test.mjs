@@ -13,6 +13,16 @@ test('failed native boundaries remain measurable instead of masking the first fa
   assert.equal(report.phases[0].status, 'failed');
 });
 
+test('failure snapshots retain completed phases while cleanup is still open', () => {
+  const timing = new PhaseTiming();
+  timing.begin('cleanup');
+  const snapshot = timing.snapshot({ runner: 'test', status: 'failed' });
+  assert.deepEqual(snapshot.open, ['cleanup']);
+  assert.equal(snapshot.status, 'failed');
+  timing.end('cleanup');
+  assert.equal(timing.finish({ runner: 'test' }).phases.length, 1);
+});
+
 test('three native baseline and candidate runs report the versioned advisory target', () => {
   const environment = { host: 'same-host', seed: 41, profile: 'world', viewDistance: 10, sourceCommit: 'abc',
     preparedArtifactSha256: 'jar', serverClasspathSha256: 'server', clientClasspathSha256: 'client' };

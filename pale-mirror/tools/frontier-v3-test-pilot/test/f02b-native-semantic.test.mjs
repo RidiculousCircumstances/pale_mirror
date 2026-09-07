@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { declaredNamespaces } from '../src/f0vb-qualification.mjs';
-import { assertNativeTranscript, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -9,10 +9,28 @@ const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'Ridicu
 
 function evidence(worker, index = Number(worker.at(-1))) {
   const lane = laneFor(worker); const namespaces = declaredNamespaces({ workspace: `/tmp/f02b/workspace-${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker });
+  const conflict = lane === 'conflict-restart';
+  const replica = conflict
+    ? { state: 'CONFLICT', revision: 3, canonicalRevision: 7, conflict: 'FINGERPRINT_MISMATCH', fingerprint: 'sha256:expected', provenance: 'pale-mirror:reference-container:test', observedFingerprint: 'sha256:missing-container:1-depot', observedProvenance: 'missing:container:1-depot' }
+    : { state: 'OBSERVED_CURRENT', revision: 3, canonicalRevision: 7, conflict: '', fingerprint: 'sha256:current', provenance: 'pale-mirror:reference-container:test', observedFingerprint: '', observedProvenance: '' };
+  const domain = lane === 'depot-never-visited'
+    ? { family: 'settlement-provision', foodStatus: 'SECURE', available: 27, fulfilled: 37, intentStatus: 'CONFIRMED' }
+    : lane === 'depot-visited-unloaded'
+      ? { family: 'settlement-production', orderStatus: 'FULFILLED', itemCount: 64, itemCustody: 'CONTAINER_SLOT' }
+      : lane === 'hive-zero-player'
+        ? { family: 'hive-growth', growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1, intentStatus: 'CONFIRMED' }
+        : { family: 'depot-conflict', recovery: 'abrupt' };
+  const custody = { status: conflict ? 'RELEASED' : 'ACQUIRED', epoch: 1, replicaRevision: 3 };
+  const conflicts = conflict ? [
+    { scenario: 'disposable-f02b-depot-changed-restart.json', replica: { ...replica, conflict: 'FINGERPRINT_MISMATCH', observedFingerprint: 'sha256:changed', observedProvenance: replica.provenance } },
+    { scenario: 'disposable-f02b-depot-foreign-restart.json', replica: { ...replica, conflict: 'FINGERPRINT_AND_PROVENANCE_MISMATCH', observedFingerprint: 'sha256:foreign', observedProvenance: 'foreign:container-owner=untagged;replica-provenance=missing' } },
+    { scenario: 'disposable-f02b-depot-conflict-restart.json', replica }
+  ] : undefined;
   return { schema: 1, kind: 'f02b-reference-container-native-semantic', status: 'passed', ...expected, worker, lane,
     jobId: 100 + index, runnerId: 200 + index, runnerName: `pm-f02b-${index}`, startedAtMillis: 1_700_000_000_000 + index,
     finishedAtMillis: 1_700_000_020_000 + index, gradlePid: 300 + index, launchTarget: 'forgeserverdev',
-    requiredTest: `pm-frontier-v3-reference-${lane}:0`, requiredTestCount: 1, jarSha256: hash, namespaces };
+    requiredTest: `scenario:${lane}`, requiredTestCount: conflict ? 3 : 1, jarSha256: hash, namespaces, launchTarget: 'normal-disposable-v3-server',
+    terminal: { lane, domain, container: { status: 'ok', replica, custody }, replica, custody, ...(conflicts === undefined ? {} : { conflicts }) } };
 }
 
 test('F0.2B semantic aggregate requires four immutable native Minecraft lanes', () => {
@@ -27,16 +45,12 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(complete.slice(0, 3), expected), /missing or extra/);
   const stale = complete.map(value => ({ ...value })); stale[0].headSha = 'c'.repeat(40);
   assert.throws(() => mergeSemanticMatrix(stale, expected), /invalid immutable identity/);
-  const duplicate = complete.map(value => ({ ...value })); duplicate[3].worker = 'worker-2'; duplicate[3].lane = laneFor('worker-2'); duplicate[3].requiredTest = `pm-frontier-v3-reference-${duplicate[3].lane}:0`;
+  const duplicate = complete.map(value => structuredClone(value)); duplicate[3] = structuredClone(complete[2]);
   assert.throws(() => mergeSemanticMatrix(duplicate, expected), /duplicate workers/);
   const nonNative = complete.map(value => ({ ...value })); nonNative[1].launchTarget = 'node';
   assert.throws(() => mergeSemanticMatrix(nonNative, expected), /no completed native semantic assertion/);
-});
-
-test('F0.2B native transcript requires the exact completed NeoForge lane', () => {
-  const lane = laneFor('worker-2');
-  const passed = "Launching target 'forgeserverdev'\nRunning test batch 'pm-frontier-v3-reference-hive-zero-player:0'\nAll 1 required tests passed :)\nBUILD SUCCESSFUL";
-  assert.doesNotThrow(() => assertNativeTranscript(passed, lane));
-  assert.throws(() => assertNativeTranscript(passed.replace('tests', 'test'), lane), /did not complete/);
-  assert.throws(() => assertNativeTranscript(passed.replace('forgeserverdev', 'node'), lane), /did not complete/);
+  const semanticHole = complete.map(value => structuredClone(value)); semanticHole[0].terminal.domain.available = 64;
+  assert.throws(() => mergeSemanticMatrix(semanticHole, expected), /settlement provision terminal is not exact/);
+  const fabricatedConflict = complete.map(value => structuredClone(value)); fabricatedConflict[3].terminal.conflicts[2].replica.observedProvenance = 'pale-mirror:reference-container:test';
+  assert.throws(() => mergeSemanticMatrix(fabricatedConflict, expected), /changed\/foreign\/missing evidence/);
 });

@@ -54,16 +54,18 @@ jobs:
           --workspace="$GITHUB_WORKSPACE" --temp="$RUNNER_TEMP" --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
           --worker="${{ matrix.worker }}" --output="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
       - name: Run one actual isolated Minecraft semantic lane
-        run: >-
-          node tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs
-          --output="$PWD/f02b-artifacts/${{ matrix.worker }}/semantic.json"
-          --log="$PWD/f02b-artifacts/${{ matrix.worker }}/minecraft.log"
-          --namespaces="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
-          --identity="$PWD/f02b-artifacts/${{ matrix.worker }}/job.json"
-          --worker="${{ matrix.worker }}" --lane="${{ matrix.lane }}"
-          --qualification="${{ inputs.qualification_id }}" --repository="${{ github.repository }}"
-          --head="${{ github.sha }}" --workflow-sha="${{ github.workflow_sha }}" --workflow="${{ github.workflow_ref }}"
-          --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
+        run: |
+          namespaces="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
+          export FRONTIER_V3_PILOT_PORT="$(node -p "JSON.parse(require('fs').readFileSync('$namespaces')).port")"
+          export FRONTIER_V3_NATIVE_PROCESS_ROOT="$(node -p "JSON.parse(require('fs').readFileSync('$namespaces')).process")"
+          scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs \
+            --output="$PWD/f02b-artifacts/${{ matrix.worker }}/semantic.json" \
+            --log="$PWD/f02b-artifacts/${{ matrix.worker }}/minecraft.log" \
+            --namespaces="$namespaces" --identity="$PWD/f02b-artifacts/${{ matrix.worker }}/job.json" \
+            --worker="${{ matrix.worker }}" --lane="${{ matrix.lane }}" \
+            --qualification="${{ inputs.qualification_id }}" --repository="${{ github.repository }}" \
+            --head="${{ github.sha }}" --workflow-sha="${{ github.workflow_sha }}" --workflow="${{ github.workflow_ref }}" \
+            --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

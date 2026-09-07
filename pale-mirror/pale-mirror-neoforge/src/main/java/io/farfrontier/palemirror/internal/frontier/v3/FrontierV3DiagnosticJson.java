@@ -412,7 +412,8 @@ final class FrontierV3DiagnosticJson {
         var lease = state.replicaCustody().custodyByScope().get(io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(containerId));
         String replica = record == null ? "null" : "{\"state\":\"" + record.state() + "\",\"revision\":" + record.replicaRevision()
                 + ",\"canonicalRevision\":" + record.observedCanonicalRevision() + ",\"conflict\":\""
-                + quote(record.conflictReason().map(Enum::name).orElse("")) + "\",\"observedFingerprint\":\""
+                + quote(record.conflictReason().map(Enum::name).orElse("")) + "\",\"fingerprint\":\"" + quote(record.fingerprint())
+                + "\",\"provenance\":\"" + quote(record.provenance()) + "\",\"observedFingerprint\":\""
                 + quote(record.observedFingerprint().orElse("")) + "\",\"observedProvenance\":\""
                 + quote(record.observedProvenance().orElse("")) + "\"}";
         String custody = lease == null ? "null" : "{\"status\":\"" + lease.status() + "\",\"epoch\":" + lease.authorityEpoch()

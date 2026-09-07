@@ -18,7 +18,8 @@
     { "type": "look", "at": { "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionCurrent" } } },
     { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "INDUSTRIAL WORKER", "maxDistance": 32, "maxAngleDeg": 50, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "FULFILLED", "jobActive": false, "reservationActive": false, "taskStatus": "COMPLETED" }, "timeoutMs": 120000 },
-    { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } }, "timeoutMs": 30000 }
+    { "type": "wait_until_diagnostic", "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
   ],
   "restart": {
     "mode": "graceful",
@@ -31,7 +32,8 @@
     { "after": 1, "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" } },
     { "after": 2, "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15", "productionStage": "PROCESSING" } },
     { "after": 5, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "FULFILLED", "jobActive": false, "reservationActive": false, "taskStatus": "COMPLETED" } },
-    { "after": 6, "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } } }
+    { "after": 6, "view": "item", "id": "item:development-production-input-theft-bread", "expect": { "status": "ok", "itemKind": "minecraft:bread", "count": 64, "custody": { "kind": "CONTAINER_SLOT" } } },
+    { "after": 7, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],
   "frames": [
     { "after": 4, "name": "industrial-worker-processing-visible" }

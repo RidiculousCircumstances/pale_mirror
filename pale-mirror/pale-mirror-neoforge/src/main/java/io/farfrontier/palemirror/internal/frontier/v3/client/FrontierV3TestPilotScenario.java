@@ -289,15 +289,17 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("scene") && requiredId(reference, "id", "service:") && diagnosticField.equals("serviceCurrent"));
     }
 
-    /** A production route's exact unoccupied future body may be used as a dynamic placement target. */
+    /** An ordinary player may place at its observed route future body or exact container position. */
     private static boolean placePosition(JsonObject action) {
         if (position(action)) return true;
         JsonObject value = action.getAsJsonObject("position");
         JsonObject reference = value == null ? null : value.getAsJsonObject("diagnostic");
         return reference != null && reference.entrySet().size() == 3 && reference.has("view") && reference.has("id") && reference.has("field")
                 && reference.get("view").isJsonPrimitive() && reference.get("id").isJsonPrimitive() && reference.get("field").isJsonPrimitive()
-                && reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
-                && reference.get("field").getAsString().equals("productionFutureBody");
+                && ((reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
+                    && reference.get("field").getAsString().equals("productionFutureBody"))
+                    || (reference.get("view").getAsString().equals("container") && requiredId(reference, "id", "container:")
+                    && reference.get("field").getAsString().equals("position")));
     }
 
     private static boolean offset(JsonObject action) {

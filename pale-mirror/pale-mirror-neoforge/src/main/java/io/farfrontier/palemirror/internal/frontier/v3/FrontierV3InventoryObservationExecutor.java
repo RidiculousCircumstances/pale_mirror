@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryConflict;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictKind;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceDeposited;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -163,6 +164,12 @@ final class FrontierV3InventoryObservationExecutor {
     }
     private static List<StoreChest> stores(FrontierWorldState state) {
         return state.inventory().surfaces().values().stream().filter(surface -> surface.status() == ContainerSurfaceStatus.ACTIVE)
+                // F0.2B reference scopes own their complete physical evidence through the
+                // replica/custody adapter.  Treating a player move there as ordinary inventory
+                // custody would first mutate canonical slots and then make that drift appear to
+                // be an executor-owned mutation.  Keep this legacy observer away from those
+                // scopes so the adapter retains the actual mismatch as a local conflict.
+                .filter(surface -> !ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
                 .map(surface -> new StoreChest(new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), surface.containerId()))
                 .sorted(Comparator.comparing(StoreChest::containerId)).toList();
     }

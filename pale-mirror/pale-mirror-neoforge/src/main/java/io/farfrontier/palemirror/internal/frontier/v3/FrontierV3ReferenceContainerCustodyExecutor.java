@@ -100,7 +100,13 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             }
             boolean newerCanonicalSlots = !ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(replica.fingerprint());
             if (newerCanonicalSlots && reemit(runtime, state, replica)) {
-                FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, containerId);
+                // `ReplicaEmitted` is the durable before-write boundary.  The state passed to
+                // this tick predates that accepted command, so using it here would put the old
+                // slots back into the chest and turn an owned physical mutation into false
+                // drift on the next observation.  Read the exact accepted state instead.
+                FrontierWorldState emitted = runtime.decodedState()
+                        .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
+                FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
                 return;
             }
             // An unchanged released scope may begin its next exact custody cycle.
@@ -112,6 +118,25 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         Observed observed = observed(state, containerId, chest);
         if (!canonical.equals(replica.fingerprint()) || !observed.fingerprint().equals(replica.fingerprint())
                 || !observed.provenance().equals(replica.provenance())) {
+            // A physical executor can legitimately mutate this chest while its exact lease is
+            // live.  Its durable canonical receipt and the loaded observed slots then agree on
+            // the next fingerprint, whereas ordinary player/world drift does not.  Preserve
+            // that fact through checkpoint/release and immediately establish the next emitted
+            // boundary; otherwise the later released-scope comparison mistakes our own effect
+            // for foreign drift.  No mismatching observation is adopted here.
+            if (lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED
+                    && canonical.equals(observed.fingerprint()) && replica.provenance().equals(observed.provenance())
+                    && release(runtime, lease)) {
+                FrontierWorldState released = runtime.decodedState()
+                        .orElseThrow(() -> new IllegalStateException("reference custody release did not publish state"));
+                PhysicalReplicaRecord releasedReplica = released.replicaCustody().replicas().get(containerId);
+                if (releasedReplica != null && reemit(runtime, released, releasedReplica)) {
+                    FrontierWorldState emitted = runtime.decodedState()
+                            .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
+                    FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
+                }
+                return;
+            }
             drain(runtime, lease, "renew");
         }
     }
@@ -165,6 +190,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         } else if (lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED) {
             // Retained unresolved custody is deliberately local and cannot be fabricated closed.
         }
+    }
+
+    private static boolean release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalCustodyLease lease) {
+        return submit(runtime, "release-renew", lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
+                lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
     }
 
     static ContainerSurface selectRoundRobin(List<ContainerSurface> eligible, long tick) {
