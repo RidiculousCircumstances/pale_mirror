@@ -26,9 +26,20 @@ public final class PhysicalReplicaCustodyPayloads {
                                   long observedCanonicalRevision) implements FrontierPayload {
         public ReplicaObserved {
             Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(fingerprint, "fingerprint"); Objects.requireNonNull(provenance, "provenance");
-            if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || observedCanonicalRevision < 0) throw new IllegalArgumentException("replica observation revision is invalid");
+            if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || observedCanonicalRevision < 0
+                    || fingerprint.isBlank() || provenance.isBlank()) throw new IllegalArgumentException("replica observation revision is invalid");
         }
         @Override public String type() { return "frontier.physical_replica_observed"; }
+    }
+    public record ReplicaConflictObserved(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                          String fingerprint, String provenance) implements FrontierPayload {
+        public ReplicaConflictObserved {
+            Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(fingerprint, "fingerprint"); Objects.requireNonNull(provenance, "provenance");
+            if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || fingerprint.isBlank() || provenance.isBlank()) {
+                throw new IllegalArgumentException("replica conflict observation is invalid");
+            }
+        }
+        @Override public String type() { return "frontier.physical_replica_conflict_observed"; }
     }
     public record CustodyAcquired(PhysicalCustodyLease lease) implements FrontierPayload {
         public CustodyAcquired { Objects.requireNonNull(lease, "lease"); }
@@ -37,7 +48,7 @@ public final class PhysicalReplicaCustodyPayloads {
     }
     public record CustodyCheckpointed(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
                                       long expectedReplicaRevision) implements FrontierPayload {
-        public CustodyCheckpointed { Objects.requireNonNull(scopeId, "scope id"); if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 0) throw new IllegalArgumentException("custody checkpoint is invalid"); }
+        public CustodyCheckpointed { Objects.requireNonNull(scopeId, "scope id"); if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1) throw new IllegalArgumentException("custody checkpoint is invalid"); }
         @Override public String type() { return "frontier.physical_custody_checkpointed"; }
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }
@@ -51,7 +62,7 @@ public final class PhysicalReplicaCustodyPayloads {
     }
     public record CustodyReleased(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
                                   long expectedReplicaRevision) implements FrontierPayload {
-        public CustodyReleased { Objects.requireNonNull(scopeId, "scope id"); if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 0) throw new IllegalArgumentException("custody release is invalid"); }
+        public CustodyReleased { Objects.requireNonNull(scopeId, "scope id"); if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1) throw new IllegalArgumentException("custody release is invalid"); }
         @Override public String type() { return "frontier.physical_custody_released"; }
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }

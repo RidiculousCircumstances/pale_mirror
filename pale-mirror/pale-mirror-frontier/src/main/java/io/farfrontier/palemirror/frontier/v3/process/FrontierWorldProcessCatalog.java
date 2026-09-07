@@ -37,7 +37,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released");
     private static final Set<String> REPLICA_CUSTODY = types(
-            "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_custody_acquired",
+            "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed", "frontier.physical_custody_acquired",
             "frontier.physical_custody_checkpointed", "frontier.physical_custody_unresolved", "frontier.physical_custody_released");
     private static final Set<String> AMBIENT = types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",

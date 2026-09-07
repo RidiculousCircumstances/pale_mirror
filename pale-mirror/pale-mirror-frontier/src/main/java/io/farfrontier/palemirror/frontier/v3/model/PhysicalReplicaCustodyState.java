@@ -74,6 +74,18 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         next.put(objectId, current.observe(expectedCanonicalRevision, fingerprint, provenance, observedRevision));
         return new PhysicalReplicaCustodyState(next, custodyByScope);
     }
+    public PhysicalReplicaCustodyState conflict(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
+                                                String fingerprint, String provenance) {
+        PhysicalReplicaRecord current = requireReplica(objectId);
+        if (current.state() != PhysicalReplicaState.OBSERVED_CURRENT || current.emittedCanonicalRevision() != expectedCanonicalRevision
+                || current.replicaRevision() != expectedReplicaRevision
+                || custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(objectId))) {
+            throw new IllegalArgumentException("released replica conflict fence is stale or custody is live");
+        }
+        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
+        next.put(objectId, current.conflict(expectedCanonicalRevision, expectedReplicaRevision, fingerprint, provenance));
+        return new PhysicalReplicaCustodyState(next, custodyByScope);
+    }
     public PhysicalReplicaCustodyState acquire(PhysicalCustodyLease requested) {
         Objects.requireNonNull(requested, "custody lease");
         if (requested.status() != PhysicalCustodyLeaseStatus.ACQUIRED || requested.unresolvedReason() != null) throw new IllegalArgumentException("custody must start acquired");

@@ -85,6 +85,23 @@ class PhysicalReplicaCustodyStateTest {
     }
 
     @Test
+    void releasedActualConflictPrecedesAnyFurtherEmissionAndLeavesOtherScopeUsable() {
+        PhysicalReplicaCustodyState released = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A)).declare(replica(OBJECT_B))
+                .observe(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L)
+                .acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L)).release(SCOPE_A, 1L, 10L, 2L);
+        PhysicalReplicaCustodyState conflicted = released.conflict(OBJECT_A, 10L, 2L, "sha256:foreign", "foreign:player");
+        PhysicalReplicaRecord retained = conflicted.replicas().get(OBJECT_A);
+        assertEquals(PhysicalReplicaState.CONFLICT, retained.state());
+        assertEquals(10L, retained.emittedCanonicalRevision(), "actual evidence does not fabricate a newer expected projection");
+        assertEquals("sha256:foreign", retained.observedFingerprint().orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> conflicted.emit(OBJECT_A, 10L, 3L, 11L, "sha256:b", "owned:next"));
+
+        PhysicalReplicaCustodyState unrelated = conflicted.observe(OBJECT_B, 10L, 1L, "sha256:a", "owned:genesis", 10L)
+                .acquire(lease(SCOPE_B, OBJECT_B, 1L, 10L, 2L));
+        assertEquals(PhysicalCustodyLeaseStatus.ACQUIRED, unrelated.custodyByScope().get(SCOPE_B).status());
+    }
+
+    @Test
     void forgedInitialVersionAndRepeatedUnresolvedOrTerminalTransitionsFailClosed() {
         PhysicalReplicaRecord forgedInitial = new PhysicalReplicaRecord(OBJECT_A, "container.depot", 10L, 10L, 2L,
                 "sha256:a", "owned:genesis", PhysicalReplicaState.EXPECTED, Optional.empty(), Optional.empty(), Optional.empty());

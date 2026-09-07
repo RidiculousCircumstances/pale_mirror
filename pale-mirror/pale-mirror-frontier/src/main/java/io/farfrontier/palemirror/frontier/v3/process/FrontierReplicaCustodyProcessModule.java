@@ -20,6 +20,8 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                         emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()); yield accepted(emitted.objectId(), emitted); }
                 case ReplicaObserved observed -> { state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(), observed.expectedReplicaRevision(),
                         observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()); yield accepted(observed.objectId(), observed); }
+                case ReplicaConflictObserved conflict -> { state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(), conflict.expectedReplicaRevision(),
+                        conflict.fingerprint(), conflict.provenance()); yield accepted(conflict.objectId(), conflict); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
                 case CustodyCheckpointed checkpointed -> { state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(),
                         checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()); yield accepted(checkpointed.scopeId(), checkpointed); }
@@ -42,6 +44,8 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                         emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()));
                 case ReplicaObserved observed -> replace(state, state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(),
                         observed.expectedReplicaRevision(), observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()));
+                case ReplicaConflictObserved conflict -> replace(state, state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(),
+                        conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance()));
                 case CustodyAcquired acquired -> replace(state, state.replicaCustody().acquire(acquired.lease()));
                 case CustodyCheckpointed checkpointed -> replace(state, state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(), checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()));
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),

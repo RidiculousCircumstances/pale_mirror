@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayload
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaDeclared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaEmitted;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaConflictObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaState;
@@ -59,28 +60,20 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 return;
             }
         }
-        state.inventory().surfaces().values().stream()
-                .filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
-                .sorted(Comparator.comparing(ContainerSurface::containerId))
-                .filter(surface -> level.hasChunkAt(position(surface)))
-                // A retained local conflict is intentionally terminal for that one object.  Do
-                // not let its lexical position starve another independently usable depot/store.
-                .filter(surface -> {
-                    PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(surface.containerId());
-                    return replica == null || replica.state() != PhysicalReplicaState.CONFLICT;
-                })
-                .findFirst().ifPresent(surface -> reconcile(level, runtime, state, surface));
+        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream().filter(surface -> level.hasChunkAt(position(surface))).toList();
+        List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
+        if (!eligible.isEmpty()) reconcile(level, runtime, state, selectRoundRobin(eligible, level.getGameTime()));
     }
 
     private static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, ContainerSurface surface) {
         SubjectId containerId = surface.containerId();
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position(surface), containerId);
+        ChestBlockEntity chest = chestAt(level, position(surface));
         if (replica == null) {
             // Initial projection remains owned by the generic surface materializer.  This adapter
             // starts only after a naturally loaded exact chest is present to observe.
-            if (chest != null) declare(runtime, state, containerId);
+            if (FrontierV3ContainerSurfaceExecutor.activeChest(level, position(surface), containerId) != null) declare(runtime, state, containerId);
             return;
         }
         if (replica.state() == PhysicalReplicaState.CONFLICT) return;
@@ -95,16 +88,24 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         }
         if (!lease.live()) {
             // A released scope is a durable, exact old observation, not permission to replace
-            // whatever happens to be in the chest now.  Retain an actual mismatch as a normal
-            // kernel conflict; only the old retained fingerprint/provenance can authorize the
-            // one catch-up write for a newer canonical snapshot.
+            // whatever happens to be in the chest now.  The old retained comparison is made
+            // before a new emission, so a changed/foreign/missing chest is a durable local
+            // conflict rather than a new expected projection that would hide its cause.
             Observed beforeCatchup = observed(state, containerId, chest);
             boolean retainedEvidenceMatches = beforeCatchup.fingerprint().equals(replica.fingerprint())
                     && beforeCatchup.provenance().equals(replica.provenance());
-            boolean newerCanonicalSlots = !ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(replica.fingerprint());
-            if (reemit(runtime, state, replica) && retainedEvidenceMatches && newerCanonicalSlots) {
-                FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, containerId);
+            if (!retainedEvidenceMatches) {
+                conflict(runtime, replica, beforeCatchup);
+                return;
             }
+            boolean newerCanonicalSlots = !ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(replica.fingerprint());
+            if (newerCanonicalSlots && reemit(runtime, state, replica)) {
+                FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, containerId);
+                return;
+            }
+            // An unchanged released scope may begin its next exact custody cycle.
+            // Its retained observation is still current, so no fabricated emission is needed.
+            acquire(runtime, state, replica, containerId);
             return;
         }
         String canonical = ReferenceContainerCustody.canonicalFingerprint(state, containerId);
@@ -128,6 +129,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         submit(runtime, "observe", replica.objectId(), replica.replicaRevision(), new ReplicaObserved(replica.objectId(),
                 replica.emittedCanonicalRevision(), replica.replicaRevision(), observed.fingerprint(), observed.provenance(),
                 replica.emittedCanonicalRevision()));
+    }
+
+    private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalReplicaRecord replica, Observed observed) {
+        submit(runtime, "conflict", replica.objectId(), replica.replicaRevision(), new ReplicaConflictObserved(replica.objectId(),
+                replica.emittedCanonicalRevision(), replica.replicaRevision(), observed.fingerprint(), observed.provenance()));
     }
 
     private static void acquire(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
@@ -161,7 +167,23 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         }
     }
 
-    private static Observed observed(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest) {
+    static ContainerSurface selectRoundRobin(List<ContainerSurface> eligible, long tick) {
+        if (eligible.isEmpty()) throw new IllegalArgumentException("reference custody has no eligible container");
+        return eligible.get((int) Math.floorMod(tick, eligible.size()));
+    }
+
+    static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
+        return loaded.stream().filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
+                .sorted(Comparator.comparing(ContainerSurface::containerId))
+                // A retained local conflict is intentionally terminal for that one object.  Do
+                // not let its lexical position starve another independently usable depot/store.
+                .filter(surface -> {
+                    PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(surface.containerId());
+                    return replica == null || replica.state() != PhysicalReplicaState.CONFLICT;
+                }).toList();
+    }
+
+    static Observed observed(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest) {
         if (chest == null) return new Observed("sha256:missing-" + containerId.value(), "missing:" + containerId.value());
         List<ReferenceContainerCustody.ObservedSlot> slots = new ArrayList<>(chest.getContainerSize());
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
@@ -176,9 +198,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                         BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
             }
         }
-        String provenance = chest.getPersistentData().getString(REPLICA_PROVENANCE_KEY);
-        if (provenance.isBlank()) provenance = containerId.value().equals(chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY))
-                ? ReferenceContainerCustody.provenance(containerId) : "foreign:" + containerId.value();
+        String owner = chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY);
+        String taggedProvenance = chest.getPersistentData().getString(REPLICA_PROVENANCE_KEY);
+        String provenance = !owner.equals(containerId.value())
+                ? "foreign:container-owner=" + (owner.isBlank() ? "untagged" : owner) + ";replica-provenance=" + (taggedProvenance.isBlank() ? "missing" : taggedProvenance)
+                : taggedProvenance.isBlank() ? "missing:replica-provenance:" + containerId.value() : taggedProvenance;
         return new Observed(ReferenceContainerCustody.observedFingerprint(state, containerId, slots), provenance);
     }
 
@@ -192,5 +216,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
 
     private static BlockPos position(ContainerSurface surface) { return new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()); }
-    private record Observed(String fingerprint, String provenance) { }
+    private static ChestBlockEntity chestAt(ServerLevel level, BlockPos position) {
+        return level.getBlockEntity(position) instanceof ChestBlockEntity chest ? chest : null;
+    }
+    record Observed(String fingerprint, String provenance) { }
 }

@@ -13,7 +13,7 @@ import java.util.List;
 /** Stable WAL payload codecs for the pure replica/custody transition vocabulary. */
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
-    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new Acquired(), new Checkpointed(), new Unresolved(), new Released()); }
+    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -46,6 +46,16 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaEmitted(subject(input),
                 input.readLong(), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
+    }
+    private static final class ConflictObserved extends Base {
+        @Override public String type() { return "frontier.physical_replica_conflict_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ReplicaConflictObserved value = (ReplicaConflictObserved) payload; subject(output, value.objectId());
+            output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
+            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaConflictObserved(
+                subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
     }
     private static final class Acquired extends Base {
         @Override public String type() { return "frontier.physical_custody_acquired"; }

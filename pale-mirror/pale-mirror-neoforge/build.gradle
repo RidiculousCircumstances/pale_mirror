@@ -37,6 +37,13 @@ def millenaireIntegrationSha512 = rootProject.providers.gradleProperty('millenai
 def coreGameTestDirectory = layout.buildDirectory.dir('runs/core-game-test').get().asFile
 def frontierV3SceneGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-scene-game-test').get().asFile
 def frontierV3EconomyGameTestDirectory = layout.buildDirectory.dir('runs/frontier-v3-economy-game-test').get().asFile
+// The four-slot F0.2B qualification must not share a generated world even when
+// its self-hosted workers happen to use one physical machine.  The CI namespace
+// is intentionally an environment input, while local runs retain a disposable
+// build directory.
+def frontierV3ReferenceGameTestDirectory = new File(providers.environmentVariable('FRONTIER_V3_REFERENCE_WORLD_ROOT')
+        .orElse(layout.buildDirectory.dir('runs/frontier-v3-reference-game-test').map { it.asFile.absolutePath }).get())
+def frontierV3ReferenceGameTestLane = providers.environmentVariable('FRONTIER_V3_REFERENCE_LANE').orElse('all').get()
 def crimsonGameTestDirectory = layout.buildDirectory.dir('runs/crimson-game-test').get().asFile
 def sporeGameTestDirectory = layout.buildDirectory.dir('runs/spore-game-test').get().asFile
 def createGameTestDirectory = layout.buildDirectory.dir('runs/create-game-test').get().asFile
@@ -203,6 +210,15 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
             systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'economy'
+        }
+        frontierV3ReferenceGameTestServer {
+            type = 'gameTestServer'
+            // Native F0.2B lanes select one bounded semantic history.  The
+            // directory is worker-private in CI and deleted before every run.
+            gameDirectory = frontierV3ReferenceGameTestDirectory
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'reference-' + frontierV3ReferenceGameTestLane
         }
         crimsonGameTestServer {
             type = 'gameTestServer'
@@ -518,6 +534,13 @@ tasks.named('runFrontierV3EconomyGameTestServer') {
     dependsOn project(':pale-mirror-frontier').tasks.named('jar')
     doFirst {
         frontierV3EconomyGameTestDirectory.deleteDir()
+    }
+}
+
+tasks.named('runFrontierV3ReferenceGameTestServer') {
+    dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    doFirst {
+        frontierV3ReferenceGameTestDirectory.deleteDir()
     }
 }
 

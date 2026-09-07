@@ -28,7 +28,8 @@ class PhysicalReplicaCustodyPayloadCodecTest {
                 PhysicalCustodyLeaseStatus.ACQUIRED, null);
         List<FrontierPayload> payloads = List.of(new ReplicaDeclared(replica), new ReplicaEmitted(OBJECT, 10L, 2L, 11L,
                 "sha256:b", "owned:cycle-two"), new ReplicaObserved(OBJECT, 10L, 1L,
-                "sha256:a", "owned:genesis", 10L), new CustodyAcquired(lease), new CustodyCheckpointed(SCOPE, 1L, 10L, 2L),
+                "sha256:a", "owned:genesis", 10L), new ReplicaConflictObserved(OBJECT, 10L, 2L, "sha256:foreign", "foreign:player"),
+                new CustodyAcquired(lease), new CustodyCheckpointed(SCOPE, 1L, 10L, 2L),
                 new CustodyUnresolved(SCOPE, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY),
                 new CustodyReleased(SCOPE, 1L, 10L, 2L));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
@@ -41,5 +42,8 @@ class PhysicalReplicaCustodyPayloadCodecTest {
         unknownLifecycle[unknownLifecycle.length - 1] = 127;
         assertThrows(IllegalArgumentException.class, () -> codecs.decode(payloads.getFirst().type(), unknownLifecycle));
         assertThrows(IllegalArgumentException.class, () -> codecs.decode("frontier.physical_custody_unknown", new byte[0]));
+        assertThrows(IllegalArgumentException.class, () -> new ReplicaObserved(OBJECT, 10L, 1L, "", "owned:genesis", 10L));
+        assertThrows(IllegalArgumentException.class, () -> new CustodyCheckpointed(SCOPE, 1L, 10L, 0L));
+        assertThrows(IllegalArgumentException.class, () -> new CustodyReleased(SCOPE, 1L, 10L, 0L));
     }
 }

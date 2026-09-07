@@ -58,4 +58,20 @@ public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, lon
         return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedRevision, replicaRevision + 1, fingerprint, provenance,
                 PhysicalReplicaState.OBSERVED_CURRENT, Optional.empty(), Optional.empty(), Optional.empty());
     }
+
+    /** Retains actual evidence found after a released scope without advancing its expected projection. */
+    public PhysicalReplicaRecord conflict(long expectedCanonicalRevision, long expectedReplicaRevision,
+                                          String actualFingerprint, String actualProvenance) {
+        Objects.requireNonNull(actualFingerprint, "actual fingerprint"); Objects.requireNonNull(actualProvenance, "actual provenance");
+        if (state != PhysicalReplicaState.OBSERVED_CURRENT || emittedCanonicalRevision != expectedCanonicalRevision
+                || replicaRevision != expectedReplicaRevision || actualFingerprint.isBlank() || actualProvenance.isBlank()) {
+            throw new IllegalArgumentException("released replica conflict fence is stale or invalid");
+        }
+        PhysicalReplicaConflictReason reason = !actualFingerprint.equals(fingerprint) && !actualProvenance.equals(provenance)
+                ? PhysicalReplicaConflictReason.FINGERPRINT_AND_PROVENANCE_MISMATCH
+                : !actualFingerprint.equals(fingerprint) ? PhysicalReplicaConflictReason.FINGERPRINT_MISMATCH
+                : PhysicalReplicaConflictReason.PROVENANCE_MISMATCH;
+        return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedCanonicalRevision, replicaRevision + 1,
+                fingerprint, provenance, PhysicalReplicaState.CONFLICT, Optional.of(actualFingerprint), Optional.of(actualProvenance), Optional.of(reason));
+    }
 }

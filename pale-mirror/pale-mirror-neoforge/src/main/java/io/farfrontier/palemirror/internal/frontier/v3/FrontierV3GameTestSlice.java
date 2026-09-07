@@ -27,7 +27,12 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-cargo-loading") || batchName.equals("pm-frontier-v3-hive-nutrient")
                     || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue")
                     || batchName.equals("pm-frontier-v3-equipment-return") || batchName.equals("pm-frontier-v3-equipment-death")
-                    || batchName.equals("pm-frontier-v3-resource-recovery");
+                    || batchName.equals("pm-frontier-v3-resource-recovery") || batchName.equals("pm-frontier-v3-reference-custody");
+            case "reference-depot-never-visited" -> batchName.equals("pm-frontier-v3-reference-depot-never-visited");
+            case "reference-depot-visited-unloaded" -> batchName.equals("pm-frontier-v3-reference-depot-visited-unloaded");
+            case "reference-hive-zero-player" -> batchName.equals("pm-frontier-v3-reference-hive-zero-player");
+            case "reference-conflict-restart" -> batchName.equals("pm-frontier-v3-reference-conflict-restart");
+            case "reference-all", "all" -> batchName.startsWith("pm-frontier-v3-reference-");
             default -> throw new IllegalArgumentException("unsupported Frontier v3 GameTest slice: " + configuredSlice);
         };
     }
