@@ -26,7 +26,7 @@ export async function prearmSaveOwnerObserver({ project, root, lifecycleIdentity
   const observationRoot = checkedRoot(projectRoot, root);
   await mkdir(observationRoot, { recursive: true });
   const pidIdentity = await readPidIdentity(server.serverPid);
-  requireExactPilotArguments(pidIdentity.commandLine, server.serverRunId, server.lifecycleDirectory, lifecycleIdentity, server.serverPid);
+  requireExactPilotArguments(pidIdentity.commandLine, server.serverRunId, server.lifecycleDirectory, server.serverPid);
   if (server.child?.pid !== server.serverPid) throw new Error('owner observer exact server PID is not the runner child');
   const jcmd = join(dirname(pidIdentity.executable), 'jcmd');
   try { await access(jcmd, constants.X_OK); }
@@ -169,9 +169,9 @@ async function readPidIdentity(pid) {
   return Object.freeze({ pid, startTime, commandLine, executable });
 }
 
-function requireExactPilotArguments(commandLine, serverRunId, lifecycleDirectory, lifecycleIdentity, pid) {
+function requireExactPilotArguments(commandLine, serverRunId, lifecycleDirectory, pid) {
   for (const value of [`-Dpale_mirror.frontier_v3.pilot.run_id=${serverRunId}`,
-    `-Dpale_mirror.frontier_v3.pilot.lifecycle_control_directory=${lifecycleDirectory}`, lifecycleIdentity.runId]) {
+    `-Dpale_mirror.frontier_v3.pilot.lifecycle_control_directory=${lifecycleDirectory}`]) {
     if (!commandLine.includes(value)) throw new Error(`owner observer exact PID ${pid} does not carry the declared pilot identity`);
   }
 }

@@ -28,6 +28,7 @@ test('owned Java observer retains exact PID/start-time-bound primary capture', {
 test('owned Java observer rejects foreign pilot identity and unavailable /proc PID before capture', { skip: process.platform !== 'linux' }, async () => {
   await withOwnedJava(async fixture => {
     await assert.rejects(arm(fixture, { serverRunId: 'foreign-run' }), /declared pilot identity/);
+    await assert.rejects(arm(fixture, { lifecycleDirectory: join(fixture.root, 'foreign-control') }), /declared pilot identity/);
     await assert.rejects(prearmSaveOwnerObserver({ project, root: fixture.root, lifecycleIdentity: fixture.lifecycleIdentity,
       server: { ...fixture.server, serverPid: 999999 } }), /unavailable/);
     const armed = await arm(fixture, { suffix: 'drift' });
@@ -74,9 +75,9 @@ test('isolated graceful recovery pre-arms the observer before RCON and retains i
   assert.match(source, /manifest\.ownerObservation = ownerObservationFact/);
 });
 
-async function arm(fixture, { serverRunId = fixture.server.serverRunId, suffix = '', captureTimeoutMs = undefined } = {}) {
+async function arm(fixture, { serverRunId = fixture.server.serverRunId, lifecycleDirectory = fixture.server.lifecycleDirectory, suffix = '', captureTimeoutMs = undefined } = {}) {
   return await prearmSaveOwnerObserver({ project, root: fixture.root, lifecycleIdentity: fixture.lifecycleIdentity,
-    server: { ...fixture.server, serverRunId }, ...(suffix === '' ? {} : { root: join(fixture.root, suffix) }),
+    server: { ...fixture.server, serverRunId, lifecycleDirectory }, ...(suffix === '' ? {} : { root: join(fixture.root, suffix) }),
     ...(captureTimeoutMs === undefined ? {} : { captureTimeoutMs }) });
 }
 
