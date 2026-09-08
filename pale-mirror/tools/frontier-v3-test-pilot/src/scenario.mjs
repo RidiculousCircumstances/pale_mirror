@@ -122,11 +122,17 @@ export function validateScenario(scenario) {
         || scenario.crash.expectedAuthorityEpoch < 0)))) {
     throw new Error('crash needs an abrupt restart plus one exact phase/boundary/owner/revision/payload');
   }
+  const causalMilestones = new Set();
   for (const [phase, allowed] of [['setup', SETUP_ACTIONS], ['actions', EVIDENCE_ACTIONS]]) {
     const actions = scenario[phase] ?? [];
     if (!Array.isArray(actions)) throw new Error(`scenario ${phase} must be an array`);
     for (const action of actions) {
       if (!action || !allowed.has(action.type)) throw new Error(`unsupported ${phase} action: ${action?.type}`);
+      if (action.causalMilestone !== undefined && (typeof action.causalMilestone !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(action.causalMilestone))) {
+        throw new Error('causalMilestone needs a stable bounded identifier');
+      }
+      if (action.causalMilestone !== undefined && causalMilestones.has(action.causalMilestone)) throw new Error('causalMilestone must be unique');
+      if (action.causalMilestone !== undefined) causalMilestones.add(action.causalMilestone);
       if (action.type === 'command' && !String(action.command).startsWith('/')) throw new Error('setup command must start with /');
       if (action.type === 'visit' && (!validDimension(action.dimension) || !validResolvablePosition(action.position)
           || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000)) {

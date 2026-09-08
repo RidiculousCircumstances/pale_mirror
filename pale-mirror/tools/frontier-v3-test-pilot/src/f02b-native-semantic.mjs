@@ -192,12 +192,14 @@ function assertNormalHistory(history) {
   }
   if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64
       || !Number.isSafeInteger(families.depot.terminalBread) || families.depot.terminalBread < 0 || families.depot.terminalBread > 64
-      // The reference receipt remains the exact 64-wheat -> 64-bread
-      // transformation.  The ordinary birth consumer then durably consumes
-      // one bread under its own authority; all three histories retain that
-      // same 63-bread terminal boundary rather than suppressing birth from
-      // retained replica history.
-      || families.depot.foodAvailable !== 63 || families.depot.foodFulfilled !== 0
+      // The reference receipt is the exact 64-wheat -> 64-bread transformation.
+      // Population is a separately scheduled consumer: its number of completed
+      // permits depends on the ordinary canonical interval after return, so a
+      // fixed bread endpoint would turn retained-reference history into an
+      // unauthorized birth throttle.  The zero-player oracle instead fences
+      // the exact COLD-admitted permit and its own confirmed consumption.
+      || !Number.isSafeInteger(families.depot.foodAvailable) || families.depot.foodAvailable < 0 || families.depot.foodAvailable > 64
+      || !Number.isSafeInteger(families.depot.foodFulfilled) || families.depot.foodFulfilled < 0
       || families.hive.inputBiomass !== 64 || families.hive.outputBiomass !== 0
       || families.hive.growthJobs !== 0 || families.hive.addedOrgans !== 1 || families.hive.spawnedBioforms !== 1) {
     throw new Error('F0.2B normal history has non-equivalent product quantities');
@@ -220,9 +222,130 @@ function assertNormalHistory(history) {
           || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.hive, admission.causal.admissionAction))) {
       throw new Error('F0.2B zero-player history is not causal');
     }
+    assertZeroPlayerBirthCatchup(admission.birthCatchup);
   } else if (history.history === 'graceful-product-recovery') {
     if (history.recovery?.mode !== 'graceful' || admission.targetVisitsBeforeDue < 1 || !history.recovery.beforeEpoch || !history.recovery.afterEpoch) throw new Error('F0.2B product recovery lacks a fenced custody boundary');
+    assertRecoveryCausalMilestones(history.recovery.milestones);
   } else throw new Error('F0.2B normal history is unknown');
+}
+
+function assertZeroPlayerBirthCatchup(value) {
+  const cold = value?.cold; const afterReturn = value?.afterReturn;
+  if (!cold || !afterReturn || !Number.isSafeInteger(value.returnAction) || !Number.isSafeInteger(cold.actionStep)
+      || !Number.isSafeInteger(afterReturn.actionStep) || !Number.isSafeInteger(cold.instant) || !Number.isSafeInteger(afterReturn.instant)
+      || cold.actionStep >= value.returnAction || value.returnAction >= afterReturn.actionStep || cold.instant > afterReturn.instant
+      || cold.job?.id !== afterReturn.job?.id || cold.job?.intent !== afterReturn.job?.intent || cold.job?.food !== 'item:production-1-1-bread'
+      || cold.intent?.id !== cold.job.intent || cold.intent?.cause !== cold.job.id || cold.intent?.kind !== 'EXACT_ITEM_CONSUMPTION'
+      || cold.intent?.status !== 'PREPARED' || afterReturn.intent?.id !== cold.intent.id || afterReturn.intent?.cause !== cold.intent.cause
+      || afterReturn.intent?.kind !== 'EXACT_ITEM_CONSUMPTION' || afterReturn.intent?.status !== 'CONFIRMED') {
+    throw new Error('F0.2B zero-player history lacks the released-COLD birth permit and exact return catch-up');
+  }
+}
+
+/**
+ * The recovery oracle consumes named read-only facts rather than scenario ordinals.  Each fact
+ * is tied to its exact canonical subject and instant; a transient cleared request, a later
+ * unrelated hive state, or a reordered receipt cannot satisfy this predicate.
+ */
+export function assertRecoveryCausalMilestones(milestones) {
+  const required = ['activeAdmission', 'activeDepotCustody', 'hydratedInflight', 'hydratedDepotCustody', 'afterReacquire', 'liveHivePending', 'depotReleased', 'hiveReleased', 'coldEffectConfirmed', 'terminalProduct'];
+  if (!milestones || typeof milestones !== 'object' || required.some(key => !milestones[key])) {
+    throw new Error('F0.2B product recovery has missing causal milestone evidence');
+  }
+  const active = milestones.activeAdmission;
+  if (active.phase !== 'before_restart' || active.kind !== 'reference_container' || active.id !== 'f02b'
+      || !Number.isSafeInteger(active.instant) || !active.taskKinds?.includes('PRODUCE_BREAD') || !active.taskKinds?.includes('GROW_HIVE_ORGANISM')
+      || !Array.isArray(active.schedules) || active.schedules.length < 2 || !Array.isArray(active.orders)
+      || !exactOperation(active, 'ACTIVE', 'ACCEPTED', true)
+      || !Number.isSafeInteger(active.actionStep)) {
+    throw new Error('F0.2B product recovery lacks retained active-admission evidence');
+  }
+  const activeCustody = milestones.activeDepotCustody;
+  if (!exactDepotCustody(activeCustody, 'before_restart') || activeCustody.actionStep !== active.actionStep + 1) {
+    throw new Error('F0.2B product recovery lacks retained active-custody evidence');
+  }
+  const hydrated = milestones.hydratedInflight;
+  const hydratedCustody = milestones.hydratedDepotCustody;
+  if (hydrated.phase !== 'after_restart' || hydrated.kind !== 'reference_container' || hydrated.id !== 'f02b'
+      || !Number.isSafeInteger(hydrated.instant) || hydrated.instant < active.instant || !sameOperation(active, hydrated)
+      || !Number.isSafeInteger(hydrated.actionStep) || hydrated.actionStep !== activeCustody.actionStep + 2
+      || !exactDepotCustody(hydratedCustody, 'after_restart') || hydratedCustody.actionStep !== hydrated.actionStep + 1
+      || !sameCustody(activeCustody, hydratedCustody)) {
+    throw new Error('F0.2B product recovery lacks same-operation hydrated in-flight evidence');
+  }
+  const after = milestones.afterReacquire;
+  if (after.phase !== 'after_restart' || after.kind !== 'reference_container' || after.id !== 'f02b'
+      || !Number.isSafeInteger(after.instant) || after.instant < active.instant
+      || !after.taskKinds?.includes('GROW_HIVE_ORGANISM') || !exactProductionCompletion(after)) {
+    throw new Error('F0.2B product recovery has stale or wrong-subject reacquire evidence');
+  }
+  const pending = milestones.liveHivePending;
+  if (pending.phase !== 'after_restart' || pending.kind !== 'hive' || pending.id !== 'hive:frontier'
+      || !Number.isSafeInteger(pending.instant) || pending.instant < after.instant || pending.growthJobs < 1) {
+    throw new Error('F0.2B product recovery lacks an in-flight hive boundary');
+  }
+  for (const [key, id] of [['depotReleased', 'container:1-depot'], ['hiveReleased', 'container:hive-east-store']]) {
+    const released = milestones[key];
+    if (released.phase !== 'after_restart' || released.kind !== 'container' || released.id !== id
+        || !Number.isSafeInteger(released.instant) || released.instant < pending.instant
+        || released.custodyStatus !== 'RELEASED' || released.chunk !== 'UNLOADED') {
+      throw new Error('F0.2B product recovery has reordered or wrong-subject release evidence');
+    }
+  }
+  const terminal = milestones.coldEffectConfirmed;
+  if (terminal.phase !== 'after_restart' || terminal.kind !== 'hive' || terminal.id !== 'hive:frontier'
+      || !Number.isSafeInteger(terminal.instant) || terminal.instant < milestones.hiveReleased.instant
+      || terminal.growthJobs !== 0 || terminal.addedOrgans !== 1 || terminal.spawnedBioforms !== 1) {
+    throw new Error('F0.2B product recovery lacks confirmed released-COLD hive evidence');
+  }
+  const terminalProduct = milestones.terminalProduct;
+  if (terminalProduct.phase !== 'after_restart' || terminalProduct.kind !== 'reference_container' || terminalProduct.id !== 'f02b'
+      || !Number.isSafeInteger(terminalProduct.instant) || terminalProduct.instant < terminal.instant
+      || !exactOperation(terminalProduct, 'COMPLETED', 'FULFILLED', false)) {
+    throw new Error('F0.2B product recovery lacks exact terminal operation evidence');
+  }
+  return milestones;
+}
+
+function exactProductionCompletion(value) {
+  const production = value.tasks?.filter(candidate => candidate.id === 'task:settlement-1-settlement_produce_bread-1'
+    && candidate.kind === 'PRODUCE_BREAD' && candidate.status === 'COMPLETED') ?? [];
+  const order = value.orders?.filter(candidate => candidate.task === 'task:settlement-1-settlement_produce_bread-1'
+    && candidate.job === 'job:production-1-1' && candidate.reservation === 'reservation:production-1-1'
+    && candidate.reservationActive === false && candidate.status === 'FULFILLED') ?? [];
+  return production.length === 1 && order.length === 1;
+}
+
+function exactDepotCustody(value, phase) {
+  return value?.phase === phase && value.kind === 'container' && value.id === 'container:1-depot'
+    && value.custodyStatus === 'ACQUIRED' && Number.isSafeInteger(value.actionStep) && Number.isSafeInteger(value.custodyEpoch)
+    && Number.isSafeInteger(value.replicaRevision) && typeof value.replicaFingerprint === 'string' && value.replicaFingerprint.startsWith('sha256:');
+}
+
+function sameCustody(left, right) {
+  return left.custodyEpoch === right.custodyEpoch && left.replicaRevision === right.replicaRevision
+    && left.replicaFingerprint === right.replicaFingerprint;
+}
+
+function sameOperation(left, right) {
+  return JSON.stringify(left.tasks) === JSON.stringify(right.tasks) && JSON.stringify(left.schedules) === JSON.stringify(right.schedules)
+    && JSON.stringify(left.orders) === JSON.stringify(right.orders);
+}
+
+function exactOperation(value, taskStatus, orderStatus, reservationActive) {
+  const task = (id, kind) => value.tasks?.filter(candidate => candidate.id === id && candidate.kind === kind && candidate.status === taskStatus) ?? [];
+  const production = task('task:settlement-1-settlement_produce_bread-1', 'PRODUCE_BREAD');
+  const growth = task('task:hive-frontier-hive_grow_organism-1', 'GROW_HIVE_ORGANISM');
+  const order = value.orders?.filter(candidate => candidate.task === 'task:settlement-1-settlement_produce_bread-1'
+    && candidate.job === 'job:production-1-1' && candidate.reservation === 'reservation:production-1-1'
+    && candidate.reservationActive === reservationActive && candidate.status === orderStatus) ?? [];
+  if (production.length !== 1 || growth.length !== 1 || order.length !== 1) return false;
+  if (taskStatus === 'COMPLETED') return true;
+  const productionSchedules = value.schedules?.filter(candidate => candidate.subject === 'job:production-1-1'
+    && candidate.kind === 'frontier.settlement.production.task.complete' && Number.isSafeInteger(candidate.dueAt)) ?? [];
+  const growthSchedules = value.schedules?.filter(candidate => candidate.subject === 'job:hive-growth-1'
+    && candidate.kind === 'frontier.hive.growth.task.complete' && Number.isSafeInteger(candidate.dueAt)) ?? [];
+  return productionSchedules.length === 1 && growthSchedules.length === 1 && productionSchedules[0].dueAt < growthSchedules[0].dueAt;
 }
 
 function assertHistoryComparator(checked) {
@@ -231,7 +354,13 @@ function assertHistoryComparator(checked) {
   if (selected.size !== 3) throw new Error('F0.2B merge lacks all three ordinary histories');
   const projection = value => {
     const { admissionAction, ...causal } = value.admission.causal;
-    return { depot: value.families.depot, hive: value.families.hive, causal };
+    // Compare each reference family at its own product boundary.  A later
+    // resident-birth permit is neither depot production nor hive growth, so
+    // its ordinary post-return food consumption cannot make the histories
+    // falsely inequivalent.
+    const depot = value.families.depot;
+    return { depot: { inputWheat: depot.inputWheat, outputBread: depot.outputBread },
+      hive: value.families.hive, causal };
   };
   const baseline = JSON.stringify(projection(selected.get('never-visited')));
   for (const name of ['visited-unloaded', 'zero-player']) {

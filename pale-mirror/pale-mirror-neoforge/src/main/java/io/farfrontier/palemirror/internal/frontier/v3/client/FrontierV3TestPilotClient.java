@@ -67,6 +67,8 @@ public final class FrontierV3TestPilotClient {
     private static ObservedDiagnostic fastForwardBaseline;
     private static ObservedDiagnostic diagnosticWaitBaseline;
     private static boolean boardInteractionAttempted;
+    /** Optional local correlation label from the immutable scenario declaration. */
+    private static String currentCausalMilestone;
     private static boolean entityInteractionAttempted;
     private static int attackedEntityRuntimeId = -1;
     private static int entityAttackAttempts;
@@ -93,7 +95,7 @@ public final class FrontierV3TestPilotClient {
             breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L;
             containerOpenAttempted = false; quickMoveAttempted = false;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null;
-            diagnosticWaitBaseline = null;
+            diagnosticWaitBaseline = null; currentCausalMilestone = null;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
@@ -175,7 +177,7 @@ public final class FrontierV3TestPilotClient {
                     // Client/Gradle stdout and stderr are separate pipes. Preserve the action
                     // identity in the local evidence itself rather than inferring it from
                     // incidental cross-pipe log ordering in the Node runner.
-                    if (!runningSetup && actionStartedTick >= 0L) FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1);
+                    if (!runningSetup && actionStartedTick >= 0L) FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1, currentCausalMilestone);
                     diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
                     PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
                 }
@@ -235,6 +237,7 @@ public final class FrontierV3TestPilotClient {
         long tick = minecraft.level.getGameTime();
         if (actionStartedTick < 0L) {
             actionStartedTick = tick;
+            currentCausalMilestone = action.has("causalMilestone") ? action.get("causalMilestone").getAsString() : null;
             diagnosticWaitBaseline = "wait_until_diagnostic".equals(type)
                     ? diagnostics.get(new DiagnosticIdentity(action.get("view").getAsString(), action.get("id").getAsString())) : null;
             PaleMirrorMod.LOGGER.info("PMV3_PILOT step={} phase={} type={}", index + 1, runningSetup ? "setup" : "action", type);
@@ -678,14 +681,23 @@ public final class FrontierV3TestPilotClient {
             fastForwardSent = true;
         }
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
-        if (fresh(observed) && observed.value().has("fastForwardTargetStatus")) {
-            String status = observed.value().get("fastForwardTargetStatus").getAsString();
-            if ("REJECTED".equals(status)) {
-                throw new IllegalStateException("server rejected absolute canonical target: " + observed.value().get("fastForwardFailure"));
-            }
-            if (observed != fastForwardBaseline && "HELD".equals(status) && observed.value().has("fastForwardTarget")
-                    && observed.value().get("fastForwardTarget").getAsLong() == target) {
-                advance("fast_forward_to_instant"); return;
+        if (fresh(observed) && observed.value().has("fastForwardTargetOutcome")
+                && !observed.value().get("fastForwardTargetOutcome").isJsonNull()) {
+            JsonObject outcome = observed.value().getAsJsonObject("fastForwardTargetOutcome");
+            long requestId = outcome.get("requestId").getAsLong();
+            long baselineRequestId = fastForwardBaseline == null || !fastForwardBaseline.value().has("fastForwardTargetOutcome")
+                    || fastForwardBaseline.value().get("fastForwardTargetOutcome").isJsonNull() ? 0L
+                    : fastForwardBaseline.value().getAsJsonObject("fastForwardTargetOutcome").get("requestId").getAsLong();
+            if (requestId > baselineRequestId && outcome.get("targetInstant").getAsLong() == target) {
+                String status = outcome.get("status").getAsString();
+                if ("REJECTED".equals(status)) {
+                    throw new IllegalStateException("server rejected absolute canonical target: " + outcome.get("failure"));
+                }
+                if ("HELD".equals(status) && outcome.has("reachedCheckpointInstant") && !outcome.get("reachedCheckpointInstant").isJsonNull()
+                        && outcome.get("reachedCheckpointInstant").getAsLong() == target
+                        && observed.value().has("instant") && observed.value().get("instant").getAsLong() == target) {
+                    advance("fast_forward_to_instant"); return;
+                }
             }
         }
         long tick = minecraft.level.getGameTime();
@@ -702,9 +714,15 @@ public final class FrontierV3TestPilotClient {
             fastForwardSent = true;
         }
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
-        if (fresh(observed) && observed != fastForwardBaseline && observed.value().has("fastForwardTargetStatus")
-                && "NONE".equals(observed.value().get("fastForwardTargetStatus").getAsString())) {
-            advance("release_fast_forward_hold"); return;
+        if (fresh(observed) && observed.value().has("fastForwardTargetOutcome")
+                && !observed.value().get("fastForwardTargetOutcome").isJsonNull()) {
+            JsonObject outcome = observed.value().getAsJsonObject("fastForwardTargetOutcome");
+            long baselineRequestId = fastForwardBaseline == null || !fastForwardBaseline.value().has("fastForwardTargetOutcome")
+                    || fastForwardBaseline.value().get("fastForwardTargetOutcome").isJsonNull() ? 0L
+                    : fastForwardBaseline.value().getAsJsonObject("fastForwardTargetOutcome").get("requestId").getAsLong();
+            if (outcome.get("requestId").getAsLong() > baselineRequestId && "RELEASED".equals(outcome.get("status").getAsString())) {
+                advance("release_fast_forward_hold"); return;
+            }
         }
         long tick = minecraft.level.getGameTime();
         if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
@@ -868,7 +886,7 @@ public final class FrontierV3TestPilotClient {
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
-        index++; actionStartedTick = -1L; breaking = false; placementAttempted = false;
+        index++; actionStartedTick = -1L; currentCausalMilestone = null; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null;
         diagnosticWaitBaseline = null;
@@ -952,7 +970,7 @@ public final class FrontierV3TestPilotClient {
         containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
-        diagnostics.clear(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false; fastForwardBaseline = null;
+        diagnostics.clear(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false; fastForwardBaseline = null; currentCausalMilestone = null;
         diagnosticWaitBaseline = null;
     }
     private static void clearExpectedLossTransientState() {

@@ -74,11 +74,15 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:performance-diagnostic"),
                 new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(12L), new byte[]{1}, List.of(), List.of());
 
-        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), 17);
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), 17, null, null,
+                new FrontierV3ServerLifecycle.FastForwardTargetOutcome(4L, 12L, 11L, null, "REJECTED", "physical work is pending at admission"));
 
         assertTrue(value.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"performance\""));
         assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8")
-                && value.contains("\"fastForwardRemaining\":17"));
+                && value.contains("\"fastForwardRemaining\":17") && value.contains("\"instant\":12")
+                && value.contains("\"world\":\"frontier:performance-diagnostic\"")
+                && value.contains("\"requestId\":4") && value.contains("\"targetInstant\":12") && value.contains("\"admittedCheckpointInstant\":11")
+                && value.contains("\"status\":\"REJECTED\""));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
     }
 

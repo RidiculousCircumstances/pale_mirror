@@ -105,7 +105,8 @@ function terminalFacts(manifests, assignedLane) {
 function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (manifest?.status !== 'ok' || manifest.initialCanonicalHold !== true || !Array.isArray(manifest.diagnostics) || !Array.isArray(manifest.actions)) throw new Error('F0.2B normal scenario has no complete receipt');
   const profile = declaration?.server?.profile;
-  const diagnostics = [beforeRestart, manifest].flatMap(receipt => Array.isArray(receipt?.diagnostics) ? receipt.diagnostics : [])
+  const diagnostics = [[beforeRestart, 'before_restart'], [manifest, 'after_restart']]
+    .flatMap(([receipt, phase]) => Array.isArray(receipt?.diagnostics) ? receipt.diagnostics.map(entry => ({ ...entry, phase })) : [])
     .map(entry => ({ ...entry, actionStep: entry.actionStep ?? entry.observed?.actionStep ?? null, value: diagnosticValue(entry) }));
   const values = diagnostics.map(entry => ({ ...entry.value, actionStep: entry.actionStep })).filter(value => value?.status === 'ok');
   const at = (kind, id) => values.filter(value => value.kind === kind && value.id === id);
@@ -180,7 +181,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   };
   const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
     initialInstant: summary.instant, initialInputs: { depot: { wheat: earlyWheat, bread: earlyBread }, hive: { biomass: earlyBiomass } },
-    observedEpochs, releasedEpochs, safeUnload, safeUnloadScopes, zeroPlayerLoaded, zeroPlayerScopes, observerFreePhysicalEffects, dueAction: due + 1, causal };
+    observedEpochs, releasedEpochs, safeUnload, safeUnloadScopes, zeroPlayerLoaded, zeroPlayerScopes, observerFreePhysicalEffects, dueAction: due + 1, causal,
+    ...(history === 'zero-player' ? { birthCatchup: zeroPlayerBirthCatchup(diagnostics, actions) } : {}) };
   const result = { history, admission, containers: { depot, hive: store }, families: {
     depot: { inputWheat: wheat, outputBread: bread, terminalBread, foodAvailable: settlement.food.available, foodFulfilled: settlement.food.fulfilled },
     hive: { inputBiomass: biomass, outputBiomass: store.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0,
@@ -189,9 +191,49 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (history === 'graceful-product-recovery') {
     const before = beforeRestart?.diagnostics?.map(diagnosticValue).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
     result.recovery = { mode: manifest.recovery?.mode, beforeEpoch: before?.custody?.epoch ?? null, afterEpoch: depot.custody?.epoch ?? null,
-      splitAfterAction: manifest.recovery?.splitAfterAction ?? null };
+      splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics) };
   }
   return result;
+}
+
+function recoveryMilestones(diagnostics) {
+  const byName = new Map();
+  for (const entry of diagnostics) {
+    const value = entry.value;
+    const name = value?.pilotCausalMilestone;
+    if (!name) continue;
+    byName.set(name, { phase: entry.phase, value });
+  }
+  const reference = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      actionStep: value.pilotActionStep,
+      tasks: (value.tasks ?? []).map(task => ({ id: task.id, kind: task.kind, status: task.status })).sort(compareJson),
+      taskKinds: [...new Set((value.tasks ?? []).map(task => task.kind))].sort(),
+      schedules: (value.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject, kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
+      orders: (value.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation, reservationActive: order.reservationActive, status: order.status })).sort(compareJson) };
+  };
+  const hive = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      growthJobs: value.growthJobs, addedOrgans: value.addedOrgans, spawnedBioforms: value.spawnedBioforms };
+  };
+  const released = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      custodyStatus: value.custody?.status, chunk: value.physicalSocket?.chunk };
+  };
+  const custody = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      actionStep: value.pilotActionStep, custodyStatus: value.custody?.status, custodyEpoch: value.custody?.epoch,
+      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint };
+  };
+  return { activeAdmission: reference('recovery_active_admission'), afterReacquire: reference('recovery_after_reacquire'),
+    activeDepotCustody: custody('recovery_active_depot_custody'), hydratedInflight: reference('recovery_hydrated_inflight'),
+    hydratedDepotCustody: custody('recovery_hydrated_depot_custody'), terminalProduct: reference('recovery_terminal_product'),
+    liveHivePending: hive('recovery_live_hive_pending'), depotReleased: released('recovery_depot_released'),
+    hiveReleased: released('recovery_hive_released'), coldEffectConfirmed: hive('recovery_cold_effect_confirmed') };
 }
 
 function referenceCausality(observations) {
@@ -217,6 +259,30 @@ function referenceCausality(observations) {
     && value.orders.some(order => order.reservationActive === true) && Number.isSafeInteger(value.actionStep)).map(value => value.actionStep);
   return { observations: normalized.length, admissionAction: admission.length ? Math.min(...admission) : null, taskKinds, schedules, orders,
     productionStarted: normalized.some(value => value.productionJobs > 0), growthStarted: normalized.some(value => value.growthJobs > 0), physicalIntentKinds };
+}
+
+// The birth permit is not inferred from the convenient 63-bread endpoint.
+// Both reads are ordinary, named diagnostics: the first is while both exact
+// scopes are safely unloaded/released, and the second is after the ordinary
+// return has allowed the registered exact-item executor to confirm that same
+// permit.  This remains evidence only; it owns neither a schedule nor custody.
+function zeroPlayerBirthCatchup(diagnostics, actions) {
+  const milestone = name => diagnostics.map(entry => entry.value)
+    .find(value => value?.pilotCausalMilestone === name);
+  const admitted = milestone('zero_player_cold_birth_admitted');
+  const consumed = milestone('zero_player_birth_consumed');
+  const normalize = value => {
+    const permit = Array.isArray(value?.birthJobs) && value.birthJobs.length === 1 ? value.birthJobs[0] : null;
+    const intent = permit && Array.isArray(value?.physicalIntents)
+      ? value.physicalIntents.find(candidate => candidate.id === permit.intent && candidate.cause === permit.id) : null;
+    return value && permit && intent && { actionStep: value.pilotActionStep, instant: value.instant,
+      job: { id: permit.id, food: permit.food, intent: permit.intent, resident: permit.resident },
+      intent: { id: intent.id, cause: intent.cause, kind: intent.kind, status: intent.status } };
+  };
+  const cold = normalize(admitted); const afterReturn = normalize(consumed);
+  const returnAction = cold && actions.findIndex((action, index) => index + 1 > cold.actionStep
+    && action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox') + 1;
+  return { cold, afterReturn, returnAction };
 }
 
 function physicalEffectObservation(observations, hasExpectedOutput) {

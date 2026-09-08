@@ -31,7 +31,8 @@ final class FrontierV3TestPilotScenario {
         JsonArray setup = array(root, "setup", true);
         JsonArray actions = array(root, "actions", false);
         JsonArray frames = array(root, "frames", true);
-        validate(setup, "setup"); validate(actions, "actions");
+        java.util.Set<String> causalMilestones = new java.util.HashSet<>();
+        validate(setup, "setup", causalMilestones); validate(actions, "actions", causalMilestones);
         validateFrames(frames, actions.size());
         return new Parsed(setup, actions, frames);
     }
@@ -45,7 +46,7 @@ final class FrontierV3TestPilotScenario {
         return root.getAsJsonArray(name);
     }
 
-    private static void validate(JsonArray actions, String section) {
+    private static void validate(JsonArray actions, String section, java.util.Set<String> causalMilestones) {
         for (int index = 0; index < actions.size(); index++) {
             JsonElement element = actions.get(index);
             if (!element.isJsonObject() || !element.getAsJsonObject().has("type")) {
@@ -54,7 +55,7 @@ final class FrontierV3TestPilotScenario {
             String type = element.getAsJsonObject().get("type").getAsString();
             if (!ACTION_TYPES.contains(type)) throw new IllegalArgumentException("unsupported test-pilot action: " + type);
             JsonObject action = element.getAsJsonObject();
-            if ((type.equals("release_fast_forward_hold") && action.size() != 1) ||
+            if (!validCausalMilestone(action, causalMilestones) || (type.equals("release_fast_forward_hold") && action.size() != 1) ||
                     (type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
                     (type.equals("visit_operation") && !validOperationVisit(action)) ||
@@ -84,6 +85,13 @@ final class FrontierV3TestPilotScenario {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
         }
+    }
+
+    private static boolean validCausalMilestone(JsonObject action, java.util.Set<String> values) {
+        if (!action.has("causalMilestone")) return true;
+        if (!action.get("causalMilestone").isJsonPrimitive()) return false;
+        String value = action.get("causalMilestone").getAsString();
+        return value.matches("[a-z][a-z0-9_]{0,63}") && values.add(value);
     }
 
     /**

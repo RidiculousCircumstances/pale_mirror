@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertPrimaryEvidence, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { assertPrimaryEvidence, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateScenario } from '../src/scenario.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -15,6 +16,15 @@ function evidence(worker, index = Number(worker.at(-1))) {
   const replica = conflict
     ? { state: 'CONFLICT', revision: 3, canonicalRevision: 7, conflict: 'FINGERPRINT_MISMATCH', fingerprint: 'sha256:expected', provenance: 'pale-mirror:reference-container:test', observedFingerprint: 'sha256:missing-container:1-depot', observedProvenance: 'missing:container:1-depot' }
     : { state: 'OBSERVED_CURRENT', revision: 3, canonicalRevision: 7, conflict: '', fingerprint: 'sha256:current', provenance: 'pale-mirror:reference-container:test', observedFingerprint: '', observedProvenance: '' };
+  const activeTasks = [
+    { id: 'task:hive-frontier-hive_grow_organism-1', kind: 'GROW_HIVE_ORGANISM', status: 'ACTIVE' },
+    { id: 'task:settlement-1-settlement_produce_bread-1', kind: 'PRODUCE_BREAD', status: 'ACTIVE' }
+  ];
+  const activeSchedules = [
+    { id: 'schedule:hive-growth-task-complete-hive-growth-1', subject: 'job:hive-growth-1', kind: 'frontier.hive.growth.task.complete', dueAt: 3500, weight: 1 },
+    { id: 'schedule:production-task-complete-production-1-1', subject: 'job:production-1-1', kind: 'frontier.settlement.production.task.complete', dueAt: 3320, weight: 1 }
+  ];
+  const activeOrders = [{ task: 'task:settlement-1-settlement_produce_bread-1', job: 'job:production-1-1', reservation: 'reservation:production-1-1', reservationActive: true, status: 'ACCEPTED' }];
   const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false, initialInstant: 227,
     initialInputs: { depot: { wheat: 64, bread: 0 }, hive: { biomass: 64 } },
     targetVisitsBeforeDue: history === 'never-visited' ? 0 : 2, observedEpochs: [1, 2], releasedEpochs: history === 'visited-unloaded' ? [1] : [],
@@ -27,6 +37,13 @@ function evidence(worker, index = Number(worker.at(-1))) {
       depot: { actionStep: 5, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-bread', ordinaryPlayerNearby: false },
       hive: { actionStep: 6, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:hive-growth', ordinaryPlayerNearby: false }
     } : { depot: null, hive: null }, dueAction: 3,
+    ...(history === 'zero-player' ? { birthCatchup: {
+      cold: { actionStep: 38, instant: 30000, job: { id: 'job:resident-birth-1-3', food: 'item:production-1-1-bread', intent: 'intent:resident-birth-food-1-3', resident: 'resident:1-born-3' },
+        intent: { id: 'intent:resident-birth-food-1-3', cause: 'job:resident-birth-1-3', kind: 'EXACT_ITEM_CONSUMPTION', status: 'PREPARED' } },
+      returnAction: 39,
+      afterReturn: { actionStep: 47, instant: 30020, job: { id: 'job:resident-birth-1-3', food: 'item:production-1-1-bread', intent: 'intent:resident-birth-food-1-3', resident: 'resident:1-born-3' },
+        intent: { id: 'intent:resident-birth-food-1-3', cause: 'job:resident-birth-1-3', kind: 'EXACT_ITEM_CONSUMPTION', status: 'CONFIRMED' } }
+    } } : {}),
     causal: { observations: 1, taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [
       { id: 'schedule:hive-growth', subject: 'job:hive-east-growth', kind: 'frontier.hive.growth.complete', dueAt: 227, weight: 1 },
       { id: 'schedule:produce-bread', subject: 'job:settlement-1-bread', kind: 'frontier.settlement.production.complete', dueAt: 227, weight: 1 }
@@ -34,7 +51,26 @@ function evidence(worker, index = Number(worker.at(-1))) {
       physicalIntentKinds: ['EXACT_ITEM_CONSUMPTION:CONFIRMED', 'PRODUCTION_TRANSFORMATION:CONFIRMED'], admissionAction: 3 } },
     families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 63, foodAvailable: 63, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
-    ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5 } } : {}) });
+    ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5, milestones: {
+      activeAdmission: { phase: 'before_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 14,
+        tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
+      activeDepotCustody: { phase: 'before_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
+        actionStep: 15, custodyStatus: 'ACQUIRED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+      hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 17,
+        tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
+      hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
+        actionStep: 18, custodyStatus: 'ACQUIRED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+      afterReacquire: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 12500,
+        tasks: [{ ...activeTasks[0] }, { ...activeTasks[1], status: 'COMPLETED' }], taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [],
+        orders: [{ ...activeOrders[0], reservationActive: false, status: 'FULFILLED' }] },
+      liveHivePending: { phase: 'after_restart', kind: 'hive', id: 'hive:frontier', instant: 12510, growthJobs: 1, addedOrgans: 0, spawnedBioforms: 0 },
+      depotReleased: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 12520, custodyStatus: 'RELEASED', chunk: 'UNLOADED' },
+      hiveReleased: { phase: 'after_restart', kind: 'container', id: 'container:hive-east-store', instant: 12521, custodyStatus: 'RELEASED', chunk: 'UNLOADED' },
+      coldEffectConfirmed: { phase: 'after_restart', kind: 'hive', id: 'hive:frontier', instant: 14000, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 },
+      terminalProduct: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 14000, actionStep: 35,
+        tasks: activeTasks.map(task => ({ ...task, status: 'COMPLETED' })), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [],
+        orders: [{ ...activeOrders[0], reservationActive: false, status: 'FULFILLED' }] }
+    } } } : {}) });
   const histories = lane === 'normal-never-visited' ? [normal('never-visited')]
     : lane === 'normal-visited-unloaded' ? [normal('visited-unloaded')]
       : lane === 'normal-zero-player-recovery' ? [normal('zero-player'), normal('graceful-product-recovery')] : undefined;
@@ -101,7 +137,7 @@ test('F0.2B primary receipts retain both sides of a graceful restart', async () 
   const runner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8');
   assert.match(runner, /beforeRestartManifest/);
   assert.match(runner, /beforeRestartSha256/);
-  assert.match(runner, /\[beforeRestart, manifest\]/);
+  assert.match(runner, /\[\[beforeRestart, 'before_restart'\], \[manifest, 'after_restart'\]\]/);
 });
 
 test('F0.2B conflict recovery uses only the declared same-world persistent-client path', async () => {
@@ -208,15 +244,24 @@ test('F0.2B zero-player history requires retained loaded observations outside bo
   assert.throws(() => mergeSemanticMatrix(sameChunk, expected), /zero-player history is not causal/);
 });
 
+test('F0.2B zero-player evidence does not turn retained replica history into a fixed birth endpoint', () => {
+  const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
+  complete[2].terminal.histories[0].families.depot.foodAvailable = 26;
+  complete[2].terminal.histories[0].families.depot.foodFulfilled = 37;
+  assert.doesNotThrow(() => mergeSemanticMatrix(complete, expected),
+    'the same fenced COLD permit can be followed by ordinary additional population work');
+});
+
 test('F0.2B zero-player lane keeps live custody observer-free while its released COLD birth permit catches up only after return', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-zero-player.json'), 'utf8'));
   const wait64 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 64);
-  const leaveForCold = scenario.actions.findIndex(action => action.type === 'fast_forward_to_instant' && action.targetInstant === 14000);
+  const bridgeToCold = scenario.actions.findIndex(action => action.type === 'fast_forward_to_instant' && action.targetInstant === 27000);
+  const leaveForCold = scenario.actions.findIndex(action => action.type === 'fast_forward_to_instant' && action.targetInstant === 30000);
   const finalReturn = scenario.actions.findIndex((action, index) => index > leaveForCold && action.type === 'visit'
     && action.dimension === 'pale_mirror:frontier_graybox');
-  const wait63 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 63);
-  const confirmed = scenario.actions.findIndex((action, index) => index > wait63 && action.type === 'wait_until_diagnostic'
+  const birthConsumed = scenario.actions.findIndex(action => action.causalMilestone === 'zero_player_birth_consumed');
+  const confirmed = scenario.actions.findIndex((action, index) => index > birthConsumed && action.type === 'wait_until_diagnostic'
     && action.expect?.replica?.state === 'OBSERVED_CURRENT' && action.expect?.custody?.status === 'ACQUIRED');
   const observerFreeLoad = scenario.actions.findIndex((action, index) => index > 0 && action.type === 'wait_until_diagnostic'
     && action.id === 'container:1-depot' && action.expect?.custody?.status === 'RELEASED'
@@ -224,12 +269,18 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
   const observerFreeAcquire = scenario.actions.findIndex((action, index) => index > observerFreeLoad && action.type === 'wait_until_diagnostic'
     && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED'
     && action.expect?.physicalSocket?.ordinaryPlayerNearby === false);
-  assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && wait63 > finalReturn && confirmed > wait63,
+  assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && birthConsumed > finalReturn && confirmed > birthConsumed,
     'the live observer-free product proof precedes released COLD birth admission and its later physical catch-up');
   assert.ok(observerFreeLoad >= 0 && observerFreeAcquire === observerFreeLoad + 1,
     'ordinary natural loading is observed before, and remains distinct from, its later zero-player custody acquire');
   assert.equal(scenario.assertions.find(assertion => assertion.after === 29)?.expect.food.available, 64);
-  assert.equal(scenario.assertions.find(assertion => assertion.after === 47)?.expect.food.available, 63);
+  assert.ok(bridgeToCold >= 0 && bridgeToCold + 2 === leaveForCold,
+    'the released COLD interval crosses the native bounded absolute-advance envelope without changing the due target');
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 50)?.expect.status, 'ok');
+  assert.equal(scenario.actions[leaveForCold + 4]?.causalMilestone, 'zero_player_cold_birth_admitted',
+    'the released COLD permit is retained before the ordinary return rather than inferred from a later endpoint');
+  assert.equal(scenario.actions[birthConsumed]?.causalMilestone, 'zero_player_birth_consumed',
+    'the exact same permit is read after ordinary return and physical consumption');
 });
 
 test('F0.2B graceful product recovery retains both family admissions and their active reservation before restart', async () => {
@@ -237,30 +288,76 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-product-recovery.json'), 'utf8'));
   const restart = scenario.restart.afterAction;
   const beforeRestart = scenario.actions.slice(0, restart);
-  assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 2);
-  assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 2);
-  assert.deepEqual(beforeRestart.at(-1), { type: 'inspect', view: 'reference_container', id: 'f02b' });
+  assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 3,
+    'the third ordinary visit is the neutral-distance natural-load observation, not a fixture placement');
+  assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 4,
+    'both initial admissions are re-observed under the ordinary neutral-distance live-custody view');
   const activeAdmission = beforeRestart.findLastIndex(action => action.type === 'inspect'
     && action.view === 'reference_container' && action.id === 'f02b');
-  assert.equal(restart, activeAdmission + 1,
-    'the graceful boundary follows the read-only active-admission observation, rather than fabricating a pre-seeded reservation');
+  assert.equal(beforeRestart[activeAdmission]?.causalMilestone, 'recovery_active_admission');
+  assert.equal(beforeRestart[activeAdmission + 1]?.causalMilestone, 'recovery_active_depot_custody');
+  assert.equal(beforeRestart[activeAdmission + 2]?.type, 'release_fast_forward_hold');
+  assert.equal(restart, activeAdmission + 3,
+    'the graceful boundary follows exact read-only operation and custody observations and releases only its artificial test hold before Minecraft saves');
   assert.equal(scenario.actions[activeAdmission - 1]?.type, 'fast_forward_to_instant',
     'the retained admission observation follows its engine-owned due advance');
-  const recoveredDepot = scenario.actions.findIndex((action, index) => index >= restart && action.type === 'wait_until_diagnostic'
-    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED');
-  const liveFood = scenario.assertions.find(assertion => assertion.after === recoveredDepot + 5);
-  const releasedDepot = scenario.actions.findIndex((action, index) => index > recoveredDepot && action.type === 'wait_until_diagnostic'
-    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'RELEASED');
-  const coldAdvance = scenario.actions.findIndex((action, index) => index > releasedDepot && action.type === 'fast_forward_to_instant'
-    && action.targetInstant === 14000);
-  const coldFood = scenario.assertions.find(assertion => assertion.after === coldAdvance + 4);
+  assert.equal(scenario.actions[activeAdmission - 1]?.targetInstant, 3200,
+    'the retained restart fence precedes production completion while the ordinary neutral-distance view has live custody of both families');
+  const milestone = name => scenario.actions.findIndex(action => action.causalMilestone === name);
+  const afterReacquire = milestone('recovery_after_reacquire');
+  const pendingHive = milestone('recovery_live_hive_pending');
+  const depotReleased = milestone('recovery_depot_released');
+  const hiveReleased = milestone('recovery_hive_released');
+  const coldEffect = milestone('recovery_cold_effect_confirmed');
+  const hydratedInflight = milestone('recovery_hydrated_inflight');
+  const hydratedCustody = milestone('recovery_hydrated_depot_custody');
+  const terminalProduct = milestone('recovery_terminal_product');
+  const liveBread = scenario.actions.findIndex((action, index) => index > hydratedCustody && action.type === 'wait_until_container_item'
+    && action.containerId === 'container:1-depot' && action.item === 'minecraft:bread' && action.count === 64);
   const coldHive = scenario.assertions.find(assertion => assertion.view === 'hive' && assertion.id === 'hive:frontier');
-  assert.equal(liveFood?.expect.food.available, 64,
-    'a recovered live custodian excludes the competing COLD birth permit');
-  assert.equal(coldFood?.expect.food.available, 63,
-    'the same released, safely unloaded scope admits COLD without waiting for another visit');
+  assert.ok(liveBread > hydratedCustody && liveBread < afterReacquire,
+    'the recovered live custodian reaches the exact 64-bread product boundary before later hive continuation');
+  assert.ok(hydratedInflight === restart && hydratedCustody === restart + 1 && afterReacquire > hydratedCustody
+    && pendingHive > afterReacquire && depotReleased > pendingHive && hiveReleased > pendingHive && coldEffect > hiveReleased && terminalProduct > coldEffect,
+  'the first recovered reads hydrate the exact in-flight operation and custody before continuation, then retain release and terminal product order');
+  assert.equal(scenario.actions[coldEffect]?.type, 'wait_until_diagnostic',
+    'released COLD completion is a domain fact, not a fabricated absolute-time request');
   assert.equal(coldHive?.after, scenario.actions.length,
-    'the hive terminal effect is asserted only after its released COLD advance, not while live custody still owns it');
+    'the hive terminal effect is asserted only after its retained released-COLD fact');
+});
+
+test('F0.2B recovery causal oracle fails closed for missing, completed, stale, reordered, replaced and duplicate facts', () => {
+  const milestones = evidence('worker-2').terminal.histories.find(value => value.history === 'graceful-product-recovery').recovery.milestones;
+  assert.doesNotThrow(() => assertRecoveryCausalMilestones(milestones));
+  const missing = structuredClone(milestones); delete missing.activeAdmission;
+  assert.throws(() => assertRecoveryCausalMilestones(missing), /missing causal milestone/);
+  const stale = structuredClone(milestones); stale.afterReacquire.instant = 3199;
+  assert.throws(() => assertRecoveryCausalMilestones(stale), /stale or wrong-subject/);
+  const completedBeforeSave = structuredClone(milestones); completedBeforeSave.activeAdmission.tasks[1].status = 'COMPLETED';
+  assert.throws(() => assertRecoveryCausalMilestones(completedBeforeSave), /active-admission/);
+  const replacedOperation = structuredClone(milestones); replacedOperation.hydratedInflight.tasks[0].id = 'task:hive-frontier-replaced';
+  assert.throws(() => assertRecoveryCausalMilestones(replacedOperation), /same-operation hydrated/);
+  const lostReservation = structuredClone(milestones); lostReservation.hydratedInflight.orders[0].reservationActive = false;
+  assert.throws(() => assertRecoveryCausalMilestones(lostReservation), /same-operation hydrated/);
+  const staleCustody = structuredClone(milestones); staleCustody.hydratedDepotCustody.replicaRevision += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(staleCustody), /same-operation hydrated/);
+  const reordered = structuredClone(milestones); reordered.hiveReleased.instant = 12509;
+  assert.throws(() => assertRecoveryCausalMilestones(reordered), /reordered or wrong-subject/);
+  const wrongSubject = structuredClone(milestones); wrongSubject.coldEffectConfirmed.id = 'hive:other';
+  assert.throws(() => assertRecoveryCausalMilestones(wrongSubject), /confirmed released-COLD/);
+  const duplicateTerminal = structuredClone(milestones); duplicateTerminal.terminalProduct.tasks.push({ ...duplicateTerminal.terminalProduct.tasks[0] });
+  assert.throws(() => assertRecoveryCausalMilestones(duplicateTerminal), /exact terminal operation/);
+});
+
+test('F0.2B recovery semantic milestones remain stable when an unrelated evidence action is inserted', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-product-recovery.json'), 'utf8'));
+  const before = scenario.actions.filter(action => action.causalMilestone).map(action => action.causalMilestone);
+  const inserted = structuredClone(scenario);
+  inserted.actions.splice(12, 0, { type: 'inspect', view: 'summary', id: '' });
+  validateScenario(inserted);
+  assert.deepEqual(inserted.actions.filter(action => action.causalMilestone).map(action => action.causalMilestone), before,
+    'a transport-only action insertion cannot rebind the retained causal facts to another semantic milestone');
 });
 
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
@@ -289,8 +386,6 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(semanticHole, expected), /non-equivalent product quantities/);
   const historyDrift = complete.map(value => structuredClone(value)); historyDrift[2].terminal.histories[0].families.hive.addedOrgans = 2;
   assert.throws(() => mergeSemanticMatrix(historyDrift, expected), /non-equivalent product quantities/);
-  const terminalChestDrift = complete.map(value => structuredClone(value)); terminalChestDrift[2].terminal.histories[0].families.depot.terminalBread = 62;
-  assert.throws(() => mergeSemanticMatrix(terminalChestDrift, expected), /terminal product drift/);
   const admissionDrift = complete.map(value => structuredClone(value)); admissionDrift[1].terminal.histories[0].admission.causal.orders[0].reservationActive = false;
   assert.throws(() => mergeSemanticMatrix(admissionDrift, expected), /seeded or lacks actual adapter observation/);
   const scheduleDrift = complete.map(value => structuredClone(value)); scheduleDrift[2].terminal.histories[0].admission.causal.schedules[0].dueAt = 228;
@@ -299,6 +394,12 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(unsafeUnload, expected), /per-family release evidence/);
   const coldCatchup = complete.map(value => structuredClone(value)); coldCatchup[2].terminal.histories[0].admission.observerFreePhysicalEffects.hive = false;
   assert.throws(() => mergeSemanticMatrix(coldCatchup, expected), /zero-player history is not causal/);
+  const missingBirthPermit = complete.map(value => structuredClone(value)); delete missingBirthPermit[2].terminal.histories[0].admission.birthCatchup.cold;
+  assert.throws(() => mergeSemanticMatrix(missingBirthPermit, expected), /released-COLD birth permit/);
+  const replacedBirthPermit = complete.map(value => structuredClone(value)); replacedBirthPermit[2].terminal.histories[0].admission.birthCatchup.afterReturn.job.id = 'job:resident-birth-1-replaced';
+  assert.throws(() => mergeSemanticMatrix(replacedBirthPermit, expected), /released-COLD birth permit/);
+  const unconfirmedBirthPermit = complete.map(value => structuredClone(value)); unconfirmedBirthPermit[2].terminal.histories[0].admission.birthCatchup.afterReturn.intent.status = 'PREPARED';
+  assert.throws(() => mergeSemanticMatrix(unconfirmedBirthPermit, expected), /released-COLD birth permit/);
   const fabricatedConflict = complete.map(value => structuredClone(value)); fabricatedConflict[3].terminal.conflicts[2].replica.observedProvenance = 'pale-mirror:reference-container:test';
   assert.throws(() => mergeSemanticMatrix(fabricatedConflict, expected), /changed\/foreign\/missing evidence/);
   const missingRuntime = complete.map(value => ({ ...value })); delete missingRuntime[0].runtimeContentSha256;

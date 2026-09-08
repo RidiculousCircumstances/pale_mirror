@@ -47,6 +47,12 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, Long> FAST_FORWARD_TARGETS = new IdentityHashMap<>();
     /** An in-flight absolute target can become physically unsafe after its admission checkpoint. */
     private static final Map<MinecraftServer, String> FAST_FORWARD_FAILURES = new IdentityHashMap<>();
+    /**
+     * The last absolute request is diagnostic-only pilot evidence.  It is deliberately separate
+     * from the canonical clock and WAL: it records whether one operator request was admitted,
+     * held at its exact checkpoint, or rejected.  A cleared mutable request is never a result.
+     */
+    private static final Map<MinecraftServer, FastForwardTargetOutcome> FAST_FORWARD_OUTCOMES = new IdentityHashMap<>();
     /** Prevents bootstrap time from crossing an unobserved product boundary before the pilot's first operator request. */
     private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
     private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
@@ -122,7 +128,8 @@ public final class FrontierV3ServerLifecycle {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(),
-                FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server));
+                FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
+                FAST_FORWARD_OUTCOMES.get(server));
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);
@@ -221,7 +228,7 @@ public final class FrontierV3ServerLifecycle {
         // would let an already-started disposable world advance while it waits
         // for its declared execution gate.
         if (RUNTIMES.containsKey(server)) return;
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         if (!enabled()) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         startConfigured(server, initialConfiguration(physicalWorld));
@@ -238,7 +245,7 @@ public final class FrontierV3ServerLifecycle {
     static void startModDevFixture(MinecraftServer server,
                                    io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(configuration, "configuration");
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         if (!enabled()) throw new IllegalStateException("Frontier v3 fixture bootstrap requires an enabled v3 launch");
         if (RUNTIMES.containsKey(server)) throw new IllegalStateException("Frontier v3 fixture bootstrap must run before the normal lifecycle");
         FrontierV3PhysicalWorld.require(server);
@@ -332,15 +339,29 @@ public final class FrontierV3ServerLifecycle {
      */
     public static boolean requestFastForwardTo(MinecraftServer server, long targetInstant) {
         Objects.requireNonNull(server, "server");
-        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) return false;
+        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
+            rejectFastForwardTarget(server, targetInstant, "another request is active or runtime is unavailable");
+            return false;
+        }
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
-                || FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) return false;
-        OptionalInt delta = absoluteFastForwardDelta(runtime.checkpointImage().orElseThrow().instant().ticks(), targetInstant);
-        if (delta.isEmpty()) return false;
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            rejectFastForwardTarget(server, targetInstant, "runtime is not active");
+            return false;
+        }
+        if (FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) {
+            rejectFastForwardTarget(server, targetInstant, "physical work is pending at admission");
+            return false;
+        }
+        long admittedCheckpoint = runtime.checkpointImage().orElseThrow().instant().ticks();
+        OptionalInt delta = absoluteFastForwardDelta(admittedCheckpoint, targetInstant);
+        if (delta.isEmpty()) {
+            rejectFastForwardTarget(server, targetInstant, "target is crossed or unbounded");
+            return false;
+        }
         FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, delta.getAsInt()); FAST_FORWARD_TARGETS.put(server, targetInstant);
+        recordFastForwardTarget(server, targetInstant, admittedCheckpoint, null, "ADVANCING", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward target={}", targetInstant);
         return true;
     }
@@ -353,7 +374,13 @@ public final class FrontierV3ServerLifecycle {
     public static boolean releaseFastForwardHold(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
-        return FAST_FORWARD_TARGETS.remove(server) != null;
+        Long target = FAST_FORWARD_TARGETS.remove(server);
+        if (target == null) return false;
+        FastForwardTargetOutcome prior = FAST_FORWARD_OUTCOMES.get(server);
+        Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).checkpointImage().map(image -> image.instant().ticks()).orElse(null) : null;
+        FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target,
+                prior == null ? checkpoint : prior.admittedCheckpointInstant(), checkpoint, "RELEASED", null));
+        return true;
     }
 
     /** Pure admission rule shared by the server-thread command and focused boundary tests. */
@@ -391,7 +418,7 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
-            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
     }
 
@@ -410,7 +437,7 @@ public final class FrontierV3ServerLifecycle {
             }
         } finally {
             FrontierV3DiagnosticTrace.forget(server);
-            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
     }
 
@@ -419,9 +446,11 @@ public final class FrontierV3ServerLifecycle {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         if (remaining == null) return;
         if (FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) {
-            if (FAST_FORWARD_TARGETS.remove(server) != null) {
+            Long target = FAST_FORWARD_TARGETS.remove(server);
+            if (target != null) {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending before the absolute target");
+                recordFastForwardTarget(server, target, null, null, "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected absolute fast-forward target because physical work became pending");
             }
             return;
@@ -435,8 +464,45 @@ public final class FrontierV3ServerLifecycle {
         int next = remaining - advanced;
         if (next <= 0) {
             FAST_FORWARD_REMAINING.remove(server);
+            Long target = FAST_FORWARD_TARGETS.get(server);
+            if (target != null) recordFastForwardTarget(server, target, null, runtime.checkpointImage().orElseThrow().instant().ticks(), "HELD", null);
             PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward{}", FAST_FORWARD_TARGETS.containsKey(server) ? " at held absolute target" : "");
         } else FAST_FORWARD_REMAINING.put(server, next);
+    }
+
+    static FastForwardTargetOutcome nextFastForwardTargetOutcome(FastForwardTargetOutcome prior, long target, Long admittedCheckpoint, Long reachedCheckpoint,
+                                                                 String status, String failure) {
+        long requestId = prior == null ? 1L : Math.addExact(prior.requestId(), 1L);
+        return new FastForwardTargetOutcome(requestId, target, admittedCheckpoint, reachedCheckpoint, status, failure);
+    }
+
+    private static void rejectFastForwardTarget(MinecraftServer server, long target, String reason) {
+        recordFastForwardTarget(server, target, null, null, "REJECTED", reason);
+    }
+
+    private static void recordFastForwardTarget(MinecraftServer server, long target, Long admittedCheckpoint, Long reachedCheckpoint,
+                                                String status, String failure) {
+        FastForwardTargetOutcome prior = FAST_FORWARD_OUTCOMES.get(server);
+        if (prior != null && prior.targetInstant() == target && prior.status().equals("ADVANCING")
+                && java.util.Set.of("HELD", "REJECTED").contains(status)) {
+            FAST_FORWARD_OUTCOMES.put(server, new FastForwardTargetOutcome(prior.requestId(), target,
+                    prior.admittedCheckpointInstant(), reachedCheckpoint, status, failure));
+            return;
+        }
+        FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target, admittedCheckpoint, reachedCheckpoint, status, failure));
+    }
+
+    record FastForwardTargetOutcome(long requestId, long targetInstant, Long admittedCheckpointInstant, Long reachedCheckpointInstant,
+                                    String status, String failure) {
+        FastForwardTargetOutcome {
+            if (requestId < 1L || targetInstant < 1L || !java.util.Set.of("ADVANCING", "HELD", "REJECTED", "RELEASED").contains(status)
+                    || (failure == null) != !"REJECTED".equals(status)
+                    || (("HELD".equals(status) || "RELEASED".equals(status)) && !java.util.Objects.equals(reachedCheckpointInstant, targetInstant))
+                    || (reachedCheckpointInstant != null && reachedCheckpointInstant < 0L)
+                    || (admittedCheckpointInstant != null && admittedCheckpointInstant < 0L)) {
+                throw new IllegalArgumentException("invalid fast-forward target outcome");
+            }
+        }
     }
 
     /** Marks the beginning of orderly shutdown before Minecraft emits entity-unload events. */

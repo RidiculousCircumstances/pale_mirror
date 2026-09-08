@@ -233,6 +233,14 @@ final class FrontierV3PilotSessionControl {
         }
     }
 
+    /** Binds a read-only diagnostic to one declared semantic evidence action, never to its ordinal. */
+    static void stampDiagnostic(JsonObject value, int actionStep, String causalMilestone) {
+        stampDiagnostic(value, actionStep);
+        if (causalMilestone == null) return;
+        if (!causalMilestone.matches("[a-z][a-z0-9_]{0,63}")) throw new IllegalArgumentException("invalid pilot causal milestone");
+        value.addProperty("pilotCausalMilestone", causalMilestone);
+    }
+
     /** Announces the one actual Minecraft JVM once; the Node wrapper is not the client identity. */
     static void publishClientPrepared() throws IOException {
         if (!enabled() || preparedLifecycleSignal) return;

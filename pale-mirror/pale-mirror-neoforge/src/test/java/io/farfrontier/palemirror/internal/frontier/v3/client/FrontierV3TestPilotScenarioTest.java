@@ -61,6 +61,23 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyUniqueBoundedCausalMilestoneLabelsOnReadOnlyEvidenceActions() {
+        assertEquals(2, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"active_admission"},
+                {"type":"wait_until_diagnostic","view":"hive","id":"hive:frontier","expect":{"growthJobs":0},"timeoutMs":180000,"causalMilestone":"cold_effect_confirmed"}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"same"},
+                {"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"same"}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"setup":[{"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"same"}],"actions":[
+                {"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"same"}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"inspect","view":"reference_container","id":"f02b","causalMilestone":"Wrong Subject"}]}"""));
+    }
+
+    @Test
     void acceptsTheRegisteredProcessDiagnosticThroughTheProductionVocabulary() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"process","id":"job:site-harvest-1-wheat-field-1",

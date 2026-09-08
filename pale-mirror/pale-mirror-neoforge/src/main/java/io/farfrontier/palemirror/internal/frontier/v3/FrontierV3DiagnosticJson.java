@@ -28,6 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.model.MarketWorkOrder;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentBirthJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
@@ -457,9 +458,23 @@ final class FrontierV3DiagnosticJson {
                         + quote(job.consumedItemId().value()) + "\",\"intent\":\"" + quote(job.consumptionIntentId().value())
                         + "\",\"organ\":\"" + quote(job.organ().id().value()) + "\",\"bioform\":\"" + quote(job.bioform().id().value()) + "\"}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        // This remains a bounded, read-only F0.2B projection: one settlement
+        // can have at most one active birth permit.  It lets the normal-world
+        // receipt distinguish a COLD-admitted exact-food permit from a later
+        // unrelated 63-bread endpoint without making demography a container
+        // authority.
+        java.util.List<ResidentBirthJob> births = state.humanPopulation().birthJobs().values().stream()
+                .filter(job -> job.settlementId().equals(settlement))
+                .sorted(java.util.Comparator.comparing(ResidentBirthJob::id)).toList();
+        java.util.Set<SubjectId> birthIds = births.stream().map(ResidentBirthJob::id).collect(java.util.stream.Collectors.toSet());
+        String birthEntries = births.stream().map(job -> "{\"id\":\"" + quote(job.id().value()) + "\",\"food\":\""
+                        + quote(job.foodItemId().value()) + "\",\"intent\":\"" + quote(job.consumptionIntentId().value())
+                        + "\",\"resident\":\"" + quote(job.resident().id().value()) + "\"}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         java.util.Set<SubjectId> subjects = new java.util.HashSet<>(taskIds);
         state.productionJobs().values().stream().filter(job -> job.settlementId().equals(settlement)).map(ProductionJob::id).forEach(subjects::add);
         state.hiveColony().growthJobs().values().stream().filter(job -> job.hiveId().equals(hive)).map(HiveGrowthJob::id).forEach(subjects::add);
+        subjects.addAll(birthIds);
         String schedules = checkpoint.schedules().stream().filter(action -> subjects.contains(action.subject()))
                 .sorted().map(action -> "{\"id\":\"" + quote(action.id().value()) + "\",\"subject\":\"" + quote(action.subject().value())
                         + "\",\"kind\":\"" + quote(action.kind()) + "\",\"dueAt\":" + action.dueAt().ticks() + ",\"weight\":" + action.weight() + "}")
@@ -470,7 +485,7 @@ final class FrontierV3DiagnosticJson {
                         + "\",\"status\":\"" + intent.status() + "\"}").collect(java.util.stream.Collectors.joining(",", "[", "]"));
         return base("reference_container", id, checkpoint) + ",\"status\":\"ok\",\"tasks\":" + taskEntries
                 + ",\"schedules\":" + schedules + ",\"orders\":" + orders + ",\"productionJobs\":" + production + ",\"growthJobs\":" + growth
-                + ",\"physicalIntents\":" + intents + "}";
+                + ",\"birthJobs\":" + birthEntries + ",\"physicalIntents\":" + intents + "}";
     }
 
     private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {
