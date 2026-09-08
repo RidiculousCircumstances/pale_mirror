@@ -25,8 +25,16 @@ final class FrontierV3ProductionWorkSceneExecutor {
         Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT).min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
-                level, FrontierProductionWorkSceneSupport.candidates(state), FrontierProductionWorkSceneSupport.Candidate::demandPosition);
+        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierProductionWorkSceneSupport.candidates(state).stream()
+                // A current exact depot custody epoch is physical eligibility, not presentation
+                // demand.  It may therefore admit the same retained worker/workshop cycle while
+                // the naturally loaded depot is ticking without a nearby player.  Both anchors
+                // must still be naturally loaded; this selector never creates a ticket.
+                .filter(value -> FrontierV3SceneExecutor.demandSnapshot(level, value.demandPosition()).active()
+                        || ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(value.settlementId())))
+                .filter(value -> level.hasChunkAt(new net.minecraft.core.BlockPos(value.demandPosition().x(), value.demandPosition().y(), value.demandPosition().z()))
+                        && level.hasChunkAt(new net.minecraft.core.BlockPos(value.handoffPosition().x(), value.handoffPosition().y(), value.handoffPosition().z())))
+                .findFirst();
         if (candidate.isEmpty()) return false;
         FrontierProductionWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);
@@ -84,8 +92,10 @@ final class FrontierV3ProductionWorkSceneExecutor {
             drain(runtime, lease); return;
         }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, workshop.anchor());
-        if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) { drain(runtime, lease); return; }
-        if (!demand.active()) return;
+        boolean operationalCustody = ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(job.settlementId()));
+        if (!operationalCustody && FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
+                FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) { drain(runtime, lease); return; }
+        if (!demand.active() && !operationalCustody) return;
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) { conflict(level, runtime, lease, "worker-unavailable"); return; }
         List<SurfaceAnchor> route = job.workTraversal().linearCorridorSurfaces(); SurfaceAnchor current = route.get(job.traversalCursor());

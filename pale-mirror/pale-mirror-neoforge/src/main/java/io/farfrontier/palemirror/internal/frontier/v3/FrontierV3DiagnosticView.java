@@ -22,6 +22,7 @@ public enum FrontierV3DiagnosticView {
     ACTOR("actor", true),
     ITEM("item", true),
     CONTAINER("container", true),
+    REFERENCE_CONTAINER("reference_container", true),
     MARKET_ORDER("market_order", true),
     OPERATION("operation", true),
     ROUTE_CONSTRUCTION("route_construction", true),

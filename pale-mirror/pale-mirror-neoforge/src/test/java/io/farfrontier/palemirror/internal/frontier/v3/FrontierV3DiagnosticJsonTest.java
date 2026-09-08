@@ -163,7 +163,7 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId container = state.inventory().containers().keySet().stream().sorted().findFirst().orElseThrow();
         var readiness = new FrontierV3ContainerSurfaceExecutor.Readiness("LOADED", "CONFLICT", "READY",
-                "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "");
+                "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "", false);
 
         String json = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));

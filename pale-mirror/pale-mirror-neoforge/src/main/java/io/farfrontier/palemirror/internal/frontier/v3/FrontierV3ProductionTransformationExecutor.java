@@ -54,13 +54,13 @@ final class FrontierV3ProductionTransformationExecutor {
         if (!matchesInput(chest, target)) { unknown(runtime, intent.id(), "input-precondition-conflict"); return; }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!replace(chest, target)) { unknown(runtime, intent.id(), "physical-write-conflict"); return; }
-        confirm(runtime, intent, target);
+        confirm(runtime, intent, target, chest);
     }
 
     private static void inspectOrApply(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                        ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
-        if (matchesOutput(chest, target)) { confirm(runtime, intent, target); return; }
-        if (matchesInput(chest, target) && replace(chest, target)) { confirm(runtime, intent, target); return; }
+        if (matchesOutput(chest, target)) { confirm(runtime, intent, target, chest); return; }
+        if (matchesInput(chest, target) && replace(chest, target)) { confirm(runtime, intent, target, chest); return; }
         unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
@@ -71,7 +71,7 @@ final class FrontierV3ProductionTransformationExecutor {
      */
     private static void inspectRecovered(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
                                          ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
-        if (matchesOutput(chest, target)) confirm(runtime, intent, target);
+        if (matchesOutput(chest, target)) confirm(runtime, intent, target, chest);
     }
 
     static boolean matchesInput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
@@ -86,12 +86,16 @@ final class FrontierV3ProductionTransformationExecutor {
         chest.setItem(target.slot().slot(), output); chest.setChanged(); return matchesOutput(chest, target);
     }
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
-                                ProductionTransformationStateSupport.Target target) {
+                                ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
         ProductionTransformationObservation observation = new ProductionTransformationObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.input().id(), target.output().id(),
                 target.input().count(), target.output().count());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) {
             throw new IllegalStateException("production transformation confirmation was rejected");
+        }
+        if (ReferenceContainerCustody.isReferenceContainer(runtime.decodedState().orElseThrow(), target.slot().containerId())
+                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, target.slot().containerId(), chest)) {
+            throw new IllegalStateException("confirmed reference production output did not establish its next replica boundary");
         }
     }
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {

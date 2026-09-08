@@ -134,8 +134,7 @@ public final class PopulationBirthProcess {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
                 && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                && state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE
-                && !ReferenceContainerCustody.hasRetainedReplica(state, depot)).findFirst();
+                && state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE).findFirst();
     }
 
     private static Household household(FrontierWorldState state, SubjectId settlementId) {

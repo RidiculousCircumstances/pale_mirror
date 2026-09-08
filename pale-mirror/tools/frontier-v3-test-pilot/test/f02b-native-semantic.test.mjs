@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertPrimaryEvidence, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 import { readFile } from 'node:fs/promises';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acquireNativeExecutionGate } from '../src/native-execution-gate.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -20,11 +18,20 @@ function evidence(worker, index = Number(worker.at(-1))) {
   const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false, initialInstant: 227,
     initialInputs: { depot: { wheat: 64, bread: 0 }, hive: { biomass: 64 } },
     targetVisitsBeforeDue: history === 'never-visited' ? 0 : 2, observedEpochs: [1, 2], releasedEpochs: history === 'visited-unloaded' ? [1] : [],
-    safeUnload: history === 'visited-unloaded', zeroPlayerLoaded: history === 'zero-player',
+    safeUnload: history === 'visited-unloaded' || history === 'zero-player', zeroPlayerLoaded: history === 'zero-player',
+    safeUnloadScopes: history === 'visited-unloaded' || history === 'zero-player' ? { 'container:1-depot': true, 'container:hive-east-store': true } : {},
     zeroPlayerScopes: history === 'zero-player' ? [
-      { id: 'container:1-depot', visitStep: 3, observationStep: 5, playerChunk: { x: -21, z: -21 }, scopeChunk: { x: -22, z: -21 }, custodyEpoch: 1, replicaRevision: 1 },
-      { id: 'container:hive-east-store', visitStep: 6, observationStep: 8, playerChunk: { x: 26, z: 26 }, scopeChunk: { x: 25, z: 26 }, custodyEpoch: 1, replicaRevision: 1 }
-    ] : [], dueAction: 3 },
+      { id: 'container:1-depot', visitStep: 3, observationStep: 5, playerChunk: { x: -21, z: -21 }, scopeChunk: { x: -22, z: -21 }, custodyEpoch: 1, replicaRevision: 1, ordinaryPlayerNearby: false },
+      { id: 'container:hive-east-store', visitStep: 6, observationStep: 8, playerChunk: { x: 26, z: 26 }, scopeChunk: { x: 25, z: 26 }, custodyEpoch: 1, replicaRevision: 1, ordinaryPlayerNearby: false }
+    ] : [], observerFreePhysicalEffects: history === 'zero-player' ? {
+      depot: { actionStep: 5, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-bread', ordinaryPlayerNearby: false },
+      hive: { actionStep: 6, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:hive-growth', ordinaryPlayerNearby: false }
+    } : { depot: null, hive: null }, dueAction: 3,
+    causal: { observations: 1, taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [
+      { id: 'schedule:hive-growth', subject: 'job:hive-east-growth', kind: 'frontier.hive.growth.complete', dueAt: 227, weight: 1 },
+      { id: 'schedule:produce-bread', subject: 'job:settlement-1-bread', kind: 'frontier.settlement.production.complete', dueAt: 227, weight: 1 }
+    ], orders: [{ task: 'task:settlement-1-bread', job: 'job:settlement-1-bread', reservation: 'reservation:bread-input', reservationActive: true, status: 'ACCEPTED' }], productionStarted: true, growthStarted: true,
+      physicalIntentKinds: ['EXACT_ITEM_CONSUMPTION:CONFIRMED', 'PRODUCTION_TRANSFORMATION:CONFIRMED'], admissionAction: 3 } },
     families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 64, foodAvailable: 64, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
     ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5 } } : {}) });
@@ -44,7 +51,6 @@ function evidence(worker, index = Number(worker.at(-1))) {
     requiredTest: `scenario:${lane}`, requiredTestCount: conflict ? 3 : lane === 'normal-zero-player-recovery' ? 2 : 1, runtimeContentSha256: hash, jarSha256: hash, primarySha256: hash, namespaces, launchTarget: 'normal-disposable-v3-server',
     jvmEnvelope: { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 },
     gracefulSaveGate: `/tmp/f02b-graceful-save-${expected.runId}-${expected.runAttempt}`,
-    executionGate: `/tmp/f02b-native-execution-${expected.runId}-${expected.runAttempt}`,
     terminal: { lane, domain, container: { status: 'ok', replica, custody }, replica, custody, ...(conflicts === undefined ? { histories } : { conflicts }) } };
 }
 
@@ -67,7 +73,7 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
     runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, preparedArtifact: { sha256: hash } } },
     manifests: [{ scenario: 'disposable-f02b-normal-never-visited.json', declarationSha256: hash, value: { status: 'ok', scenarioSha256: 'c'.repeat(64), scenarioDeclarationSha256: hash, recovery: { mode: 'graceful' }, diagnostics: [],
       gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }],
-      nativeExecutionGate: { mode: 'serialized', directory: semantic.executionGate } } }], terminal: semantic.terminal };
+      } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
   assert.equal(assertPrimaryEvidence(primary, semantic), primary);
   const drifted = structuredClone(primary); drifted.runtime.receipt.runtimeContentSha256 = 'c'.repeat(64);
@@ -126,26 +132,6 @@ test('F0.2B reserves adjacent RCON ports outside every other worker game socket'
   assert.equal(new Set(spaces.flatMap(value => [value.port, value.port + 1])).size, 8);
 });
 
-test('F0.2B native execution gate serializes live work and rejects malformed authority', async () => {
-  await assert.rejects(() => acquireNativeExecutionGate({ directory: 'relative', owner: {} }), /malformed/);
-  const root = await mkdtemp(resolve('build/f02b-native-execution-'));
-  try {
-    const first = await acquireNativeExecutionGate({ directory: root, owner: { worker: 'worker-0' } });
-    let acquired = false;
-    const secondPromise = acquireNativeExecutionGate({ directory: root, owner: { worker: 'worker-1' } })
-      .then(value => { acquired = true; return value; });
-    await new Promise(resolveDelay => setTimeout(resolveDelay, 50));
-    assert.equal(acquired, false);
-    await first.release();
-    const second = await secondPromise;
-    assert.equal(second.receipt.mode, 'serialized');
-    assert.equal(second.receipt.owner.worker, 'worker-1');
-    await second.release();
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 test('F0.2B consumers use a private checkout and prepare only a disposable world from immutable runtime bytes', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const [workflow, runner, isolated, scenarioRunner, build] = await Promise.all([
@@ -163,17 +149,15 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /--memory-per-worker-mib=6144/);
   assert.equal((workflow.match(/JAVA_TOOL_OPTIONS: -Xmx3G/g) ?? []).length, 2);
   assert.match(workflow, /F02B_GRACEFUL_SAVE_GATE: \$\{\{ inputs\.task_root \}\}\/f02b-graceful-save-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
-  assert.match(workflow, /F02B_EXECUTION_GATE: \$\{\{ inputs\.task_root \}\}\/f02b-native-execution-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(runner, /FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate/);
-  assert.match(runner, /FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate/);
   assert.match(runner, /FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'/);
   assert.match(runner, /entry\?\.observed\?\.value/);
   assert.match(runner, /initialInputs/);
   assert.match(runner, /initialDepotAction/);
   assert.match(runner, /initialStoreAction/);
   assert.match(isolated, /withGracefulSaveGate/);
-  assert.match(isolated, /acquireNativeExecutionGate/);
+  assert.doesNotMatch(isolated, /acquireNativeExecutionGate/);
   assert.match(isolated, /initialCanonicalHold/);
   assert.match(await readFile(resolve(project, 'pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerLifecycle.java'), 'utf8'), /INITIAL_CANONICAL_HOLDS\.containsKey\(server\)[\s\S]*?FrontierV3PhysicalExecutors\.registry\(\)\.tick/);
   assert.match(runner, /exact bounded JVM envelope/);
@@ -250,6 +234,16 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(semanticHole, expected), /non-equivalent product quantities/);
   const historyDrift = complete.map(value => structuredClone(value)); historyDrift[2].terminal.histories[0].families.hive.addedOrgans = 2;
   assert.throws(() => mergeSemanticMatrix(historyDrift, expected), /non-equivalent product quantities/);
+  const terminalChestDrift = complete.map(value => structuredClone(value)); terminalChestDrift[2].terminal.histories[0].families.depot.terminalBread = 63;
+  assert.throws(() => mergeSemanticMatrix(terminalChestDrift, expected), /terminal product drift/);
+  const admissionDrift = complete.map(value => structuredClone(value)); admissionDrift[1].terminal.histories[0].admission.causal.orders[0].reservationActive = false;
+  assert.throws(() => mergeSemanticMatrix(admissionDrift, expected), /seeded or lacks actual adapter observation/);
+  const scheduleDrift = complete.map(value => structuredClone(value)); scheduleDrift[2].terminal.histories[0].admission.causal.schedules[0].dueAt = 228;
+  assert.throws(() => mergeSemanticMatrix(scheduleDrift, expected), /terminal product drift/);
+  const unsafeUnload = complete.map(value => structuredClone(value)); delete unsafeUnload[1].terminal.histories[0].admission.safeUnloadScopes['container:hive-east-store'];
+  assert.throws(() => mergeSemanticMatrix(unsafeUnload, expected), /per-family release evidence/);
+  const coldCatchup = complete.map(value => structuredClone(value)); coldCatchup[2].terminal.histories[0].admission.observerFreePhysicalEffects.hive = false;
+  assert.throws(() => mergeSemanticMatrix(coldCatchup, expected), /zero-player history is not causal/);
   const fabricatedConflict = complete.map(value => structuredClone(value)); fabricatedConflict[3].terminal.conflicts[2].replica.observedProvenance = 'pale-mirror:reference-container:test';
   assert.throws(() => mergeSemanticMatrix(fabricatedConflict, expected), /changed\/foreign\/missing evidence/);
   const missingRuntime = complete.map(value => ({ ...value })); delete missingRuntime[0].runtimeContentSha256;
@@ -260,6 +254,4 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(unboundedJvm, expected), /exact bounded JVM envelope/);
   const missingGate = complete.map(value => structuredClone(value)); delete missingGate[0].gracefulSaveGate;
   assert.throws(() => mergeSemanticMatrix(missingGate, expected), /graceful-save gate/);
-  const missingExecutionGate = complete.map(value => structuredClone(value)); delete missingExecutionGate[0].executionGate;
-  assert.throws(() => mergeSemanticMatrix(missingExecutionGate, expected), /native execution gate/);
 });

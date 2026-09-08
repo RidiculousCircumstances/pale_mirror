@@ -26,6 +26,7 @@
     { "type": "fast_forward_to_instant", "targetInstant": 12500, "timeoutMs": 180000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -343, "y": 65, "z": -326 }, "settleMs": 1500 },
     { "type": "release_fast_forward_hold" },
+    { "type": "inspect", "view": "reference_container", "id": "f02b" },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" } }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "container", "id": "container:1-depot" },
     { "type": "inspect", "view": "container", "id": "container:1-depot" },
@@ -44,9 +45,9 @@
     { "type": "inspect", "view": "hive", "id": "hive:frontier" }
   ],
   "assertions": [
-    { "after": 17, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
-    { "after": 18, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 64, "fulfilled": 0 } } },
-    { "after": 21, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
-    { "after": 22, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
+    { "after": 18, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 19, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 64, "fulfilled": 0 } } },
+    { "after": 22, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 23, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
   ]
 }

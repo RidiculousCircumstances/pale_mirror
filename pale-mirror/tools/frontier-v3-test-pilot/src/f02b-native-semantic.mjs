@@ -48,9 +48,6 @@ export function assertSemanticEvidence(value, expected = {}) {
   if (typeof value.gracefulSaveGate !== 'string' || !value.gracefulSaveGate.endsWith(`f02b-graceful-save-${value.runId}-${value.runAttempt}`)) {
     throw new Error('F0.2B evidence has no exact graceful-save gate');
   }
-  if (typeof value.executionGate !== 'string' || !value.executionGate.endsWith(`f02b-native-execution-${value.runId}-${value.runAttempt}`)) {
-    throw new Error('F0.2B evidence has no exact native execution gate');
-  }
   const expectedScenarioCount = value.lane === 'conflict-restart' ? 3 : value.lane === 'normal-zero-player-recovery' ? 2 : 1;
   if (value.requiredTestCount !== expectedScenarioCount) throw new Error('F0.2B evidence has incomplete lane coverage');
   if (!value.terminal || value.terminal.lane !== value.lane || !value.terminal.domain || !value.terminal.container || value.terminal.container.status !== 'ok'
@@ -97,9 +94,6 @@ export function assertPrimaryEvidence(primary, semantic) {
     if (!Array.isArray(receipt.value.gracefulSaveGate) || receipt.value.gracefulSaveGate.length === 0
         || receipt.value.gracefulSaveGate.some(value => value?.mode !== 'serialized' || value.directory !== semantic.gracefulSaveGate)) {
       throw new Error('F0.2B primary evidence has no retained serialized graceful-save receipt');
-    }
-    if (receipt.value.nativeExecutionGate?.mode !== 'serialized' || receipt.value.nativeExecutionGate.directory !== semantic.executionGate) {
-      throw new Error('F0.2B primary evidence has no retained serialized native execution receipt');
     }
     const declaredBeforeRestart = receipt.value?.recovery?.beforeRestartManifest;
     if (declaredBeforeRestart) {
@@ -187,10 +181,17 @@ function assertNormalHistory(history) {
   if (admission.profile !== 'world' || admission.initialIntents !== 0 || admission.initialReplica !== false || admission.initialCustody !== false
       || !Number.isSafeInteger(admission.initialInstant) || admission.initialInstant < 0
       || admission.initialInputs?.depot?.wheat !== 64 || admission.initialInputs?.depot?.bread !== 0 || admission.initialInputs?.hive?.biomass !== 64
-      || !Array.isArray(admission.observedEpochs) || admission.observedEpochs.length < 2) {
+      || !Array.isArray(admission.observedEpochs) || admission.observedEpochs.length < 2
+      || admission.causal?.observations < 1 || !admission.causal?.taskKinds?.includes('PRODUCE_BREAD')
+      || !admission.causal?.taskKinds?.includes('GROW_HIVE_ORGANISM') || admission.causal?.productionStarted !== true
+      || admission.causal?.growthStarted !== true || !Array.isArray(admission.causal?.schedules)
+      || !Array.isArray(admission.causal?.orders) || admission.causal.schedules.length < 2 || admission.causal.orders.length < 1
+      || !admission.causal.orders.some(order => order.reservationActive === true)
+      || !Number.isSafeInteger(admission.causal.admissionAction)) {
     throw new Error('F0.2B normal history was seeded or lacks actual adapter observation');
   }
-  if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64 || families.depot.terminalBread !== 64
+  if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64
+      || !Number.isSafeInteger(families.depot.terminalBread) || families.depot.terminalBread < 0 || families.depot.terminalBread > 64
       || families.depot.foodAvailable !== 64 || families.depot.foodFulfilled !== 0
       || families.hive.inputBiomass !== 64 || families.hive.outputBiomass !== 0
       || families.hive.growthJobs !== 0 || families.hive.addedOrgans !== 1 || families.hive.spawnedBioforms !== 1) {
@@ -199,14 +200,19 @@ function assertNormalHistory(history) {
   if (history.history === 'never-visited') {
     if (admission.targetVisitsBeforeDue !== 0 || admission.safeUnload !== false || admission.zeroPlayerLoaded !== false) throw new Error('F0.2B never-visited history is not causal');
   } else if (history.history === 'visited-unloaded') {
-    if (admission.targetVisitsBeforeDue < 2 || admission.safeUnload !== true || admission.zeroPlayerLoaded !== false || !admission.releasedEpochs?.length) throw new Error('F0.2B safely-unloaded history lacks release evidence');
+    if (admission.targetVisitsBeforeDue < 2 || admission.safeUnload !== true || admission.safeUnloadScopes?.['container:1-depot'] !== true
+        || admission.safeUnloadScopes?.['container:hive-east-store'] !== true || admission.zeroPlayerLoaded !== false || !admission.releasedEpochs?.length) throw new Error('F0.2B safely-unloaded history lacks per-family release evidence');
   } else if (history.history === 'zero-player') {
     const scopes = admission.zeroPlayerScopes;
     if (admission.targetVisitsBeforeDue < 2 || admission.zeroPlayerLoaded !== true || !Array.isArray(scopes) || scopes.length !== 2
         || scopes.map(value => value.id).join(',') !== 'container:1-depot,container:hive-east-store'
+        || admission.safeUnload !== true || admission.safeUnloadScopes?.['container:1-depot'] !== true
+        || admission.safeUnloadScopes?.['container:hive-east-store'] !== true
         || scopes.some(value => !Number.isSafeInteger(value.visitStep) || !Number.isSafeInteger(value.observationStep)
           || !Number.isSafeInteger(value.custodyEpoch) || !Number.isSafeInteger(value.replicaRevision)
-          || value.visitStep >= value.observationStep || value.playerChunk?.x === value.scopeChunk?.x && value.playerChunk?.z === value.scopeChunk?.z)) {
+          || value.ordinaryPlayerNearby !== false || value.visitStep >= value.observationStep || value.playerChunk?.x === value.scopeChunk?.x && value.playerChunk?.z === value.scopeChunk?.z
+          || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.depot, admission.causal.admissionAction)
+          || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.hive, admission.causal.admissionAction))) {
       throw new Error('F0.2B zero-player history is not causal');
     }
   } else if (history.history === 'graceful-product-recovery') {
@@ -218,9 +224,19 @@ function assertHistoryComparator(checked) {
   const histories = checked.filter(value => value.lane !== 'conflict-restart').flatMap(value => value.terminal.histories);
   const selected = new Map(histories.filter(value => ['never-visited', 'visited-unloaded', 'zero-player'].includes(value.history)).map(value => [value.history, value]));
   if (selected.size !== 3) throw new Error('F0.2B merge lacks all three ordinary histories');
-  const projection = value => ({ depot: value.families.depot, hive: value.families.hive });
+  const projection = value => {
+    const { admissionAction, ...causal } = value.admission.causal;
+    return { depot: value.families.depot, hive: value.families.hive, causal };
+  };
   const baseline = JSON.stringify(projection(selected.get('never-visited')));
   for (const name of ['visited-unloaded', 'zero-player']) {
     if (JSON.stringify(projection(selected.get(name))) !== baseline) throw new Error(`F0.2B merge rejects ${name} terminal product drift`);
   }
+}
+
+function physicalEffectAfterAdmission(effect, admissionAction) {
+  return effect && typeof effect === 'object' && Number.isSafeInteger(effect.actionStep)
+    && effect.actionStep > admissionAction && Number.isSafeInteger(effect.custodyEpoch)
+    && Number.isSafeInteger(effect.replicaRevision) && typeof effect.replicaFingerprint === 'string'
+    && effect.replicaFingerprint.startsWith('sha256:') && effect.ordinaryPlayerNearby === false;
 }

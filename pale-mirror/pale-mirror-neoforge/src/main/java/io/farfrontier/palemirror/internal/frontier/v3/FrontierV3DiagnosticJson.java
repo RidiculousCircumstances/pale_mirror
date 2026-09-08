@@ -23,6 +23,8 @@ import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthJob;
+import io.farfrontier.palemirror.frontier.v3.model.MarketWorkOrder;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
@@ -36,6 +38,8 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalEvacuationOperation;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
@@ -129,6 +133,7 @@ final class FrontierV3DiagnosticJson {
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state, containerReadiness);
+            case "reference_container" -> referenceContainer(id, checkpoint, state);
             case "market_order" -> marketOrder(id, checkpoint, state);
             case "operation" -> operation(id, checkpoint, state, assemblyReadiness);
             case "route_construction" -> routeConstruction(id, checkpoint, state);
@@ -398,7 +403,8 @@ final class FrontierV3DiagnosticJson {
         String physical = readiness.map(value -> ",\"physicalSocket\":{\"chunk\":\"" + quote(value.chunk())
                 + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
-                + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch()) + "\"}").orElse("");
+                + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch())
+                + "\",\"ordinaryPlayerNearby\":" + value.ordinaryPlayerNearby() + "}").orElse("");
         String replica = referenceCustody(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
@@ -419,6 +425,52 @@ final class FrontierV3DiagnosticJson {
         String custody = lease == null ? "null" : "{\"status\":\"" + lease.status() + "\",\"epoch\":" + lease.authorityEpoch()
                 + ",\"replicaRevision\":" + lease.expectedReplicaRevision() + "}";
         return ",\"replica\":" + replica + ",\"custody\":" + custody;
+    }
+
+    /**
+     * Bounded F0.2B causal projection.  It reports the one representative
+     * depot and hive task/schedule/reservation owners without creating a
+     * second ledger or inferring history from a chest endpoint.
+     */
+    private static String referenceContainer(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId settlement = new SubjectId("settlement:1");
+        SubjectId hive = state.bootstrap().hive().id();
+        java.util.List<StrategicTask> tasks = state.strategicPlans().tasks().values().stream()
+                .filter(task -> (task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.ownerId().equals(settlement))
+                        || (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM && task.ownerId().equals(hive)))
+                .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList();
+        java.util.Set<SubjectId> taskIds = tasks.stream().map(StrategicTask::id).collect(java.util.stream.Collectors.toSet());
+        String taskEntries = tasks.stream().map(task -> "{\"id\":\"" + quote(task.id().value()) + "\",\"kind\":\"" + task.kind()
+                + "\",\"status\":\"" + task.status() + "\"}").collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String orders = state.companies().market().workOrders().values().stream().filter(order -> taskIds.contains(order.taskId()))
+                .sorted(java.util.Comparator.comparing(MarketWorkOrder::id)).map(order -> "{\"task\":\"" + quote(order.taskId().value())
+                        + "\",\"job\":\"" + quote(order.jobId().value()) + "\",\"reservation\":\"" + quote(order.reservationId().value())
+                        + "\",\"reservationActive\":" + state.inventory().economics().reservations().containsKey(order.reservationId())
+                        + ",\"status\":\"" + order.status() + "\"}").collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String production = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(settlement))
+                .sorted(java.util.Comparator.comparing(ProductionJob::id)).map(job -> "{\"id\":\"" + quote(job.id().value()) + "\",\"input\":\""
+                        + quote(job.consumedItemId().value()) + "\",\"output\":\"" + quote(job.outputItemId().value()) + "\",\"count\":" + job.outputCount()
+                        + ",\"hold\":\"" + job.inputHold().getClass().getSimpleName() + "\"}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String growth = state.hiveColony().growthJobs().values().stream().filter(job -> job.hiveId().equals(hive))
+                .sorted(java.util.Comparator.comparing(HiveGrowthJob::id)).map(job -> "{\"id\":\"" + quote(job.id().value()) + "\",\"input\":\""
+                        + quote(job.consumedItemId().value()) + "\",\"intent\":\"" + quote(job.consumptionIntentId().value())
+                        + "\",\"organ\":\"" + quote(job.organ().id().value()) + "\",\"bioform\":\"" + quote(job.bioform().id().value()) + "\"}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        java.util.Set<SubjectId> subjects = new java.util.HashSet<>(taskIds);
+        state.productionJobs().values().stream().filter(job -> job.settlementId().equals(settlement)).map(ProductionJob::id).forEach(subjects::add);
+        state.hiveColony().growthJobs().values().stream().filter(job -> job.hiveId().equals(hive)).map(HiveGrowthJob::id).forEach(subjects::add);
+        String schedules = checkpoint.schedules().stream().filter(action -> subjects.contains(action.subject()))
+                .sorted().map(action -> "{\"id\":\"" + quote(action.id().value()) + "\",\"subject\":\"" + quote(action.subject().value())
+                        + "\",\"kind\":\"" + quote(action.kind()) + "\",\"dueAt\":" + action.dueAt().ticks() + ",\"weight\":" + action.weight() + "}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String intents = state.physicalIntents().values().stream().filter(intent -> subjects.contains(intent.causeSubjectId()))
+                .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).map(intent -> "{\"id\":\"" + quote(intent.id().value())
+                        + "\",\"cause\":\"" + quote(intent.causeSubjectId().value()) + "\",\"kind\":\"" + intent.kind()
+                        + "\",\"status\":\"" + intent.status() + "\"}").collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        return base("reference_container", id, checkpoint) + ",\"status\":\"ok\",\"tasks\":" + taskEntries
+                + ",\"schedules\":" + schedules + ",\"orders\":" + orders + ",\"productionJobs\":" + production + ",\"growthJobs\":" + growth
+                + ",\"physicalIntents\":" + intents + "}";
     }
 
     private static String marketOrder(String id, CheckpointImage checkpoint, FrontierWorldState state) {

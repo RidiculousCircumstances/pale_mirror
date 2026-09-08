@@ -19,7 +19,6 @@ import { requiresExactChildTerminationAfterGracefulFailure } from './owned-proce
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, publishLifecycleBarrier, readLifecycleBarriers } from './lifecycle-barrier.mjs';
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
 import { withGracefulSaveGate } from './graceful-save-gate.mjs';
-import { acquireNativeExecutionGate } from './native-execution-gate.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -99,16 +98,10 @@ const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT 
 let crashEvidence = null;
 let failure = null;
 const gracefulSaveGateReceipts = [];
-let nativeExecutionGateReceipt = null;
-let releaseNativeExecutionGate = null;
 timing.begin('scenario.total');
 try {
   const recovery = restartSegments(scenario);
   server = await startServer(true);
-  const executionGate = await acquireNativeExecutionGate({ directory: process.env.FRONTIER_V3_PILOT_EXECUTION_GATE,
-    owner: { worker: lifecycle.identity.workerId, scenario: scenario.id, serverRunId: server.serverRunId } });
-  nativeExecutionGateReceipt = executionGate.receipt;
-  releaseNativeExecutionGate = executionGate.release;
   if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
     await writeScenario(ephemeralScenario, scenario);
@@ -234,7 +227,6 @@ try {
       return bundle;
     }
   });
-  if (releaseNativeExecutionGate !== null) await releaseNativeExecutionGate();
   timing.end('cleanup');
   timing.abortOpen({ status: finalization.terminalFailure === null ? 'ok' : 'failed' });
   if (failure === null && finalization.terminalFailure !== null) throw finalization.terminalFailure;
@@ -252,7 +244,6 @@ if (completed) {
   manifest.build = buildIdentity;
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
-  manifest.nativeExecutionGate = nativeExecutionGateReceipt;
   manifest.initialCanonicalHold = initialCanonicalHold;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

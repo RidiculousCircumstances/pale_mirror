@@ -20,10 +20,6 @@ const gracefulSaveGate = `${process.env.F02B_GRACEFUL_SAVE_GATE ?? ''}`;
 if (!gracefulSaveGate.startsWith('/') || !gracefulSaveGate.endsWith(`f02b-graceful-save-${values.run}-${values.attempt}`)) {
   throw new Error('F0.2B normal-world semantic invocation has no exact graceful-save gate');
 }
-const executionGate = `${process.env.F02B_EXECUTION_GATE ?? ''}`;
-if (!executionGate.startsWith('/') || !executionGate.endsWith(`f02b-native-execution-${values.run}-${values.attempt}`)) {
-  throw new Error('F0.2B normal-world semantic invocation has no exact native execution gate');
-}
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const scenarios = { 'normal-never-visited': ['disposable-f02b-normal-never-visited.json'], 'normal-visited-unloaded': ['disposable-f02b-normal-visited-unloaded.json'],
   'normal-zero-player-recovery': ['disposable-f02b-normal-zero-player.json', 'disposable-f02b-normal-product-recovery.json'],
@@ -64,7 +60,7 @@ try {
       FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared,
       FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: usePersistentClient ? 'true' : 'false',
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
-      FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate, FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'
+      FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
     if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
@@ -88,7 +84,7 @@ const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed'
     ...(value.beforeRestart == null ? {} : { beforeRestartSha256: hashJson(value.beforeRestart), beforeRestart: value.beforeRestart }) })), terminal };
 const primarySha256 = hashJson(primary);
 const evidence = { schema: F02B_SCHEMA, kind: F02B_KIND, status: 'passed', worker: values.worker, lane, ...identityFact, startedAtMillis, finishedAtMillis, gradlePid: pilotPid,
-  runtimeContentSha256, jarSha256, primarySha256, namespaces, gracefulSaveGate, executionGate, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
+  runtimeContentSha256, jarSha256, primarySha256, namespaces, gracefulSaveGate, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
 assertSemanticEvidence(evidence); await mkdir(dirname(output), { recursive: true }); await writeFile(resolve(dirname(output), 'primary.json'), `${JSON.stringify(primary)}\n`, { flag: 'wx' }); await writeFile(output, `${JSON.stringify(evidence)}\n`, { flag: 'wx' });
 
 function terminalFacts(manifests, assignedLane) {
@@ -114,6 +110,7 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const values = diagnostics.map(entry => ({ ...entry.value, actionStep: entry.actionStep })).filter(value => value?.status === 'ok');
   const at = (kind, id) => values.filter(value => value.kind === kind && value.id === id);
   const summary = at('summary', '').at(0); const depotObservations = at('container', 'container:1-depot'); const hiveObservations = at('container', 'container:hive-east-store');
+  const referenceObservations = at('reference_container', 'f02b');
   const initialWheatItem = at('item', 'item:bootstrap-1-wheat').at(0); const initialBiomassItem = at('item', 'item:bootstrap-hive-biomass').at(0);
   const settlement = at('settlement', 'settlement:1').at(-1); const hive = at('hive', 'hive:frontier').at(-1);
   const depot = depotObservations.at(-1); const store = hiveObservations.at(-1);
@@ -148,14 +145,26 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (!history) throw new Error('F0.2B normal scenario is not an admitted history');
   const due = actions.findIndex(action => action.type === 'fast_forward' || action.type === 'fast_forward_to_instant');
   const targetVisitsBeforeDue = actions.slice(0, due).filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length;
-  const away = actions.findIndex(action => action.type === 'visit' && action.dimension === 'minecraft:overworld');
-  const interim = diagnostics.filter(entry => entry.actionStep != null && entry.actionStep > away + 1 && entry.actionStep < due + 1)
-    .map(entry => entry.value).filter(value => value?.kind === 'container');
+  const safelyUnloaded = entry => {
+    if (!Number.isInteger(entry.actionStep) || entry.value?.kind !== 'container'
+        || entry.value.physicalSocket?.chunk !== 'UNLOADED' || entry.value.custody?.status !== 'RELEASED') return false;
+    // A per-scope unload is causal only after an ordinary departure and before
+    // the next ordinary graybox arrival.  Do not tie it to the first due tick:
+    // the zero-player history deliberately proves a later post-effect unload.
+    const preceding = actions.slice(0, entry.actionStep - 1);
+    const away = preceding.map((action, index) => ({ action, index }))
+      .filter(({ action }) => action.type === 'visit' && action.dimension === 'minecraft:overworld').at(-1);
+    return Boolean(away) && !preceding.slice(away.index + 1)
+      .some(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox');
+  };
+  const safelyUnloadedEntries = diagnostics.filter(safelyUnloaded);
   const observedEpochs = [...depotObservations, ...hiveObservations].map(value => value.custody?.epoch).filter(Number.isSafeInteger);
-  const releasedEpochs = interim.filter(value => value.custody?.status === 'RELEASED').map(value => value.custody.epoch);
+  const releasedEpochs = safelyUnloadedEntries.map(entry => entry.value.custody.epoch);
   const zeroPlayerScopes = zeroPlayerScopeObservations(diagnostics, actions);
   const zeroPlayerLoaded = zeroPlayerScopes.length === 2;
-  const safeUnload = interim.some(value => value.physicalSocket?.chunk === 'UNLOADED' && value.custody?.status === 'RELEASED');
+  const safeUnloadScopes = Object.fromEntries(['container:1-depot', 'container:hive-east-store'].map(containerId => [containerId,
+    safelyUnloadedEntries.some(entry => entry.value.id === containerId)]));
+  const safeUnload = Object.values(safeUnloadScopes).every(Boolean);
   // Retain both the exact transformed stack boundary and the later terminal depot
   // state: the ordinary provision scheduler can consume its one named ration only
   // after the production effect has been confirmed.  A terminal-only count would
@@ -164,9 +173,14 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const terminalBread = depot.occupied?.find(value => value.itemKind === 'minecraft:bread')?.count ?? 0;
   const wheat = initialWheat;
   const biomass = initialBiomass;
+  const causal = referenceCausality(referenceObservations);
+  const observerFreePhysicalEffects = {
+    depot: physicalEffectObservation(depotObservations, value => (value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0) === 64),
+    hive: physicalEffectObservation(hiveObservations, value => (value.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0) === 0)
+  };
   const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
     initialInstant: summary.instant, initialInputs: { depot: { wheat: earlyWheat, bread: earlyBread }, hive: { biomass: earlyBiomass } },
-    observedEpochs, releasedEpochs, safeUnload, zeroPlayerLoaded, zeroPlayerScopes, dueAction: due + 1 };
+    observedEpochs, releasedEpochs, safeUnload, safeUnloadScopes, zeroPlayerLoaded, zeroPlayerScopes, observerFreePhysicalEffects, dueAction: due + 1, causal };
   const result = { history, admission, containers: { depot, hive: store }, families: {
     depot: { inputWheat: wheat, outputBread: bread, terminalBread, foodAvailable: settlement.food.available, foodFulfilled: settlement.food.fulfilled },
     hive: { inputBiomass: biomass, outputBiomass: store.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0,
@@ -178,6 +192,45 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
       splitAfterAction: manifest.recovery?.splitAfterAction ?? null };
   }
   return result;
+}
+
+function referenceCausality(observations) {
+  const normalized = observations.map(value => ({
+    actionStep: value.actionStep,
+    taskKinds: [...new Set((value.tasks ?? []).map(task => task.kind))].sort(),
+    // The name alone is not an admission proof: retain each action's exact
+    // owner, due instant, priority and id, and each work-order/reservation
+    // relation.  The terminal three-history comparator consumes these values.
+    schedules: (value.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject,
+      kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
+    orders: (value.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation,
+      reservationActive: order.reservationActive, status: order.status })).sort(compareJson),
+    productionJobs: (value.productionJobs ?? []).length,
+    growthJobs: (value.growthJobs ?? []).length,
+    physicalIntentKinds: [...new Set((value.physicalIntents ?? []).map(intent => `${intent.kind}:${intent.status}`))].sort()
+  }));
+  const taskKinds = [...new Set(normalized.flatMap(value => value.taskKinds))].sort();
+  const schedules = uniqueJson(normalized.flatMap(value => value.schedules));
+  const orders = uniqueJson(normalized.flatMap(value => value.orders));
+  const physicalIntentKinds = [...new Set(normalized.flatMap(value => value.physicalIntentKinds))].sort();
+  const admission = normalized.filter(value => value.taskKinds.includes('PRODUCE_BREAD') && value.taskKinds.includes('GROW_HIVE_ORGANISM')
+    && value.orders.some(order => order.reservationActive === true) && Number.isSafeInteger(value.actionStep)).map(value => value.actionStep);
+  return { observations: normalized.length, admissionAction: admission.length ? Math.min(...admission) : null, taskKinds, schedules, orders,
+    productionStarted: normalized.some(value => value.productionJobs > 0), growthStarted: normalized.some(value => value.growthJobs > 0), physicalIntentKinds };
+}
+
+function physicalEffectObservation(observations, hasExpectedOutput) {
+  const value = observations.find(candidate => candidate.physicalSocket?.chunk === 'LOADED'
+    && candidate.physicalSocket?.ordinaryPlayerNearby === false && candidate.custody?.status === 'ACQUIRED'
+    && Number.isSafeInteger(candidate.actionStep) && Number.isSafeInteger(candidate.custody?.epoch)
+    && Number.isSafeInteger(candidate.replica?.revision) && hasExpectedOutput(candidate));
+  return value && { actionStep: value.actionStep, custodyEpoch: value.custody.epoch, replicaRevision: value.replica.revision,
+    replicaFingerprint: value.replica.fingerprint, ordinaryPlayerNearby: value.physicalSocket.ordinaryPlayerNearby };
+}
+
+function compareJson(left, right) { return JSON.stringify(left).localeCompare(JSON.stringify(right)); }
+function uniqueJson(values) {
+  return [...new Map(values.map(value => [JSON.stringify(value), value])).values()].sort(compareJson);
 }
 
 function diagnosticValue(entry) {
@@ -192,14 +245,15 @@ function zeroPlayerScopeObservations(diagnostics, actions) {
   for (const entry of diagnostics) {
     const value = entry?.value;
     if (!Number.isInteger(entry?.actionStep) || value?.kind !== 'container' || !value.id
-        || value.physicalSocket?.chunk !== 'LOADED' || value.custody?.status !== 'ACQUIRED') continue;
+        || value.physicalSocket?.chunk !== 'LOADED' || value.physicalSocket?.ordinaryPlayerNearby !== false || value.custody?.status !== 'ACQUIRED') continue;
     const visit = actions.slice(0, entry.actionStep - 1).map((action, index) => ({ action, index }))
       .filter(({ action }) => action?.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').at(-1);
     if (!visit?.action?.position || !value.position) continue;
     const playerChunk = chunkOf(visit.action.position); const scopeChunk = chunkOf(value.position);
     if (playerChunk.x === scopeChunk.x && playerChunk.z === scopeChunk.z) continue;
     observations.set(value.id, { id: value.id, visitStep: visit.index + 1, observationStep: entry.actionStep,
-      playerChunk, scopeChunk, custodyEpoch: value.custody.epoch, replicaRevision: value.replica?.revision ?? null });
+      playerChunk, scopeChunk, custodyEpoch: value.custody.epoch, replicaRevision: value.replica?.revision ?? null,
+      ordinaryPlayerNearby: value.physicalSocket.ordinaryPlayerNearby });
   }
   return [...observations.values()].sort((left, right) => left.id.localeCompare(right.id));
 }

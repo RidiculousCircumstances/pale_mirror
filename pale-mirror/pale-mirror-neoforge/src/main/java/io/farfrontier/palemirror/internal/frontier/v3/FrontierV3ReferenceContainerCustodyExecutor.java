@@ -230,6 +230,39 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
     }
 
+    /**
+     * Closes the exact replica boundary immediately after a reference-owned physical effect has
+     * been durably confirmed.  A player may leave on the next normal tick, so waiting for the
+     * periodic sampler would leave an owned output behind an old released observation and make
+     * the later return look like foreign drift.  This method does not adopt a physical value:
+     * the new canonical fingerprint, current live epoch and freshly observed tagged chest must
+     * all agree before it checkpoints, releases and emits the next replica boundary.
+     */
+    static boolean checkpointConfirmedMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                               SubjectId containerId, ChestBlockEntity chest) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        if (replica == null || lease == null || !lease.live() || !lease.objectId().equals(containerId)
+                || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)) return false;
+        Observed observed = observed(state, containerId, chest);
+        if (!ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(observed.fingerprint())
+                || !replica.provenance().equals(observed.provenance())) return false;
+        if (lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+            if (!submit(runtime, "checkpoint-confirmed-mutation", containerId, lease.authorityEpoch(), new CustodyCheckpointed(lease.scopeId(),
+                    lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()))) return false;
+            state = runtime.decodedState().orElse(null);
+            if (state == null) return false;
+            lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        }
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.CHECKPOINTED || !release(runtime, lease)) return false;
+        FrontierWorldState released = runtime.decodedState().orElse(null);
+        if (released == null) return false;
+        PhysicalReplicaRecord releasedReplica = released.replicaCustody().replicas().get(containerId);
+        return releasedReplica != null && reemit(runtime, released, releasedReplica);
+    }
+
     static ContainerSurface selectRoundRobin(List<ContainerSurface> eligible, long tick) {
         if (eligible.isEmpty()) throw new IllegalArgumentException("reference custody has no eligible container");
         return eligible.get((int) Math.floorMod(tick, eligible.size()));
