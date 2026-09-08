@@ -117,7 +117,8 @@ test('provider-native workflows use the repository-owned private Xvfb launcher',
   assert.match(launcher, /command -v Xvfb/);
   assert.match(launcher, /command -v bwrap/);
   assert.match(launcher, /--tmpfs \/tmp/);
-  assert.match(launcher, /--ro-bind \/ \/.*--bind "\$PWD" "\$PWD"/s);
+  assert.match(launcher, /namespace_parent=\$\(dirname "\$runtime_parent"\)/);
+  assert.match(launcher, /--ro-bind \/ \/.*--bind "\$PWD" "\$PWD".*--bind "\$namespace_parent" "\$namespace_parent"/s);
   assert.match(launcher, /-nolisten tcp/);
   assert.match(launcher, /DISPLAY="\$display" LIBGL_ALWAYS_SOFTWARE=1/);
 });
