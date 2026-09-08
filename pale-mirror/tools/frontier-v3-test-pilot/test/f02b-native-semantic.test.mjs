@@ -100,6 +100,16 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
 });
 
+test('F0.2B hive lane asserts the actual grown relay projection', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-hive-growth.json'), 'utf8'));
+  assert.deepEqual(scenario.actions[3], {
+    type: 'wait_until_block', position: { x: 430, y: 64, z: 432 }, block: 'minecraft:pink_concrete', timeoutMs: 30000
+  });
+  assert.equal(scenario.actions[5].type, 'assert_visible_board');
+  assert.equal(scenario.actions[5].text, 'RELAY');
+});
+
 test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and non-native evidence', () => {
   const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
   assert.throws(() => mergeSemanticMatrix(complete.slice(0, 3), expected), /missing or extra/);
