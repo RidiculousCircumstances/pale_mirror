@@ -34,9 +34,9 @@ function evidence(worker, index = Number(worker.at(-1))) {
   const domain = lane === 'conflict-restart' ? { family: 'depot-conflict', recovery: 'abrupt' } : { family: 'normal-world-product-comparator' };
   const custody = { status: conflict ? 'RELEASED' : 'ACQUIRED', epoch: 1, replicaRevision: 3 };
   const conflicts = conflict ? [
-    { scenario: 'disposable-f02b-depot-changed-restart.json', replica: { ...replica, conflict: 'FINGERPRINT_MISMATCH', observedFingerprint: 'sha256:changed', observedProvenance: replica.provenance } },
-    { scenario: 'disposable-f02b-depot-foreign-restart.json', replica: { ...replica, conflict: 'FINGERPRINT_AND_PROVENANCE_MISMATCH', observedFingerprint: 'sha256:foreign', observedProvenance: 'foreign:container-owner=untagged;replica-provenance=missing' } },
-    { scenario: 'disposable-f02b-depot-conflict-restart.json', replica }
+    { scenario: 'disposable-f02b-depot-changed-restart.json', clientSession: { runId: 'changed-restart', reusedJvm: true }, replica: { ...replica, conflict: 'FINGERPRINT_MISMATCH', observedFingerprint: 'sha256:changed', observedProvenance: replica.provenance } },
+    { scenario: 'disposable-f02b-depot-foreign-restart.json', clientSession: { runId: 'foreign-restart', reusedJvm: true }, replica: { ...replica, conflict: 'FINGERPRINT_AND_PROVENANCE_MISMATCH', observedFingerprint: 'sha256:foreign', observedProvenance: 'foreign:container-owner=untagged;replica-provenance=missing' } },
+    { scenario: 'disposable-f02b-depot-conflict-restart.json', clientSession: { runId: 'missing-restart', reusedJvm: true }, replica }
   ] : undefined;
   return { schema: 1, kind: 'f02b-reference-container-native-semantic', status: 'passed', ...expected, worker, lane,
     jobId: 100 + index, runnerId: 200 + index, runnerName: `pm-f02b-${index}`, startedAtMillis: 1_700_000_000_000 + index,
@@ -96,6 +96,18 @@ test('F0.2B primary receipts retain both sides of a graceful restart', async () 
   assert.match(runner, /beforeRestartManifest/);
   assert.match(runner, /beforeRestartSha256/);
   assert.match(runner, /\[beforeRestart, manifest\]/);
+});
+
+test('F0.2B conflict recovery uses only the declared same-world persistent-client path', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const runner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8');
+  assert.match(runner, /const usePersistentClient = lane === 'conflict-restart';/);
+  assert.match(runner, /FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: usePersistentClient \? 'true' : 'false'/);
+  assert.match(runner, /clientSession\?\.reusedJvm !== true/);
+  const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
+  assert.doesNotThrow(() => mergeSemanticMatrix(complete, expected));
+  complete[3].terminal.conflicts[1].clientSession.reusedJvm = false;
+  assert.throws(() => mergeSemanticMatrix(complete, expected), /changed\/foreign\/missing evidence/);
 });
 
 test('F0.2B recovery validation derives the initial inputs from its retained ordinary chest observations', async () => {

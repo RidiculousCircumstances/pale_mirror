@@ -156,13 +156,14 @@ function assertTerminalFacts(lane, terminal) {
         || !Array.isArray(terminal.conflicts) || terminal.conflicts.length !== 3) {
       throw new Error('F0.2B conflict lane lacks complete recovered conflict evidence');
     }
-    const actual = Object.fromEntries(terminal.conflicts.map(value => [value.scenario, value.replica]));
+    const actual = Object.fromEntries(terminal.conflicts.map(value => [value.scenario, value]));
     const changed = actual['disposable-f02b-depot-changed-restart.json'];
     const foreign = actual['disposable-f02b-depot-foreign-restart.json'];
     const missing = actual['disposable-f02b-depot-conflict-restart.json'];
-    if (changed?.state !== 'CONFLICT' || changed.conflict !== 'FINGERPRINT_MISMATCH' || changed.observedProvenance !== changed.provenance
-        || foreign?.state !== 'CONFLICT' || foreign.conflict !== 'FINGERPRINT_AND_PROVENANCE_MISMATCH' || !foreign.observedProvenance?.startsWith('foreign:')
-        || missing?.state !== 'CONFLICT' || !missing.observedFingerprint?.startsWith('sha256:missing-') || !missing.observedProvenance?.startsWith('missing:')) {
+    if (changed?.replica?.state !== 'CONFLICT' || changed.replica.conflict !== 'FINGERPRINT_MISMATCH' || changed.replica.observedProvenance !== changed.replica.provenance
+        || foreign?.replica?.state !== 'CONFLICT' || foreign.replica.conflict !== 'FINGERPRINT_AND_PROVENANCE_MISMATCH' || !foreign.replica.observedProvenance?.startsWith('foreign:')
+        || missing?.replica?.state !== 'CONFLICT' || !missing.replica.observedFingerprint?.startsWith('sha256:missing-') || !missing.replica.observedProvenance?.startsWith('missing:')
+        || [changed, foreign, missing].some(value => value?.clientSession?.reusedJvm !== true || typeof value.clientSession.runId !== 'string' || value.clientSession.runId.length === 0)) {
       throw new Error('F0.2B conflict lane lacks retained actual changed/foreign/missing evidence');
     }
     return;

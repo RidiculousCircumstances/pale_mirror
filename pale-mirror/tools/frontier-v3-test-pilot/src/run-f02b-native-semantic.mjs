@@ -28,6 +28,12 @@ for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespa
 const scenarios = { 'normal-never-visited': ['disposable-f02b-normal-never-visited.json'], 'normal-visited-unloaded': ['disposable-f02b-normal-visited-unloaded.json'],
   'normal-zero-player-recovery': ['disposable-f02b-normal-zero-player.json', 'disposable-f02b-normal-product-recovery.json'],
   'conflict-restart': ['disposable-f02b-depot-changed-restart.json', 'disposable-f02b-depot-foreign-restart.json', 'disposable-f02b-depot-conflict-restart.json'] }[lane];
+// The three conflict cases each restart the exact same disposable world without
+// an injected client-loss crash.  Reuse the one ordinary client only for that
+// declared compatible recovery: the isolated runner fences its reconnect with
+// SAME_CLIENT_RECONNECTED_STATE_CLEARED before accepting the post-restart
+// actions.  Product recovery retains separate pre/post client receipts.
+const usePersistentClient = lane === 'conflict-restart';
 const root = `build/f02b-native/${values.run}-${values.attempt}-${values.worker}`; const prepared = `${root}/prepared-build.json`;
 const startedAtMillis = Date.now(); const stream = createWriteStream(log, { flags: 'wx' });
 const run = async (args, extra = {}) => {
@@ -55,7 +61,8 @@ try {
     const manifest = `${root}/${scenario.replace(/\.json$/, '')}.manifest.json`;
     pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
       GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
-      FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared, FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: 'false',
+      FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared,
+      FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: usePersistentClient ? 'true' : 'false',
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
       FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate, FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'
     });
@@ -205,10 +212,13 @@ function conflictFacts(manifestValue) {
   if (manifestValue?.status !== 'ok' || !Array.isArray(manifestValue.diagnostics)) throw new Error('F0.2B conflict scenario has no terminal manifest');
   const container = manifestValue.diagnostics.map(diagnosticValue)
     .filter(value => value?.kind === 'container' && value.status === 'ok').at(-1);
-  if (!container?.replica || !container?.custody || manifestValue.recovery?.mode !== 'abrupt') {
+  const clientSession = manifestValue.recovery?.clientSession;
+  if (!container?.replica || !container?.custody || manifestValue.recovery?.mode !== 'abrupt'
+      || clientSession?.reusedJvm !== true || typeof clientSession.runId !== 'string' || clientSession.runId.length === 0) {
     throw new Error('F0.2B conflict scenario lacks recovered terminal evidence');
   }
-  return { recovery: manifestValue.recovery, container, replica: container.replica, custody: container.custody };
+  return { recovery: manifestValue.recovery, clientSession: { runId: clientSession.runId, reusedJvm: true },
+    container, replica: container.replica, custody: container.custody };
 }
 
 async function seedOfflineGradleHome(destination) {
