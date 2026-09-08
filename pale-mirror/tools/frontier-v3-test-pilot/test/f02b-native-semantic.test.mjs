@@ -17,12 +17,17 @@ function evidence(worker, index = Number(worker.at(-1))) {
     ? { state: 'CONFLICT', revision: 3, canonicalRevision: 7, conflict: 'FINGERPRINT_MISMATCH', fingerprint: 'sha256:expected', provenance: 'pale-mirror:reference-container:test', observedFingerprint: 'sha256:missing-container:1-depot', observedProvenance: 'missing:container:1-depot' }
     : { state: 'OBSERVED_CURRENT', revision: 3, canonicalRevision: 7, conflict: '', fingerprint: 'sha256:current', provenance: 'pale-mirror:reference-container:test', observedFingerprint: '', observedProvenance: '' };
   const activeTasks = [
-    { id: 'task:hive-frontier-hive_grow_organism-1', kind: 'GROW_HIVE_ORGANISM', status: 'ACTIVE' },
+    { id: 'task:hive-frontier-hive_grow_organism-1', kind: 'GROW_HIVE_ORGANISM', status: 'PENDING' },
     { id: 'task:settlement-1-settlement_produce_bread-1', kind: 'PRODUCE_BREAD', status: 'ACTIVE' }
   ];
   const activeSchedules = [
+    { id: 'schedule:hive-growth-task-start-task-hive-frontier-hive_grow_organism-1', subject: 'task:hive-frontier-hive_grow_organism-1', kind: 'frontier.hive.growth.task.start', dueAt: 3300, weight: 1 },
+    { id: 'schedule:production-task-complete-production-1-1', subject: 'job:production-1-1', kind: 'frontier.settlement.production.task.complete', dueAt: 3220, weight: 1 }
+  ];
+  const hydratedTasks = [{ ...activeTasks[0], status: 'ACTIVE' }, { ...activeTasks[1] }];
+  const hydratedSchedules = [
     { id: 'schedule:hive-growth-task-complete-hive-growth-1', subject: 'job:hive-growth-1', kind: 'frontier.hive.growth.task.complete', dueAt: 3500, weight: 1 },
-    { id: 'schedule:production-task-complete-production-1-1', subject: 'job:production-1-1', kind: 'frontier.settlement.production.task.complete', dueAt: 3320, weight: 1 }
+    { ...activeSchedules[1], dueAt: 3480 }
   ];
   const activeOrders = [{ task: 'task:settlement-1-settlement_produce_bread-1', job: 'job:production-1-1', reservation: 'reservation:production-1-1', reservationActive: true, status: 'ACCEPTED' }];
   const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false, initialInstant: 227,
@@ -56,10 +61,10 @@ function evidence(worker, index = Number(worker.at(-1))) {
         tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
       activeDepotCustody: { phase: 'before_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
         actionStep: 15, custodyStatus: 'ACQUIRED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
-      hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 17,
-        tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
-      hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
-        actionStep: 18, custodyStatus: 'ACQUIRED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+      hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3460, actionStep: 1,
+        tasks: structuredClone(hydratedTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(hydratedSchedules), orders: structuredClone(activeOrders) },
+      hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3460,
+        actionStep: 2, custodyStatus: 'RELEASED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
       afterReacquire: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 12500,
         tasks: [{ ...activeTasks[0] }, { ...activeTasks[1], status: 'COMPLETED' }], taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [],
         orders: [{ ...activeOrders[0], reservationActive: false, status: 'FULFILLED' }] },
@@ -305,10 +310,6 @@ test('F0.2B graceful product recovery retains both family admissions and their a
     'the retained restart fence precedes production completion while the ordinary neutral-distance view has live custody of both families');
   const milestone = name => scenario.actions.findIndex(action => action.causalMilestone === name);
   const afterReacquire = milestone('recovery_after_reacquire');
-  const pendingHive = milestone('recovery_live_hive_pending');
-  const depotReleased = milestone('recovery_depot_released');
-  const hiveReleased = milestone('recovery_hive_released');
-  const coldEffect = milestone('recovery_cold_effect_confirmed');
   const hydratedInflight = milestone('recovery_hydrated_inflight');
   const hydratedCustody = milestone('recovery_hydrated_depot_custody');
   const terminalProduct = milestone('recovery_terminal_product');
@@ -317,13 +318,10 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   const coldHive = scenario.assertions.find(assertion => assertion.view === 'hive' && assertion.id === 'hive:frontier');
   assert.ok(liveBread > hydratedCustody && liveBread < afterReacquire,
     'the recovered live custodian reaches the exact 64-bread product boundary before later hive continuation');
-  assert.ok(hydratedInflight === restart && hydratedCustody === restart + 1 && afterReacquire > hydratedCustody
-    && pendingHive > afterReacquire && depotReleased > pendingHive && hiveReleased > pendingHive && coldEffect > hiveReleased && terminalProduct > coldEffect,
-  'the first recovered reads hydrate the exact in-flight operation and custody before continuation, then retain release and terminal product order');
-  assert.equal(scenario.actions[coldEffect]?.type, 'wait_until_diagnostic',
-    'released COLD completion is a domain fact, not a fabricated absolute-time request');
+  assert.ok(hydratedInflight === restart && hydratedCustody === restart + 1 && afterReacquire > hydratedCustody && terminalProduct > afterReacquire,
+  'the first recovered reads hydrate the exact in-flight production operation and its custody fence before ordinary continuation reaches the terminal production fact');
   assert.equal(coldHive?.after, scenario.actions.length,
-    'the hive terminal effect is asserted only after its retained released-COLD fact');
+    'the separate hive terminal fact remains an ordinary product assertion, not an inferred recovery boundary');
 });
 
 test('F0.2B recovery causal oracle fails closed for missing, completed, stale, reordered, replaced and duplicate facts', () => {
@@ -335,17 +333,19 @@ test('F0.2B recovery causal oracle fails closed for missing, completed, stale, r
   assert.throws(() => assertRecoveryCausalMilestones(stale), /stale or wrong-subject/);
   const completedBeforeSave = structuredClone(milestones); completedBeforeSave.activeAdmission.tasks[1].status = 'COMPLETED';
   assert.throws(() => assertRecoveryCausalMilestones(completedBeforeSave), /active-admission/);
-  const replacedOperation = structuredClone(milestones); replacedOperation.hydratedInflight.tasks[0].id = 'task:hive-frontier-replaced';
+  const replacedOperation = structuredClone(milestones); replacedOperation.hydratedInflight.tasks[1].id = 'task:settlement-1-replaced';
   assert.throws(() => assertRecoveryCausalMilestones(replacedOperation), /same-operation hydrated/);
   const lostReservation = structuredClone(milestones); lostReservation.hydratedInflight.orders[0].reservationActive = false;
   assert.throws(() => assertRecoveryCausalMilestones(lostReservation), /same-operation hydrated/);
+  const reorderedDue = structuredClone(milestones); reorderedDue.hydratedInflight.schedules[1].dueAt += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(reorderedDue), /same-operation hydrated/);
   const staleCustody = structuredClone(milestones); staleCustody.hydratedDepotCustody.replicaRevision += 1;
   assert.throws(() => assertRecoveryCausalMilestones(staleCustody), /same-operation hydrated/);
-  const reordered = structuredClone(milestones); reordered.hiveReleased.instant = 12509;
-  assert.throws(() => assertRecoveryCausalMilestones(reordered), /reordered or wrong-subject/);
-  const wrongSubject = structuredClone(milestones); wrongSubject.coldEffectConfirmed.id = 'hive:other';
-  assert.throws(() => assertRecoveryCausalMilestones(wrongSubject), /confirmed released-COLD/);
-  const duplicateTerminal = structuredClone(milestones); duplicateTerminal.terminalProduct.tasks.push({ ...duplicateTerminal.terminalProduct.tasks[0] });
+  const fabricatedCustody = structuredClone(milestones); fabricatedCustody.hydratedDepotCustody.custodyStatus = 'ACQUIRED';
+  assert.throws(() => assertRecoveryCausalMilestones(fabricatedCustody), /same-operation hydrated/);
+  const wrongSubject = structuredClone(milestones); wrongSubject.terminalProduct.tasks[1].id = 'task:settlement-1-replaced';
+  assert.throws(() => assertRecoveryCausalMilestones(wrongSubject), /exact terminal operation/);
+  const duplicateTerminal = structuredClone(milestones); duplicateTerminal.terminalProduct.tasks.push({ ...duplicateTerminal.terminalProduct.tasks[1] });
   assert.throws(() => assertRecoveryCausalMilestones(duplicateTerminal), /exact terminal operation/);
 });
 

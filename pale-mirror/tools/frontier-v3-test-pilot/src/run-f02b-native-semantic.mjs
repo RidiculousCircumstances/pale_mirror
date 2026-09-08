@@ -4,7 +4,7 @@ import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { assertSemanticEvidence, F02B_KIND, F02B_PRIMARY_KIND, F02B_SCHEMA, hashJson, laneFor } from './f02b-native-semantic.mjs';
+import { assertSemanticEvidence, F02B_KIND, F02B_PRIMARY_KIND, F02B_SCHEMA, hashJson, laneFor, recoveryMilestones } from './f02b-native-semantic.mjs';
 import { consumeRuntime } from './f0vc-prepared-runtime.mjs';
 
 const values = Object.fromEntries(process.argv.slice(2).map(value => { const [key, entry] = value.slice(2).split('=', 2); return [key, entry]; }));
@@ -194,46 +194,6 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
       splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics) };
   }
   return result;
-}
-
-function recoveryMilestones(diagnostics) {
-  const byName = new Map();
-  for (const entry of diagnostics) {
-    const value = entry.value;
-    const name = value?.pilotCausalMilestone;
-    if (!name) continue;
-    byName.set(name, { phase: entry.phase, value });
-  }
-  const reference = name => {
-    const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      actionStep: value.pilotActionStep,
-      tasks: (value.tasks ?? []).map(task => ({ id: task.id, kind: task.kind, status: task.status })).sort(compareJson),
-      taskKinds: [...new Set((value.tasks ?? []).map(task => task.kind))].sort(),
-      schedules: (value.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject, kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
-      orders: (value.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation, reservationActive: order.reservationActive, status: order.status })).sort(compareJson) };
-  };
-  const hive = name => {
-    const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      growthJobs: value.growthJobs, addedOrgans: value.addedOrgans, spawnedBioforms: value.spawnedBioforms };
-  };
-  const released = name => {
-    const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      custodyStatus: value.custody?.status, chunk: value.physicalSocket?.chunk };
-  };
-  const custody = name => {
-    const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      actionStep: value.pilotActionStep, custodyStatus: value.custody?.status, custodyEpoch: value.custody?.epoch,
-      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint };
-  };
-  return { activeAdmission: reference('recovery_active_admission'), afterReacquire: reference('recovery_after_reacquire'),
-    activeDepotCustody: custody('recovery_active_depot_custody'), hydratedInflight: reference('recovery_hydrated_inflight'),
-    hydratedDepotCustody: custody('recovery_hydrated_depot_custody'), terminalProduct: reference('recovery_terminal_product'),
-    liveHivePending: hive('recovery_live_hive_pending'), depotReleased: released('recovery_depot_released'),
-    hiveReleased: released('recovery_hive_released'), coldEffectConfirmed: hive('recovery_cold_effect_confirmed') };
 }
 
 function referenceCausality(observations) {

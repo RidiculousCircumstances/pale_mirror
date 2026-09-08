@@ -127,6 +127,34 @@ export function mergeSemanticMatrix(evidence, expected) {
 
 export function hashJson(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 
+/** Extract the named, read-only recovery facts from both retained restart halves. */
+export function recoveryMilestones(diagnostics) {
+  const byName = new Map();
+  for (const entry of diagnostics) {
+    const value = entry?.value;
+    const name = value?.pilotCausalMilestone;
+    if (name) byName.set(name, { phase: entry.phase, value });
+  }
+  const reference = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      actionStep: value.pilotActionStep,
+      tasks: (value.tasks ?? []).map(task => ({ id: task.id, kind: task.kind, status: task.status })).sort(compareJson),
+      taskKinds: [...new Set((value.tasks ?? []).map(task => task.kind))].sort(),
+      schedules: (value.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject, kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
+      orders: (value.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation, reservationActive: order.reservationActive, status: order.status })).sort(compareJson) };
+  };
+  const custody = name => {
+    const entry = byName.get(name); const value = entry?.value;
+    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
+      actionStep: value.pilotActionStep, custodyStatus: value.custody?.status, custodyEpoch: value.custody?.epoch,
+      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint };
+  };
+  return { activeAdmission: reference('recovery_active_admission'), afterReacquire: reference('recovery_after_reacquire'),
+    activeDepotCustody: custody('recovery_active_depot_custody'), hydratedInflight: reference('recovery_hydrated_inflight'),
+    hydratedDepotCustody: custody('recovery_hydrated_depot_custody'), terminalProduct: reference('recovery_terminal_product') };
+}
+
 function immutableIdentity(value) {
   return { qualificationId: value.qualificationId, repository: value.repository, headSha: value.headSha, workflowSha: value.workflowSha,
     workflowRef: value.workflowRef, runId: value.runId, runAttempt: value.runAttempt, jobId: value.jobId, runnerId: value.runnerId,
@@ -135,6 +163,7 @@ function immutableIdentity(value) {
 }
 
 function sameJson(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
+function compareJson(left, right) { return JSON.stringify(left).localeCompare(JSON.stringify(right)); }
 
 function assertTerminalFacts(lane, terminal) {
   const replica = terminal.replica; const custody = terminal.custody;
@@ -248,60 +277,41 @@ function assertZeroPlayerBirthCatchup(value) {
  * unrelated hive state, or a reordered receipt cannot satisfy this predicate.
  */
 export function assertRecoveryCausalMilestones(milestones) {
-  const required = ['activeAdmission', 'activeDepotCustody', 'hydratedInflight', 'hydratedDepotCustody', 'afterReacquire', 'liveHivePending', 'depotReleased', 'hiveReleased', 'coldEffectConfirmed', 'terminalProduct'];
+  const required = ['activeAdmission', 'activeDepotCustody', 'hydratedInflight', 'hydratedDepotCustody', 'afterReacquire', 'terminalProduct'];
   if (!milestones || typeof milestones !== 'object' || required.some(key => !milestones[key])) {
     throw new Error('F0.2B product recovery has missing causal milestone evidence');
   }
   const active = milestones.activeAdmission;
   if (active.phase !== 'before_restart' || active.kind !== 'reference_container' || active.id !== 'f02b'
       || !Number.isSafeInteger(active.instant) || !active.taskKinds?.includes('PRODUCE_BREAD') || !active.taskKinds?.includes('GROW_HIVE_ORGANISM')
-      || !Array.isArray(active.schedules) || active.schedules.length < 2 || !Array.isArray(active.orders)
-      || !exactOperation(active, 'ACTIVE', 'ACCEPTED', true)
+      || !exactInFlightProduction(active) || !exactPendingHiveStart(active)
       || !Number.isSafeInteger(active.actionStep)) {
     throw new Error('F0.2B product recovery lacks retained active-admission evidence');
   }
   const activeCustody = milestones.activeDepotCustody;
-  if (!exactDepotCustody(activeCustody, 'before_restart') || activeCustody.actionStep !== active.actionStep + 1) {
+  if (!exactDepotCustody(activeCustody, 'before_restart', 'ACQUIRED') || activeCustody.actionStep !== active.actionStep + 1) {
     throw new Error('F0.2B product recovery lacks retained active-custody evidence');
   }
   const hydrated = milestones.hydratedInflight;
   const hydratedCustody = milestones.hydratedDepotCustody;
   if (hydrated.phase !== 'after_restart' || hydrated.kind !== 'reference_container' || hydrated.id !== 'f02b'
-      || !Number.isSafeInteger(hydrated.instant) || hydrated.instant < active.instant || !sameOperation(active, hydrated)
-      || !Number.isSafeInteger(hydrated.actionStep) || hydrated.actionStep !== activeCustody.actionStep + 2
-      || !exactDepotCustody(hydratedCustody, 'after_restart') || hydratedCustody.actionStep !== hydrated.actionStep + 1
+      || !Number.isSafeInteger(hydrated.instant) || hydrated.instant < active.instant
+      || !sameInFlightProduction(exactInFlightProduction(active), exactInFlightProduction(hydrated))
+      || !Number.isSafeInteger(hydrated.actionStep)
+      || !exactDepotCustody(hydratedCustody, 'after_restart', 'RELEASED') || hydratedCustody.actionStep !== hydrated.actionStep + 1
       || !sameCustody(activeCustody, hydratedCustody)) {
     throw new Error('F0.2B product recovery lacks same-operation hydrated in-flight evidence');
   }
   const after = milestones.afterReacquire;
   if (after.phase !== 'after_restart' || after.kind !== 'reference_container' || after.id !== 'f02b'
       || !Number.isSafeInteger(after.instant) || after.instant < active.instant
-      || !after.taskKinds?.includes('GROW_HIVE_ORGANISM') || !exactProductionCompletion(after)) {
+      || !exactProductionCompletion(after)) {
     throw new Error('F0.2B product recovery has stale or wrong-subject reacquire evidence');
-  }
-  const pending = milestones.liveHivePending;
-  if (pending.phase !== 'after_restart' || pending.kind !== 'hive' || pending.id !== 'hive:frontier'
-      || !Number.isSafeInteger(pending.instant) || pending.instant < after.instant || pending.growthJobs < 1) {
-    throw new Error('F0.2B product recovery lacks an in-flight hive boundary');
-  }
-  for (const [key, id] of [['depotReleased', 'container:1-depot'], ['hiveReleased', 'container:hive-east-store']]) {
-    const released = milestones[key];
-    if (released.phase !== 'after_restart' || released.kind !== 'container' || released.id !== id
-        || !Number.isSafeInteger(released.instant) || released.instant < pending.instant
-        || released.custodyStatus !== 'RELEASED' || released.chunk !== 'UNLOADED') {
-      throw new Error('F0.2B product recovery has reordered or wrong-subject release evidence');
-    }
-  }
-  const terminal = milestones.coldEffectConfirmed;
-  if (terminal.phase !== 'after_restart' || terminal.kind !== 'hive' || terminal.id !== 'hive:frontier'
-      || !Number.isSafeInteger(terminal.instant) || terminal.instant < milestones.hiveReleased.instant
-      || terminal.growthJobs !== 0 || terminal.addedOrgans !== 1 || terminal.spawnedBioforms !== 1) {
-    throw new Error('F0.2B product recovery lacks confirmed released-COLD hive evidence');
   }
   const terminalProduct = milestones.terminalProduct;
   if (terminalProduct.phase !== 'after_restart' || terminalProduct.kind !== 'reference_container' || terminalProduct.id !== 'f02b'
-      || !Number.isSafeInteger(terminalProduct.instant) || terminalProduct.instant < terminal.instant
-      || !exactOperation(terminalProduct, 'COMPLETED', 'FULFILLED', false)) {
+      || !Number.isSafeInteger(terminalProduct.instant) || terminalProduct.instant < after.instant
+      || !exactProductionCompletion(terminalProduct)) {
     throw new Error('F0.2B product recovery lacks exact terminal operation evidence');
   }
   return milestones;
@@ -316,9 +326,9 @@ function exactProductionCompletion(value) {
   return production.length === 1 && order.length === 1;
 }
 
-function exactDepotCustody(value, phase) {
+function exactDepotCustody(value, phase, status) {
   return value?.phase === phase && value.kind === 'container' && value.id === 'container:1-depot'
-    && value.custodyStatus === 'ACQUIRED' && Number.isSafeInteger(value.actionStep) && Number.isSafeInteger(value.custodyEpoch)
+    && value.custodyStatus === status && Number.isSafeInteger(value.actionStep) && Number.isSafeInteger(value.custodyEpoch)
     && Number.isSafeInteger(value.replicaRevision) && typeof value.replicaFingerprint === 'string' && value.replicaFingerprint.startsWith('sha256:');
 }
 
@@ -327,25 +337,46 @@ function sameCustody(left, right) {
     && left.replicaFingerprint === right.replicaFingerprint;
 }
 
-function sameOperation(left, right) {
-  return JSON.stringify(left.tasks) === JSON.stringify(right.tasks) && JSON.stringify(left.schedules) === JSON.stringify(right.schedules)
-    && JSON.stringify(left.orders) === JSON.stringify(right.orders);
-}
-
-function exactOperation(value, taskStatus, orderStatus, reservationActive) {
-  const task = (id, kind) => value.tasks?.filter(candidate => candidate.id === id && candidate.kind === kind && candidate.status === taskStatus) ?? [];
-  const production = task('task:settlement-1-settlement_produce_bread-1', 'PRODUCE_BREAD');
-  const growth = task('task:hive-frontier-hive_grow_organism-1', 'GROW_HIVE_ORGANISM');
+/**
+ * The recovery boundary names one actually admitted operation.  The companion
+ * hive task is deliberately still PENDING at that instant, so it is a control
+ * for due ordering, not a fabricated second in-flight recovery subject.  A
+ * later graceful save can advance canonical time, therefore the durable fact is
+ * the operation's exact action identity and remaining due interval, rather than
+ * two unrelated absolute instants from different server lifetimes.
+ */
+function exactInFlightProduction(value) {
+  if (!value || !Number.isSafeInteger(value.instant)) return null;
+  const task = value.tasks?.filter(candidate => candidate.id === 'task:settlement-1-settlement_produce_bread-1'
+    && candidate.kind === 'PRODUCE_BREAD' && candidate.status === 'ACTIVE') ?? [];
   const order = value.orders?.filter(candidate => candidate.task === 'task:settlement-1-settlement_produce_bread-1'
     && candidate.job === 'job:production-1-1' && candidate.reservation === 'reservation:production-1-1'
-    && candidate.reservationActive === reservationActive && candidate.status === orderStatus) ?? [];
-  if (production.length !== 1 || growth.length !== 1 || order.length !== 1) return false;
-  if (taskStatus === 'COMPLETED') return true;
-  const productionSchedules = value.schedules?.filter(candidate => candidate.subject === 'job:production-1-1'
-    && candidate.kind === 'frontier.settlement.production.task.complete' && Number.isSafeInteger(candidate.dueAt)) ?? [];
-  const growthSchedules = value.schedules?.filter(candidate => candidate.subject === 'job:hive-growth-1'
-    && candidate.kind === 'frontier.hive.growth.task.complete' && Number.isSafeInteger(candidate.dueAt)) ?? [];
-  return productionSchedules.length === 1 && growthSchedules.length === 1 && productionSchedules[0].dueAt < growthSchedules[0].dueAt;
+    && candidate.reservationActive === true && candidate.status === 'ACCEPTED') ?? [];
+  const schedule = value.schedules?.filter(candidate => candidate.id === 'schedule:production-task-complete-production-1-1'
+    && candidate.subject === 'job:production-1-1' && candidate.kind === 'frontier.settlement.production.task.complete'
+    && candidate.weight === 1 && Number.isSafeInteger(candidate.dueAt)) ?? [];
+  if (task.length !== 1 || order.length !== 1 || schedule.length !== 1) return null;
+  const remaining = schedule[0].dueAt - value.instant;
+  if (!Number.isSafeInteger(remaining) || remaining <= 0) return null;
+  return { task: task[0], order: order[0], schedule: schedule[0], remaining };
+}
+
+function exactPendingHiveStart(value) {
+  if (!value || !Number.isSafeInteger(value.instant)) return false;
+  const task = value.tasks?.filter(candidate => candidate.id === 'task:hive-frontier-hive_grow_organism-1'
+    && candidate.kind === 'GROW_HIVE_ORGANISM' && candidate.status === 'PENDING') ?? [];
+  const schedule = value.schedules?.filter(candidate => candidate.id === 'schedule:hive-growth-task-start-task-hive-frontier-hive_grow_organism-1'
+    && candidate.subject === 'task:hive-frontier-hive_grow_organism-1' && candidate.kind === 'frontier.hive.growth.task.start'
+    && candidate.weight === 1 && Number.isSafeInteger(candidate.dueAt) && candidate.dueAt > value.instant) ?? [];
+  return task.length === 1 && schedule.length === 1;
+}
+
+function sameInFlightProduction(left, right) {
+  return left != null && right != null && JSON.stringify(left.task) === JSON.stringify(right.task)
+    && JSON.stringify(left.order) === JSON.stringify(right.order)
+    && left.schedule.id === right.schedule.id && left.schedule.subject === right.schedule.subject
+    && left.schedule.kind === right.schedule.kind && left.schedule.weight === right.schedule.weight
+    && left.remaining === right.remaining;
 }
 
 function assertHistoryComparator(checked) {
