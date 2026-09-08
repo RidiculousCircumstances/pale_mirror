@@ -292,6 +292,16 @@ test('F0.2B no-demand carriers are named ordinary visits, never fixture or force
     'container:1-depot': { x: -343, z: -326 },
     'container:hive-east-store': { x: 412, z: 420 }
   });
+  // The observer-free depot proof is still a real production run: its one worker starts on
+  // the retained residential apron and crosses the Workshop's west service port before the
+  // exact depot write.  A carrier that only reaches the chest can acquire custody yet leave
+  // the physical worker frozen in an unticking column, which would turn a geometry accident
+  // into a false product failure.  These immutable bootstrap coordinates keep the smallest
+  // ordinary view (8) wide enough for that exact bounded production envelope.
+  const depotProductionEnvelope = Object.freeze({
+    residentHome: { x: -362, z: -370 },
+    workshopService: { x: -385, z: -326 }
+  });
   const verifyCarrierGeometry = (scenario, milestones) => {
     assert.equal(scenario.server.viewDistance, 8, `${scenario.id} retains only the exact seven-chunk natural-streaming carrier`);
     for (const milestone of milestones) {
@@ -316,6 +326,17 @@ test('F0.2B no-demand carriers are named ordinary visits, never fixture or force
   verifyCarrierGeometry(zero, ['zero_player_depot_loaded_no_demand', 'zero_player_depot_acquired_no_demand',
     'zero_player_hive_loaded_no_demand', 'zero_player_hive_acquired_no_demand']);
   verifyCarrierGeometry(recovery, ['recovery_depot_loaded_no_demand', 'recovery_depot_checkpointed_no_demand']);
+  for (const milestone of ['zero_player_depot_loaded_no_demand', 'zero_player_depot_acquired_no_demand']) {
+    const actionIndex = zero.actions.findIndex(action => action.causalMilestone === milestone);
+    const visit = zero.actions.slice(0, actionIndex).findLast(candidate => candidate.type === 'visit'
+      && candidate.dimension === 'pale_mirror:frontier_graybox');
+    for (const [name, position] of Object.entries(depotProductionEnvelope)) {
+      const distance = Math.max(Math.abs(Math.floor(visit.position.x / 16) - Math.floor(position.x / 16)),
+        Math.abs(Math.floor(visit.position.z / 16) - Math.floor(position.z / 16)));
+      assert.ok(distance <= zero.server.viewDistance,
+        `${milestone} keeps the exact production ${name} column naturally ticking`);
+    }
+  }
 });
 
 test('F0.2B zero-player evidence does not turn retained replica history into a fixed birth endpoint', () => {
