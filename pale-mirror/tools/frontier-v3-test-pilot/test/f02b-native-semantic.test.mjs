@@ -222,6 +222,16 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
   assert.equal(scenario.assertions.find(assertion => assertion.after === 45)?.expect.food.available, 63);
 });
 
+test('F0.2B graceful product recovery retains both family admissions and their active reservation before restart', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-product-recovery.json'), 'utf8'));
+  const restart = scenario.restart.afterAction;
+  const beforeRestart = scenario.actions.slice(0, restart);
+  assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 2);
+  assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 2);
+  assert.deepEqual(beforeRestart.at(-1), { type: 'inspect', view: 'reference_container', id: 'f02b' });
+});
+
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-depot-foreign-restart.json'), 'utf8'));
