@@ -96,7 +96,7 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(workflow, /--memory-per-worker-mib=6144/);
-  assert.match(workflow, /JAVA_TOOL_OPTIONS: -Xmx3G/);
+  assert.equal((workflow.match(/JAVA_TOOL_OPTIONS: -Xmx3G/g) ?? []).length, 2);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);

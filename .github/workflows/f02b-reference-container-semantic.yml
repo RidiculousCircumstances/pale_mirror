@@ -40,6 +40,10 @@ jobs:
           node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
           --root="${{ inputs.task_root }}" --workers=4 --memory-per-worker-mib=6144 --output="$PWD/f02b-artifacts/producer/capacity.json"
       - name: Build, package, and stage the one immutable runtime
+        env:
+          # The prepared runtime fingerprints Java's exact visible launch environment.
+          # Consumers execute the same bounded envelope, so preparation must see it too.
+          JAVA_TOOL_OPTIONS: -Xmx3G
         run: |
           mkdir -p "$PWD/build/f02b-producer"
           node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=build/f02b-producer/prepared-build.json
