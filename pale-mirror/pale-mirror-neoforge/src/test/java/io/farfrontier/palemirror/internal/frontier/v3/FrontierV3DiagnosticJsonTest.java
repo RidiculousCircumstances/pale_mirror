@@ -167,13 +167,14 @@ class FrontierV3DiagnosticJsonTest {
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         SubjectId container = state.inventory().containers().keySet().stream().sorted().findFirst().orElseThrow();
         var readiness = new FrontierV3ContainerSurfaceExecutor.Readiness("LOADED", "CONFLICT", "READY",
-                "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "", false);
+                "minecraft:chest", "FOREIGN_OR_UNTAGGED", "UNAVAILABLE", "", false, false, 0, 0);
 
         String json = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(readiness));
 
         assertTrue(json.contains("\"physicalSocket\":{\"chunk\":\"LOADED\",\"freshSocket\":\"CONFLICT\""));
         assertTrue(json.contains("\"targetBlock\":\"minecraft:chest\"") && json.contains("\"chest\":\"FOREIGN_OR_UNTAGGED\""));
+        assertTrue(json.contains("\"presentationDemand\":false,\"eligibleObserverCount\":0,\"presentationObserverCount\":0"));
         assertTrue(runtime.decodedState().orElseThrow().equals(state), "container socket diagnostics must not mutate canonical inventory or load work");
         runtime.shutdown();
     }

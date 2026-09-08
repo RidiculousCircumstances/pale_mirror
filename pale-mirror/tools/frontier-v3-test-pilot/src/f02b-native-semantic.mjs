@@ -244,11 +244,28 @@ function assertNormalHistory(history) {
         || scopes.map(value => value.id).join(',') !== 'container:1-depot,container:hive-east-store'
         || admission.safeUnload !== true || admission.safeUnloadScopes?.['container:1-depot'] !== true
         || admission.safeUnloadScopes?.['container:hive-east-store'] !== true
-        || scopes.some(value => !Number.isSafeInteger(value.visitStep) || !Number.isSafeInteger(value.observationStep)
+        || scopes.some(value => !Number.isSafeInteger(value.priorReleasedActionStep) || !Number.isSafeInteger(value.priorReleasedCustodyEpoch)
+          || !Number.isSafeInteger(value.visitStep) || !Number.isSafeInteger(value.loadedActionStep)
+          || !Number.isSafeInteger(value.acquiredActionStep) || !Number.isSafeInteger(value.effectActionStep)
+          || !Number.isSafeInteger(value.releasedActionStep) || value.loadedActionStep >= value.acquiredActionStep
+          || value.acquiredActionStep >= value.effectActionStep || value.effectActionStep >= value.releasedActionStep
+          || value.priorReleasedActionStep >= value.visitStep || value.visitStep >= value.loadedActionStep
           || !Number.isSafeInteger(value.custodyEpoch) || !Number.isSafeInteger(value.replicaRevision)
-          || value.ordinaryPlayerNearby !== false || value.visitStep >= value.observationStep || value.playerChunk?.x === value.scopeChunk?.x && value.playerChunk?.z === value.scopeChunk?.z
-          || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.depot, admission.causal.admissionAction)
-          || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.hive, admission.causal.admissionAction))) {
+          || !Number.isSafeInteger(value.loadedCustodyEpoch) || value.priorReleasedCustodyEpoch > value.loadedCustodyEpoch
+          || value.loadedCustodyEpoch > value.custodyEpoch || value.effectCustodyEpoch !== value.custodyEpoch
+          || value.releasedCustodyEpoch !== value.custodyEpoch || !Number.isSafeInteger(value.loadedReplicaRevision)
+          || !Number.isSafeInteger(value.effectReplicaRevision) || !Number.isSafeInteger(value.releasedReplicaRevision)
+          || value.loadedReplicaRevision > value.replicaRevision || value.effectReplicaRevision < value.replicaRevision
+          || value.releasedReplicaRevision < value.effectReplicaRevision
+          || typeof value.replicaFingerprint !== 'string' || !value.replicaFingerprint.startsWith('sha256:')
+          || value.naturalChunkLoaded !== true || value.ordinaryPlayerNearby !== false || value.presentationDemand !== false
+          || value.eligibleObserverCount !== 0 || value.presentationObserverCount !== 0
+          || value.playerChunk?.x === value.scopeChunk?.x && value.playerChunk?.z === value.scopeChunk?.z
+          || value.loadedMilestone !== `zero_player_${value.id === 'container:1-depot' ? 'depot' : 'hive'}_loaded_no_demand`
+          || value.acquiredMilestone !== `zero_player_${value.id === 'container:1-depot' ? 'depot' : 'hive'}_acquired_no_demand`
+          || value.effectMilestone !== `zero_player_${value.id === 'container:1-depot' ? 'depot' : 'hive'}_effect_no_demand`
+          || value.releasedMilestone !== `zero_player_${value.id === 'container:1-depot' ? 'depot' : 'hive'}_released`
+          || !physicalEffectAfterAdmission(admission.observerFreePhysicalEffects?.[value.id === 'container:1-depot' ? 'depot' : 'hive'], admission.causal.admissionAction, value))) {
       throw new Error('F0.2B zero-player history is not causal');
     }
     assertZeroPlayerBirthCatchup(admission.birthCatchup);
@@ -289,7 +306,7 @@ export function assertRecoveryCausalMilestones(milestones) {
     throw new Error('F0.2B product recovery lacks retained active-admission evidence');
   }
   const activeCustody = milestones.activeDepotCustody;
-  if (!exactDepotCustody(activeCustody, 'before_restart', 'ACQUIRED') || activeCustody.actionStep !== active.actionStep + 1) {
+  if (!exactDepotCustody(activeCustody, 'before_restart', 'CHECKPOINTED') || activeCustody.actionStep !== active.actionStep + 1) {
     throw new Error('F0.2B product recovery lacks retained active-custody evidence');
   }
   const hydrated = milestones.hydratedInflight;
@@ -399,9 +416,12 @@ function assertHistoryComparator(checked) {
   }
 }
 
-function physicalEffectAfterAdmission(effect, admissionAction) {
+function physicalEffectAfterAdmission(effect, admissionAction, scope) {
   return effect && typeof effect === 'object' && Number.isSafeInteger(effect.actionStep)
-    && effect.actionStep > admissionAction && Number.isSafeInteger(effect.custodyEpoch)
+    && effect.actionStep > admissionAction && effect.actionStep === scope.effectActionStep && Number.isSafeInteger(effect.custodyEpoch)
     && Number.isSafeInteger(effect.replicaRevision) && typeof effect.replicaFingerprint === 'string'
-    && effect.replicaFingerprint.startsWith('sha256:') && effect.ordinaryPlayerNearby === false;
+    && effect.replicaFingerprint.startsWith('sha256:') && effect.custodyEpoch === scope.custodyEpoch
+    && effect.replicaRevision >= scope.replicaRevision
+    && effect.milestone === scope.effectMilestone && effect.ordinaryPlayerNearby === false
+    && effect.presentationDemand === false && effect.eligibleObserverCount === 0 && effect.presentationObserverCount === 0;
 }

@@ -36,11 +36,17 @@ function evidence(worker, index = Number(worker.at(-1))) {
     safeUnload: history === 'visited-unloaded' || history === 'zero-player', zeroPlayerLoaded: history === 'zero-player',
     safeUnloadScopes: history === 'visited-unloaded' || history === 'zero-player' ? { 'container:1-depot': true, 'container:hive-east-store': true } : {},
     zeroPlayerScopes: history === 'zero-player' ? [
-      { id: 'container:1-depot', visitStep: 3, observationStep: 5, playerChunk: { x: -21, z: -21 }, scopeChunk: { x: -22, z: -21 }, custodyEpoch: 1, replicaRevision: 1, ordinaryPlayerNearby: false },
-      { id: 'container:hive-east-store', visitStep: 6, observationStep: 8, playerChunk: { x: 26, z: 26 }, scopeChunk: { x: 25, z: 26 }, custodyEpoch: 1, replicaRevision: 1, ordinaryPlayerNearby: false }
+      { id: 'container:1-depot', priorReleasedActionStep: 1, priorReleasedCustodyEpoch: 1, visitStep: 2, loadedActionStep: 3, acquiredActionStep: 4, effectActionStep: 5, releasedActionStep: 7,
+        loadedMilestone: 'zero_player_depot_loaded_no_demand', acquiredMilestone: 'zero_player_depot_acquired_no_demand', effectMilestone: 'zero_player_depot_effect_no_demand', releasedMilestone: 'zero_player_depot_released',
+        playerChunk: { x: -21, z: -21 }, scopeChunk: { x: -22, z: -21 }, loadedCustodyEpoch: 1, custodyEpoch: 2, effectCustodyEpoch: 2, releasedCustodyEpoch: 2,
+        loadedReplicaRevision: 1, replicaRevision: 1, effectReplicaRevision: 3, releasedReplicaRevision: 3, replicaFingerprint: 'sha256:depot-active', naturalChunkLoaded: true, ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 },
+      { id: 'container:hive-east-store', priorReleasedActionStep: 1, priorReleasedCustodyEpoch: 1, visitStep: 2, loadedActionStep: 3, acquiredActionStep: 4, effectActionStep: 6, releasedActionStep: 8,
+        loadedMilestone: 'zero_player_hive_loaded_no_demand', acquiredMilestone: 'zero_player_hive_acquired_no_demand', effectMilestone: 'zero_player_hive_effect_no_demand', releasedMilestone: 'zero_player_hive_released',
+        playerChunk: { x: 26, z: 26 }, scopeChunk: { x: 25, z: 26 }, loadedCustodyEpoch: 1, custodyEpoch: 2, effectCustodyEpoch: 2, releasedCustodyEpoch: 2,
+        loadedReplicaRevision: 1, replicaRevision: 1, effectReplicaRevision: 3, releasedReplicaRevision: 3, replicaFingerprint: 'sha256:hive-active', naturalChunkLoaded: true, ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 }
     ] : [], observerFreePhysicalEffects: history === 'zero-player' ? {
-      depot: { actionStep: 5, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-bread', ordinaryPlayerNearby: false },
-      hive: { actionStep: 6, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:hive-growth', ordinaryPlayerNearby: false }
+      depot: { actionStep: 5, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-bread', milestone: 'zero_player_depot_effect_no_demand', ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 },
+      hive: { actionStep: 6, custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:hive-growth', milestone: 'zero_player_hive_effect_no_demand', ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 }
     } : { depot: null, hive: null }, dueAction: 3,
     ...(history === 'zero-player' ? { birthCatchup: {
       cold: { actionStep: 38, instant: 30000, job: { id: 'job:resident-birth-1-3', food: 'item:production-1-1-bread', intent: 'intent:resident-birth-food-1-3', resident: 'resident:1-born-3' },
@@ -60,7 +66,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
       activeAdmission: { phase: 'before_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 14,
         tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
       activeDepotCustody: { phase: 'before_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
-        actionStep: 15, custodyStatus: 'ACQUIRED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+        actionStep: 15, custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
       hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3460, actionStep: 1,
         tasks: structuredClone(hydratedTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(hydratedSchedules), orders: structuredClone(activeOrders) },
       hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3460,
@@ -241,12 +247,75 @@ test('F0.2B normal-history assertions bind their exact ordinary inspection actio
   }
 });
 
-test('F0.2B zero-player history requires retained loaded observations outside both reference chunks', () => {
+test('F0.2B zero-player history rejects missing demand-zero, wrong-family and reordered natural-streaming facts', () => {
   const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
   const missingHive = structuredClone(complete); missingHive[2].terminal.histories[0].admission.zeroPlayerScopes.pop();
   assert.throws(() => mergeSemanticMatrix(missingHive, expected), /zero-player history is not causal/);
   const sameChunk = structuredClone(complete); sameChunk[2].terminal.histories[0].admission.zeroPlayerScopes[0].playerChunk = { x: -22, z: -21 };
   assert.throws(() => mergeSemanticMatrix(sameChunk, expected), /zero-player history is not causal/);
+  const demand = structuredClone(complete); demand[2].terminal.histories[0].admission.zeroPlayerScopes[1].presentationDemand = true;
+  assert.throws(() => mergeSemanticMatrix(demand, expected), /zero-player history is not causal/);
+  const observer = structuredClone(complete); observer[2].terminal.histories[0].admission.zeroPlayerScopes[0].presentationObserverCount = 1;
+  assert.throws(() => mergeSemanticMatrix(observer, expected), /zero-player history is not causal/);
+  const wrongFamily = structuredClone(complete); wrongFamily[2].terminal.histories[0].admission.zeroPlayerScopes[0].effectMilestone = 'zero_player_hive_effect_no_demand';
+  assert.throws(() => mergeSemanticMatrix(wrongFamily, expected), /zero-player history is not causal/);
+  const reordered = structuredClone(complete); reordered[2].terminal.histories[0].admission.zeroPlayerScopes[0].acquiredActionStep = 2;
+  assert.throws(() => mergeSemanticMatrix(reordered, expected), /zero-player history is not causal/);
+  const staleRelease = structuredClone(complete); staleRelease[2].terminal.histories[0].admission.zeroPlayerScopes[0].priorReleasedActionStep = 3;
+  assert.throws(() => mergeSemanticMatrix(staleRelease, expected), /zero-player history is not causal/);
+  const forced = structuredClone(complete); forced[2].terminal.histories[0].admission.zeroPlayerScopes[0].naturalChunkLoaded = false;
+  assert.throws(() => mergeSemanticMatrix(forced, expected), /zero-player history is not causal/);
+});
+
+test('F0.2B no-demand carriers are named ordinary visits, never fixture or force-load commands', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const zero = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-zero-player.json'), 'utf8'));
+  const recovery = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-product-recovery.json'), 'utf8'));
+  for (const scenario of [zero, recovery]) {
+    assert.doesNotThrow(() => validateScenario(scenario));
+    assert.equal(scenario.actions.some(action => action.type === 'command' || /force/i.test(action.type)), false,
+      `${scenario.id} relies only on ordinary pilot actions`);
+  }
+  const named = zero.actions.filter(action => action.type === 'wait_until_diagnostic' && action.causalMilestone?.includes('_no_demand'));
+  assert.deepEqual(named.map(action => action.causalMilestone), [
+    'zero_player_depot_loaded_no_demand', 'zero_player_depot_acquired_no_demand',
+    'zero_player_hive_loaded_no_demand', 'zero_player_hive_acquired_no_demand'
+  ]);
+  for (const action of named) {
+    assert.deepEqual(action.expect.physicalSocket, { chunk: 'LOADED', ordinaryPlayerNearby: false, presentationDemand: false,
+      eligibleObserverCount: 0, presentationObserverCount: 0 });
+  }
+  const recoveryCarrier = recovery.actions.filter(action => action.causalMilestone?.includes('_no_demand'));
+  assert.deepEqual(recoveryCarrier.map(action => action.causalMilestone), ['recovery_depot_loaded_no_demand', 'recovery_depot_checkpointed_no_demand']);
+
+  const scopes = Object.freeze({
+    'container:1-depot': { x: -343, z: -326 },
+    'container:hive-east-store': { x: 412, z: 420 }
+  });
+  const verifyCarrierGeometry = (scenario, milestones) => {
+    assert.equal(scenario.server.viewDistance, 8, `${scenario.id} retains only the exact seven-chunk natural-streaming carrier`);
+    for (const milestone of milestones) {
+      const actionIndex = scenario.actions.findIndex(action => action.causalMilestone === milestone);
+      assert.ok(actionIndex >= 0, `${scenario.id} retains ${milestone}`);
+      const action = scenario.actions[actionIndex];
+      const visit = scenario.actions.slice(0, actionIndex).findLast(candidate => candidate.type === 'visit'
+        && candidate.dimension === 'pale_mirror:frontier_graybox');
+      const scope = scopes[action.id];
+      assert.ok(visit && scope, `${milestone} has an ordinary graybox visit and known physical scope`);
+      assert.ok(Math.hypot(visit.position.x - scope.x, visit.position.z - scope.z) > 96,
+        `${milestone} remains outside the presentation envelope`);
+      const chunkDistance = Math.max(Math.abs(Math.floor(visit.position.x / 16) - Math.floor(scope.x / 16)),
+        Math.abs(Math.floor(visit.position.z / 16) - Math.floor(scope.z / 16)));
+      assert.equal(chunkDistance, 7, `${milestone} retains the bounded natural chunk distance`);
+      assert.equal(scenario.server.viewDistance, chunkDistance + 1,
+        `${milestone} keeps exactly the smallest inclusive natural-streaming carrier`);
+      assert.deepEqual(action.expect.physicalSocket, { chunk: 'LOADED', ordinaryPlayerNearby: false, presentationDemand: false,
+        eligibleObserverCount: 0, presentationObserverCount: 0 }, `${milestone} binds natural loading to zero eligible demand`);
+    }
+  };
+  verifyCarrierGeometry(zero, ['zero_player_depot_loaded_no_demand', 'zero_player_depot_acquired_no_demand',
+    'zero_player_hive_loaded_no_demand', 'zero_player_hive_acquired_no_demand']);
+  verifyCarrierGeometry(recovery, ['recovery_depot_loaded_no_demand', 'recovery_depot_checkpointed_no_demand']);
 });
 
 test('F0.2B zero-player evidence does not turn retained replica history into a fixed birth endpoint', () => {
@@ -268,17 +337,15 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
   const birthConsumed = scenario.actions.findIndex(action => action.causalMilestone === 'zero_player_birth_consumed');
   const confirmed = scenario.actions.findIndex((action, index) => index > birthConsumed && action.type === 'wait_until_diagnostic'
     && action.expect?.replica?.state === 'OBSERVED_CURRENT' && action.expect?.custody?.status === 'ACQUIRED');
-  const observerFreeLoad = scenario.actions.findIndex((action, index) => index > 0 && action.type === 'wait_until_diagnostic'
-    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'RELEASED'
-    && action.expect?.physicalSocket?.chunk === 'LOADED' && action.expect?.physicalSocket?.ordinaryPlayerNearby === false);
-  const observerFreeAcquire = scenario.actions.findIndex((action, index) => index > observerFreeLoad && action.type === 'wait_until_diagnostic'
-    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED'
-    && action.expect?.physicalSocket?.ordinaryPlayerNearby === false);
+  const observerFreeLoad = scenario.actions.findIndex(action => action.causalMilestone === 'zero_player_depot_loaded_no_demand');
+  const observerFreeAcquire = scenario.actions.findIndex(action => action.causalMilestone === 'zero_player_depot_acquired_no_demand');
   assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && birthConsumed > finalReturn && confirmed > birthConsumed,
     'the live observer-free product proof precedes released COLD birth admission and its later physical catch-up');
-  assert.ok(observerFreeLoad >= 0 && observerFreeAcquire === observerFreeLoad + 1,
-    'ordinary natural loading is observed before, and remains distinct from, its later zero-player custody acquire');
-  assert.equal(scenario.assertions.find(assertion => assertion.after === 29)?.expect.food.available, 64);
+  assert.ok(observerFreeLoad >= 0 && observerFreeAcquire === observerFreeLoad + 1
+    && scenario.actions[observerFreeLoad].expect.custody.status === 'ACQUIRED'
+    && scenario.actions[observerFreeAcquire].expect.custody.status === 'ACQUIRED',
+  'the prior released/unloaded scope is naturally loaded and then retained under the exact observer-free custody epoch');
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 30)?.expect.food.available, 64);
   assert.ok(bridgeToCold >= 0 && bridgeToCold + 2 === leaveForCold,
     'the released COLD interval crosses the native bounded absolute-advance envelope without changing the due target');
   assert.equal(scenario.assertions.find(assertion => assertion.after === 50)?.expect.status, 'ok');
@@ -288,15 +355,15 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
     'the exact same permit is read after ordinary return and physical consumption');
 });
 
-test('F0.2B graceful product recovery retains both family admissions and their active reservation before restart', async () => {
+test('F0.2B graceful product recovery retains one exact observer-free production admission before restart', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-product-recovery.json'), 'utf8'));
   const restart = scenario.restart.afterAction;
   const beforeRestart = scenario.actions.slice(0, restart);
-  assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 3,
-    'the third ordinary visit is the neutral-distance natural-load observation, not a fixture placement');
-  assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 4,
-    'both initial admissions are re-observed under the ordinary neutral-distance live-custody view');
+  assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 2,
+    'the second ordinary visit is the neutral-distance natural-load observation, not a fixture placement');
+  assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'CHECKPOINTED').length, 2,
+    'the recovery carrier retains the stable checkpointed production phase without acquiring the non-subject hive');
   const activeAdmission = beforeRestart.findLastIndex(action => action.type === 'inspect'
     && action.view === 'reference_container' && action.id === 'f02b');
   assert.equal(beforeRestart[activeAdmission]?.causalMilestone, 'recovery_active_admission');
@@ -307,7 +374,7 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   assert.equal(scenario.actions[activeAdmission - 1]?.type, 'fast_forward_to_instant',
     'the retained admission observation follows its engine-owned due advance');
   assert.equal(scenario.actions[activeAdmission - 1]?.targetInstant, 3200,
-    'the retained restart fence precedes production completion while the ordinary neutral-distance view has live custody of both families');
+    'the retained restart fence precedes production completion while the ordinary neutral-distance view has live custody of its exact production subject');
   const milestone = name => scenario.actions.findIndex(action => action.causalMilestone === name);
   const afterReacquire = milestone('recovery_after_reacquire');
   const hydratedInflight = milestone('recovery_hydrated_inflight');
@@ -333,6 +400,9 @@ test('F0.2B recovery causal oracle fails closed for missing, completed, stale, r
   assert.throws(() => assertRecoveryCausalMilestones(stale), /stale or wrong-subject/);
   const completedBeforeSave = structuredClone(milestones); completedBeforeSave.activeAdmission.tasks[1].status = 'COMPLETED';
   assert.throws(() => assertRecoveryCausalMilestones(completedBeforeSave), /active-admission/);
+  const releasedBeforeSave = structuredClone(milestones); releasedBeforeSave.activeDepotCustody.custodyStatus = 'RELEASED';
+  assert.throws(() => assertRecoveryCausalMilestones(releasedBeforeSave), /active-custody/,
+    'the declared stable checkpointed boundary cannot be replaced by a later release');
   const replacedOperation = structuredClone(milestones); replacedOperation.hydratedInflight.tasks[1].id = 'task:settlement-1-replaced';
   assert.throws(() => assertRecoveryCausalMilestones(replacedOperation), /same-operation hydrated/);
   const lostReservation = structuredClone(milestones); lostReservation.hydratedInflight.orders[0].reservationActive = false;
@@ -341,6 +411,9 @@ test('F0.2B recovery causal oracle fails closed for missing, completed, stale, r
   assert.throws(() => assertRecoveryCausalMilestones(reorderedDue), /same-operation hydrated/);
   const staleCustody = structuredClone(milestones); staleCustody.hydratedDepotCustody.replicaRevision += 1;
   assert.throws(() => assertRecoveryCausalMilestones(staleCustody), /same-operation hydrated/);
+  const staleEpoch = structuredClone(milestones); staleEpoch.hydratedDepotCustody.custodyEpoch += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(staleEpoch), /same-operation hydrated/,
+    'the recovered custody epoch must be the persisted checkpoint chain, not a replacement lease');
   const fabricatedCustody = structuredClone(milestones); fabricatedCustody.hydratedDepotCustody.custodyStatus = 'ACQUIRED';
   assert.throws(() => assertRecoveryCausalMilestones(fabricatedCustody), /same-operation hydrated/);
   const wrongSubject = structuredClone(milestones); wrongSubject.terminalProduct.tasks[1].id = 'task:settlement-1-replaced';

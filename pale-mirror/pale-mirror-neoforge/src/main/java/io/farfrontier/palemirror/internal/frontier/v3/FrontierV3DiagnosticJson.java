@@ -405,7 +405,10 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
                 + "\",\"slots\":\"" + quote(value.slots()) + "\",\"mismatch\":\"" + quote(value.mismatch())
-                + "\",\"ordinaryPlayerNearby\":" + value.ordinaryPlayerNearby() + "}").orElse("");
+                + "\",\"ordinaryPlayerNearby\":" + value.ordinaryPlayerNearby()
+                + ",\"presentationDemand\":" + value.presentationDemand()
+                + ",\"eligibleObserverCount\":" + value.eligibleObserverCount()
+                + ",\"presentationObserverCount\":" + value.presentationObserverCount() + "}").orElse("");
         String replica = referenceCustody(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()

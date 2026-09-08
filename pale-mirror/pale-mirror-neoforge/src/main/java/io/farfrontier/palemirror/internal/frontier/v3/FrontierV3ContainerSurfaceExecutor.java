@@ -49,7 +49,7 @@ final class FrontierV3ContainerSurfaceExecutor {
      * projection, a foreign socket and a stale owned chest without guessing from CONFLICT.
      */
     record Readiness(String chunk, String freshSocket, String support, String targetBlock, String chest, String slots, String mismatch,
-                     boolean ordinaryPlayerNearby) { }
+                     boolean ordinaryPlayerNearby, boolean presentationDemand, int eligibleObserverCount, int presentationObserverCount) { }
 
     private FrontierV3ContainerSurfaceExecutor() { }
 
@@ -235,14 +235,14 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SubjectId containerId) {
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
-        if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false);
+        if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false, false, 0, 0);
         BlockPos target = position(surface);
         // For the F0.2B reference scopes an evicted-ticking chunk retained in the server's
         // serialization cache is prior replica evidence, not a physical custody candidate.
         // Keep the generic materializer's loaded-socket diagnostic unchanged for every other
         // family while reporting the same eligibility boundary used by the custody adapter.
         if (!level.hasChunkAt(target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
-            return new Readiness("UNLOADED", "", "", "", "", "", "", false);
+            return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0);
         }
         GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElse(null);
         SocketReadiness fresh = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
@@ -254,9 +254,10 @@ final class FrontierV3ContainerSurfaceExecutor {
                 : matchesCanonicalSlotsOrPendingProductionOutput(owned, state, containerId) ? "PENDING_PRODUCTION_OUTPUT" : "MISMATCH";
         String mismatch = owned == null || slots.equals("CURRENT") || slots.equals("PENDING_PRODUCTION_OUTPUT") ? ""
                 : firstMismatch(owned, state, containerId);
+        FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, target);
         return new Readiness("LOADED", fresh.name(), supportStatus.name(),
                 BuiltInRegistries.BLOCK.getKey(level.getBlockState(target).getBlock()).toString(), chestStatus, slots, mismatch,
-                FrontierV3PhysicalDemand.readiness(level, target).ordinaryPlayerNearby());
+                demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount());
     }
 
     private static String firstMismatch(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {

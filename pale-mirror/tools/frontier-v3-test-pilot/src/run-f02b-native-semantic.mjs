@@ -176,8 +176,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const biomass = initialBiomass;
   const causal = referenceCausality(referenceObservations);
   const observerFreePhysicalEffects = {
-    depot: physicalEffectObservation(depotObservations, value => (value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0) === 64),
-    hive: physicalEffectObservation(hiveObservations, value => (value.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0) === 0)
+    depot: physicalEffectObservation(depotObservations, 'zero_player_depot_effect_no_demand', value => (value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0) === 64),
+    hive: physicalEffectObservation(hiveObservations, 'zero_player_hive_effect_no_demand', value => (value.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0) === 0)
   };
   const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
     initialInstant: summary.instant, initialInputs: { depot: { wheat: earlyWheat, bread: earlyBread }, hive: { biomass: earlyBiomass } },
@@ -245,13 +245,15 @@ function zeroPlayerBirthCatchup(diagnostics, actions) {
   return { cold, afterReturn, returnAction };
 }
 
-function physicalEffectObservation(observations, hasExpectedOutput) {
-  const value = observations.find(candidate => candidate.physicalSocket?.chunk === 'LOADED'
-    && candidate.physicalSocket?.ordinaryPlayerNearby === false && candidate.custody?.status === 'ACQUIRED'
+function physicalEffectObservation(observations, milestone, hasExpectedOutput) {
+  const value = observations.find(candidate => candidate.pilotCausalMilestone === milestone
+    && naturallyLoadedWithoutPresentationDemand(candidate) && candidate.custody?.status === 'ACQUIRED'
     && Number.isSafeInteger(candidate.actionStep) && Number.isSafeInteger(candidate.custody?.epoch)
     && Number.isSafeInteger(candidate.replica?.revision) && hasExpectedOutput(candidate));
   return value && { actionStep: value.actionStep, custodyEpoch: value.custody.epoch, replicaRevision: value.replica.revision,
-    replicaFingerprint: value.replica.fingerprint, ordinaryPlayerNearby: value.physicalSocket.ordinaryPlayerNearby };
+    replicaFingerprint: value.replica.fingerprint, milestone, ordinaryPlayerNearby: value.physicalSocket.ordinaryPlayerNearby,
+    presentationDemand: value.physicalSocket.presentationDemand, eligibleObserverCount: value.physicalSocket.eligibleObserverCount,
+    presentationObserverCount: value.physicalSocket.presentationObserverCount };
 }
 
 function compareJson(left, right) { return JSON.stringify(left).localeCompare(JSON.stringify(right)); }
@@ -263,25 +265,61 @@ function diagnosticValue(entry) {
   return entry?.value ?? entry?.observed?.value ?? null;
 }
 
-// This cannot be inferred from a later return.  Retain the ordinary inspection
-// while vanilla player loading holds the reference chunk, and prove the sole
-// pilot was in a different chunk from each observed reference surface.
+// These named reads are the authoritative natural-streaming proof.  A visit
+// merely requests normal vanilla streaming; it is not evidence that the
+// surface is loaded or observer-free.  Each family therefore retains its own
+// loaded -> acquired -> effect -> released chain, with the server-calculated
+// no-demand counts at every live boundary.
 function zeroPlayerScopeObservations(diagnostics, actions) {
-  const observations = new Map();
-  for (const entry of diagnostics) {
-    const value = entry?.value;
-    if (!Number.isInteger(entry?.actionStep) || value?.kind !== 'container' || !value.id
-        || value.physicalSocket?.chunk !== 'LOADED' || value.physicalSocket?.ordinaryPlayerNearby !== false || value.custody?.status !== 'ACQUIRED') continue;
-    const visit = actions.slice(0, entry.actionStep - 1).map((action, index) => ({ action, index }))
-      .filter(({ action }) => action?.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').at(-1);
-    if (!visit?.action?.position || !value.position) continue;
-    const playerChunk = chunkOf(visit.action.position); const scopeChunk = chunkOf(value.position);
-    if (playerChunk.x === scopeChunk.x && playerChunk.z === scopeChunk.z) continue;
-    observations.set(value.id, { id: value.id, visitStep: visit.index + 1, observationStep: entry.actionStep,
-      playerChunk, scopeChunk, custodyEpoch: value.custody.epoch, replicaRevision: value.replica?.revision ?? null,
-      ordinaryPlayerNearby: value.physicalSocket.ordinaryPlayerNearby });
-  }
-  return [...observations.values()].sort((left, right) => left.id.localeCompare(right.id));
+  const family = [
+    { id: 'container:1-depot', name: 'depot' },
+    { id: 'container:hive-east-store', name: 'hive' }
+  ];
+  return family.map(({ id, name }) => {
+    const named = suffix => diagnostics.find(entry => entry?.value?.kind === 'container' && entry.value.id === id
+      && entry.value.pilotCausalMilestone === `zero_player_${name}_${suffix}`);
+    const loaded = named('loaded_no_demand'); const acquired = named('acquired_no_demand');
+    const effect = named('effect_no_demand'); const released = named('released');
+    const value = loaded?.value; const visit = loaded && latestGrayboxVisit(actions, loaded.actionStep);
+    const releasedBeforeLoad = diagnostics.filter(entry => entry?.value?.kind === 'container' && entry.value.id === id
+      && Number.isInteger(entry.actionStep) && entry.actionStep < loaded?.actionStep && entry.value.physicalSocket?.chunk === 'UNLOADED'
+      && entry.value.custody?.status === 'RELEASED').at(-1);
+    if (!loaded || !acquired || !effect || !released || !value?.position || !visit?.action?.position
+        || !naturallyLoadedWithoutPresentationDemand(loaded.value) || !naturallyLoadedWithoutPresentationDemand(acquired.value)
+        || !naturallyLoadedWithoutPresentationDemand(effect.value) || !releasedBeforeLoad
+        || acquired.value.custody?.status !== 'ACQUIRED' || effect.value.custody?.status !== 'ACQUIRED'
+        || released.value?.physicalSocket?.chunk !== 'UNLOADED' || released.value.custody?.status !== 'RELEASED'
+        || !Number.isInteger(loaded.actionStep) || !Number.isInteger(acquired.actionStep) || !Number.isInteger(effect.actionStep)
+        || !Number.isInteger(released.actionStep) || !(loaded.actionStep < acquired.actionStep && acquired.actionStep < effect.actionStep && effect.actionStep < released.actionStep)
+        || !outsidePresentationEnvelope(visit.action.position, value.position)) return null;
+    return { id, priorReleasedActionStep: releasedBeforeLoad.actionStep, priorReleasedCustodyEpoch: releasedBeforeLoad.value.custody?.epoch ?? null,
+      visitStep: visit.index + 1, playerChunk: chunkOf(visit.action.position), scopeChunk: chunkOf(value.position),
+      loadedMilestone: loaded.value.pilotCausalMilestone, acquiredMilestone: acquired.value.pilotCausalMilestone,
+      effectMilestone: effect.value.pilotCausalMilestone, releasedMilestone: released.value.pilotCausalMilestone,
+      loadedActionStep: loaded.actionStep, acquiredActionStep: acquired.actionStep, effectActionStep: effect.actionStep, releasedActionStep: released.actionStep,
+      loadedCustodyEpoch: loaded.value.custody?.epoch ?? null, custodyEpoch: acquired.value.custody.epoch,
+      effectCustodyEpoch: effect.value.custody?.epoch ?? null, releasedCustodyEpoch: released.value.custody?.epoch ?? null,
+      loadedReplicaRevision: loaded.value.replica?.revision ?? null, replicaRevision: acquired.value.replica?.revision ?? null,
+      effectReplicaRevision: effect.value.replica?.revision ?? null, releasedReplicaRevision: released.value.replica?.revision ?? null,
+      replicaFingerprint: acquired.value.replica?.fingerprint ?? null, naturalChunkLoaded: true,
+      ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 };
+  }).filter(Boolean);
+}
+
+function naturallyLoadedWithoutPresentationDemand(value) {
+  const socket = value?.physicalSocket;
+  return socket?.chunk === 'LOADED' && socket.ordinaryPlayerNearby === false && socket.presentationDemand === false
+    && socket.eligibleObserverCount === 0 && socket.presentationObserverCount === 0;
+}
+
+function latestGrayboxVisit(actions, actionStep) {
+  return actions.slice(0, actionStep - 1).map((action, index) => ({ action, index }))
+    .filter(({ action }) => action?.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').at(-1);
+}
+
+function outsidePresentationEnvelope(visit, surface) {
+  const dx = visit.x - surface.x; const dz = visit.z - surface.z;
+  return dx * dx + dz * dz > 96 * 96;
 }
 
 function chunkOf(position) {

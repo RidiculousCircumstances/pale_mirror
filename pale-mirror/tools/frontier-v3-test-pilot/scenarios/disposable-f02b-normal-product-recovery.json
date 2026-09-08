@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "disposable_f02b_normal_product_recovery",
   "isolation": { "mode": "disposable_lite", "seed": 41 },
-  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 32 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 8 },
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
@@ -15,13 +15,10 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -343, "y": 65, "z": -326 }, "settleMs": 1500 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" } }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "container", "id": "container:1-depot" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 412, "y": 65, "z": 420 }, "settleMs": 1500 },
-    { "type": "wait_until_diagnostic", "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" } }, "timeoutMs": 30000 },
-    { "type": "inspect", "view": "reference_container", "id": "f02b" },
     { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 64, "z": 0 }, "settleMs": 1000 },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 35, "y": 65, "z": 47 }, "settleMs": 1500 },
-    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
-    { "type": "wait_until_diagnostic", "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -231, "y": 65, "z": -326 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "causalMilestone": "recovery_depot_loaded_no_demand", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "CHECKPOINTED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false, "presentationDemand": false, "eligibleObserverCount": 0, "presentationObserverCount": 0 } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "causalMilestone": "recovery_depot_checkpointed_no_demand", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "CHECKPOINTED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false, "presentationDemand": false, "eligibleObserverCount": 0, "presentationObserverCount": 0 } }, "timeoutMs": 30000 },
     { "type": "fast_forward_to_instant", "targetInstant": 3200, "timeoutMs": 180000 },
     { "type": "inspect", "view": "reference_container", "id": "f02b", "causalMilestone": "recovery_active_admission" },
     { "type": "inspect", "view": "container", "id": "container:1-depot", "causalMilestone": "recovery_active_depot_custody" },
@@ -53,12 +50,12 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 16,
+    "afterAction": 13,
     "resumeSetup": []
   },
   "assertions": [
-    { "after": 26, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
-    { "after": 30, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
-    { "after": 40, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
+    { "after": 23, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 27, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 37, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
   ]
 }
