@@ -19,7 +19,7 @@ import { requiresExactChildTerminationAfterGracefulFailure } from './owned-proce
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, publishLifecycleBarrier, readLifecycleBarriers } from './lifecycle-barrier.mjs';
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
 import { withGracefulSaveGate } from './graceful-save-gate.mjs';
-import { captureSaveOwnerObservation, prearmSaveOwnerObserver } from './save-owner-observer.mjs';
+import { prearmSaveOwnerObserver, startSaveOwnerObservation } from './save-owner-observer.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -646,28 +646,36 @@ async function stopServerSafely(server, serverPort) {
   return withGracefulSaveGate({ directory: process.env.FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE,
     owner: { worker: lifecycle.identity.workerId, scenario: lifecycle.identity.scenarioId, serverRunId: server.serverRunId } }, async receipt => {
     gracefulSaveGateReceipts.push(receipt);
-    if (server.ownerObservation?.status === 'captured' || server.ownerObservation?.status === 'capture_failed') {
+    if (server.ownerObservation?.status === 'completed' || server.ownerObservation?.status === 'capture_failed') {
       throw new Error('owner observer already recorded the exact graceful-stop attempt');
     }
     if (saveOwnerObserverRoot !== undefined && retainedOwnerObservation === null && server.ownerObserverArm === undefined) {
       server.ownerObserverArm = await prearmSaveOwnerObserver({ project, root: saveOwnerObserverRoot,
-        lifecycleIdentity: lifecycle.identity, server: { ...server, lifecycleDirectory: lifecycle.directory } });
+        lifecycleIdentity: lifecycle.identity, server: { ...server, lifecycleDirectory: lifecycle.directory, worldDirectory: disposableWorld } });
     }
     await requestRconStop({ port: server.rconPort, password: server.rconPassword });
-    if (server.ownerObserverArm !== undefined) {
-      try {
-        server.ownerObservation = await captureSaveOwnerObservation(server.ownerObserverArm, {
-          output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
-        });
-        retainedOwnerObservation = server.ownerObservation;
-      } catch (captureFailure) {
-        server.ownerObservation = { status: 'capture_failed', receipt: server.ownerObserverArm.receipt,
-          serverRunId: server.serverRunId, serverPid: server.serverPid, failure: String(captureFailure?.message ?? captureFailure) };
-        retainedOwnerObservation = server.ownerObservation;
-        throw captureFailure;
+    const ownerObserver = server.ownerObserverArm === undefined ? undefined : startSaveOwnerObservation(server.ownerObserverArm, {
+      output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
+    });
+    try {
+      await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+      ownerObserver?.finish({ kind: 'durable_server_save' });
+    } catch (failure) {
+      ownerObserver?.finish({ kind: 'durable_server_save_absent', failure: String(failure?.message ?? failure) });
+      throw failure;
+    } finally {
+      if (ownerObserver !== undefined) {
+        try {
+          server.ownerObservation = await ownerObserver.result;
+          retainedOwnerObservation = server.ownerObservation;
+        } catch (captureFailure) {
+          server.ownerObservation = { status: 'capture_failed', receipt: server.ownerObserverArm.receipt,
+            serverRunId: server.serverRunId, serverPid: server.serverPid, failure: String(captureFailure?.message ?? captureFailure) };
+          retainedOwnerObservation = server.ownerObservation;
+          throw captureFailure;
+        }
       }
     }
-    await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
     await ownedServerExit(server, serverPort, DURABLE_STOP_TIMEOUT_MS, 'disposable v3 server flushed but retained its game port');
     releaseWrapper(server.child);
   });
@@ -774,8 +782,10 @@ function ownerObservationFact(value) {
   if (value === undefined || value === null) return null;
   const receipt = typeof value.receipt === 'string' ? relative(project, value.receipt) : null;
   return { status: value.status ?? null, receipt, serverRunId: value.server?.serverRunId ?? value.serverRunId ?? null,
-    serverPid: value.server?.serverPid ?? value.serverPid ?? null, capture: value.capture?.method ?? null,
-    snapshots: Array.isArray(value.snapshots) ? value.snapshots.map(snapshot => ({ path: relative(project, snapshot.path), sha256: snapshot.sha256 })) : [],
+    serverPid: value.server?.serverPid ?? value.serverPid ?? null,
+    slots: Array.isArray(value.slots) ? value.slots.map(slot => ({ index: slot.index, offsetMs: slot.offsetMs, status: slot.status,
+      receipt: typeof slot.receipt?.path === 'string' ? relative(project, slot.receipt.path) : null, sha256: slot.receipt?.sha256 ?? null,
+      facts: slot.facts ?? null, ...(slot.reason === undefined ? {} : { reason: slot.reason }) })) : [],
     ...(value.failure === undefined ? {} : { failure: value.failure }) };
 }
 function killIfPresent(pid) {
