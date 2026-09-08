@@ -108,6 +108,10 @@ test('F0.2B hive lane asserts the actual grown relay projection', async () => {
   });
   assert.equal(scenario.actions[5].type, 'assert_visible_board');
   assert.equal(scenario.actions[5].text, 'RELAY');
+  assert.deepEqual(scenario.assertions[2], {
+    after: 9, view: 'actor', id: 'bioform:east-grown-1',
+    expect: { status: 'ok', actorKind: 'BIOFORM', role: 'RUNT/DEFEND', life: 'ALIVE' }
+  });
 });
 
 test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and non-native evidence', () => {
