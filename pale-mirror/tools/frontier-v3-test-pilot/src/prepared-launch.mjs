@@ -1,5 +1,11 @@
-import { mkdir, readFile } from 'node:fs/promises';
-import { delimiter, relative, resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { delimiter, join, relative, resolve } from 'node:path';
+
+// A direct prepared launch deliberately bypasses Gradle's RunGame setup.  Its
+// private client root therefore needs the same first-run acknowledgements that
+// RunGame ordinarily writes before Quick Play can act.  This is disposable
+// consumer state, never part of the immutable prepared artifact.
+const DISPOSABLE_CLIENT_OPTIONS = 'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\n';
 
 /**
  * Builds one direct Minecraft JVM command from the already-fingerprinted moddev launch files.
@@ -55,6 +61,13 @@ export async function ensurePreparedLaunchWorkingDirectory(launch) {
     throw new Error('prepared launch working directory is malformed');
   }
   await mkdir(launch.cwd, { recursive: true });
+  try {
+    // `wx` is the custody fence for this mutable consumer view: seed an empty
+    // root once, but never adopt, normalize, or overwrite existing state.
+    await writeFile(join(launch.cwd, 'options.txt'), DISPOSABLE_CLIENT_OPTIONS, { encoding: 'utf8', flag: 'wx' });
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+  }
   return launch;
 }
 

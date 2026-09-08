@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import test from 'node:test';
-import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -111,6 +111,13 @@ test('prepared build fingerprints both native classpaths and fails closed on dri
     const ownedClientDirectory = resolve(root, 'pale-mirror-neoforge/build/runs/direct-client');
     await ensurePreparedLaunchWorkingDirectory({ cwd: ownedClientDirectory });
     assert.ok((await stat(ownedClientDirectory)).isDirectory());
+    assert.equal(await readFile(resolve(ownedClientDirectory, 'options.txt'), 'utf8'),
+      'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\n',
+      'a fresh private prepared client can Quick Play without a first-run screen');
+    await writeFile(resolve(ownedClientDirectory, 'options.txt'), 'foreign-private-options\n');
+    await ensurePreparedLaunchWorkingDirectory({ cwd: ownedClientDirectory });
+    assert.equal(await readFile(resolve(ownedClientDirectory, 'options.txt'), 'utf8'), 'foreign-private-options\n',
+      'consumer setup never adopts or overwrites an existing private client view');
     await assert.rejects(() => ensurePreparedLaunchWorkingDirectory({ cwd: 'relative-client' }), /malformed/);
     await writeFile(dependency, 'classpath-v2');
     await assert.rejects(() => requirePreparedBuild(root, identity), /hash drifted/);
