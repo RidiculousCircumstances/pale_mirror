@@ -153,6 +153,7 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(isolated, /withGracefulSaveGate/);
   assert.match(isolated, /acquireNativeExecutionGate/);
   assert.match(isolated, /initialCanonicalHold/);
+  assert.match(await readFile(resolve(project, 'pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerLifecycle.java'), 'utf8'), /INITIAL_CANONICAL_HOLDS\.containsKey\(server\)[\s\S]*?FrontierV3PhysicalExecutors\.registry\(\)\.tick/);
   assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);

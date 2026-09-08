@@ -370,8 +370,12 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try {
-            if (INITIAL_CANONICAL_HOLDS.containsKey(server)) return;
-            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
+            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && INITIAL_CANONICAL_HOLDS.containsKey(server)) {
+                // The disposable-pilot fence excludes only canonical progression.
+                // Real loaded-world observation, custody acquire/checkpoint/release,
+                // and their fail-closed physical checks remain ordinary server work.
+                FrontierV3PhysicalExecutors.registry().tick(FrontierV3PhysicalWorld.require(server), runtime);
+            } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
                 advanceQueuedCanonicalTime(server, runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
