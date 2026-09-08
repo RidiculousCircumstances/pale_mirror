@@ -22,12 +22,12 @@ jobs:
     runs-on: [self-hosted, pm-native]
     defaults:
       run:
-        working-directory: f02b-producer-workspace/pale-mirror
+        working-directory: f02b-${{ github.run_id }}-producer-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: f02b-producer-workspace
+          path: f02b-${{ github.run_id }}-producer-workspace
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -51,7 +51,7 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: f02b-producer-workspace/pale-mirror/build/f02b-producer
+          path: f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer
           if-no-files-found: error
 
   semantic:
@@ -73,12 +73,12 @@ jobs:
             lane: conflict-restart
     defaults:
       run:
-        working-directory: f02b-${{ matrix.worker }}-workspace/pale-mirror
+        working-directory: f02b-${{ github.run_id }}-${{ matrix.worker }}-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: f02b-${{ matrix.worker }}-workspace
+          path: f02b-${{ github.run_id }}-${{ matrix.worker }}-workspace
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -92,7 +92,7 @@ jobs:
         continue-on-error: true
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: f02b-${{ matrix.worker }}-workspace/pale-mirror/build/f02b-producer
+          path: f02b-${{ github.run_id }}-${{ matrix.worker }}-workspace/pale-mirror/build/f02b-producer
       - name: Bind active GitHub job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -123,7 +123,7 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-${{ matrix.worker }}
-          path: f02b-${{ matrix.worker }}-workspace/pale-mirror/f02b-artifacts/${{ matrix.worker }}
+          path: f02b-${{ github.run_id }}-${{ matrix.worker }}-workspace/pale-mirror/f02b-artifacts/${{ matrix.worker }}
           if-no-files-found: error
   merge:
     needs: semantic
@@ -131,16 +131,16 @@ jobs:
     runs-on: [self-hosted, pm-native]
     defaults:
       run:
-        working-directory: f02b-merge-workspace/pale-mirror
+        working-directory: f02b-${{ github.run_id }}-merge-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
         with:
-          path: f02b-merge-workspace
+          path: f02b-${{ github.run_id }}-merge-workspace
       - run: mkdir -p f02b-evidence
       - uses: actions/download-artifact@v4
         with:
           pattern: f02b-${{ github.run_id }}-worker-*
-          path: f02b-merge-workspace/pale-mirror/f02b-evidence
+          path: f02b-${{ github.run_id }}-merge-workspace/pale-mirror/f02b-evidence
       - name: Write complete or incomplete fail-closed aggregate
         run: >-
           node tools/frontier-v3-test-pilot/src/merge-f02b-native-semantic.mjs --input=f02b-evidence
@@ -151,5 +151,5 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-merge
-          path: f02b-merge-workspace/pale-mirror/f02b-merge.json
+          path: f02b-${{ github.run_id }}-merge-workspace/pale-mirror/f02b-merge.json
           if-no-files-found: warn

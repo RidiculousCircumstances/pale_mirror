@@ -74,11 +74,11 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
     readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-scenario.mjs'), 'utf8'),
     readFile(resolve(project, 'pale-mirror-neoforge/build.gradle'), 'utf8')
   ]);
-  assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace/);
-  assert.match(workflow, /working-directory: f02b-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
-  assert.match(workflow, /path: f02b-merge-workspace/);
-  assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
-  assert.match(workflow, /path: f02b-merge-workspace\/pale-mirror\/f02b-evidence/);
+  assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace/);
+  assert.match(workflow, /working-directory: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
+  assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace/);
+  assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
+  assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
