@@ -218,10 +218,18 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
   const wait63 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 63);
   const confirmed = scenario.actions.findIndex((action, index) => index > wait63 && action.type === 'wait_until_diagnostic'
     && action.expect?.replica?.state === 'OBSERVED_CURRENT' && action.expect?.custody?.status === 'ACQUIRED');
+  const observerFreeLoad = scenario.actions.findIndex((action, index) => index > 0 && action.type === 'wait_until_diagnostic'
+    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'RELEASED'
+    && action.expect?.physicalSocket?.chunk === 'LOADED' && action.expect?.physicalSocket?.ordinaryPlayerNearby === false);
+  const observerFreeAcquire = scenario.actions.findIndex((action, index) => index > observerFreeLoad && action.type === 'wait_until_diagnostic'
+    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED'
+    && action.expect?.physicalSocket?.ordinaryPlayerNearby === false);
   assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && wait63 > finalReturn && confirmed > wait63,
     'the live observer-free product proof precedes released COLD birth admission and its later physical catch-up');
-  assert.equal(scenario.assertions.find(assertion => assertion.after === 28)?.expect.food.available, 64);
-  assert.equal(scenario.assertions.find(assertion => assertion.after === 46)?.expect.food.available, 63);
+  assert.ok(observerFreeLoad >= 0 && observerFreeAcquire === observerFreeLoad + 1,
+    'ordinary natural loading is observed before, and remains distinct from, its later zero-player custody acquire');
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 29)?.expect.food.available, 64);
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 47)?.expect.food.available, 63);
 });
 
 test('F0.2B graceful product recovery retains both family admissions and their active reservation before restart', async () => {

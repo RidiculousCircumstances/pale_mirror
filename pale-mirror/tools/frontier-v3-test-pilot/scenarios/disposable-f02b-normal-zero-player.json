@@ -26,6 +26,7 @@
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } }, "timeoutMs": 30000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 35, "y": 65, "z": 47 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "reference_container", "id": "f02b" },
@@ -63,14 +64,14 @@
   "assertions": [
     { "after": 5, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED" } } },
     { "after": 8, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED" } } },
-    { "after": 26, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 27, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 28, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 64, "fulfilled": 0 } } },
-    { "after": 29, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } },
-    { "after": 41, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 42, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 45, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 46, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 63, "fulfilled": 0 } } },
-    { "after": 47, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
+    { "after": 27, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 28, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 29, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 64, "fulfilled": 0 } } },
+    { "after": 30, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } },
+    { "after": 42, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 43, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 46, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 47, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 63, "fulfilled": 0 } } },
+    { "after": 48, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
   ]
 }
