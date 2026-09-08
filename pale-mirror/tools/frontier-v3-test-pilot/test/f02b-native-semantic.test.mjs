@@ -216,10 +216,12 @@ test('F0.2B zero-player lane keeps live custody observer-free while its released
   const finalReturn = scenario.actions.findIndex((action, index) => index > leaveForCold && action.type === 'visit'
     && action.dimension === 'pale_mirror:frontier_graybox');
   const wait63 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 63);
-  assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && wait63 > finalReturn,
+  const confirmed = scenario.actions.findIndex((action, index) => index > wait63 && action.type === 'wait_until_diagnostic'
+    && action.expect?.replica?.state === 'OBSERVED_CURRENT' && action.expect?.custody?.status === 'ACQUIRED');
+  assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && wait63 > finalReturn && confirmed > wait63,
     'the live observer-free product proof precedes released COLD birth admission and its later physical catch-up');
   assert.equal(scenario.assertions.find(assertion => assertion.after === 28)?.expect.food.available, 64);
-  assert.equal(scenario.assertions.find(assertion => assertion.after === 45)?.expect.food.available, 63);
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 46)?.expect.food.available, 63);
 });
 
 test('F0.2B graceful product recovery retains both family admissions and their active reservation before restart', async () => {

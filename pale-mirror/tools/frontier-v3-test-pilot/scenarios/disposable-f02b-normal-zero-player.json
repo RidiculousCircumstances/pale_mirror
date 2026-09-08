@@ -55,6 +55,7 @@
     { "type": "inspect", "view": "container", "id": "container:1-depot" },
     { "type": "inspect", "view": "container", "id": "container:hive-east-store" },
     { "type": "wait_until_container_item", "containerId": "container:1-depot", "item": "minecraft:bread", "count": 63, "slot": 0, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } }, "timeoutMs": 30000 },
     { "type": "inspect", "view": "container", "id": "container:1-depot" },
     { "type": "inspect", "view": "settlement", "id": "settlement:1" },
     { "type": "inspect", "view": "hive", "id": "hive:frontier" }
@@ -68,8 +69,8 @@
     { "after": 29, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } },
     { "after": 41, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
     { "after": 42, "view": "container", "id": "container:hive-east-store", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 44, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
-    { "after": 45, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 63, "fulfilled": 0 } } },
-    { "after": 46, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
+    { "after": 45, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }, "physicalSocket": { "chunk": "LOADED", "ordinaryPlayerNearby": false } } },
+    { "after": 46, "view": "settlement", "id": "settlement:1", "expect": { "status": "ok", "food": { "status": "IDLE", "available": 63, "fulfilled": 0 } } },
+    { "after": 47, "view": "hive", "id": "hive:frontier", "expect": { "status": "ok", "growthJobs": 0, "addedOrgans": 1, "spawnedBioforms": 1 } }
   ]
 }
