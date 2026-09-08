@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeDirectory, mergeEvidence, preflight } from './f0vc-pipeline.mjs';
@@ -15,7 +15,10 @@ function plan() { return { schema: 1, kind: 'frontier-v3-f0vc-preflight', runtim
     port: 26300 + index * 2, display: `:${1300 + index * 2}`, matrixPlanSha256: 'b'.repeat(64), assignmentContentSha256: `${index}`.repeat(64),
     worlds: [`world-${index}`], cases: [{ id: `lane-${index}`, world: `world-${index}`, completions: ['terminal'] }] })) }; }
 function evidence(value = plan()) { return value.workers.map((entry, index) => ({ worker: entry.worker, status: 'success', runtimeContentSha256: runtime,
-  namespace: entry.namespace, port: entry.port, display: entry.display, matrixPlanSha256: entry.matrixPlanSha256, assignmentContentSha256: entry.assignmentContentSha256, artifact: `f0vc-77-${entry.worker}`, jobId: index + 1, result: { status: 'ok' } })); }
+  namespace: entry.namespace, port: entry.port, display: entry.display, matrixPlanSha256: entry.matrixPlanSha256, assignmentContentSha256: entry.assignmentContentSha256, artifact: `f0vc-77-${entry.worker}`, jobId: index + 1,
+  primaryLifecycle: { worker: entry.worker, artifactPath: 'primary/persistent-matrix.json', sha256: 'c'.repeat(64), assignmentContentSha256: entry.assignmentContentSha256,
+    matrixPlanSha256: entry.matrixPlanSha256, projection: { clientPid: index + 10, serverRunIds: [`server-${index}`], worldKeys: [`world-${index}`], lifecycleEventCount: 1, crashReceiptCount: 0, durableFinalStop: true } },
+  result: { status: 'ok' } })); }
 
 test('F0.VC admits only four isolated workers and declared same-world batches', () => {
   const admitted = preflight(plan());
@@ -50,6 +53,25 @@ test('F0.VC writes an incomplete aggregate when no worker artifact directory exi
   const aggregate = JSON.parse(await readFile(output, 'utf8'));
   assert.equal(aggregate.status, 'incomplete');
   assert.match(aggregate.failure, /missing worker evidence/);
+});
+
+test('F0.VC merge cryptographically binds every retained primary lifecycle receipt and rejects loss or drift', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f0vc-primary-')); const input = join(root, 'workers'); const output = join(root, 'merge.json');
+  const values = evidence();
+  for (const [index, item] of values.entries()) {
+    const directory = join(input, item.artifact); const receipt = { status: 'ok', session: { plan: { kind: 'frontier-v3-assigned-persistent-matrix', workerId: item.worker } },
+      client: { clientPid: item.primaryLifecycle.projection.clientPid }, serverRuns: [{ serverRunId: `server-${index}` }],
+      evidence: { worldKeys: [`world-${index}`] }, lifecycle: { events: [{}] }, crashReceipts: [], finalStop: { durableSave: true, portClosed: true } };
+    const encoded = `${JSON.stringify(receipt)}\n`; const crypto = await import('node:crypto');
+    item.primaryLifecycle.sha256 = crypto.createHash('sha256').update(encoded).digest('hex');
+    await mkdir(join(directory, 'primary'), { recursive: true }); await writeFile(join(directory, 'worker.json'), JSON.stringify(item));
+    await writeFile(join(directory, 'primary/persistent-matrix.json'), encoded);
+  }
+  assert.equal((await mergeDirectory({ plan: plan(), input, output })).status, 'ok');
+  await writeFile(join(input, values[2].artifact, 'primary/persistent-matrix.json'), '{"tampered":true}\n');
+  await assert.rejects(mergeDirectory({ plan: plan(), input, output: join(root, 'drift.json') }), /digest-drifted/);
+  const drift = JSON.parse(await readFile(join(root, 'drift.json'), 'utf8'));
+  assert.equal(drift.status, 'incomplete');
 });
 
 test('F0.VC preserves launcher member names and Gradle-cache topology in a private consumer view', () => {

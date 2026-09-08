@@ -16,7 +16,8 @@ async function main() {
   const status = reported === 'success' && result.status === 'ok' && Number.isSafeInteger(jobId) && jobId > 0 ? 'success' : reported === 'success' ? 'failure' : reported;
   await writeWorkerEvidence({ output: resolve(values.output), worker: values.worker, status, runtimeContentSha256: plan.runtimeContentSha256,
     namespace: worker.namespace, port: worker.port, display: worker.display, matrixPlanSha256: worker.matrixPlanSha256, assignmentContentSha256: worker.assignmentContentSha256, artifact: `f0vc-${plan.runId}-${worker.worker}`,
-    ...(jobId === undefined ? {} : { jobId }), result: job === undefined ? { status: 'failed', reason: 'job identity unavailable', nativeResult: result } : result });
+    ...(jobId === undefined ? {} : { jobId }), ...(result.primaryLifecycle === undefined ? {} : { primaryLifecycle: result.primaryLifecycle }),
+    result: job === undefined ? { status: 'failed', reason: 'job identity unavailable', nativeResult: result } : result });
 }
 
 async function writePlanUnavailable(values, reason = 'F0.VC producer plan unavailable') {

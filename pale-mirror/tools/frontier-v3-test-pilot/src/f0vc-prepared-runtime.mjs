@@ -59,8 +59,7 @@ export async function consumeRuntime({ manifest, worker, output, workspace = pro
   const root = resolve(workspace); const source = await readRuntimeManifest(manifest);
   const environment = await runtimeEnvironment();
   if (JSON.stringify(source.environment) !== JSON.stringify(environment)) throw new Error('F0.VC consumer runtime environment is foreign');
-  const actualSource = await fingerprintPreparedSource(root);
-  if (JSON.stringify(actualSource) !== JSON.stringify(source.source)) throw new Error('F0.VC consumer source/test/workflow identity drifted');
+  const actualSource = await requireRuntimeSourceIdentity(source.source, root);
   const map = new Map();
   for (const entry of source.inputs) {
     const origin = resolve(dirname(manifest), source.entriesRoot, entry.id);
@@ -82,6 +81,10 @@ export async function consumeRuntime({ manifest, worker, output, workspace = pro
   const localLaunch = resolve(root, launchPath.target); const launch = JSON.parse(await readFile(localLaunch, 'utf8'));
   launch.java = await javaExecutable();
   await writeFile(localLaunch, `${JSON.stringify(launch, null, 2)}\n`, { flag: 'w' });
+  // The private view has been completely rewritten before it becomes launch input. Its ordinary
+  // same-user mode is now read-only; more importantly, it never shares an inode with producer
+  // or sibling consumers, so a compromised consumer cannot mutate their launch inputs.
+  for (const entry of source.inputs) await makeReadOnly(resolve(root, entry.target));
   const artifact = source.inputs.find((entry) => entry.role === 'artifact');
   if (!artifact) throw new Error('F0.VC runtime lacks packaged artifact');
   const identity = Object.freeze({ sourceContent: actualSource, ...(await fingerprintPreparedBuild(root, resolve(root, artifact.target))) });
@@ -89,7 +92,7 @@ export async function consumeRuntime({ manifest, worker, output, workspace = pro
     throw new Error('F0.VC consumer prepared artifact/classpath identity drifted');
   }
   const receipt = { schema: RUNTIME_SCHEMA, kind: 'frontier-v3-f0vc-runtime-consumer', status: 'ok', worker,
-    runtimeContentSha256: source.contentSha256, copyStrategy: 'READ_ONLY_HARDLINK', workspace: root,
+    runtimeContentSha256: source.contentSha256, copyStrategy: 'PRIVATE_REFLINK_OR_COPY', workspace: root,
     immutableStore: resolve(dirname(manifest)), localPreparedIdentity: relative(root, output), mutableRoots: [resolve(root, 'pale-mirror-neoforge/build/runs'), resolve(root, 'build/f0vc')] };
   await mkdir(dirname(resolve(root, output)), { recursive: true });
   await writeFile(resolve(root, output), `${JSON.stringify(identity, null, 2)}\n`, { flag: 'wx' });
@@ -113,6 +116,13 @@ export async function readRuntimeManifest(path) {
     ids.add(input.id); targets.add(input.target);
   }
   return Object.freeze(value);
+}
+
+/** A changed selected source/test/workflow byte invalidates a prepared runtime before launch. */
+export async function requireRuntimeSourceIdentity(expected, workspace) {
+  const actual = await fingerprintPreparedSource(resolve(workspace));
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('F0.VC consumer source/test/workflow identity drifted');
+  return actual;
 }
 
 async function collectInputs(launch, identity) {
@@ -183,14 +193,25 @@ async function loadPrepared(path) { return Object.freeze(JSON.parse(await readFi
 async function digestPath(path) { const value = await stat(path); if (value.isFile()) return hash(await readFile(path)); if (!value.isDirectory()) throw new Error('F0.VC runtime input is not a file or directory'); const digest = createHash('sha256'); await digestDirectory(path, path, digest); return digest.digest('hex'); }
 async function digestDirectory(root, directory, digest) { for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) { const target = resolve(directory, entry.name); if (entry.isDirectory()) await digestDirectory(root, target, digest); else if (entry.isFile()) { digest.update(relative(root, target)); digest.update('\0'); digest.update(await readFile(target)); } else throw new Error('F0.VC runtime has unsupported filesystem entry'); } }
 async function copyStage(source, destination) { await copy(source, destination, ['--archive', '--no-preserve=mode']); }
-async function copyConsumerView(source, destination, mutable) {
-  // ext4 workers need not emulate CoW by accepting a writable shared cache.  Immutable
-  // classpath trees are hard-linked from a producer-read-only store; launch text is copied
-  // privately because it is rewritten for this checkout's absolute paths.
-  await copy(source, destination, mutable ? ['--archive', '--no-preserve=mode'] : ['--archive', '--link']);
+export async function copyConsumerView(source, destination, mutable) {
+  // Reflinks preserve the one immutable source while giving every consumer a distinct inode;
+  // GNU cp falls back to a real private copy where the filesystem has no CoW support.  Never
+  // use hard links here: mode 0444 is not an isolation proof for simultaneous same-owner jobs.
+  await copy(source, destination, ['--archive', '--reflink=auto', '--no-preserve=mode']);
 }
 async function copy(source, destination, flags) { await mkdir(dirname(destination), { recursive: true }); await new Promise((resolveCopy, rejectCopy) => { const task = spawn('cp', [...flags, source, destination], { stdio: 'ignore' }); task.once('error', rejectCopy); task.once('exit', (code) => code === 0 ? resolveCopy() : rejectCopy(new Error('F0.VC immutable runtime copy failed'))); }); }
-async function makeReadOnly(path) { await chmod(path, 0o555); for (const entry of await readdir(path, { withFileTypes: true })) { const target = resolve(path, entry.name); if (entry.isDirectory()) await makeReadOnly(target); else if (entry.isFile()) await chmod(target, 0o444); } }
+async function makeReadOnly(path) {
+  const value = await stat(path);
+  if (value.isFile()) { await chmod(path, 0o444); return; }
+  if (!value.isDirectory()) throw new Error('F0.VC runtime has unsupported filesystem entry');
+  await chmod(path, 0o555);
+  for (const entry of await readdir(path, { withFileTypes: true })) {
+    const target = resolve(path, entry.name);
+    if (entry.isDirectory()) await makeReadOnly(target);
+    else if (entry.isFile()) await chmod(target, 0o444);
+    else throw new Error('F0.VC runtime has unsupported filesystem entry');
+  }
+}
 async function removeExact(path) { await new Promise((resolveRemove) => { const task = spawn('rm', ['-rf', '--', path], { stdio: 'ignore' }); task.once('exit', () => resolveRemove()); task.once('error', () => resolveRemove()); }); }
 async function absent(path, label) { try { await stat(path); throw new Error(`F0.VC refuses to overwrite ${label}`); } catch (error) { if (error?.code !== 'ENOENT') throw error; } }
 function taskRoot(value) { const root = resolve(value ?? ''); if (!root.startsWith('/home/rd/proj/pm-f0vc-')) throw new Error('F0.VC prepared store must be a dedicated task root'); return root; }

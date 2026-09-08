@@ -21,7 +21,7 @@
     "f0va:merge-ci": "node src/merge-ci-matrix.mjs",
     "f0v:matrix": "node src/run-f0v-matrix.mjs",
     "f0v:timing": "node src/run-f0v-timing.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs src/f0vc-pipeline.test.mjs"
   },
   "dependencies": {
     "mineflayer": "4.38.0",
