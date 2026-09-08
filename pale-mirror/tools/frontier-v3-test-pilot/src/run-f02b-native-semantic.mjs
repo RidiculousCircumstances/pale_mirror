@@ -107,11 +107,10 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const values = diagnostics.map(entry => ({ ...entry.value, actionStep: entry.actionStep })).filter(value => value?.status === 'ok');
   const at = (kind, id) => values.filter(value => value.kind === kind && value.id === id);
   const summary = at('summary', '').at(0); const depotObservations = at('container', 'container:1-depot'); const hiveObservations = at('container', 'container:hive-east-store');
-  const initialWheat = at('item', 'item:bootstrap-1-wheat').at(0); const initialBiomass = at('item', 'item:bootstrap-hive-biomass').at(0);
+  const initialWheatItem = at('item', 'item:bootstrap-1-wheat').at(0); const initialBiomassItem = at('item', 'item:bootstrap-hive-biomass').at(0);
   const settlement = at('settlement', 'settlement:1').at(-1); const hive = at('hive', 'hive:frontier').at(-1);
   const depot = depotObservations.at(-1); const store = hiveObservations.at(-1);
-  if (!summary || !Number.isSafeInteger(summary.instant) || summary.instant < 0 || !initialWheat || initialWheat.count !== 64 || initialWheat.custody?.kind !== 'CONTAINER_SLOT'
-      || !initialBiomass || initialBiomass.count !== 64 || initialBiomass.custody?.kind !== 'CONTAINER_SLOT'
+  if (!summary || !Number.isSafeInteger(summary.instant) || summary.instant < 0
       || !depot || !store || !settlement?.food || !hive || !depot.replica || !depot.custody || !store.replica || !store.custody) throw new Error('F0.2B normal scenario lacks terminal product or custody diagnostics');
   const actions = declaration.actions;
   const initialDepotAction = actions.findIndex(action => action.type === 'inspect' && action.view === 'container' && action.id === 'container:1-depot') + 1;
@@ -121,8 +120,19 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const earlyWheat = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:wheat')?.count ?? 0;
   const earlyBread = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0;
   const earlyBiomass = earlyStore?.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0;
+  // A restart receipt is deliberately split between pre- and post-restart
+  // diagnostics.  It is not required to repeat auxiliary item diagnostics:
+  // the first ordinary container inspection is the authoritative physical
+  // proof of the exact initial contents.  If an item diagnostic is present,
+  // still fence it against the same source of truth rather than accepting a
+  // contradictory duplicate assertion.
+  const initialWheat = initialWheatItem?.count ?? earlyWheat;
+  const initialBiomass = initialBiomassItem?.count ?? earlyBiomass;
   if (!earlyDepot || !earlyStore || earlyDepot.replica !== null || earlyDepot.custody !== null || earlyStore.replica !== null || earlyStore.custody !== null
-      || earlyWheat !== 64 || earlyBread !== 0 || earlyBiomass !== 64) {
+      || earlyWheat !== 64 || earlyBread !== 0 || earlyBiomass !== 64
+      || initialWheat !== earlyWheat || initialBiomass !== earlyBiomass
+      || (initialWheatItem && initialWheatItem.custody?.kind !== 'CONTAINER_SLOT')
+      || (initialBiomassItem && initialBiomassItem.custody?.kind !== 'CONTAINER_SLOT')) {
     throw new Error('F0.2B normal scenario did not start from unseeded replica/custody');
   }
   const id = scenario.replace(/\.json$/, '');
@@ -145,8 +155,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   // hide the 64-wheat -> 64-bread product receipt.
   const bread = Math.max(0, ...depotObservations.map(value => value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0));
   const terminalBread = depot.occupied?.find(value => value.itemKind === 'minecraft:bread')?.count ?? 0;
-  const wheat = initialWheat.count;
-  const biomass = initialBiomass.count;
+  const wheat = initialWheat;
+  const biomass = initialBiomass;
   const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
     initialInstant: summary.instant, initialInputs: { depot: { wheat: earlyWheat, bread: earlyBread }, hive: { biomass: earlyBiomass } },
     observedEpochs, releasedEpochs, safeUnload, zeroPlayerLoaded, zeroPlayerScopes, dueAction: due + 1 };

@@ -98,6 +98,16 @@ test('F0.2B primary receipts retain both sides of a graceful restart', async () 
   assert.match(runner, /\[beforeRestart, manifest\]/);
 });
 
+test('F0.2B recovery validation derives the initial inputs from its retained ordinary chest observations', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const runner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8');
+  assert.match(runner, /const initialWheat = initialWheatItem\?\.count \?\? earlyWheat/);
+  assert.match(runner, /const initialBiomass = initialBiomassItem\?\.count \?\? earlyBiomass/);
+  assert.match(runner, /initialWheat !== earlyWheat \|\| initialBiomass !== earlyBiomass/);
+  assert.match(runner, /const wheat = initialWheat;/);
+  assert.match(runner, /const biomass = initialBiomass;/);
+});
+
 test('F0.2B reserves adjacent RCON ports outside every other worker game socket', () => {
   const spaces = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(worker => f02bNamespaces({ workspace: `/tmp/f02b/${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker }));
   assert.deepEqual(spaces.map(value => value.port), [26200, 26202, 26204, 26206]);
