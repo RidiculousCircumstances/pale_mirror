@@ -44,7 +44,11 @@ try {
       FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared, FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: 'false',
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'
     });
-    manifests.push({ scenario, manifest, value: JSON.parse(await readFile(resolve(manifest), 'utf8')) });
+    const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
+    const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
+    const beforeRestart = beforeRestartManifest
+      ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;
+    manifests.push({ scenario, manifest, value, beforeRestart });
   }
   runtimeContentSha256 = consumed.receipt.runtimeContentSha256;
 } finally { stream.end(); await new Promise(resolveClose => stream.once('close', resolveClose)); }
@@ -57,7 +61,8 @@ const identityFact = { qualificationId: values.qualification, repository: values
   launchTarget: 'normal-disposable-v3-server', requiredTest: `scenario:${scenarios.join('+')}`, requiredTestCount: scenarios.length };
 const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed', worker: values.worker, lane, identity: identityFact, runtimeContentSha256, jarSha256,
   runtime: { receipt: JSON.parse(await readFile(resolve(`${root}/consumer-${values.worker}.json`), 'utf8')), preparedIdentity: consumed.identity },
-  manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value })), terminal };
+  manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value,
+    ...(value.beforeRestart == null ? {} : { beforeRestartSha256: hashJson(value.beforeRestart), beforeRestart: value.beforeRestart }) })), terminal };
 const primarySha256 = hashJson(primary);
 const evidence = { schema: F02B_SCHEMA, kind: F02B_KIND, status: 'passed', worker: values.worker, lane, ...identityFact, startedAtMillis, finishedAtMillis, gradlePid: pilotPid,
   runtimeContentSha256, jarSha256, primarySha256, namespaces, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
@@ -73,7 +78,13 @@ function terminalFacts(manifests, assignedLane) {
   }
   const manifestValue = manifests[0].value;
   if (manifestValue?.status !== 'ok' || !Array.isArray(manifestValue.diagnostics)) throw new Error('F0.2B native scenario has no terminal manifest');
-  const values = manifestValue.diagnostics.map(value => value?.value).filter(value => value?.status === 'ok');
+  // A real restart has two durable receipts.  The pre-restart segment contains the
+  // production completion while the resumed segment proves the recovered replica/custody
+  // boundary.  Retain and compare both rather than treating the final client segment alone
+  // as a complete product result.
+  const values = [manifests[0].beforeRestart, manifestValue].flatMap(receipt =>
+    Array.isArray(receipt?.diagnostics) ? receipt.diagnostics.map(value => value?.value) : [])
+    .filter(value => value?.status === 'ok');
   const find = (kind, id) => values.filter(value => value.kind === kind && value.id === id).at(-1);
   const containers = values.filter(value => value.kind === 'container');
   const selected = containers.at(-1);

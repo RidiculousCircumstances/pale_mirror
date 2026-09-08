@@ -76,6 +76,15 @@ export function assertPrimaryEvidence(primary, semantic) {
   for (const receipt of primary.manifests) {
     if (!receipt || typeof receipt.scenario !== 'string' || !HASH.test(receipt.sha256 ?? '') || !receipt.value
         || hashJson(receipt.value) !== receipt.sha256) throw new Error('F0.2B primary evidence has corrupt scenario receipt');
+    const declaredBeforeRestart = receipt.value?.recovery?.beforeRestartManifest;
+    if (declaredBeforeRestart) {
+      if (!receipt.beforeRestart || !HASH.test(receipt.beforeRestartSha256 ?? '')
+          || hashJson(receipt.beforeRestart) !== receipt.beforeRestartSha256 || receipt.beforeRestart.status !== 'ok') {
+        throw new Error('F0.2B primary evidence has incomplete restart receipt');
+      }
+    } else if ('beforeRestart' in receipt || 'beforeRestartSha256' in receipt) {
+      throw new Error('F0.2B primary evidence has an undeclared restart receipt');
+    }
   }
   return primary;
 }

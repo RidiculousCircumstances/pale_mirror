@@ -44,6 +44,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.initialDeclarationReady(ContainerSurfaceStatus.PREPARED, chest)
                         && FrontierV3ReferenceContainerCustodyExecutor.initialDeclarationReady(ContainerSurfaceStatus.ACTIVE, chest),
                 "a tagged chest cannot become a replica boundary until its surface transition is durably ACTIVE");
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.readyForReplicaObservation(ContainerSurfaceStatus.PREPARED)
+                        && FrontierV3ReferenceContainerCustodyExecutor.readyForReplicaObservation(ContainerSurfaceStatus.ACTIVE),
+                "a retained replica must not classify a generic socket's durable PREPARED recovery window as missing evidence");
         helper.succeed();
     }
 

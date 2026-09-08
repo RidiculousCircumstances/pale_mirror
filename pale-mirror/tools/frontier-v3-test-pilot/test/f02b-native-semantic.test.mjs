@@ -57,6 +57,21 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
   assert.throws(() => assertPrimaryEvidence(drifted, semantic), /lacks the consumed prepared runtime identity/);
   const corrupt = structuredClone(primary); corrupt.manifests[0].value.status = 'foreign';
   assert.throws(() => assertPrimaryEvidence(corrupt, semantic), /corrupt scenario receipt/);
+  primary.manifests[0].value.recovery = { beforeRestartManifest: '/private/pre-restart.json' };
+  primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
+  primary.manifests[0].beforeRestart = { status: 'ok', diagnostics: [] };
+  primary.manifests[0].beforeRestartSha256 = hashJson(primary.manifests[0].beforeRestart);
+  assert.equal(assertPrimaryEvidence(primary, semantic), primary);
+  const missingRestart = structuredClone(primary); delete missingRestart.manifests[0].beforeRestart;
+  assert.throws(() => assertPrimaryEvidence(missingRestart, semantic), /incomplete restart receipt/);
+});
+
+test('F0.2B primary receipts retain both sides of a graceful restart', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const runner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8');
+  assert.match(runner, /beforeRestartManifest/);
+  assert.match(runner, /beforeRestartSha256/);
+  assert.match(runner, /\[manifests\[0\]\.beforeRestart, manifestValue\]/);
 });
 
 test('F0.2B reserves adjacent RCON ports outside every other worker game socket', () => {

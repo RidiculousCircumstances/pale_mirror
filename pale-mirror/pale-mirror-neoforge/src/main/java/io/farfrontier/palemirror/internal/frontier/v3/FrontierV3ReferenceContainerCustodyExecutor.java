@@ -33,7 +33,10 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * The one physical adapter for the F0.2B depot and nest-store reference scopes.
@@ -45,6 +48,9 @@ import java.util.List;
  */
 final class FrontierV3ReferenceContainerCustodyExecutor {
     static final String REPLICA_PROVENANCE_KEY = "pale_mirror:reference_container_provenance";
+    private static final long ABSENT_CONFIRMATION_TICKS = 2L;
+    /** Transient sampling debounce only; all admitted replica evidence remains durable. */
+    private static final Map<ServerLevel, Map<SubjectId, Long>> ABSENT_SINCE_TICK = new WeakHashMap<>();
 
     private FrontierV3ReferenceContainerCustodyExecutor() { }
 
@@ -84,11 +90,26 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return;
         }
         if (replica.state() == PhysicalReplicaState.CONFLICT) return;
+        // The generic socket owner can retain PREPARED while its own durable write/recovery
+        // boundary is incomplete.  That is not replica evidence: no reference observation,
+        // acquisition, or conflict is admitted until there is a completed physical surface to
+        // sample.  This is a lifecycle fence only; ACTIVE never grants custody or overrides
+        // the exact fingerprint/provenance comparison below.
+        if (!readyForReplicaObservation(surface.status())) return;
         // A placed chest becomes a block before its block entity is available on the server.
         // That short normal-world lifecycle window is neither missing evidence nor foreign
         // evidence; wait until the exact block entity can be classified.  A non-chest block
         // with no entity is still actual missing evidence below.
-        if (chest == null && level.getBlockState(position(surface)).is(Blocks.CHEST)) return;
+        if (chest == null && level.getBlockState(position(surface)).is(Blocks.CHEST)) {
+            forgetAbsent(level, containerId);
+            return;
+        }
+        // An ordinary player replacement consists of a real break followed by a real placement
+        // on adjacent server ticks.  Do not persist the one scheduling gap as missing when a
+        // fresh block entity is still arriving; a continuously absent loaded socket is retained
+        // as typed missing evidence after this fixed, two-sample bound.  No write is allowed in
+        // either branch, and restart discards the debounce rather than fabricating evidence.
+        if (!stableLoadedObservation(level, containerId, chest)) return;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
         if (replica.state() == PhysicalReplicaState.EXPECTED) {
             observe(runtime, state, replica, chest);
@@ -216,6 +237,30 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     static boolean initialDeclarationReady(ContainerSurfaceStatus status, ChestBlockEntity chest) {
         return status == ContainerSurfaceStatus.ACTIVE && chest != null;
+    }
+
+    static boolean readyForReplicaObservation(ContainerSurfaceStatus status) {
+        return status == ContainerSurfaceStatus.ACTIVE;
+    }
+
+    private static boolean stableLoadedObservation(ServerLevel level, SubjectId containerId, ChestBlockEntity chest) {
+        if (chest != null) {
+            forgetAbsent(level, containerId);
+            return true;
+        }
+        Map<SubjectId, Long> absent = ABSENT_SINCE_TICK.computeIfAbsent(level, ignored -> new HashMap<>());
+        long first = absent.computeIfAbsent(containerId, ignored -> level.getGameTime());
+        if (level.getGameTime() - first < ABSENT_CONFIRMATION_TICKS) return false;
+        absent.remove(containerId);
+        if (absent.isEmpty()) ABSENT_SINCE_TICK.remove(level);
+        return true;
+    }
+
+    private static void forgetAbsent(ServerLevel level, SubjectId containerId) {
+        Map<SubjectId, Long> absent = ABSENT_SINCE_TICK.get(level);
+        if (absent == null) return;
+        absent.remove(containerId);
+        if (absent.isEmpty()) ABSENT_SINCE_TICK.remove(level);
     }
 
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
