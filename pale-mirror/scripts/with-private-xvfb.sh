@@ -20,30 +20,38 @@ runtime_parent=${FRONTIER_V3_NATIVE_PROCESS_ROOT:-${RUNNER_TEMP:-${TMPDIR:-/tmp}
 [[ "$runtime_parent" = /* && -d "$runtime_parent" ]] || { printf 'private CI process root must be an existing absolute directory\n' >&2; exit 64; }
 runtime_dir=$(mktemp -d "$runtime_parent/frontier-v3-private-xvfb.XXXXXX")
 display=:$((port - 25000))
-xvfb_pid_file="$runtime_dir/xvfb.pid"
-# `setsid` must fork when an Actions step is already a process-group leader.
-# Its short-lived launcher PID is then not the X server's session leader, so
-# record the inner shell PID before exec and use that exact new-session PID for
-# both readiness and group cleanup.
-setsid bash -c 'printf "%s\\n" "$$" >"$1"; shift; exec "$@"' xvfb-session "$xvfb_pid_file" "$xvfb_bin" "$display" -screen 0 1920x1080x24 -nolisten tcp >"$runtime_dir/xvfb.log" 2>&1 &
-launcher_pid=$!; xvfb_pid=
-for _ in $(seq 1 20); do
-  if [[ -s "$xvfb_pid_file" ]]; then
-    xvfb_pid="$(<"$xvfb_pid_file")"
-    [[ "$xvfb_pid" =~ ^[1-9][0-9]*$ ]] || { printf 'private Xvfb session PID is malformed\n' >&2; exit 1; }
-    break
-  fi
-  kill -0 "$launcher_pid" 2>/dev/null || break
-  sleep 0.1
-done
-cleanup() {
-  if [[ -n "$xvfb_pid" ]] && [[ "$(ps -o pgid= -p "$xvfb_pid" 2>/dev/null | tr -d ' ')" == "$xvfb_pid" ]]; then kill -TERM -- "-$xvfb_pid" 2>/dev/null || true; fi
-  wait "$launcher_pid" 2>/dev/null || true
-  rm -rf -- "$runtime_dir"
-}
-trap cleanup EXIT
-sleep 1
-[[ -n "$xvfb_pid" ]] && kill -0 "$xvfb_pid" 2>/dev/null || { printf 'private Xvfb failed; inspect %s/xvfb.log\n' "$runtime_dir" >&2; exit 1; }
-[[ "$(ps -o pgid= -p "$xvfb_pid" 2>/dev/null | tr -d ' ')" == "$xvfb_pid" ]] || { printf 'private Xvfb lacks an exact owned session\n' >&2; exit 1; }
+bwrap_bin=$(command -v bwrap || true)
+[[ -x "$bwrap_bin" ]] || { printf 'private CI display requires bubblewrap for its task-owned /tmp; install bwrap\n' >&2; exit 2; }
 
-DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$@"
+# Xvfb's display locks and Unix sockets are hard-wired to /tmp.  A task can
+# have a valid private native root while the shared tmpfs is quota-bound, so
+# run the X server and its sole client command together in a private mount
+# namespace.  The checkout and declared process root are the only writable
+# host mounts; the display socket and lock can never escape into shared /tmp.
+# Keeping the command inside this one bubblewrap instance also makes the
+# client unable to observe a display owned by a different CI consumer.
+set +e
+"$bwrap_bin" --die-with-parent --ro-bind / / --bind "$PWD" "$PWD" --bind "$runtime_parent" "$runtime_parent" \
+  --dev /dev --proc /proc --tmpfs /tmp --chdir "$PWD" \
+  bash -ceu '
+    runtime_dir=$1; display=$2; xvfb_bin=$3; shift 3
+    "$xvfb_bin" "$display" -screen 0 1920x1080x24 -nolisten tcp >"$runtime_dir/xvfb.log" 2>&1 &
+    xvfb_pid=$!
+    cleanup() {
+      kill "$xvfb_pid" 2>/dev/null || true
+      wait "$xvfb_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+    for _ in $(seq 1 20); do
+      kill -0 "$xvfb_pid" 2>/dev/null || break
+      if [[ -S "/tmp/.X11-unix/X${display#:}" ]]; then break; fi
+      sleep 0.1
+    done
+    kill -0 "$xvfb_pid" 2>/dev/null || { printf "private Xvfb failed; inspect %s/xvfb.log\\n" "$runtime_dir" >&2; exit 1; }
+    [[ -S "/tmp/.X11-unix/X${display#:}" ]] || { printf "private Xvfb socket is absent\\n" >&2; exit 1; }
+    DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$@"
+  ' bash "$runtime_dir" "$display" "$xvfb_bin" "$@"
+status=$?
+set -e
+rm -rf -- "$runtime_dir"
+exit "$status"
