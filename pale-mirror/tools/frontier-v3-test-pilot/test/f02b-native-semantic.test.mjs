@@ -208,6 +208,20 @@ test('F0.2B zero-player history requires retained loaded observations outside bo
   assert.throws(() => mergeSemanticMatrix(sameChunk, expected), /zero-player history is not causal/);
 });
 
+test('F0.2B zero-player lane keeps live custody observer-free while its released COLD birth permit catches up only after return', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-normal-zero-player.json'), 'utf8'));
+  const wait64 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 64);
+  const leaveForCold = scenario.actions.findIndex(action => action.type === 'fast_forward_to_instant' && action.targetInstant === 14000);
+  const finalReturn = scenario.actions.findIndex((action, index) => index > leaveForCold && action.type === 'visit'
+    && action.dimension === 'pale_mirror:frontier_graybox');
+  const wait63 = scenario.actions.findIndex(action => action.type === 'wait_until_container_item' && action.count === 63);
+  assert.ok(wait64 >= 0 && leaveForCold > wait64 && finalReturn > leaveForCold && wait63 > finalReturn,
+    'the live observer-free product proof precedes released COLD birth admission and its later physical catch-up');
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 28)?.expect.food.available, 64);
+  assert.equal(scenario.assertions.find(assertion => assertion.after === 45)?.expect.food.available, 63);
+});
+
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-depot-foreign-restart.json'), 'utf8'));

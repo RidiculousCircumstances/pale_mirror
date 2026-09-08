@@ -122,21 +122,29 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void retainedReferenceReplicaDoesNotSuppressAnOtherwiseValidBirthAdmission() {
-        FrontierWorldState active = stateWithActiveBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-reference"), 91L)),
+    void releasedReferenceReplicaRemainsColdEligibleButLiveCustodyExcludesACompetingBirthPermit() {
+        FrontierWorldState active = stateWithBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-reference"), 91L)),
                 new SubjectId("settlement:1"));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(active, depot), 7L,
                 ReferenceContainerCustody.canonicalFingerprint(active, depot), ReferenceContainerCustody.provenance(depot));
-        FrontierWorldState retained = active.withChanges(FrontierWorldStateUpdate.begin()
-                .replicaCustody(PhysicalReplicaCustodyState.empty().declare(replica)));
+        FrontierWorldState released = active.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(PhysicalReplicaCustodyState.empty().declare(replica)));
 
-        var proposed = PopulationBirthProcess.planReview(retained, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
+        var proposed = PopulationBirthProcess.planReview(released, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
 
-        assertEquals(3, proposed.size(), "retained F0.2B evidence is neither birth spending authority nor an admission exclusion");
+        assertEquals(3, proposed.size(), "a safely released reference depot remains COLD eligible despite retained replica history");
         assertTrue(proposed.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
         assertTrue(proposed.get(1).payload() instanceof ResidentBirthStarted);
         assertTrue(proposed.get(2).payload() instanceof PhysicalIntentPrepared);
+
+        PhysicalReplicaCustodyState heldCustody = PhysicalReplicaCustodyState.empty().declare(replica)
+                .observe(depot, 7L, 1L, replica.fingerprint(), replica.provenance(), 7L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot, ReferenceContainerCustody.PROVIDER_ID,
+                        1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        FrontierWorldState held = released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(heldCustody));
+
+        assertEquals(1, PopulationBirthProcess.planReview(held, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L)).size(),
+                "a live reference custodian excludes a competing birth-consumption permit");
     }
 
     @Test
@@ -221,9 +229,15 @@ class HumanPopulationProcessTest {
     }
 
     private static FrontierWorldState stateWithActiveBread(FrontierWorldState state, SubjectId settlementId) {
+        state = stateWithBread(state, settlementId);
+        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        return state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+    }
+
+    private static FrontierWorldState stateWithBread(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId); SubjectId bread = new SubjectId("item:birth-test-bread");
-        ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(bread, settlementId, PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1)));
+        ExactInventory inventory = state.inventory().store(new ExactItemStack(bread, settlementId, PopulationBirthProcess.BREAD, 64,
+                new InventoryCustody.ContainerSlot(depot, 1)));
         return state.withInventory(inventory);
     }
     private static FrontierCommand command(WorldId world, io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,

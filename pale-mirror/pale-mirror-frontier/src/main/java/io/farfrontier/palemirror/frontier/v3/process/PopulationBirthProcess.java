@@ -39,6 +39,14 @@ public final class PopulationBirthProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
         if (hasActiveJob(state, settlement.id()) || !hasHousing(state, settlement.id())) return List.copyOf(events);
+        // A retained replica is evidence, not a spending authority.  The one
+        // exceptional boundary is an actually live physical custodian: do not
+        // create a second exact-item consumer while that owner is responsible
+        // for the chest.  Once it is safely released, COLD planning remains
+        // eligible even if its presentation surface is UNMATERIALIZED.
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        if (ReferenceContainerCustody.isReferenceContainer(state, depot)
+                && ReferenceContainerCustody.hasLiveCustody(state, depot)) return List.copyOf(events);
         Optional<ExactItemStack> food = food(state, settlement.id());
         if (food.isEmpty()) return List.copyOf(events);
         Household household = household(state, settlement.id());
@@ -132,9 +140,10 @@ public final class PopulationBirthProcess {
 
     private static Optional<ExactItemStack> food(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
+        boolean referenceDepot = ReferenceContainerCustody.isReferenceContainer(state, depot);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
                 && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                && state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE).findFirst();
+                && (referenceDepot || state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE)).findFirst();
     }
 
     private static Household household(FrontierWorldState state, SubjectId settlementId) {
