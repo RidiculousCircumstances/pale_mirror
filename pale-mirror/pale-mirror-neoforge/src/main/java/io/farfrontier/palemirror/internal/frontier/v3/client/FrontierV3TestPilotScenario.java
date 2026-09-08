@@ -11,7 +11,7 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "fast_forward_to_instant", "command", "inspect", "look", "look_nearest_entity",
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "fast_forward_to_instant", "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -54,7 +54,8 @@ final class FrontierV3TestPilotScenario {
             String type = element.getAsJsonObject().get("type").getAsString();
             if (!ACTION_TYPES.contains(type)) throw new IllegalArgumentException("unsupported test-pilot action: " + type);
             JsonObject action = element.getAsJsonObject();
-            if ((type.equals("command") && !action.has("command")) ||
+            if ((type.equals("release_fast_forward_hold") && action.size() != 1) ||
+                    (type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
                     (type.equals("visit_operation") && !validOperationVisit(action)) ||
                     (type.equals("look_operation") && !validOperationLook(action)) ||

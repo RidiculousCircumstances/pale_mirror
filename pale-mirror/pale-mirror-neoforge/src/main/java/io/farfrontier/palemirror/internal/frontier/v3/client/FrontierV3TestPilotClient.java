@@ -257,6 +257,7 @@ public final class FrontierV3TestPilotClient {
                 case "attack_nearest_entity" -> attackNearestEntity(minecraft, action);
                 case "fast_forward" -> waitForFastForward(minecraft, action);
                 case "fast_forward_to_instant" -> waitForAbsoluteFastForward(minecraft, action);
+                case "release_fast_forward_hold" -> releaseAbsoluteFastForwardHold(minecraft);
                 case "command" -> { minecraft.player.connection.sendCommand(withoutSlash(action.get("command").getAsString())); advance(type); }
                 case "inspect" -> inspect(minecraft, action);
                 case "look" -> lookAtPosition(minecraft, action);
@@ -692,6 +693,22 @@ public final class FrontierV3TestPilotClient {
         if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
             throw new IllegalStateException("timed out waiting for server-held absolute canonical target " + target);
         }
+    }
+    /** Releases the read-only absolute checkpoint without advancing canonical time. */
+    private static void releaseAbsoluteFastForwardHold(Minecraft minecraft) {
+        if (!fastForwardSent) {
+            fastForwardBaseline = diagnostics.get(new DiagnosticIdentity("performance", ""));
+            minecraft.player.connection.sendCommand("pale_mirror v3 release_advance_hold");
+            fastForwardSent = true;
+        }
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
+        if (fresh(observed) && observed != fastForwardBaseline && observed.value().has("fastForwardTargetStatus")
+                && "NONE".equals(observed.value().get("fastForwardTargetStatus").getAsString())) {
+            advance("release_fast_forward_hold"); return;
+        }
+        long tick = minecraft.level.getGameTime();
+        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
+        if ((tick - actionStartedTick) * 50L >= 30_000L) throw new IllegalStateException("timed out releasing absolute canonical checkpoint");
     }
     /**
      * An inspect completes only after its ordinary read-only command returned. Advancing on

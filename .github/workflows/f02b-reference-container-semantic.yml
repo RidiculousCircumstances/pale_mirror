@@ -68,11 +68,11 @@ jobs:
       matrix:
         include:
           - worker: worker-0
-            lane: depot-never-visited
+            lane: normal-never-visited
           - worker: worker-1
-            lane: depot-visited-unloaded
+            lane: normal-visited-unloaded
           - worker: worker-2
-            lane: hive-zero-player
+            lane: normal-zero-player-recovery
           - worker: worker-3
             lane: conflict-restart
     defaults:

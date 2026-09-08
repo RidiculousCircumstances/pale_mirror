@@ -103,6 +103,24 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void releasedReferenceDepotUsesColdProvisionUntilItsNextExactCustodyEpoch() {
+        WorldId world = new WorldId("frontier:provision-released-reference");
+        FrontierWorldState held = withBread(base(world).initialState(), true);
+        SubjectId depot = FrontierWorldState.depotId(held.bootstrap().settlements().getFirst().id());
+        PhysicalCustodyLease lease = held.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+        PhysicalReplicaCustodyState releasedCustody = held.replicaCustody()
+                .checkpoint(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision())
+                .release(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision());
+        FrontierWorldState released = held.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(releasedCustody));
+
+        var engine = FrontierEngines.create(configuration(world, released)); advance(engine, 101L);
+        FrontierWorldState settled = state(engine); Settlement settlement = settled.bootstrap().settlements().getFirst();
+        assertEquals(SettlementProvisionStatus.SECURE, settled.humanPopulation().provision(settlement.id()).status());
+        assertTrue(settled.physicalIntents().isEmpty(), "released replica evidence must not manufacture a physical provision intent");
+        assertEquals(64 - settlement.residents().size(), settled.inventory().items().get(new SubjectId("item:provision-bread")).count());
+    }
+
+    @Test
     void activeDepotConsumesTheObservedExactAmountAndKeepsTheStackIdentity() {
         WorldId world = new WorldId("frontier:provision-confirmed"); FrontierWorldState initial = withBread(base(world).initialState(), true);
         var engine = FrontierEngines.create(configuration(world, initial)); advance(engine, 101L);
@@ -236,7 +254,8 @@ class SettlementProvisionProcessTest {
             inventory = inventory.store(new ExactItemStack(new SubjectId("item:provision-bread" + suffix), settlement, SettlementProvisionProcess.BREAD, counts[index],
                     new InventoryCustody.ContainerSlot(depot, index + 1)));
         }
-        return state.withInventory(inventory);
+        FrontierWorldState stocked = state.withInventory(inventory);
+        return active ? ReferenceContainerCustodyFixtures.observedAndHeld(stocked, depot) : stocked;
     }
 
     private static FrontierWorldState hungryAtCycleOne(FrontierWorldState state) {

@@ -122,6 +122,22 @@ class HumanPopulationProcessTest {
     }
 
     @Test
+    void retainedReferenceReplicaPreventsLegacyBirthAdmissionFromDependingOnAVisit() {
+        FrontierWorldState active = stateWithActiveBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-reference"), 91L)),
+                new SubjectId("settlement:1"));
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(active, depot), 7L,
+                ReferenceContainerCustody.canonicalFingerprint(active, depot), ReferenceContainerCustody.provenance(depot));
+        FrontierWorldState retained = active.withChanges(FrontierWorldStateUpdate.begin()
+                .replicaCustody(PhysicalReplicaCustodyState.empty().declare(replica)));
+
+        var proposed = PopulationBirthProcess.planReview(retained, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
+
+        assertEquals(1, proposed.size(), "a retained F0.2B replica must not let the legacy ACTIVE branch create a birth permit");
+        assertTrue(proposed.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
+    }
+
+    @Test
     void schedulerAndPhysicalTransitionAdmitExactlyOneResidentOnlyAfterTheConfirmedStackReceipt() {
         WorldId world = new WorldId("frontier:birth-scheduled");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);

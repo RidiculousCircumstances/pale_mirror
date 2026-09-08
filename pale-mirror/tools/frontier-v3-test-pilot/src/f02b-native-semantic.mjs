@@ -13,9 +13,9 @@ const SHA = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const QUALIFICATION = /^[A-Za-z0-9._-]{1,120}$/;
 const LANES = Object.freeze({
-  'worker-0': 'depot-never-visited',
-  'worker-1': 'depot-visited-unloaded',
-  'worker-2': 'hive-zero-player',
+  'worker-0': 'normal-never-visited',
+  'worker-1': 'normal-visited-unloaded',
+  'worker-2': 'normal-zero-player-recovery',
   'worker-3': 'conflict-restart'
 });
 
@@ -48,7 +48,8 @@ export function assertSemanticEvidence(value, expected = {}) {
   if (typeof value.gracefulSaveGate !== 'string' || !value.gracefulSaveGate.endsWith(`f02b-graceful-save-${value.runId}-${value.runAttempt}`)) {
     throw new Error('F0.2B evidence has no exact graceful-save gate');
   }
-  if (value.requiredTestCount !== (value.lane === 'conflict-restart' ? 3 : 1)) throw new Error('F0.2B evidence has incomplete lane coverage');
+  const expectedScenarioCount = value.lane === 'conflict-restart' ? 3 : value.lane === 'normal-zero-player-recovery' ? 2 : 1;
+  if (value.requiredTestCount !== expectedScenarioCount) throw new Error('F0.2B evidence has incomplete lane coverage');
   if (!value.terminal || value.terminal.lane !== value.lane || !value.terminal.domain || !value.terminal.container || value.terminal.container.status !== 'ok'
     || !value.terminal.replica || !value.terminal.custody) throw new Error('F0.2B evidence has no terminal domain/replica/custody facts');
   assertTerminalFacts(value.lane, value.terminal);
@@ -87,6 +88,9 @@ export function assertPrimaryEvidence(primary, semantic) {
   for (const receipt of primary.manifests) {
     if (!receipt || typeof receipt.scenario !== 'string' || !HASH.test(receipt.sha256 ?? '') || !receipt.value
         || hashJson(receipt.value) !== receipt.sha256) throw new Error('F0.2B primary evidence has corrupt scenario receipt');
+    if (!HASH.test(receipt.declarationSha256 ?? '') || receipt.declarationSha256 !== receipt.value.scenarioSha256) {
+      throw new Error('F0.2B primary evidence has a foreign scenario declaration');
+    }
     if (!Array.isArray(receipt.value.gracefulSaveGate) || receipt.value.gracefulSaveGate.length === 0
         || receipt.value.gracefulSaveGate.some(value => value?.mode !== 'serialized' || value.directory !== semantic.gracefulSaveGate)) {
       throw new Error('F0.2B primary evidence has no retained serialized graceful-save receipt');
@@ -114,6 +118,7 @@ export function mergeSemanticMatrix(evidence, expected) {
   const latestStart = Math.max(...checked.map(value => value.startedAtMillis));
   const earliestFinish = Math.min(...checked.map(value => value.finishedAtMillis));
   if (latestStart >= earliestFinish) throw new Error('F0.2B merge rejects non-overlapping Minecraft launches');
+  assertHistoryComparator(checked);
   return { schema: F02B_SCHEMA, kind: 'f02b-reference-container-native-semantic-merge', status: 'ok', ...expected,
     workers: checked.map(value => value.worker).sort(), overlapMillis: earliestFinish - latestStart,
     runtimeContentSha256: checked[0].runtimeContentSha256,
@@ -157,14 +162,49 @@ function assertTerminalFacts(lane, terminal) {
     return;
   }
   if (replica.state !== 'OBSERVED_CURRENT' || replica.conflict !== '') throw new Error('F0.2B owned lane has false replica drift');
-  if (lane === 'depot-never-visited') {
-    if (terminal.domain.family !== 'settlement-provision' || terminal.domain.foodStatus !== 'SECURE' || terminal.domain.available !== 27
-        || terminal.domain.fulfilled !== 37 || terminal.domain.intentStatus !== 'CONFIRMED') throw new Error('F0.2B settlement provision terminal is not exact');
-  } else if (lane === 'depot-visited-unloaded') {
-    if (terminal.domain.family !== 'settlement-production' || terminal.domain.orderStatus !== 'FULFILLED' || terminal.domain.itemCount !== 64
-        || terminal.domain.itemCustody !== 'CONTAINER_SLOT') throw new Error('F0.2B production terminal is not exact');
-  } else if (lane === 'hive-zero-player') {
-    if (terminal.domain.family !== 'hive-growth' || terminal.domain.growthJobs !== 0 || terminal.domain.addedOrgans !== 1
-        || terminal.domain.spawnedBioforms !== 1 || terminal.domain.intentStatus !== 'CONFIRMED') throw new Error('F0.2B hive terminal is not exact');
+  if (!Array.isArray(terminal.histories) || terminal.histories.length !== (lane === 'normal-zero-player-recovery' ? 2 : 1)) {
+    throw new Error('F0.2B normal lane has incomplete causal history evidence');
+  }
+  const expected = lane === 'normal-never-visited' ? ['never-visited']
+    : lane === 'normal-visited-unloaded' ? ['visited-unloaded']
+      : lane === 'normal-zero-player-recovery' ? ['zero-player', 'graceful-product-recovery'] : null;
+  if (!expected || terminal.histories.map(value => value.history).sort().join(',') !== expected.sort().join(',')) {
+    throw new Error('F0.2B normal lane has a foreign causal history');
+  }
+  for (const history of terminal.histories) assertNormalHistory(history);
+}
+
+function assertNormalHistory(history) {
+  if (!history || typeof history !== 'object' || !history.admission || !history.families) throw new Error('F0.2B normal history has no ordinary admission facts');
+  const { admission, families } = history;
+  if (admission.profile !== 'world' || admission.initialIntents !== 0 || admission.initialReplica !== false || admission.initialCustody !== false
+      || !Array.isArray(admission.observedEpochs) || admission.observedEpochs.length < 2) {
+    throw new Error('F0.2B normal history was seeded or lacks actual adapter observation');
+  }
+  if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64 || families.depot.terminalBread !== 63
+      || families.depot.foodAvailable !== 63 || families.depot.foodFulfilled !== 0
+      || families.hive.inputBiomass !== 64 || families.hive.outputBiomass !== 0
+      || families.hive.growthJobs !== 0 || families.hive.addedOrgans !== 1 || families.hive.spawnedBioforms !== 1) {
+    throw new Error('F0.2B normal history has non-equivalent product quantities');
+  }
+  if (history.history === 'never-visited') {
+    if (admission.targetVisitsBeforeDue !== 0 || admission.safeUnload !== false || admission.zeroPlayerLoaded !== false) throw new Error('F0.2B never-visited history is not causal');
+  } else if (history.history === 'visited-unloaded') {
+    if (admission.targetVisitsBeforeDue < 2 || admission.safeUnload !== true || admission.zeroPlayerLoaded !== false || !admission.releasedEpochs?.length) throw new Error('F0.2B safely-unloaded history lacks release evidence');
+  } else if (history.history === 'zero-player') {
+    if (admission.targetVisitsBeforeDue < 2 || admission.zeroPlayerLoaded !== true) throw new Error('F0.2B zero-player history is not causal');
+  } else if (history.history === 'graceful-product-recovery') {
+    if (history.recovery?.mode !== 'graceful' || admission.targetVisitsBeforeDue < 1 || !history.recovery.beforeEpoch || !history.recovery.afterEpoch) throw new Error('F0.2B product recovery lacks a fenced custody boundary');
+  } else throw new Error('F0.2B normal history is unknown');
+}
+
+function assertHistoryComparator(checked) {
+  const histories = checked.filter(value => value.lane !== 'conflict-restart').flatMap(value => value.terminal.histories);
+  const selected = new Map(histories.filter(value => ['never-visited', 'visited-unloaded', 'zero-player'].includes(value.history)).map(value => [value.history, value]));
+  if (selected.size !== 3) throw new Error('F0.2B merge lacks all three ordinary histories');
+  const projection = value => ({ depot: value.families.depot, hive: value.families.hive });
+  const baseline = JSON.stringify(projection(selected.get('never-visited')));
+  for (const name of ['visited-unloaded', 'zero-player']) {
+    if (JSON.stringify(projection(selected.get(name))) !== baseline) throw new Error(`F0.2B merge rejects ${name} terminal product drift`);
   }
 }

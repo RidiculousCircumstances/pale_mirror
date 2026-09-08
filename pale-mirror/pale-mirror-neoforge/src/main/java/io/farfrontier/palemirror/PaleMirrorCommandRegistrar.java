@@ -67,6 +67,14 @@ final class PaleMirrorCommandRegistrar {
                     context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward to canonical instant " + instant + "."), true);
                     return 1;
                 })));
+        v3.then(Commands.literal("release_advance_hold").requires(source -> source.hasPermission(4)).executes(context -> {
+            if (!FrontierV3ServerLifecycle.releaseFastForwardHold(context.getSource().getServer())) {
+                context.getSource().sendFailure(Component.literal("Frontier v3 has no held absolute fast-forward target to release."));
+                return 0;
+            }
+            context.getSource().sendSuccess(() -> Component.literal("Released Frontier v3 absolute fast-forward hold."), true);
+            return 1;
+        }));
         // Attach the finished mutable v3 branch only after every child is present. Brigadier
         // copies a child branch when it is attached, so attaching it earlier would omit advance.
         root.then(v3);

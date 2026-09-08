@@ -21,7 +21,8 @@ if (!gracefulSaveGate.startsWith('/') || !gracefulSaveGate.endsWith(`f02b-gracef
   throw new Error('F0.2B normal-world semantic invocation has no exact graceful-save gate');
 }
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
-const scenarios = { 'depot-never-visited': ['disposable-settlement-provision.json'], 'depot-visited-unloaded': ['disposable-materialized-production-work-restart.json'], 'hive-zero-player': ['disposable-hive-growth.json'],
+const scenarios = { 'normal-never-visited': ['disposable-f02b-normal-never-visited.json'], 'normal-visited-unloaded': ['disposable-f02b-normal-visited-unloaded.json'],
+  'normal-zero-player-recovery': ['disposable-f02b-normal-zero-player.json', 'disposable-f02b-normal-product-recovery.json'],
   'conflict-restart': ['disposable-f02b-depot-changed-restart.json', 'disposable-f02b-depot-foreign-restart.json', 'disposable-f02b-depot-conflict-restart.json'] }[lane];
 const root = `build/f02b-native/${values.run}-${values.attempt}-${values.worker}`; const prepared = `${root}/prepared-build.json`;
 const startedAtMillis = Date.now(); const stream = createWriteStream(log, { flags: 'wx' });
@@ -44,6 +45,9 @@ try {
   // artifacts: those are the immutable F0.VC consumer view above.
   await seedOfflineGradleHome(namespaces.gradle);
   for (const scenario of scenarios) {
+    const declarationSource = await readFile(resolve(`tools/frontier-v3-test-pilot/scenarios/${scenario}`));
+    const declarationSha256 = createHash('sha256').update(declarationSource).digest('hex');
+    const declaration = JSON.parse(declarationSource);
     const manifest = `${root}/${scenario.replace(/\.json$/, '')}.manifest.json`;
     pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
       GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
@@ -51,10 +55,11 @@ try {
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
+    if (value.scenarioSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
     const beforeRestart = beforeRestartManifest
       ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;
-    manifests.push({ scenario, manifest, value, beforeRestart });
+    manifests.push({ scenario, declaration, declarationSha256, manifest, value, beforeRestart });
   }
   runtimeContentSha256 = consumed.receipt.runtimeContentSha256;
 } finally { stream.end(); await new Promise(resolveClose => stream.once('close', resolveClose)); }
@@ -67,7 +72,7 @@ const identityFact = { qualificationId: values.qualification, repository: values
   launchTarget: 'normal-disposable-v3-server', requiredTest: `scenario:${scenarios.join('+')}`, requiredTestCount: scenarios.length, jvmEnvelope };
 const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed', worker: values.worker, lane, identity: identityFact, runtimeContentSha256, jarSha256,
   runtime: { receipt: JSON.parse(await readFile(resolve(`${root}/consumer-${values.worker}.json`), 'utf8')), preparedIdentity: consumed.identity },
-  gracefulSaveGate, manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value,
+  gracefulSaveGate, manifests: manifests.map(value => ({ scenario: value.scenario, declarationSha256: value.declarationSha256, sha256: hashJson(value.value), value: value.value,
     ...(value.beforeRestart == null ? {} : { beforeRestartSha256: hashJson(value.beforeRestart), beforeRestart: value.beforeRestart }) })), terminal };
 const primarySha256 = hashJson(primary);
 const evidence = { schema: F02B_SCHEMA, kind: F02B_KIND, status: 'passed', worker: values.worker, lane, ...identityFact, startedAtMillis, finishedAtMillis, gradlePid: pilotPid,
@@ -82,39 +87,62 @@ function terminalFacts(manifests, assignedLane) {
     return { lane: assignedLane, scenarioIds: conflicts.map(value => value.scenario), recovery: last.recovery, container: last.container,
       replica: last.replica, custody: last.custody, conflicts, domain: { family: 'depot-conflict', recovery: last.recovery?.mode ?? null } };
   }
-  const manifestValue = manifests[0].value;
-  if (manifestValue?.status !== 'ok' || !Array.isArray(manifestValue.diagnostics)) throw new Error('F0.2B native scenario has no terminal manifest');
-  // A real restart has two durable receipts.  The pre-restart segment contains the
-  // production completion while the resumed segment proves the recovered replica/custody
-  // boundary.  Retain and compare both rather than treating the final client segment alone
-  // as a complete product result.
-  const values = [manifests[0].beforeRestart, manifestValue].flatMap(receipt =>
-    Array.isArray(receipt?.diagnostics) ? receipt.diagnostics.map(value => value?.value) : [])
-    .filter(value => value?.status === 'ok');
-  const find = (kind, id) => values.filter(value => value.kind === kind && value.id === id).at(-1);
-  const containers = values.filter(value => value.kind === 'container');
-  const selected = containers.at(-1);
-  if (!selected || !selected.replica || !selected.custody) throw new Error('F0.2B native scenario has no terminal domain/replica/custody comparison');
-  const base = { lane: assignedLane, scenarioId: manifestValue.scenarioId, recovery: manifestValue.recovery ?? null,
-    container: selected, replica: selected.replica, custody: selected.custody };
-  if (assignedLane === 'depot-never-visited') {
-    const settlement = find('settlement', 'settlement:1'); const intent = find('intent', 'intent:settlement-provision-1-2-0');
-    if (!settlement?.food || !intent) throw new Error('F0.2B settlement provision lane lacks terminal domain facts');
-    return { ...base, domain: { family: 'settlement-provision', foodStatus: settlement.food.status, available: settlement.food.available,
-      fulfilled: settlement.food.fulfilled, intentStatus: intent.intentStatus } };
+  const histories = manifests.map(({ scenario, declaration, value, beforeRestart }) => normalHistory(scenario, declaration, value, beforeRestart));
+  const finalHistory = histories.at(-1);
+  const selected = finalHistory.containers.depot;
+  return { lane: assignedLane, scenarioIds: manifests.map(value => value.scenario), domain: { family: 'normal-world-product-comparator' },
+    container: selected, replica: selected.replica, custody: selected.custody, histories };
+}
+
+function normalHistory(scenario, declaration, manifest, beforeRestart) {
+  if (manifest?.status !== 'ok' || !Array.isArray(manifest.diagnostics) || !Array.isArray(manifest.actions)) throw new Error('F0.2B normal scenario has no complete receipt');
+  const profile = declaration?.server?.profile;
+  const diagnostics = [beforeRestart, manifest].flatMap(receipt => Array.isArray(receipt?.diagnostics) ? receipt.diagnostics : []);
+  const values = diagnostics.map(entry => ({ ...entry.value, actionStep: entry.actionStep })).filter(value => value?.status === 'ok');
+  const at = (kind, id) => values.filter(value => value.kind === kind && value.id === id);
+  const summary = at('summary', '').at(0); const depotObservations = at('container', 'container:1-depot'); const hiveObservations = at('container', 'container:hive-east-store');
+  const settlement = at('settlement', 'settlement:1').at(-1); const hive = at('hive', 'hive:frontier').at(-1);
+  const depot = depotObservations.at(-1); const store = hiveObservations.at(-1);
+  if (!summary || !depot || !store || !settlement?.food || !hive || !depot.replica || !depot.custody || !store.replica || !store.custody) throw new Error('F0.2B normal scenario lacks terminal product or custody diagnostics');
+  const earlyDepot = depotObservations.at(0); const earlyStore = hiveObservations.at(0);
+  if (!earlyDepot || !earlyStore || earlyDepot.replica !== null || earlyDepot.custody !== null || earlyStore.replica !== null || earlyStore.custody !== null) {
+    throw new Error('F0.2B normal scenario did not start from unseeded replica/custody');
   }
-  if (assignedLane === 'depot-visited-unloaded') {
-    const order = find('market_order', 'order:development-production-input-theft'); const item = find('item', 'item:development-production-input-theft-bread');
-    if (!order || !item) throw new Error('F0.2B production lane lacks terminal domain facts');
-    return { ...base, domain: { family: 'settlement-production', orderStatus: order.orderStatus, itemCount: item.count, itemCustody: item.custody?.kind } };
+  const id = scenario.replace(/\.json$/, '');
+  const history = id.includes('never-visited') ? 'never-visited' : id.includes('visited-unloaded') ? 'visited-unloaded'
+    : id.includes('zero-player') ? 'zero-player' : id.includes('product-recovery') ? 'graceful-product-recovery' : null;
+  if (!history) throw new Error('F0.2B normal scenario is not an admitted history');
+  const actions = declaration.actions;
+  const due = actions.findIndex(action => action.type === 'fast_forward' || action.type === 'fast_forward_to_instant');
+  const targetVisitsBeforeDue = actions.slice(0, due).filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length;
+  const away = actions.findIndex(action => action.type === 'visit' && action.dimension === 'minecraft:overworld');
+  const interim = diagnostics.filter(entry => entry.actionStep != null && entry.actionStep > away + 1 && entry.actionStep < due + 1)
+    .map(entry => entry.value).filter(value => value?.kind === 'container');
+  const observedEpochs = [...depotObservations, ...hiveObservations].map(value => value.custody?.epoch).filter(Number.isSafeInteger);
+  const releasedEpochs = interim.filter(value => value.custody?.status === 'RELEASED').map(value => value.custody.epoch);
+  const zeroPlayerLoaded = interim.some(value => value.physicalSocket?.chunk === 'LOADED' && value.custody?.status === 'ACQUIRED');
+  const safeUnload = interim.some(value => value.physicalSocket?.chunk === 'UNLOADED' && value.custody?.status === 'RELEASED');
+  // Retain both the exact transformed stack boundary and the later terminal depot
+  // state: the ordinary provision scheduler can consume its one named ration only
+  // after the production effect has been confirmed.  A terminal-only count would
+  // hide the 64-wheat -> 64-bread product receipt.
+  const bread = Math.max(0, ...depotObservations.map(value => value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0));
+  const terminalBread = depot.occupied?.find(value => value.itemKind === 'minecraft:bread')?.count ?? 0;
+  const wheat = earlyDepot.occupied?.find(value => value.itemKind === 'minecraft:wheat')?.count ?? 0;
+  const biomass = earlyStore.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0;
+  const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
+    observedEpochs, releasedEpochs, safeUnload, zeroPlayerLoaded, dueAction: due + 1 };
+  const result = { history, admission, containers: { depot, hive: store }, families: {
+    depot: { inputWheat: wheat, outputBread: bread, terminalBread, foodAvailable: settlement.food.available, foodFulfilled: settlement.food.fulfilled },
+    hive: { inputBiomass: biomass, outputBiomass: store.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0,
+      growthJobs: hive.growthJobs, addedOrgans: hive.addedOrgans, spawnedBioforms: hive.spawnedBioforms }
+  } };
+  if (history === 'graceful-product-recovery') {
+    const before = beforeRestart?.diagnostics?.map(entry => entry.value).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
+    result.recovery = { mode: manifest.recovery?.mode, beforeEpoch: before?.custody?.epoch ?? null, afterEpoch: depot.custody?.epoch ?? null,
+      splitAfterAction: manifest.recovery?.splitAfterAction ?? null };
   }
-  if (assignedLane === 'hive-zero-player') {
-    const hive = find('hive', 'hive:frontier'); const intent = find('intent', 'intent:hive-growth-biomass-1');
-    if (!hive || !intent) throw new Error('F0.2B hive lane lacks terminal domain facts');
-    return { ...base, domain: { family: 'hive-growth', growthJobs: hive.growthJobs, addedOrgans: hive.addedOrgans,
-      spawnedBioforms: hive.spawnedBioforms, intentStatus: intent.intentStatus } };
-  }
-  throw new Error(`F0.2B has no terminal extractor for ${assignedLane}`);
+  return result;
 }
 
 function conflictFacts(manifestValue) {

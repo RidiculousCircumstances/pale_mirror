@@ -135,6 +135,15 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsOnlyParameterlessAbsoluteFastForwardHoldRelease() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"release_fast_forward_hold"}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"release_fast_forward_hold","targetInstant":1}]}"""));
+    }
+
+    @Test
     void requiresAllCanonicalIdentitiesForADomainHarvestResult() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_harvest_result","siteId":"site:1-wheat-field",

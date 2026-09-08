@@ -331,6 +331,17 @@ public final class FrontierV3ServerLifecycle {
         return true;
     }
 
+    /**
+     * Releases one already-reached test-pilot checkpoint so ordinary physical
+     * observation may resume. It never advances canonical time, and cannot
+     * interrupt a queued target.
+     */
+    public static boolean releaseFastForwardHold(MinecraftServer server) {
+        Objects.requireNonNull(server, "server");
+        if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
+        return FAST_FORWARD_TARGETS.remove(server) != null;
+    }
+
     /** Pure admission rule shared by the server-thread command and focused boundary tests. */
     static OptionalInt absoluteFastForwardDelta(long checkpointInstant, long targetInstant) {
         if (checkpointInstant < 0L || targetInstant <= checkpointInstant) return OptionalInt.empty();

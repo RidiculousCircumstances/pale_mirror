@@ -236,7 +236,13 @@ final class FrontierV3ContainerSurfaceExecutor {
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
         if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "");
         BlockPos target = position(surface);
-        if (!level.hasChunkAt(target)) return new Readiness("UNLOADED", "", "", "", "", "", "");
+        // For the F0.2B reference scopes an evicted-ticking chunk retained in the server's
+        // serialization cache is prior replica evidence, not a physical custody candidate.
+        // Keep the generic materializer's loaded-socket diagnostic unchanged for every other
+        // family while reporting the same eligibility boundary used by the custody adapter.
+        if (!level.hasChunkAt(target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
+            return new Readiness("UNLOADED", "", "", "", "", "", "");
+        }
         GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElse(null);
         SocketReadiness fresh = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         SocketReadiness supportStatus = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);

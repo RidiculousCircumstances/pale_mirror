@@ -84,7 +84,13 @@ public final class SettlementProvisionProcess {
             return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
         }
         ContainerSurface surface = state.inventory().surfaces().get(depot);
-        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
+        // The converted depot's visible surface is only a locator.  Its exact current
+        // replica lease, rather than ACTIVE history, is the sole physical-consumption
+        // authority.  During a released re-emission boundary COLD must retain the same
+        // canonical path instead of preparing an unfenced physical consumption intent.
+        boolean referenceDepot = ReferenceContainerCustody.isReferenceContainer(state, depot);
+        boolean physicalCustody = referenceDepot && ReferenceContainerCustody.hasLiveCustody(state, depot);
+        if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED || (referenceDepot && !physicalCustody)) {
             List<ProposedEvent> events = new ArrayList<>();
             events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionConsumed(provision.settlementId(), item.id(), allocation.count())));
             if (provision.nextAllocation() + 1 < provision.allocations().size()) {
@@ -184,7 +190,10 @@ public final class SettlementProvisionProcess {
             throw new IllegalArgumentException("settlement provision consumption does not match its exact food allocation");
         }
         ContainerSurfaceStatus surface = state.inventory().surfaces().get(depot).status();
-        if (physical != (surface == ContainerSurfaceStatus.ACTIVE)) throw new IllegalArgumentException("settlement provision crossed the wrong physical custody boundary");
+        boolean physicalBoundary = ReferenceContainerCustody.isReferenceContainer(state, depot)
+                ? ReferenceContainerCustody.hasLiveCustody(state, depot)
+                : surface == ContainerSurfaceStatus.ACTIVE;
+        if (physical != physicalBoundary) throw new IllegalArgumentException("settlement provision crossed the wrong physical custody boundary");
         HumanPopulation population = feedCurrentAllocation(state.humanPopulation(), provision);
         if (provision.nextAllocation() + 1 == provision.allocations().size()) population = resolveUnserved(population, provision, provision.nextAllocation() + 1);
         return state.withInventory(state.inventory().consume(itemId, count))

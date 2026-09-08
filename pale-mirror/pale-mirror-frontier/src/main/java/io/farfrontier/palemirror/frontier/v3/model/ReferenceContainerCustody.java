@@ -59,6 +59,16 @@ public final class ReferenceContainerCustody {
         return replica != null && replica.state() == PhysicalReplicaState.CONFLICT;
     }
 
+    /**
+     * Once the reference adapter has retained evidence for its exact chest, legacy physical
+     * consumers must not use their historical surface bit to create a competing intent there.
+     * This does not grant custody; it only keeps a visit from changing legacy admission.
+     */
+    public static boolean hasRetainedReplica(FrontierWorldState state, SubjectId containerId) {
+        return isReferenceContainer(state, containerId)
+                && state.replicaCustody().replicas().containsKey(containerId);
+    }
+
     /** Deterministic canonical fingerprint of the exact slots represented by one chest. */
     public static String canonicalFingerprint(FrontierWorldState state, SubjectId containerId) {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));

@@ -63,12 +63,12 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .filter(lease -> lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID) && lease.live())
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
-            if (surface == null || !level.hasChunkAt(position(surface))) {
+            if (surface == null || !naturallyTicking(level, position(surface))) {
                 drain(runtime, lease, "unloaded");
                 return;
             }
         }
-        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream().filter(surface -> level.hasChunkAt(position(surface))).toList();
+        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream().filter(surface -> naturallyTicking(level, position(surface))).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
         if (!eligible.isEmpty()) reconcile(level, runtime, state, selectRoundRobin(eligible, level.getGameTime()));
     }
@@ -307,6 +307,10 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
 
     private static BlockPos position(ContainerSurface surface) { return new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()); }
+    /** A retained full chunk cache is serialized evidence, not a normally ticking physical scope. */
+    private static boolean naturallyTicking(ServerLevel level, BlockPos position) {
+        return level.hasChunkAt(position) && level.shouldTickBlocksAt(position);
+    }
     private static ChestBlockEntity chestAt(ServerLevel level, BlockPos position) {
         return level.getBlockEntity(position) instanceof ChestBlockEntity chest ? chest : null;
     }
