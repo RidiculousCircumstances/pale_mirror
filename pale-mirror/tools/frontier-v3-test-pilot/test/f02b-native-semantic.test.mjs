@@ -51,13 +51,17 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
     identity: { qualificationId: semantic.qualificationId, repository: semantic.repository, headSha: semantic.headSha, workflowSha: semantic.workflowSha,
       workflowRef: semantic.workflowRef, runId: semantic.runId, runAttempt: semantic.runAttempt, jobId: semantic.jobId, runnerId: semantic.runnerId,
       runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount, jvmEnvelope: semantic.jvmEnvelope },
-    runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, artifactSha256: hash } },
+    runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, preparedArtifact: { sha256: hash } } },
     manifests: [{ scenario: 'disposable-settlement-provision.json', value: { status: 'ok', recovery: { mode: 'graceful' }, diagnostics: [],
       gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }] } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
   assert.equal(assertPrimaryEvidence(primary, semantic), primary);
   const drifted = structuredClone(primary); drifted.runtime.receipt.runtimeContentSha256 = 'c'.repeat(64);
   assert.throws(() => assertPrimaryEvidence(drifted, semantic), /lacks the consumed prepared runtime identity/);
+  const flattened = structuredClone(primary); flattened.runtime.preparedIdentity.artifactSha256 = hash; delete flattened.runtime.preparedIdentity.preparedArtifact;
+  assert.throws(() => assertPrimaryEvidence(flattened, semantic), /lacks the consumed prepared runtime identity/);
+  const malformedPreparedArtifact = structuredClone(primary); malformedPreparedArtifact.runtime.preparedIdentity.preparedArtifact.sha256 = 'not-a-digest';
+  assert.throws(() => assertPrimaryEvidence(malformedPreparedArtifact, semantic), /lacks the consumed prepared runtime identity/);
   const corrupt = structuredClone(primary); corrupt.manifests[0].value.status = 'foreign';
   assert.throws(() => assertPrimaryEvidence(corrupt, semantic), /corrupt scenario receipt/);
   primary.manifests[0].value.recovery = { beforeRestartManifest: '/private/pre-restart.json' };

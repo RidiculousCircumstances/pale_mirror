@@ -75,8 +75,12 @@ export function assertPrimaryEvidence(primary, semantic) {
       || !sameJson(primary.identity, immutableIdentity(semantic)) || !sameJson(primary.terminal, semantic.terminal)) {
     throw new Error('F0.2B primary evidence is foreign to its semantic receipt');
   }
+  // This is the F0.VC consumer identity, not the older flattened verification
+  // projection.  Retain its actual source and prepared-artifact digests so a
+  // primary receipt cannot name a valid runtime while eliding what it launched.
   if (!primary.runtime?.receipt || primary.runtime.receipt.worker !== semantic.worker || primary.runtime.receipt.runtimeContentSha256 !== semantic.runtimeContentSha256
-      || !primary.runtime.preparedIdentity?.sourceContent || !primary.runtime.preparedIdentity?.artifactSha256) {
+      || !HASH.test(primary.runtime.preparedIdentity?.sourceContent?.sha256 ?? '')
+      || !HASH.test(primary.runtime.preparedIdentity?.preparedArtifact?.sha256 ?? '')) {
     throw new Error('F0.2B primary evidence lacks the consumed prepared runtime identity');
   }
   if (!Array.isArray(primary.manifests) || primary.manifests.length !== semantic.requiredTestCount) throw new Error('F0.2B primary evidence has incomplete scenario receipts');
