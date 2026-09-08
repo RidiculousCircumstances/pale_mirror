@@ -5,7 +5,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createConnection } from 'node:net';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
 import { requestRconStop } from './rcon.mjs';
@@ -19,6 +19,7 @@ import { requiresExactChildTerminationAfterGracefulFailure } from './owned-proce
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, publishLifecycleBarrier, readLifecycleBarriers } from './lifecycle-barrier.mjs';
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
 import { withGracefulSaveGate } from './graceful-save-gate.mjs';
+import { captureSaveOwnerObservation, prearmSaveOwnerObserver } from './save-owner-observer.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -46,6 +47,11 @@ timing.begin('source.build_identity_resolution');
 const buildIdentity = await resolvePreparedBuild(project, gradle);
 timing.end('source.build_identity_resolution');
 const jfr = jfrCaptureRequest(process.env, project);
+const saveOwnerObserverRoot = process.env.FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT;
+if (saveOwnerObserverRoot !== undefined && saveOwnerObserverRoot === '') {
+  throw new Error('FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT must not be empty when declared');
+}
+let retainedOwnerObservation = null;
 const runId = randomUUID();
 const lifecycle = await createLifecycleBarrierSession(resolve(project, 'build/frontier-v3-scenarios'), newLifecycleIdentity({
   buildIdentitySha256: createHash('sha256').update(JSON.stringify(buildIdentity)).digest('hex'),
@@ -220,6 +226,7 @@ try {
           serverPid: server?.serverPid ?? lastServerAttempt?.serverPid ?? null,
           startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null,
           gracefulShutdown: server?.gracefulShutdown ?? lastServerAttempt?.gracefulShutdown ?? null,
+          ownerObservation: ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation),
           cleanupFailures: boundedCleanupFailures(cleanupFailures) },
         termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
         lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
@@ -244,6 +251,7 @@ if (completed) {
   manifest.build = buildIdentity;
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
+  manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
   manifest.initialCanonicalHold = initialCanonicalHold;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -638,7 +646,27 @@ async function stopServerSafely(server, serverPort) {
   return withGracefulSaveGate({ directory: process.env.FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE,
     owner: { worker: lifecycle.identity.workerId, scenario: lifecycle.identity.scenarioId, serverRunId: server.serverRunId } }, async receipt => {
     gracefulSaveGateReceipts.push(receipt);
+    if (server.ownerObservation?.status === 'captured' || server.ownerObservation?.status === 'capture_failed') {
+      throw new Error('owner observer already recorded the exact graceful-stop attempt');
+    }
+    if (saveOwnerObserverRoot !== undefined && retainedOwnerObservation === null && server.ownerObserverArm === undefined) {
+      server.ownerObserverArm = await prearmSaveOwnerObserver({ project, root: saveOwnerObserverRoot,
+        lifecycleIdentity: lifecycle.identity, server: { ...server, lifecycleDirectory: lifecycle.directory } });
+    }
     await requestRconStop({ port: server.rconPort, password: server.rconPassword });
+    if (server.ownerObserverArm !== undefined) {
+      try {
+        server.ownerObservation = await captureSaveOwnerObservation(server.ownerObserverArm, {
+          output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
+        });
+        retainedOwnerObservation = server.ownerObservation;
+      } catch (captureFailure) {
+        server.ownerObservation = { status: 'capture_failed', receipt: server.ownerObserverArm.receipt,
+          serverRunId: server.serverRunId, serverPid: server.serverPid, failure: String(captureFailure?.message ?? captureFailure) };
+        retainedOwnerObservation = server.ownerObservation;
+        throw captureFailure;
+      }
+    }
     await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
     await ownedServerExit(server, serverPort, DURABLE_STOP_TIMEOUT_MS, 'disposable v3 server flushed but retained its game port');
     releaseWrapper(server.child);
@@ -741,6 +769,14 @@ async function stopServerAbruptly(server, serverPort) {
 function releaseWrapper(child) {
   if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
   child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
+}
+function ownerObservationFact(value) {
+  if (value === undefined || value === null) return null;
+  const receipt = typeof value.receipt === 'string' ? relative(project, value.receipt) : null;
+  return { status: value.status ?? null, receipt, serverRunId: value.server?.serverRunId ?? value.serverRunId ?? null,
+    serverPid: value.server?.serverPid ?? value.serverPid ?? null, capture: value.capture?.method ?? null,
+    snapshots: Array.isArray(value.snapshots) ? value.snapshots.map(snapshot => ({ path: relative(project, snapshot.path), sha256: snapshot.sha256 })) : [],
+    ...(value.failure === undefined ? {} : { failure: value.failure }) };
 }
 function killIfPresent(pid) {
   try { process.kill(pid, 'SIGKILL'); }
