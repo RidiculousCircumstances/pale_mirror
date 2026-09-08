@@ -32,7 +32,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
       { id: 'schedule:produce-bread', subject: 'job:settlement-1-bread', kind: 'frontier.settlement.production.complete', dueAt: 227, weight: 1 }
     ], orders: [{ task: 'task:settlement-1-bread', job: 'job:settlement-1-bread', reservation: 'reservation:bread-input', reservationActive: true, status: 'ACCEPTED' }], productionStarted: true, growthStarted: true,
       physicalIntentKinds: ['EXACT_ITEM_CONSUMPTION:CONFIRMED', 'PRODUCTION_TRANSFORMATION:CONFIRMED'], admissionAction: 3 } },
-    families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 64, foodAvailable: 64, foodFulfilled: 0 },
+    families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 63, foodAvailable: 63, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
     ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5 } } : {}) });
   const histories = lane === 'normal-never-visited' ? [normal('never-visited')]
@@ -234,7 +234,7 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(semanticHole, expected), /non-equivalent product quantities/);
   const historyDrift = complete.map(value => structuredClone(value)); historyDrift[2].terminal.histories[0].families.hive.addedOrgans = 2;
   assert.throws(() => mergeSemanticMatrix(historyDrift, expected), /non-equivalent product quantities/);
-  const terminalChestDrift = complete.map(value => structuredClone(value)); terminalChestDrift[2].terminal.histories[0].families.depot.terminalBread = 63;
+  const terminalChestDrift = complete.map(value => structuredClone(value)); terminalChestDrift[2].terminal.histories[0].families.depot.terminalBread = 62;
   assert.throws(() => mergeSemanticMatrix(terminalChestDrift, expected), /terminal product drift/);
   const admissionDrift = complete.map(value => structuredClone(value)); admissionDrift[1].terminal.histories[0].admission.causal.orders[0].reservationActive = false;
   assert.throws(() => mergeSemanticMatrix(admissionDrift, expected), /seeded or lacks actual adapter observation/);

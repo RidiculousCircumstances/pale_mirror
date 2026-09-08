@@ -192,7 +192,12 @@ function assertNormalHistory(history) {
   }
   if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64
       || !Number.isSafeInteger(families.depot.terminalBread) || families.depot.terminalBread < 0 || families.depot.terminalBread > 64
-      || families.depot.foodAvailable !== 64 || families.depot.foodFulfilled !== 0
+      // The reference receipt remains the exact 64-wheat -> 64-bread
+      // transformation.  The ordinary birth consumer then durably consumes
+      // one bread under its own authority; all three histories retain that
+      // same 63-bread terminal boundary rather than suppressing birth from
+      // retained replica history.
+      || families.depot.foodAvailable !== 63 || families.depot.foodFulfilled !== 0
       || families.hive.inputBiomass !== 64 || families.hive.outputBiomass !== 0
       || families.hive.growthJobs !== 0 || families.hive.addedOrgans !== 1 || families.hive.spawnedBioforms !== 1) {
     throw new Error('F0.2B normal history has non-equivalent product quantities');
