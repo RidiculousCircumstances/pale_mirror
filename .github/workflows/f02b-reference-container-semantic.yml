@@ -41,17 +41,17 @@ jobs:
           --root="${{ inputs.task_root }}" --workers=4 --output="$PWD/f02b-artifacts/producer/capacity.json"
       - name: Build, package, and stage the one immutable runtime
         run: |
-          mkdir -p "$PWD/f02b-artifacts/producer"
-          node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=f02b-artifacts/producer/prepared-build.json
+          mkdir -p "$PWD/build/f02b-producer"
+          node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=build/f02b-producer/prepared-build.json
           ./gradlew :pale-mirror-neoforge:verifyPackagedJar --offline --no-daemon
           node tools/frontier-v3-test-pilot/src/f0vc-prepared-runtime.mjs --mode=prepare \
-            --store="${{ inputs.task_root }}" --prepared=f02b-artifacts/producer/prepared-build.json \
-            --output=f02b-artifacts/producer/runtime.json
+            --store="${{ inputs.task_root }}" --prepared=build/f02b-producer/prepared-build.json \
+            --output=build/f02b-producer/runtime.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: pale-mirror/f02b-artifacts/producer
+          path: pale-mirror/build/f02b-producer
           if-no-files-found: error
 
   semantic:
@@ -88,7 +88,7 @@ jobs:
         continue-on-error: true
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: pale-mirror/f02b-artifacts/producer
+          path: pale-mirror/build/f02b-producer
       - name: Bind active GitHub job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -109,7 +109,7 @@ jobs:
           scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs \
             --output="$PWD/f02b-artifacts/${{ matrix.worker }}/semantic.json" \
             --log="$PWD/f02b-artifacts/${{ matrix.worker }}/minecraft.log" \
-            --runtime="$PWD/f02b-artifacts/producer/runtime.json" \
+            --runtime="$PWD/build/f02b-producer/runtime.json" \
             --namespaces="$namespaces" --identity="$PWD/f02b-artifacts/${{ matrix.worker }}/job.json" \
             --worker="${{ matrix.worker }}" --lane="${{ matrix.lane }}" \
             --qualification="${{ inputs.qualification_id }}" --repository="${{ github.repository }}" \
