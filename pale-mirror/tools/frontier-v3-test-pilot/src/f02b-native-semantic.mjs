@@ -45,6 +45,9 @@ export function assertSemanticEvidence(value, expected = {}) {
   if (!sameJson(value.jvmEnvelope, { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 })) {
     throw new Error('F0.2B evidence has no exact bounded JVM envelope');
   }
+  if (typeof value.gracefulSaveGate !== 'string' || !value.gracefulSaveGate.endsWith(`f02b-graceful-save-${value.runId}-${value.runAttempt}`)) {
+    throw new Error('F0.2B evidence has no exact graceful-save gate');
+  }
   if (value.requiredTestCount !== (value.lane === 'conflict-restart' ? 3 : 1)) throw new Error('F0.2B evidence has incomplete lane coverage');
   if (!value.terminal || value.terminal.lane !== value.lane || !value.terminal.domain || !value.terminal.container || value.terminal.container.status !== 'ok'
     || !value.terminal.replica || !value.terminal.custody) throw new Error('F0.2B evidence has no terminal domain/replica/custody facts');
@@ -68,7 +71,8 @@ export function assertPrimaryEvidence(primary, semantic) {
     throw new Error('F0.2B primary evidence has unknown schema or kind');
   }
   if (!semantic || primary.worker !== semantic.worker || primary.lane !== semantic.lane || primary.runtimeContentSha256 !== semantic.runtimeContentSha256
-      || primary.jarSha256 !== semantic.jarSha256 || !sameJson(primary.identity, immutableIdentity(semantic)) || !sameJson(primary.terminal, semantic.terminal)) {
+      || primary.jarSha256 !== semantic.jarSha256 || primary.gracefulSaveGate !== semantic.gracefulSaveGate
+      || !sameJson(primary.identity, immutableIdentity(semantic)) || !sameJson(primary.terminal, semantic.terminal)) {
     throw new Error('F0.2B primary evidence is foreign to its semantic receipt');
   }
   if (!primary.runtime?.receipt || primary.runtime.receipt.worker !== semantic.worker || primary.runtime.receipt.runtimeContentSha256 !== semantic.runtimeContentSha256
@@ -79,6 +83,10 @@ export function assertPrimaryEvidence(primary, semantic) {
   for (const receipt of primary.manifests) {
     if (!receipt || typeof receipt.scenario !== 'string' || !HASH.test(receipt.sha256 ?? '') || !receipt.value
         || hashJson(receipt.value) !== receipt.sha256) throw new Error('F0.2B primary evidence has corrupt scenario receipt');
+    if (!Array.isArray(receipt.value.gracefulSaveGate) || receipt.value.gracefulSaveGate.length === 0
+        || receipt.value.gracefulSaveGate.some(value => value?.mode !== 'serialized' || value.directory !== semantic.gracefulSaveGate)) {
+      throw new Error('F0.2B primary evidence has no retained serialized graceful-save receipt');
+    }
     const declaredBeforeRestart = receipt.value?.recovery?.beforeRestartManifest;
     if (declaredBeforeRestart) {
       if (!receipt.beforeRestart || !HASH.test(receipt.beforeRestartSha256 ?? '')

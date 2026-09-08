@@ -112,6 +112,7 @@ jobs:
       - name: Run one actual isolated Minecraft semantic lane
         env:
           JAVA_TOOL_OPTIONS: -Xmx3G
+          F02B_GRACEFUL_SAVE_GATE: ${{ inputs.task_root }}/f02b-graceful-save-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           namespaces="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
           export FRONTIER_V3_PILOT_PORT="$(node -p "JSON.parse(require('fs').readFileSync('$namespaces')).port")"

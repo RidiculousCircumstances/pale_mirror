@@ -18,6 +18,7 @@ import { preparedLaunch } from './prepared-launch.mjs';
 import { requiresExactChildTerminationAfterGracefulFailure } from './owned-process-group.mjs';
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, createLifecycleBarrierSession, exactLifecycleClientPid, exactLifecycleCompletedSegment, newLifecycleIdentity, publishLifecycleBarrier, readLifecycleBarriers } from './lifecycle-barrier.mjs';
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
+import { withGracefulSaveGate } from './graceful-save-gate.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -89,6 +90,7 @@ let recoveryMetadata = null;
 const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined;
 let crashEvidence = null;
 let failure = null;
+const gracefulSaveGateReceipts = [];
 timing.begin('scenario.total');
 try {
   const recovery = restartSegments(scenario);
@@ -233,6 +235,7 @@ if (completed) {
   manifest.recovery = recoveryMetadata;
   manifest.build = buildIdentity;
   manifest.clientSegments = clientSegments;
+  manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 }
@@ -622,10 +625,14 @@ async function stopServerSafely(server, serverPort) {
   // shutdown hook and can interrupt world persistence. A request is never
   // evidence: the pilot-only typed durable-save acknowledgement below must be
   // present before restart or cleanup.
-  await requestRconStop({ port: server.rconPort, password: server.rconPassword });
-  await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
-  await ownedServerExit(server, serverPort, DURABLE_STOP_TIMEOUT_MS, 'disposable v3 server flushed but retained its game port');
-  releaseWrapper(server.child);
+  return withGracefulSaveGate({ directory: process.env.FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE,
+    owner: { worker: lifecycle.identity.workerId, scenario: lifecycle.identity.scenarioId, serverRunId: server.serverRunId } }, async receipt => {
+    gracefulSaveGateReceipts.push(receipt);
+    await requestRconStop({ port: server.rconPort, password: server.rconPassword });
+    await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+    await ownedServerExit(server, serverPort, DURABLE_STOP_TIMEOUT_MS, 'disposable v3 server flushed but retained its game port');
+    releaseWrapper(server.child);
+  });
 }
 async function stopServerForCleanup(server, serverPort) {
   try {

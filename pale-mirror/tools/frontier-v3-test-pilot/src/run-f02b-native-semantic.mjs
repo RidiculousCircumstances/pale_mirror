@@ -16,6 +16,10 @@ if (!output.startsWith(`${process.cwd()}/`) || !log.startsWith(`${process.cwd()}
   || values.lane !== lane || process.env.DISPLAY !== namespaces.display) throw new Error('F0.2B normal-world semantic invocation is malformed');
 const jvmEnvelope = Object.freeze({ javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 });
 if (process.env.JAVA_TOOL_OPTIONS !== jvmEnvelope.javaToolOptions) throw new Error('F0.2B normal-world semantic invocation has no exact bounded JVM envelope');
+const gracefulSaveGate = `${process.env.F02B_GRACEFUL_SAVE_GATE ?? ''}`;
+if (!gracefulSaveGate.startsWith('/') || !gracefulSaveGate.endsWith(`f02b-graceful-save-${values.run}-${values.attempt}`)) {
+  throw new Error('F0.2B normal-world semantic invocation has no exact graceful-save gate');
+}
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const scenarios = { 'depot-never-visited': ['disposable-settlement-provision.json'], 'depot-visited-unloaded': ['disposable-materialized-production-work-restart.json'], 'hive-zero-player': ['disposable-hive-growth.json'],
   'conflict-restart': ['disposable-f02b-depot-changed-restart.json', 'disposable-f02b-depot-foreign-restart.json', 'disposable-f02b-depot-conflict-restart.json'] }[lane];
@@ -44,7 +48,7 @@ try {
     pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
       GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
       FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared, FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: 'false',
-      FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'
+      FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
@@ -63,11 +67,11 @@ const identityFact = { qualificationId: values.qualification, repository: values
   launchTarget: 'normal-disposable-v3-server', requiredTest: `scenario:${scenarios.join('+')}`, requiredTestCount: scenarios.length, jvmEnvelope };
 const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed', worker: values.worker, lane, identity: identityFact, runtimeContentSha256, jarSha256,
   runtime: { receipt: JSON.parse(await readFile(resolve(`${root}/consumer-${values.worker}.json`), 'utf8')), preparedIdentity: consumed.identity },
-  manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value,
+  gracefulSaveGate, manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value,
     ...(value.beforeRestart == null ? {} : { beforeRestartSha256: hashJson(value.beforeRestart), beforeRestart: value.beforeRestart }) })), terminal };
 const primarySha256 = hashJson(primary);
 const evidence = { schema: F02B_SCHEMA, kind: F02B_KIND, status: 'passed', worker: values.worker, lane, ...identityFact, startedAtMillis, finishedAtMillis, gradlePid: pilotPid,
-  runtimeContentSha256, jarSha256, primarySha256, namespaces, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
+  runtimeContentSha256, jarSha256, primarySha256, namespaces, gracefulSaveGate, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
 assertSemanticEvidence(evidence); await mkdir(dirname(output), { recursive: true }); await writeFile(resolve(dirname(output), 'primary.json'), `${JSON.stringify(primary)}\n`, { flag: 'wx' }); await writeFile(output, `${JSON.stringify(evidence)}\n`, { flag: 'wx' });
 
 function terminalFacts(manifests, assignedLane) {

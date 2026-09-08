@@ -33,6 +33,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
     finishedAtMillis: 1_700_000_020_000 + index, gradlePid: 300 + index, launchTarget: 'forgeserverdev',
     requiredTest: `scenario:${lane}`, requiredTestCount: conflict ? 3 : 1, runtimeContentSha256: hash, jarSha256: hash, primarySha256: hash, namespaces, launchTarget: 'normal-disposable-v3-server',
     jvmEnvelope: { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 },
+    gracefulSaveGate: `/tmp/f02b-graceful-save-${expected.runId}-${expected.runAttempt}`,
     terminal: { lane, domain, container: { status: 'ok', replica, custody }, replica, custody, ...(conflicts === undefined ? {} : { conflicts }) } };
 }
 
@@ -46,12 +47,13 @@ test('F0.2B semantic aggregate requires four immutable native Minecraft lanes', 
 test('F0.2B primary receipts bind the retained runtime and complete normal-world scenario facts', () => {
   const semantic = evidence('worker-0');
   const primary = { schema: 1, kind: 'f02b-reference-container-native-semantic-primary', status: 'passed', worker: semantic.worker, lane: semantic.lane,
-    runtimeContentSha256: semantic.runtimeContentSha256, jarSha256: semantic.jarSha256,
+    runtimeContentSha256: semantic.runtimeContentSha256, jarSha256: semantic.jarSha256, gracefulSaveGate: semantic.gracefulSaveGate,
     identity: { qualificationId: semantic.qualificationId, repository: semantic.repository, headSha: semantic.headSha, workflowSha: semantic.workflowSha,
       workflowRef: semantic.workflowRef, runId: semantic.runId, runAttempt: semantic.runAttempt, jobId: semantic.jobId, runnerId: semantic.runnerId,
       runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount, jvmEnvelope: semantic.jvmEnvelope },
     runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, artifactSha256: hash } },
-    manifests: [{ scenario: 'disposable-settlement-provision.json', value: { status: 'ok', recovery: { mode: 'graceful' }, diagnostics: [] } }], terminal: semantic.terminal };
+    manifests: [{ scenario: 'disposable-settlement-provision.json', value: { status: 'ok', recovery: { mode: 'graceful' }, diagnostics: [],
+      gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }] } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
   assert.equal(assertPrimaryEvidence(primary, semantic), primary);
   const drifted = structuredClone(primary); drifted.runtime.receipt.runtimeContentSha256 = 'c'.repeat(64);
@@ -97,7 +99,10 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(workflow, /--memory-per-worker-mib=6144/);
   assert.equal((workflow.match(/JAVA_TOOL_OPTIONS: -Xmx3G/g) ?? []).length, 2);
+  assert.match(workflow, /F02B_GRACEFUL_SAVE_GATE: \$\{\{ inputs\.task_root \}\}\/f02b-graceful-save-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
+  assert.match(runner, /FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate/);
+  assert.match(isolated, /withGracefulSaveGate/);
   assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
@@ -150,4 +155,6 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(mixedRuntime, expected), /mixed prepared runtimes/);
   const unboundedJvm = complete.map(value => structuredClone(value)); delete unboundedJvm[0].jvmEnvelope;
   assert.throws(() => mergeSemanticMatrix(unboundedJvm, expected), /exact bounded JVM envelope/);
+  const missingGate = complete.map(value => structuredClone(value)); delete missingGate[0].gracefulSaveGate;
+  assert.throws(() => mergeSemanticMatrix(missingGate, expected), /graceful-save gate/);
 });
