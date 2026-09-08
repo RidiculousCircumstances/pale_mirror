@@ -70,6 +70,14 @@ def frontierV3PilotRconPort = providers.gradleProperty('frontierV3PilotRconPort'
 def frontierV3PilotRconPassword = providers.environmentVariable('FRONTIER_V3_PILOT_RCON_PASSWORD').orElse('').get()
 def frontierV3PilotOperator = providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
 def frontierV3PilotReset = providers.gradleProperty('frontierV3PilotReset').orElse('false').get()
+// A native prepared-runtime consumer already carries the exact packaged launch
+// inputs.  Its disposable-world setup is deliberately limited to world/config
+// creation; asking this task to rebuild the Frontier JAR would both violate the
+// one-build contract and attempt to replace the consumer's immutable classpath.
+def frontierV3PilotPreparedRuntime = providers.gradleProperty('frontierV3PilotPreparedRuntime').orElse('false').get()
+if (!(frontierV3PilotPreparedRuntime in ['true', 'false'])) {
+    throw new GradleException('frontierV3PilotPreparedRuntime must be true or false')
+}
 def frontierV3PilotRunId = providers.gradleProperty('frontierV3PilotRunId').orElse('').get()
 def frontierV3PilotLifecycleControlDirectory = providers.gradleProperty('frontierV3PilotLifecycleControlDirectory').orElse('').get()
 def frontierV3PilotLifecycleSegment = providers.gradleProperty('frontierV3PilotLifecycleSegment').orElse('single').get()
@@ -1001,8 +1009,10 @@ def installFrontierV3PilotGrayboxDatapack = tasks.register('installFrontierV3Pil
 // Java launch directly.  Separating world setup from the RunGame task prevents either restart
 // segment from recompiling or resolving a different classpath after its identity was hashed.
 def prepareFrontierV3PilotServerWorld = tasks.register('prepareFrontierV3PilotServerWorld') {
-    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods,
-            project(':pale-mirror-frontier').tasks.named('jar')
+    dependsOn installFrontierV3PilotGrayboxDatapack, resetFrontierV3PilotLiteServerMods
+    if (frontierV3PilotPreparedRuntime != 'true') {
+        dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    }
     doLast {
         def directory = frontierV3PilotServerRunDirectory
         def world = frontierV3PilotWorldName

@@ -251,6 +251,11 @@ async function startServer(reset) {
       '-PfrontierV3PilotReset=true', `-PfrontierV3PilotRunId=${serverRunId}`,
       `-PfrontierV3PilotProfile=${scenario.server.profile ?? defaultPilotProfile()}`,
       `-PfrontierV3PilotViewDistance=${scenario.server.viewDistance ?? 10}`];
+    if (process.env.FRONTIER_V3_PILOT_PREPARED_RUNTIME === 'true') {
+      serverArgs.push('-PfrontierV3PilotPreparedRuntime=true');
+    } else if (process.env.FRONTIER_V3_PILOT_PREPARED_RUNTIME !== undefined) {
+      throw new Error('FRONTIER_V3_PILOT_PREPARED_RUNTIME must be true when declared');
+    }
     if (crash !== undefined) {
       serverArgs.push(`-PfrontierV3PilotCrashBoundary=${crash.boundary}`, `-PfrontierV3PilotCrashOwner=${crash.owner}`,
         `-PfrontierV3PilotCrashRevision=${crash.expectedRevision}`, `-PfrontierV3PilotCrashPayload=${crash.payloadType}`);

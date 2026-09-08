@@ -16,18 +16,18 @@ permissions:
   contents: read
   actions: read
 
-defaults:
-  run:
-    working-directory: pale-mirror
-
 jobs:
   producer:
     name: F0.2B prepared runtime producer
     runs-on: [self-hosted, pm-native]
+    defaults:
+      run:
+        working-directory: f02b-producer-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: f02b-producer-workspace
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -51,7 +51,7 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: pale-mirror/build/f02b-producer
+          path: f02b-producer-workspace/pale-mirror/build/f02b-producer
           if-no-files-found: error
 
   semantic:
@@ -71,10 +71,14 @@ jobs:
             lane: hive-zero-player
           - worker: worker-3
             lane: conflict-restart
+    defaults:
+      run:
+        working-directory: f02b-${{ matrix.worker }}-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: f02b-${{ matrix.worker }}-workspace
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -119,14 +123,19 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-${{ matrix.worker }}
-          path: pale-mirror/f02b-artifacts/${{ matrix.worker }}
+          path: f02b-${{ matrix.worker }}-workspace/pale-mirror/f02b-artifacts/${{ matrix.worker }}
           if-no-files-found: error
   merge:
     needs: semantic
     if: always()
     runs-on: [self-hosted, pm-native]
+    defaults:
+      run:
+        working-directory: f02b-merge-workspace/pale-mirror
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: f02b-merge-workspace
       - run: mkdir -p f02b-evidence
       - uses: actions/download-artifact@v4
         with:
@@ -142,5 +151,5 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-merge
-          path: pale-mirror/f02b-merge.json
+          path: f02b-merge-workspace/pale-mirror/f02b-merge.json
           if-no-files-found: warn

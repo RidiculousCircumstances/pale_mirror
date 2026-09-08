@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertPrimaryEvidence, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -60,6 +63,22 @@ test('F0.2B reserves adjacent RCON ports outside every other worker game socket'
   const spaces = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(worker => f02bNamespaces({ workspace: `/tmp/f02b/${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker }));
   assert.deepEqual(spaces.map(value => value.port), [26200, 26202, 26204, 26206]);
   assert.equal(new Set(spaces.flatMap(value => [value.port, value.port + 1])).size, 8);
+});
+
+test('F0.2B consumers use a private checkout and prepare only a disposable world from immutable runtime bytes', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const [workflow, runner, isolated, build] = await Promise.all([
+    readFile(resolve(project, '..', '.github/workflows/f02b-reference-container-semantic.yml'), 'utf8'),
+    readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8'),
+    readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs'), 'utf8'),
+    readFile(resolve(project, 'pale-mirror-neoforge/build.gradle'), 'utf8')
+  ]);
+  assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace/);
+  assert.match(workflow, /working-directory: f02b-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
+  assert.match(workflow, /path: f02b-merge-workspace/);
+  assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
+  assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
+  assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
 });
 
 test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and non-native evidence', () => {
