@@ -38,7 +38,7 @@ jobs:
       - name: Admit four isolated native slots before preparation
         run: >-
           node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
-          --root="${{ inputs.task_root }}" --workers=4 --output="$PWD/f02b-artifacts/producer/capacity.json"
+          --root="${{ inputs.task_root }}" --workers=4 --memory-per-worker-mib=6144 --output="$PWD/f02b-artifacts/producer/capacity.json"
       - name: Build, package, and stage the one immutable runtime
         run: |
           mkdir -p "$PWD/build/f02b-producer"
@@ -106,6 +106,8 @@ jobs:
           --workspace="$GITHUB_WORKSPACE" --temp="$RUNNER_TEMP" --run="${{ github.run_id }}" --attempt="${{ github.run_attempt }}"
           --worker="${{ matrix.worker }}" --output="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
       - name: Run one actual isolated Minecraft semantic lane
+        env:
+          JAVA_TOOL_OPTIONS: -Xmx3G
         run: |
           namespaces="$PWD/f02b-artifacts/${{ matrix.worker }}/namespaces.json"
           export FRONTIER_V3_PILOT_PORT="$(node -p "JSON.parse(require('fs').readFileSync('$namespaces')).port")"

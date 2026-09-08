@@ -32,6 +32,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
     jobId: 100 + index, runnerId: 200 + index, runnerName: `pm-f02b-${index}`, startedAtMillis: 1_700_000_000_000 + index,
     finishedAtMillis: 1_700_000_020_000 + index, gradlePid: 300 + index, launchTarget: 'forgeserverdev',
     requiredTest: `scenario:${lane}`, requiredTestCount: conflict ? 3 : 1, runtimeContentSha256: hash, jarSha256: hash, primarySha256: hash, namespaces, launchTarget: 'normal-disposable-v3-server',
+    jvmEnvelope: { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 },
     terminal: { lane, domain, container: { status: 'ok', replica, custody }, replica, custody, ...(conflicts === undefined ? {} : { conflicts }) } };
 }
 
@@ -48,7 +49,7 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
     runtimeContentSha256: semantic.runtimeContentSha256, jarSha256: semantic.jarSha256,
     identity: { qualificationId: semantic.qualificationId, repository: semantic.repository, headSha: semantic.headSha, workflowSha: semantic.workflowSha,
       workflowRef: semantic.workflowRef, runId: semantic.runId, runAttempt: semantic.runAttempt, jobId: semantic.jobId, runnerId: semantic.runnerId,
-      runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount },
+      runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount, jvmEnvelope: semantic.jvmEnvelope },
     runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, artifactSha256: hash } },
     manifests: [{ scenario: 'disposable-settlement-provision.json', value: { status: 'ok', recovery: { mode: 'graceful' }, diagnostics: [] } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
@@ -94,7 +95,10 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace\/pale-mirror\/f02b-evidence/);
+  assert.match(workflow, /--memory-per-worker-mib=6144/);
+  assert.match(workflow, /JAVA_TOOL_OPTIONS: -Xmx3G/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
+  assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
@@ -144,4 +148,6 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(missingRuntime, expected), /invalid immutable identity/);
   const mixedRuntime = complete.map(value => ({ ...value })); mixedRuntime[2].runtimeContentSha256 = 'c'.repeat(64);
   assert.throws(() => mergeSemanticMatrix(mixedRuntime, expected), /mixed prepared runtimes/);
+  const unboundedJvm = complete.map(value => structuredClone(value)); delete unboundedJvm[0].jvmEnvelope;
+  assert.throws(() => mergeSemanticMatrix(unboundedJvm, expected), /exact bounded JVM envelope/);
 });

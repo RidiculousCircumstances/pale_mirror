@@ -42,6 +42,9 @@ export function assertSemanticEvidence(value, expected = {}) {
   if (value.startedAtMillis >= value.finishedAtMillis || value.finishedAtMillis - value.startedAtMillis > 20 * 60 * 60_000) throw new Error('F0.2B evidence has an unbounded launch interval');
   if (value.launchTarget !== 'normal-disposable-v3-server' || !String(value.requiredTest ?? '').startsWith('scenario:')
     || !Number.isInteger(value.requiredTestCount) || value.requiredTestCount < 1 || value.status !== 'passed') throw new Error('F0.2B evidence has no completed native semantic assertion');
+  if (!sameJson(value.jvmEnvelope, { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 })) {
+    throw new Error('F0.2B evidence has no exact bounded JVM envelope');
+  }
   if (value.requiredTestCount !== (value.lane === 'conflict-restart' ? 3 : 1)) throw new Error('F0.2B evidence has incomplete lane coverage');
   if (!value.terminal || value.terminal.lane !== value.lane || !value.terminal.domain || !value.terminal.container || value.terminal.container.status !== 'ok'
     || !value.terminal.replica || !value.terminal.custody) throw new Error('F0.2B evidence has no terminal domain/replica/custody facts');
@@ -110,7 +113,8 @@ export function hashJson(value) { return createHash('sha256').update(JSON.string
 function immutableIdentity(value) {
   return { qualificationId: value.qualificationId, repository: value.repository, headSha: value.headSha, workflowSha: value.workflowSha,
     workflowRef: value.workflowRef, runId: value.runId, runAttempt: value.runAttempt, jobId: value.jobId, runnerId: value.runnerId,
-    runnerName: value.runnerName, launchTarget: value.launchTarget, requiredTest: value.requiredTest, requiredTestCount: value.requiredTestCount };
+    runnerName: value.runnerName, launchTarget: value.launchTarget, requiredTest: value.requiredTest, requiredTestCount: value.requiredTestCount,
+    jvmEnvelope: value.jvmEnvelope };
 }
 
 function sameJson(left, right) { return JSON.stringify(left) === JSON.stringify(right); }

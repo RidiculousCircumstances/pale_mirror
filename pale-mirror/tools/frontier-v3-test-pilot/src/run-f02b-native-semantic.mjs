@@ -14,6 +14,8 @@ const output = resolve(values.output ?? ''); const log = resolve(values.log ?? '
 const runtimePath = resolve(values.runtime ?? '');
 if (!output.startsWith(`${process.cwd()}/`) || !log.startsWith(`${process.cwd()}/`) || !runtimePath.startsWith(`${process.cwd()}/`)
   || values.lane !== lane || process.env.DISPLAY !== namespaces.display) throw new Error('F0.2B normal-world semantic invocation is malformed');
+const jvmEnvelope = Object.freeze({ javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 });
+if (process.env.JAVA_TOOL_OPTIONS !== jvmEnvelope.javaToolOptions) throw new Error('F0.2B normal-world semantic invocation has no exact bounded JVM envelope');
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const scenarios = { 'depot-never-visited': ['disposable-settlement-provision.json'], 'depot-visited-unloaded': ['disposable-materialized-production-work-restart.json'], 'hive-zero-player': ['disposable-hive-growth.json'],
   'conflict-restart': ['disposable-f02b-depot-changed-restart.json', 'disposable-f02b-depot-foreign-restart.json', 'disposable-f02b-depot-conflict-restart.json'] }[lane];
@@ -58,7 +60,7 @@ if (!jar) throw new Error('F0.2B normal-world launch produced no distributable j
 const jarSha256 = createHash('sha256').update(await readFile(resolve('pale-mirror-neoforge/build/libs', jar))).digest('hex');
 const identityFact = { qualificationId: values.qualification, repository: values.repository, headSha: values.head, workflowSha: values['workflow-sha'], workflowRef: values.workflow,
   runId: Number(values.run), runAttempt: Number(values.attempt), jobId: identity.jobId, runnerId: identity.runnerId, runnerName: identity.runnerName,
-  launchTarget: 'normal-disposable-v3-server', requiredTest: `scenario:${scenarios.join('+')}`, requiredTestCount: scenarios.length };
+  launchTarget: 'normal-disposable-v3-server', requiredTest: `scenario:${scenarios.join('+')}`, requiredTestCount: scenarios.length, jvmEnvelope };
 const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed', worker: values.worker, lane, identity: identityFact, runtimeContentSha256, jarSha256,
   runtime: { receipt: JSON.parse(await readFile(resolve(`${root}/consumer-${values.worker}.json`), 'utf8')), preparedIdentity: consumed.identity },
   manifests: manifests.map(value => ({ scenario: value.scenario, sha256: hashJson(value.value), value: value.value,

@@ -52,10 +52,12 @@ function copy(value) { return { ...value, namespaces: { ...value.namespaces }, c
 
 test('same-host capacity admission requires four CPU slots and bounded memory and disk', () => {
   assert.deepEqual(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8192, diskAvailableMiB: 20480 }),
-    { admitted: true, workers: 4, cpu: 4, memAvailableMiB: 8192, diskAvailableMiB: 20480, reasons: [] });
+    { admitted: true, workers: 4, cpu: 4, memoryPerWorkerMiB: 2048, requiredMemoryMiB: 8192, memAvailableMiB: 8192, diskAvailableMiB: 20480, reasons: [] });
   assert.equal(evaluateCapacity({ workers: 4, cpu: 3, memAvailableMiB: 8192, diskAvailableMiB: 20480 }).admitted, false);
   assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8191, diskAvailableMiB: 20480 }).admitted, false);
   assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memAvailableMiB: 8192, diskAvailableMiB: 20479 }).admitted, false);
+  assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memoryPerWorkerMiB: 6144, memAvailableMiB: 24575, diskAvailableMiB: 20480 }).admitted, false);
+  assert.equal(evaluateCapacity({ workers: 4, cpu: 4, memoryPerWorkerMiB: 6144, memAvailableMiB: 24576, diskAvailableMiB: 20480 }).admitted, true);
 });
 
 test('F0.VB merge retains a visible incomplete aggregate when worker artifacts are missing', async () => {
