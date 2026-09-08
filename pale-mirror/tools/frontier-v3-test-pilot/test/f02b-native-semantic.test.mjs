@@ -17,9 +17,14 @@ function evidence(worker, index = Number(worker.at(-1))) {
   const replica = conflict
     ? { state: 'CONFLICT', revision: 3, canonicalRevision: 7, conflict: 'FINGERPRINT_MISMATCH', fingerprint: 'sha256:expected', provenance: 'pale-mirror:reference-container:test', observedFingerprint: 'sha256:missing-container:1-depot', observedProvenance: 'missing:container:1-depot' }
     : { state: 'OBSERVED_CURRENT', revision: 3, canonicalRevision: 7, conflict: '', fingerprint: 'sha256:current', provenance: 'pale-mirror:reference-container:test', observedFingerprint: '', observedProvenance: '' };
-  const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false,
+  const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false, initialInstant: 227,
+    initialInputs: { depot: { wheat: 64, bread: 0 }, hive: { biomass: 64 } },
     targetVisitsBeforeDue: history === 'never-visited' ? 0 : 2, observedEpochs: [1, 2], releasedEpochs: history === 'visited-unloaded' ? [1] : [],
-    safeUnload: history === 'visited-unloaded', zeroPlayerLoaded: history === 'zero-player', dueAction: 3 },
+    safeUnload: history === 'visited-unloaded', zeroPlayerLoaded: history === 'zero-player',
+    zeroPlayerScopes: history === 'zero-player' ? [
+      { id: 'container:1-depot', visitStep: 3, observationStep: 5, playerChunk: { x: -21, z: -21 }, scopeChunk: { x: -22, z: -21 }, custodyEpoch: 1, replicaRevision: 1 },
+      { id: 'container:hive-east-store', visitStep: 6, observationStep: 8, playerChunk: { x: 26, z: 26 }, scopeChunk: { x: 25, z: 26 }, custodyEpoch: 1, replicaRevision: 1 }
+    ] : [], dueAction: 3 },
     families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 64, foodAvailable: 64, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
     ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5 } } : {}) });
@@ -48,6 +53,8 @@ test('F0.2B semantic aggregate requires four immutable native Minecraft lanes', 
   const merged = mergeSemanticMatrix(complete, expected);
   assert.equal(merged.status, 'ok'); assert.equal(merged.overlapMillis, 19_997);
   assert.deepEqual(merged.lanes.map(value => value.lane), ['normal-never-visited', 'normal-visited-unloaded', 'normal-zero-player-recovery', 'conflict-restart']);
+  const consumedInput = structuredClone(complete); consumedInput[0].terminal.histories[0].admission.initialInputs.depot.wheat = 0;
+  assert.throws(() => mergeSemanticMatrix(consumedInput, expected), /seeded or lacks actual adapter observation/);
 });
 
 test('F0.2B primary receipts bind the retained runtime and complete normal-world scenario facts', () => {
@@ -138,8 +145,12 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(runner, /FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate/);
   assert.match(runner, /FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate/);
+  assert.match(runner, /FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'/);
+  assert.match(runner, /entry\?\.observed\?\.value/);
+  assert.match(runner, /initialInputs/);
   assert.match(isolated, /withGracefulSaveGate/);
   assert.match(isolated, /acquireNativeExecutionGate/);
+  assert.match(isolated, /initialCanonicalHold/);
   assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
@@ -178,6 +189,14 @@ test('F0.2B normal-history assertions bind their exact ordinary inspection actio
       assert.equal(action.id, assertion.id, `${name} assertion after=${assertion.after} names the wrong object`);
     }
   }
+});
+
+test('F0.2B zero-player history requires retained loaded observations outside both reference chunks', () => {
+  const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
+  const missingHive = structuredClone(complete); missingHive[2].terminal.histories[0].admission.zeroPlayerScopes.pop();
+  assert.throws(() => mergeSemanticMatrix(missingHive, expected), /zero-player history is not causal/);
+  const sameChunk = structuredClone(complete); sameChunk[2].terminal.histories[0].admission.zeroPlayerScopes[0].playerChunk = { x: -22, z: -21 };
+  assert.throws(() => mergeSemanticMatrix(sameChunk, expected), /zero-player history is not causal/);
 });
 
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {

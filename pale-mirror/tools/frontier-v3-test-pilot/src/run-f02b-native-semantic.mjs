@@ -57,7 +57,7 @@ try {
       GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
       FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared, FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: 'false',
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
-      FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate
+      FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate, FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
     if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
@@ -100,17 +100,25 @@ function terminalFacts(manifests, assignedLane) {
 }
 
 function normalHistory(scenario, declaration, manifest, beforeRestart) {
-  if (manifest?.status !== 'ok' || !Array.isArray(manifest.diagnostics) || !Array.isArray(manifest.actions)) throw new Error('F0.2B normal scenario has no complete receipt');
+  if (manifest?.status !== 'ok' || manifest.initialCanonicalHold !== true || !Array.isArray(manifest.diagnostics) || !Array.isArray(manifest.actions)) throw new Error('F0.2B normal scenario has no complete receipt');
   const profile = declaration?.server?.profile;
-  const diagnostics = [beforeRestart, manifest].flatMap(receipt => Array.isArray(receipt?.diagnostics) ? receipt.diagnostics : []);
+  const diagnostics = [beforeRestart, manifest].flatMap(receipt => Array.isArray(receipt?.diagnostics) ? receipt.diagnostics : [])
+    .map(entry => ({ ...entry, actionStep: entry.actionStep ?? entry.observed?.actionStep ?? null, value: diagnosticValue(entry) }));
   const values = diagnostics.map(entry => ({ ...entry.value, actionStep: entry.actionStep })).filter(value => value?.status === 'ok');
   const at = (kind, id) => values.filter(value => value.kind === kind && value.id === id);
   const summary = at('summary', '').at(0); const depotObservations = at('container', 'container:1-depot'); const hiveObservations = at('container', 'container:hive-east-store');
+  const initialWheat = at('item', 'item:bootstrap-1-wheat').at(0); const initialBiomass = at('item', 'item:bootstrap-hive-biomass').at(0);
   const settlement = at('settlement', 'settlement:1').at(-1); const hive = at('hive', 'hive:frontier').at(-1);
   const depot = depotObservations.at(-1); const store = hiveObservations.at(-1);
-  if (!summary || !depot || !store || !settlement?.food || !hive || !depot.replica || !depot.custody || !store.replica || !store.custody) throw new Error('F0.2B normal scenario lacks terminal product or custody diagnostics');
+  if (!summary || !Number.isSafeInteger(summary.instant) || summary.instant < 0 || !initialWheat || initialWheat.count !== 64 || initialWheat.custody?.kind !== 'CONTAINER_SLOT'
+      || !initialBiomass || initialBiomass.count !== 64 || initialBiomass.custody?.kind !== 'CONTAINER_SLOT'
+      || !depot || !store || !settlement?.food || !hive || !depot.replica || !depot.custody || !store.replica || !store.custody) throw new Error('F0.2B normal scenario lacks terminal product or custody diagnostics');
   const earlyDepot = depotObservations.at(0); const earlyStore = hiveObservations.at(0);
-  if (!earlyDepot || !earlyStore || earlyDepot.replica !== null || earlyDepot.custody !== null || earlyStore.replica !== null || earlyStore.custody !== null) {
+  const earlyWheat = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:wheat')?.count ?? 0;
+  const earlyBread = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0;
+  const earlyBiomass = earlyStore?.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0;
+  if (!earlyDepot || !earlyStore || earlyDepot.replica !== null || earlyDepot.custody !== null || earlyStore.replica !== null || earlyStore.custody !== null
+      || earlyWheat !== 64 || earlyBread !== 0 || earlyBiomass !== 64) {
     throw new Error('F0.2B normal scenario did not start from unseeded replica/custody');
   }
   const id = scenario.replace(/\.json$/, '');
@@ -125,7 +133,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
     .map(entry => entry.value).filter(value => value?.kind === 'container');
   const observedEpochs = [...depotObservations, ...hiveObservations].map(value => value.custody?.epoch).filter(Number.isSafeInteger);
   const releasedEpochs = interim.filter(value => value.custody?.status === 'RELEASED').map(value => value.custody.epoch);
-  const zeroPlayerLoaded = interim.some(value => value.physicalSocket?.chunk === 'LOADED' && value.custody?.status === 'ACQUIRED');
+  const zeroPlayerScopes = zeroPlayerScopeObservations(diagnostics, actions);
+  const zeroPlayerLoaded = zeroPlayerScopes.length === 2;
   const safeUnload = interim.some(value => value.physicalSocket?.chunk === 'UNLOADED' && value.custody?.status === 'RELEASED');
   // Retain both the exact transformed stack boundary and the later terminal depot
   // state: the ordinary provision scheduler can consume its one named ration only
@@ -133,26 +142,55 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   // hide the 64-wheat -> 64-bread product receipt.
   const bread = Math.max(0, ...depotObservations.map(value => value.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0));
   const terminalBread = depot.occupied?.find(value => value.itemKind === 'minecraft:bread')?.count ?? 0;
-  const wheat = earlyDepot.occupied?.find(value => value.itemKind === 'minecraft:wheat')?.count ?? 0;
-  const biomass = earlyStore.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0;
+  const wheat = initialWheat.count;
+  const biomass = initialBiomass.count;
   const admission = { profile, initialIntents: summary.intents, initialReplica: false, initialCustody: false, targetVisitsBeforeDue,
-    observedEpochs, releasedEpochs, safeUnload, zeroPlayerLoaded, dueAction: due + 1 };
+    initialInstant: summary.instant, initialInputs: { depot: { wheat: earlyWheat, bread: earlyBread }, hive: { biomass: earlyBiomass } },
+    observedEpochs, releasedEpochs, safeUnload, zeroPlayerLoaded, zeroPlayerScopes, dueAction: due + 1 };
   const result = { history, admission, containers: { depot, hive: store }, families: {
     depot: { inputWheat: wheat, outputBread: bread, terminalBread, foodAvailable: settlement.food.available, foodFulfilled: settlement.food.fulfilled },
     hive: { inputBiomass: biomass, outputBiomass: store.occupied?.find(value => value.itemKind === 'minecraft:rotten_flesh')?.count ?? 0,
       growthJobs: hive.growthJobs, addedOrgans: hive.addedOrgans, spawnedBioforms: hive.spawnedBioforms }
   } };
   if (history === 'graceful-product-recovery') {
-    const before = beforeRestart?.diagnostics?.map(entry => entry.value).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
+    const before = beforeRestart?.diagnostics?.map(diagnosticValue).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
     result.recovery = { mode: manifest.recovery?.mode, beforeEpoch: before?.custody?.epoch ?? null, afterEpoch: depot.custody?.epoch ?? null,
       splitAfterAction: manifest.recovery?.splitAfterAction ?? null };
   }
   return result;
 }
 
+function diagnosticValue(entry) {
+  return entry?.value ?? entry?.observed?.value ?? null;
+}
+
+// This cannot be inferred from a later return.  Retain the ordinary inspection
+// while vanilla player loading holds the reference chunk, and prove the sole
+// pilot was in a different chunk from each observed reference surface.
+function zeroPlayerScopeObservations(diagnostics, actions) {
+  const observations = new Map();
+  for (const entry of diagnostics) {
+    const value = entry?.value;
+    if (!Number.isInteger(entry?.actionStep) || value?.kind !== 'container' || !value.id
+        || value.physicalSocket?.chunk !== 'LOADED' || value.custody?.status !== 'ACQUIRED') continue;
+    const visit = actions.slice(0, entry.actionStep - 1).map((action, index) => ({ action, index }))
+      .filter(({ action }) => action?.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').at(-1);
+    if (!visit?.action?.position || !value.position) continue;
+    const playerChunk = chunkOf(visit.action.position); const scopeChunk = chunkOf(value.position);
+    if (playerChunk.x === scopeChunk.x && playerChunk.z === scopeChunk.z) continue;
+    observations.set(value.id, { id: value.id, visitStep: visit.index + 1, observationStep: entry.actionStep,
+      playerChunk, scopeChunk, custodyEpoch: value.custody.epoch, replicaRevision: value.replica?.revision ?? null });
+  }
+  return [...observations.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function chunkOf(position) {
+  return { x: Math.floor(position.x / 16), z: Math.floor(position.z / 16) };
+}
+
 function conflictFacts(manifestValue) {
   if (manifestValue?.status !== 'ok' || !Array.isArray(manifestValue.diagnostics)) throw new Error('F0.2B conflict scenario has no terminal manifest');
-  const container = manifestValue.diagnostics.map(value => value?.value)
+  const container = manifestValue.diagnostics.map(diagnosticValue)
     .filter(value => value?.kind === 'container' && value.status === 'ok').at(-1);
   if (!container?.replica || !container?.custody || manifestValue.recovery?.mode !== 'abrupt') {
     throw new Error('F0.2B conflict scenario lacks recovered terminal evidence');

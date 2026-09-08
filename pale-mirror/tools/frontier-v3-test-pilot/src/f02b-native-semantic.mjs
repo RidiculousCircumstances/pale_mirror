@@ -184,6 +184,8 @@ function assertNormalHistory(history) {
   if (!history || typeof history !== 'object' || !history.admission || !history.families) throw new Error('F0.2B normal history has no ordinary admission facts');
   const { admission, families } = history;
   if (admission.profile !== 'world' || admission.initialIntents !== 0 || admission.initialReplica !== false || admission.initialCustody !== false
+      || !Number.isSafeInteger(admission.initialInstant) || admission.initialInstant < 0
+      || admission.initialInputs?.depot?.wheat !== 64 || admission.initialInputs?.depot?.bread !== 0 || admission.initialInputs?.hive?.biomass !== 64
       || !Array.isArray(admission.observedEpochs) || admission.observedEpochs.length < 2) {
     throw new Error('F0.2B normal history was seeded or lacks actual adapter observation');
   }
@@ -198,7 +200,14 @@ function assertNormalHistory(history) {
   } else if (history.history === 'visited-unloaded') {
     if (admission.targetVisitsBeforeDue < 2 || admission.safeUnload !== true || admission.zeroPlayerLoaded !== false || !admission.releasedEpochs?.length) throw new Error('F0.2B safely-unloaded history lacks release evidence');
   } else if (history.history === 'zero-player') {
-    if (admission.targetVisitsBeforeDue < 2 || admission.zeroPlayerLoaded !== true) throw new Error('F0.2B zero-player history is not causal');
+    const scopes = admission.zeroPlayerScopes;
+    if (admission.targetVisitsBeforeDue < 2 || admission.zeroPlayerLoaded !== true || !Array.isArray(scopes) || scopes.length !== 2
+        || scopes.map(value => value.id).join(',') !== 'container:1-depot,container:hive-east-store'
+        || scopes.some(value => !Number.isSafeInteger(value.visitStep) || !Number.isSafeInteger(value.observationStep)
+          || !Number.isSafeInteger(value.custodyEpoch) || !Number.isSafeInteger(value.replicaRevision)
+          || value.visitStep >= value.observationStep || value.playerChunk?.x === value.scopeChunk?.x && value.playerChunk?.z === value.scopeChunk?.z)) {
+      throw new Error('F0.2B zero-player history is not causal');
+    }
   } else if (history.history === 'graceful-product-recovery') {
     if (history.recovery?.mode !== 'graceful' || admission.targetVisitsBeforeDue < 1 || !history.recovery.beforeEpoch || !history.recovery.afterEpoch) throw new Error('F0.2B product recovery lacks a fenced custody boundary');
   } else throw new Error('F0.2B normal history is unknown');

@@ -36,6 +36,10 @@ if (scenario.isolation?.mode !== 'disposable_lite') throw new Error('isolated ru
 if (scenario.crash?.phase === 'after_restart') {
   throw new Error('F0.V crash scenarios currently require phase=before_restart with one non-replayed recovery half');
 }
+const initialCanonicalHold = process.env.FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD === 'true';
+if (process.env.FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD !== undefined && !initialCanonicalHold) {
+  throw new Error('FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD must be true when declared');
+}
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const timing = new PhaseTiming();
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
@@ -249,6 +253,7 @@ if (completed) {
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.nativeExecutionGate = nativeExecutionGateReceipt;
+  manifest.initialCanonicalHold = initialCanonicalHold;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 }
@@ -302,6 +307,7 @@ async function startServer(reset) {
     'pale_mirror.frontier_v3.pilot.run_id': serverRunId,
     'pale_mirror.frontier_v3.pilot.lifecycle_control_directory': lifecycle.directory,
     'pale_mirror.frontier_v3.pilot.profile': scenario.server.profile ?? defaultPilotProfile(),
+    ...(reset && initialCanonicalHold ? { 'pale_mirror.frontier_v3.pilot.initial_canonical_hold': 'true' } : {}),
     ...(crash === undefined ? {} : {
       'pale_mirror.frontier_v3.pilot.crash.boundary': crash.boundary,
       'pale_mirror.frontier_v3.pilot.crash.owner': crash.owner,

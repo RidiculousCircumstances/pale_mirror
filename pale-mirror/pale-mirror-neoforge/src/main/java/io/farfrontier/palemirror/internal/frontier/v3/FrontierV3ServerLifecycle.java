@@ -36,6 +36,8 @@ import java.util.OptionalInt;
 public final class FrontierV3ServerLifecycle {
     private static final String ENABLED_PROPERTY = "pale_mirror.frontier_v3.enabled";
     private static final String PILOT_RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
+    /** Disposable-pilot-only admission hold; production never sets this launch property. */
+    private static final String PILOT_INITIAL_CANONICAL_HOLD_PROPERTY = "pale_mirror.frontier_v3.pilot.initial_canonical_hold";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
     /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
@@ -45,6 +47,8 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, Long> FAST_FORWARD_TARGETS = new IdentityHashMap<>();
     /** An in-flight absolute target can become physically unsafe after its admission checkpoint. */
     private static final Map<MinecraftServer, String> FAST_FORWARD_FAILURES = new IdentityHashMap<>();
+    /** Prevents bootstrap time from crossing an unobserved product boundary before the pilot's first operator request. */
+    private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
     private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
     private static final int FAST_FORWARD_SLICE_TICKS = 512;
@@ -212,7 +216,7 @@ public final class FrontierV3ServerLifecycle {
 
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         if (!enabled() || RUNTIMES.containsKey(server)) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         startConfigured(server, initialConfiguration(physicalWorld));
@@ -229,7 +233,7 @@ public final class FrontierV3ServerLifecycle {
     static void startModDevFixture(MinecraftServer server,
                                    io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(configuration, "configuration");
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         if (!enabled()) throw new IllegalStateException("Frontier v3 fixture bootstrap requires an enabled v3 launch");
         if (RUNTIMES.containsKey(server)) throw new IllegalStateException("Frontier v3 fixture bootstrap must run before the normal lifecycle");
         FrontierV3PhysicalWorld.require(server);
@@ -251,6 +255,9 @@ public final class FrontierV3ServerLifecycle {
             runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error);
         }
         RUNTIMES.put(server, runtime);
+        if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && Boolean.getBoolean(PILOT_INITIAL_CANONICAL_HOLD_PROPERTY)) {
+            INITIAL_CANONICAL_HOLDS.put(server, Boolean.TRUE);
+        }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             FrontierV3ResourceSiteExecutor.beginRecovery(runtime);
             try {
@@ -306,6 +313,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) return false;
         if (FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) return false;
+        INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, ticks);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward ticks={}", ticks);
         return true;
@@ -326,6 +334,7 @@ public final class FrontierV3ServerLifecycle {
         OptionalInt delta = absoluteFastForwardDelta(runtime.checkpointImage().orElseThrow().instant().ticks(), targetInstant);
         if (delta.isEmpty()) return false;
         FAST_FORWARD_FAILURES.remove(server);
+        INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, delta.getAsInt()); FAST_FORWARD_TARGETS.put(server, targetInstant);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward target={}", targetInstant);
         return true;
@@ -356,6 +365,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try {
+            if (INITIAL_CANONICAL_HOLDS.containsKey(server)) return;
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
                 advanceQueuedCanonicalTime(server, runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
@@ -372,7 +382,7 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
-            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
     }
 
@@ -391,7 +401,7 @@ public final class FrontierV3ServerLifecycle {
             }
         } finally {
             FrontierV3DiagnosticTrace.forget(server);
-            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
     }
 
