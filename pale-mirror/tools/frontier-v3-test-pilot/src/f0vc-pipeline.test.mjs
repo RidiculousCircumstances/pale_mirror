@@ -62,6 +62,8 @@ test('F0.VC merge cryptographically binds every retained primary lifecycle recei
     const directory = join(input, item.artifact); const receipt = { status: 'ok', session: { plan: { kind: 'frontier-v3-assigned-persistent-matrix', workerId: item.worker } },
       client: { clientPid: item.primaryLifecycle.projection.clientPid }, serverRuns: [{ serverRunId: `server-${index}` }],
       evidence: { worldKeys: [`world-${index}`] }, lifecycle: { events: [{}] }, crashReceipts: [], finalStop: { durableSave: true, portClosed: true } };
+    receipt.session.plan.workerPlanSha256 = item.assignmentContentSha256;
+    receipt.session.plan.source = { planSha256: item.matrixPlanSha256 };
     const encoded = `${JSON.stringify(receipt)}\n`; const crypto = await import('node:crypto');
     item.primaryLifecycle.sha256 = crypto.createHash('sha256').update(encoded).digest('hex');
     await mkdir(join(directory, 'primary'), { recursive: true }); await writeFile(join(directory, 'worker.json'), JSON.stringify(item));
@@ -72,6 +74,36 @@ test('F0.VC merge cryptographically binds every retained primary lifecycle recei
   await assert.rejects(mergeDirectory({ plan: plan(), input, output: join(root, 'drift.json') }), /digest-drifted/);
   const drift = JSON.parse(await readFile(join(root, 'drift.json'), 'utf8'));
   assert.equal(drift.status, 'incomplete');
+});
+
+test('F0.VC merge rejects a rehashed same-worker primary receipt with assignment or source-matrix identity drift', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'f0vc-primary-identity-')); const input = join(root, 'workers');
+  const values = evidence(); const crypto = await import('node:crypto');
+  for (const [index, item] of values.entries()) {
+    const directory = join(input, item.artifact); const receipt = { status: 'ok', session: { plan: {
+      kind: 'frontier-v3-assigned-persistent-matrix', workerId: item.worker, workerPlanSha256: item.assignmentContentSha256,
+      source: { planSha256: item.matrixPlanSha256 } } }, client: { clientPid: item.primaryLifecycle.projection.clientPid },
+      serverRuns: [{ serverRunId: `server-${index}` }], evidence: { worldKeys: [`world-${index}`] }, lifecycle: { events: [{}] },
+      crashReceipts: [], finalStop: { durableSave: true, portClosed: true } };
+    const encoded = `${JSON.stringify(receipt)}\n`; item.primaryLifecycle.sha256 = crypto.createHash('sha256').update(encoded).digest('hex');
+    await mkdir(join(directory, 'primary'), { recursive: true }); await writeFile(join(directory, 'worker.json'), JSON.stringify(item));
+    await writeFile(join(directory, 'primary/persistent-matrix.json'), encoded);
+  }
+  assert.equal((await mergeDirectory({ plan: plan(), input, output: join(root, 'valid.json') })).status, 'ok');
+  for (const [field, replacement] of [['workerPlanSha256', 'f'.repeat(64)], ['source.planSha256', 'e'.repeat(64)]]) {
+    const receiptPath = join(input, values[1].artifact, 'primary/persistent-matrix.json'); const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+    if (field === 'workerPlanSha256') receipt.session.plan.workerPlanSha256 = replacement;
+    else receipt.session.plan.source.planSha256 = replacement;
+    const encoded = `${JSON.stringify(receipt)}\n`; values[1].primaryLifecycle.sha256 = crypto.createHash('sha256').update(encoded).digest('hex');
+    await writeFile(receiptPath, encoded); await writeFile(join(input, values[1].artifact, 'worker.json'), JSON.stringify(values[1]));
+    const output = join(root, `${field.replace('.', '-')}.json`);
+    await assert.rejects(mergeDirectory({ plan: plan(), input, output }), /inconsistent/);
+    assert.equal(JSON.parse(await readFile(output, 'utf8')).status, 'incomplete');
+    receipt.session.plan.workerPlanSha256 = values[1].assignmentContentSha256;
+    receipt.session.plan.source.planSha256 = values[1].matrixPlanSha256;
+    const restored = `${JSON.stringify(receipt)}\n`; values[1].primaryLifecycle.sha256 = crypto.createHash('sha256').update(restored).digest('hex');
+    await writeFile(receiptPath, restored); await writeFile(join(input, values[1].artifact, 'worker.json'), JSON.stringify(values[1]));
+  }
 });
 
 test('F0.VC preserves launcher member names and Gradle-cache topology in a private consumer view', () => {

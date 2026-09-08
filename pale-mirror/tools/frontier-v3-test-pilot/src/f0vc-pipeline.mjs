@@ -104,6 +104,7 @@ async function verifyPrimaryLifecycleBundle(directory, item) {
   let report; try { report = JSON.parse(await readFile(path, 'utf8')); } catch { throw new Error('primary lifecycle receipt is unreadable'); }
   const plan = report?.session?.plan;
   if (report?.status !== 'ok' || plan?.kind !== 'frontier-v3-assigned-persistent-matrix' || plan.workerId !== item.worker
+      || plan.workerPlanSha256 !== item.assignmentContentSha256 || plan?.source?.planSha256 !== item.matrixPlanSha256
       || !Array.isArray(report?.lifecycle?.events) || report.lifecycle.events.length !== item.primaryLifecycle.projection.lifecycleEventCount
       || !Array.isArray(report?.serverRuns) || report.serverRuns.map((run) => run?.serverRunId).join(',') !== item.primaryLifecycle.projection.serverRunIds.join(',')
       || !Array.isArray(report?.evidence?.worldKeys) || report.evidence.worldKeys.join(',') !== item.primaryLifecycle.projection.worldKeys.join(',')
