@@ -28,13 +28,14 @@ bwrap_bin=$(command -v bwrap || true)
 # Xvfb's display locks and Unix sockets are hard-wired to /tmp.  A task can
 # have a valid private native root while the shared tmpfs is quota-bound, so
 # run the X server and its sole client command together in a private mount
-# namespace.  The checkout and the one declared per-worker namespace parent
-# are the only writable host mounts; that parent owns the sibling process and
-# Gradle roots. The display socket and lock can never escape into shared /tmp.
+# namespace.  The checked-in worker namespaces still own all mutable runtime
+# inputs; the host tree remains mounted normally because NeoForge resolves
+# native libraries and user-session facilities outside its launch directory.
+# The display socket and lock can never escape into shared /tmp.
 # Keeping the command inside this one bubblewrap instance also makes the
 # client unable to observe a display owned by a different CI consumer.
 set +e
-"$bwrap_bin" --die-with-parent --ro-bind / / --bind "$PWD" "$PWD" --bind "$namespace_parent" "$namespace_parent" \
+"$bwrap_bin" --die-with-parent --bind / / --bind "$PWD" "$PWD" --bind "$namespace_parent" "$namespace_parent" \
   --dev /dev --proc /proc --tmpfs /tmp --chdir "$PWD" \
   bash -ceu '
     runtime_dir=$1; display=$2; xvfb_bin=$3; shift 3
