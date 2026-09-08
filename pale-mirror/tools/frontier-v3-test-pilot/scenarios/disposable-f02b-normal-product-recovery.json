@@ -45,7 +45,7 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 8,
+    "afterAction": 11,
     "resumeSetup": []
   },
   "assertions": [

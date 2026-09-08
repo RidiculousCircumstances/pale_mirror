@@ -240,6 +240,12 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 2);
   assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 2);
   assert.deepEqual(beforeRestart.at(-1), { type: 'inspect', view: 'reference_container', id: 'f02b' });
+  const activeAdmission = beforeRestart.findLastIndex(action => action.type === 'inspect'
+    && action.view === 'reference_container' && action.id === 'f02b');
+  assert.equal(restart, activeAdmission + 1,
+    'the graceful boundary follows the read-only active-admission observation, rather than fabricating a pre-seeded reservation');
+  assert.equal(scenario.actions[activeAdmission - 1]?.type, 'fast_forward_to_instant',
+    'the retained admission observation follows its engine-owned due advance');
   const recoveredDepot = scenario.actions.findIndex((action, index) => index >= restart && action.type === 'wait_until_diagnostic'
     && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED');
   const liveFood = scenario.assertions.find(assertion => assertion.after === recoveredDepot + 5);
