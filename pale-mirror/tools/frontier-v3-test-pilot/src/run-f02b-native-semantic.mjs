@@ -55,7 +55,7 @@ try {
       FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
-    if (value.scenarioSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
+    if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
     const beforeRestart = beforeRestartManifest
       ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;

@@ -25,7 +25,10 @@ if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenari
 if (!process.env.DISPLAY) throw new Error('a native visible pilot requires DISPLAY=:0');
 
 const sourcePath = resolve(scenarioPath);
-const { scenario } = await loadScenario(sourcePath);
+// The disposable runner writes a private loopback-port variant for its actual
+// client connection.  Keep the checked-in declaration digest alongside the
+// runtime-scenario digest so an evidence consumer never has to conflate them.
+const { scenario, sha256: scenarioDeclarationSha256 } = await loadScenario(sourcePath);
 if (scenario.isolation?.mode !== 'disposable_lite') throw new Error('isolated runner requires isolation.mode=disposable_lite');
 // A post-recovery rendezvous would need a third explicitly declared recovery segment. Reject it
 // instead of replaying ordinary player actions after a killed JVM and manufacturing evidence.
@@ -232,6 +235,7 @@ if (completed) {
   // Independent-matrix proof needs the exact distinct world identities even
   // for a one-server scenario that has no recovery record.
   manifest.isolation = { world, port, freshWorld: true };
+  manifest.scenarioDeclarationSha256 = scenarioDeclarationSha256;
   manifest.recovery = recoveryMetadata;
   manifest.build = buildIdentity;
   manifest.clientSegments = clientSegments;

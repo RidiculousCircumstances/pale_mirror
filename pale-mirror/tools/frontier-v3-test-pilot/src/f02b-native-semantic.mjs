@@ -88,7 +88,7 @@ export function assertPrimaryEvidence(primary, semantic) {
   for (const receipt of primary.manifests) {
     if (!receipt || typeof receipt.scenario !== 'string' || !HASH.test(receipt.sha256 ?? '') || !receipt.value
         || hashJson(receipt.value) !== receipt.sha256) throw new Error('F0.2B primary evidence has corrupt scenario receipt');
-    if (!HASH.test(receipt.declarationSha256 ?? '') || receipt.declarationSha256 !== receipt.value.scenarioSha256) {
+    if (!HASH.test(receipt.declarationSha256 ?? '') || receipt.declarationSha256 !== receipt.value.scenarioDeclarationSha256) {
       throw new Error('F0.2B primary evidence has a foreign scenario declaration');
     }
     if (!Array.isArray(receipt.value.gracefulSaveGate) || receipt.value.gracefulSaveGate.length === 0

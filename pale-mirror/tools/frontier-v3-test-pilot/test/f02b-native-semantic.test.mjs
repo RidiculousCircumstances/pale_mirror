@@ -55,7 +55,7 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
       workflowRef: semantic.workflowRef, runId: semantic.runId, runAttempt: semantic.runAttempt, jobId: semantic.jobId, runnerId: semantic.runnerId,
       runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount, jvmEnvelope: semantic.jvmEnvelope },
     runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, preparedArtifact: { sha256: hash } } },
-    manifests: [{ scenario: 'disposable-f02b-normal-never-visited.json', declarationSha256: hash, value: { status: 'ok', scenarioSha256: hash, recovery: { mode: 'graceful' }, diagnostics: [],
+    manifests: [{ scenario: 'disposable-f02b-normal-never-visited.json', declarationSha256: hash, value: { status: 'ok', scenarioSha256: 'c'.repeat(64), scenarioDeclarationSha256: hash, recovery: { mode: 'graceful' }, diagnostics: [],
       gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }] } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
   assert.equal(assertPrimaryEvidence(primary, semantic), primary);
@@ -67,7 +67,7 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
   assert.throws(() => assertPrimaryEvidence(malformedPreparedArtifact, semantic), /lacks the consumed prepared runtime identity/);
   const corrupt = structuredClone(primary); corrupt.manifests[0].value.status = 'foreign';
   assert.throws(() => assertPrimaryEvidence(corrupt, semantic), /corrupt scenario receipt/);
-  const foreignDeclaration = structuredClone(primary); foreignDeclaration.manifests[0].value.scenarioSha256 = 'c'.repeat(64);
+  const foreignDeclaration = structuredClone(primary); foreignDeclaration.manifests[0].value.scenarioDeclarationSha256 = 'd'.repeat(64);
   foreignDeclaration.manifests[0].sha256 = hashJson(foreignDeclaration.manifests[0].value);
   assert.throws(() => assertPrimaryEvidence(foreignDeclaration, semantic), /foreign scenario declaration/);
   primary.manifests[0].value.recovery = { beforeRestartManifest: '/private/pre-restart.json' };
