@@ -11,19 +11,20 @@
   "actions": [
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE" }, "timeoutMs": 60000 },
     { "type": "break", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } } },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "block": "minecraft:air", "timeoutMs": 30000 },
     { "type": "place", "item": "minecraft:chest", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_AND_PROVENANCE_MISMATCH", "observedProvenance": "foreign:container-owner=untagged;replica-provenance=missing" } }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "container", "id": "container:1-depot" }
   ],
   "restart": {
     "mode": "abrupt",
-    "afterAction": 4,
+    "afterAction": 5,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -343, "y": 65, "z": -328 }, "settleMs": 1500 }
     ]
   },
   "assertions": [
-    { "after": 4, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_AND_PROVENANCE_MISMATCH", "observedProvenance": "foreign:container-owner=untagged;replica-provenance=missing" } } },
-    { "after": 5, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_AND_PROVENANCE_MISMATCH", "observedProvenance": "foreign:container-owner=untagged;replica-provenance=missing" } } }
+    { "after": 5, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_AND_PROVENANCE_MISMATCH", "observedProvenance": "foreign:container-owner=untagged;replica-provenance=missing" } } },
+    { "after": 6, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "replica": { "state": "CONFLICT", "conflict": "FINGERPRINT_AND_PROVENANCE_MISMATCH", "observedProvenance": "foreign:container-owner=untagged;replica-provenance=missing" } } }
   ]
 }

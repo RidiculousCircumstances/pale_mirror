@@ -114,6 +114,19 @@ test('F0.2B hive lane asserts the actual grown relay projection', async () => {
   });
 });
 
+test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-f02b-depot-foreign-restart.json'), 'utf8'));
+  const position = { diagnostic: { view: 'container', id: 'container:1-depot', field: 'position' } };
+  assert.deepEqual(scenario.actions.slice(1, 4), [
+    { type: 'break', position },
+    { type: 'wait_until_block', position, block: 'minecraft:air', timeoutMs: 30000 },
+    { type: 'place', item: 'minecraft:chest', position, timeoutMs: 30000 }
+  ]);
+  assert.equal(scenario.restart.afterAction, 5);
+  assert.deepEqual(scenario.assertions.map(assertion => assertion.after), [5, 6]);
+});
+
 test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and non-native evidence', () => {
   const complete = ['worker-0', 'worker-1', 'worker-2', 'worker-3'].map(evidence);
   assert.throws(() => mergeSemanticMatrix(complete.slice(0, 3), expected), /missing or extra/);
