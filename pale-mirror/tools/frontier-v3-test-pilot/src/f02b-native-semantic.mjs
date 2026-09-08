@@ -1,7 +1,9 @@
 import { F0VB_XVFB_PORT_BASE, declaredNamespaces, workerNames } from './f0vb-qualification.mjs';
+import { createHash } from 'node:crypto';
 
 export const F02B_SCHEMA = 1;
 export const F02B_KIND = 'f02b-reference-container-native-semantic';
+export const F02B_PRIMARY_KIND = 'f02b-reference-container-native-semantic-primary';
 // A normal disposable Minecraft server also owns RCON at gamePort + 1.  The
 // F0.VB listener-only port cadence is consecutive, so it cannot be reused for
 // this matrix without one worker's RCON colliding with its neighbour's game
@@ -32,7 +34,7 @@ export function f02bNamespaces(identity) {
 export function assertSemanticEvidence(value, expected = {}) {
   if (!value || typeof value !== 'object' || value.schema !== F02B_SCHEMA || value.kind !== F02B_KIND) throw new Error('F0.2B evidence has unknown schema or kind');
   if (laneFor(value.worker) !== value.lane || !QUALIFICATION.test(value.qualificationId ?? '')) throw new Error('F0.2B evidence has an invalid matrix assignment');
-  if (!SHA.test(value.headSha ?? '') || value.headSha !== value.workflowSha || !HASH.test(value.jarSha256 ?? '')
+  if (!SHA.test(value.headSha ?? '') || value.headSha !== value.workflowSha || !HASH.test(value.runtimeContentSha256 ?? '') || !HASH.test(value.jarSha256 ?? '') || !HASH.test(value.primarySha256 ?? '')
     || !String(value.workflowRef ?? '').includes('.github/workflows/f02b-reference-container-semantic.yml@')) throw new Error('F0.2B evidence has an invalid immutable identity');
   for (const key of ['runId', 'runAttempt', 'jobId', 'runnerId', 'startedAtMillis', 'finishedAtMillis', 'gradlePid']) {
     if (!Number.isSafeInteger(value[key]) || value[key] <= 0) throw new Error(`F0.2B evidence has invalid ${key}`);
@@ -53,19 +55,56 @@ export function assertSemanticEvidence(value, expected = {}) {
   return value;
 }
 
+/**
+ * A worker bundle keeps the complete normal-world receipts separate from the
+ * compact aggregate record.  The aggregate names this exact immutable primary
+ * document; it cannot recover terminal facts from a scenario name alone.
+ */
+export function assertPrimaryEvidence(primary, semantic) {
+  if (!primary || typeof primary !== 'object' || primary.schema !== F02B_SCHEMA || primary.kind !== F02B_PRIMARY_KIND || primary.status !== 'passed') {
+    throw new Error('F0.2B primary evidence has unknown schema or kind');
+  }
+  if (!semantic || primary.worker !== semantic.worker || primary.lane !== semantic.lane || primary.runtimeContentSha256 !== semantic.runtimeContentSha256
+      || primary.jarSha256 !== semantic.jarSha256 || !sameJson(primary.identity, immutableIdentity(semantic)) || !sameJson(primary.terminal, semantic.terminal)) {
+    throw new Error('F0.2B primary evidence is foreign to its semantic receipt');
+  }
+  if (!primary.runtime?.receipt || primary.runtime.receipt.worker !== semantic.worker || primary.runtime.receipt.runtimeContentSha256 !== semantic.runtimeContentSha256
+      || !primary.runtime.preparedIdentity?.sourceContent || !primary.runtime.preparedIdentity?.artifactSha256) {
+    throw new Error('F0.2B primary evidence lacks the consumed prepared runtime identity');
+  }
+  if (!Array.isArray(primary.manifests) || primary.manifests.length !== semantic.requiredTestCount) throw new Error('F0.2B primary evidence has incomplete scenario receipts');
+  for (const receipt of primary.manifests) {
+    if (!receipt || typeof receipt.scenario !== 'string' || !HASH.test(receipt.sha256 ?? '') || !receipt.value
+        || hashJson(receipt.value) !== receipt.sha256) throw new Error('F0.2B primary evidence has corrupt scenario receipt');
+  }
+  return primary;
+}
+
 export function mergeSemanticMatrix(evidence, expected) {
   if (!Array.isArray(evidence) || evidence.length !== workerNames().length) throw new Error('F0.2B merge rejects missing or extra worker evidence');
   const checked = evidence.map(value => assertSemanticEvidence(value, expected));
   if (new Set(checked.map(value => value.worker)).size !== workerNames().length) throw new Error('F0.2B merge rejects duplicate workers');
   for (const field of ['jobId', 'runnerId', 'runnerName']) if (new Set(checked.map(value => value[field])).size !== checked.length) throw new Error(`F0.2B merge rejects duplicate ${field}`);
+  if (new Set(checked.map(value => value.runtimeContentSha256)).size !== 1) throw new Error('F0.2B merge rejects mixed prepared runtimes');
   for (const field of ['workspace', 'temp', 'gradle', 'cache', 'world', 'process', 'display', 'port']) if (new Set(checked.map(value => value.namespaces[field])).size !== checked.length) throw new Error('F0.2B merge rejects shared native namespace');
   const latestStart = Math.max(...checked.map(value => value.startedAtMillis));
   const earliestFinish = Math.min(...checked.map(value => value.finishedAtMillis));
   if (latestStart >= earliestFinish) throw new Error('F0.2B merge rejects non-overlapping Minecraft launches');
   return { schema: F02B_SCHEMA, kind: 'f02b-reference-container-native-semantic-merge', status: 'ok', ...expected,
     workers: checked.map(value => value.worker).sort(), overlapMillis: earliestFinish - latestStart,
-    lanes: checked.map(({ worker, lane, jobId, runnerId, runnerName, jarSha256, namespaces, terminal }) => ({ worker, lane, jobId, runnerId, runnerName, jarSha256, namespaces, terminal })).sort((a, b) => a.worker.localeCompare(b.worker)) };
+    runtimeContentSha256: checked[0].runtimeContentSha256,
+    lanes: checked.map(({ worker, lane, jobId, runnerId, runnerName, runtimeContentSha256, jarSha256, primarySha256, namespaces, terminal }) => ({ worker, lane, jobId, runnerId, runnerName, runtimeContentSha256, jarSha256, primarySha256, namespaces, terminal })).sort((a, b) => a.worker.localeCompare(b.worker)) };
 }
+
+export function hashJson(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+
+function immutableIdentity(value) {
+  return { qualificationId: value.qualificationId, repository: value.repository, headSha: value.headSha, workflowSha: value.workflowSha,
+    workflowRef: value.workflowRef, runId: value.runId, runAttempt: value.runAttempt, jobId: value.jobId, runnerId: value.runnerId,
+    runnerName: value.runnerName, launchTarget: value.launchTarget, requiredTest: value.requiredTest, requiredTestCount: value.requiredTestCount };
+}
+
+function sameJson(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 
 function assertTerminalFacts(lane, terminal) {
   const replica = terminal.replica; const custody = terminal.custody;

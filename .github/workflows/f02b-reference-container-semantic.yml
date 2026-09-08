@@ -7,6 +7,10 @@ on:
         description: Immutable F0.2B semantic-matrix identity.
         required: true
         type: string
+      task_root:
+        description: Dedicated ephemeral /home/rd/proj/pm-f0vc-* prepared-runtime root.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,8 +21,42 @@ defaults:
     working-directory: pale-mirror
 
 jobs:
+  producer:
+    name: F0.2B prepared runtime producer
+    runs-on: [self-hosted, pm-native]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Admit four isolated native slots before preparation
+        run: >-
+          node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
+          --root="${{ inputs.task_root }}" --workers=4 --output="$PWD/f02b-artifacts/producer/capacity.json"
+      - name: Build, package, and stage the one immutable runtime
+        run: |
+          mkdir -p "$PWD/f02b-artifacts/producer"
+          node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=f02b-artifacts/producer/prepared-build.json
+          ./gradlew :pale-mirror-neoforge:verifyPackagedJar --offline --no-daemon
+          node tools/frontier-v3-test-pilot/src/f0vc-prepared-runtime.mjs --mode=prepare \
+            --store="${{ inputs.task_root }}" --prepared=f02b-artifacts/producer/prepared-build.json \
+            --output=f02b-artifacts/producer/runtime.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f02b-${{ github.run_id }}-producer
+          path: pale-mirror/f02b-artifacts/producer
+          if-no-files-found: error
+
   semantic:
     name: F0.2B ${{ matrix.worker }}
+    needs: producer
     runs-on: [self-hosted, pm-native]
     strategy:
       fail-fast: false
@@ -35,12 +73,22 @@ jobs:
             lane: conflict-restart
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Allocate immutable semantic evidence custody
         run: mkdir -p "$PWD/f02b-artifacts/${{ matrix.worker }}"
-      - name: Admit bounded same-host capacity
-        run: >-
-          node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
-          --root="$RUNNER_TEMP" --workers=4 --output="$PWD/f02b-artifacts/${{ matrix.worker }}/capacity.json"
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: f02b-${{ github.run_id }}-producer
+          path: pale-mirror/f02b-artifacts/producer
       - name: Bind active GitHub job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -61,6 +109,7 @@ jobs:
           scripts/with-private-xvfb.sh node tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs \
             --output="$PWD/f02b-artifacts/${{ matrix.worker }}/semantic.json" \
             --log="$PWD/f02b-artifacts/${{ matrix.worker }}/minecraft.log" \
+            --runtime="$PWD/f02b-artifacts/producer/runtime.json" \
             --namespaces="$namespaces" --identity="$PWD/f02b-artifacts/${{ matrix.worker }}/job.json" \
             --worker="${{ matrix.worker }}" --lane="${{ matrix.lane }}" \
             --qualification="${{ inputs.qualification_id }}" --repository="${{ github.repository }}" \
