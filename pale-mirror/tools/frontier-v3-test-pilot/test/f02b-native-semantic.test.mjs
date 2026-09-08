@@ -248,10 +248,13 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   const coldAdvance = scenario.actions.findIndex((action, index) => index > releasedDepot && action.type === 'fast_forward_to_instant'
     && action.targetInstant === 14000);
   const coldFood = scenario.assertions.find(assertion => assertion.after === coldAdvance + 4);
+  const coldHive = scenario.assertions.find(assertion => assertion.view === 'hive' && assertion.id === 'hive:frontier');
   assert.equal(liveFood?.expect.food.available, 64,
     'a recovered live custodian excludes the competing COLD birth permit');
   assert.equal(coldFood?.expect.food.available, 63,
     'the same released, safely unloaded scope admits COLD without waiting for another visit');
+  assert.equal(coldHive?.after, scenario.actions.length,
+    'the hive terminal effect is asserted only after its released COLD advance, not while live custody still owns it');
 });
 
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
