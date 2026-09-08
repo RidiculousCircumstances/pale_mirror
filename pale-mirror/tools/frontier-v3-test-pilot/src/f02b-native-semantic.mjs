@@ -48,6 +48,9 @@ export function assertSemanticEvidence(value, expected = {}) {
   if (typeof value.gracefulSaveGate !== 'string' || !value.gracefulSaveGate.endsWith(`f02b-graceful-save-${value.runId}-${value.runAttempt}`)) {
     throw new Error('F0.2B evidence has no exact graceful-save gate');
   }
+  if (typeof value.executionGate !== 'string' || !value.executionGate.endsWith(`f02b-native-execution-${value.runId}-${value.runAttempt}`)) {
+    throw new Error('F0.2B evidence has no exact native execution gate');
+  }
   const expectedScenarioCount = value.lane === 'conflict-restart' ? 3 : value.lane === 'normal-zero-player-recovery' ? 2 : 1;
   if (value.requiredTestCount !== expectedScenarioCount) throw new Error('F0.2B evidence has incomplete lane coverage');
   if (!value.terminal || value.terminal.lane !== value.lane || !value.terminal.domain || !value.terminal.container || value.terminal.container.status !== 'ok'
@@ -94,6 +97,9 @@ export function assertPrimaryEvidence(primary, semantic) {
     if (!Array.isArray(receipt.value.gracefulSaveGate) || receipt.value.gracefulSaveGate.length === 0
         || receipt.value.gracefulSaveGate.some(value => value?.mode !== 'serialized' || value.directory !== semantic.gracefulSaveGate)) {
       throw new Error('F0.2B primary evidence has no retained serialized graceful-save receipt');
+    }
+    if (receipt.value.nativeExecutionGate?.mode !== 'serialized' || receipt.value.nativeExecutionGate.directory !== semantic.executionGate) {
+      throw new Error('F0.2B primary evidence has no retained serialized native execution receipt');
     }
     const declaredBeforeRestart = receipt.value?.recovery?.beforeRestartManifest;
     if (declaredBeforeRestart) {
@@ -181,8 +187,8 @@ function assertNormalHistory(history) {
       || !Array.isArray(admission.observedEpochs) || admission.observedEpochs.length < 2) {
     throw new Error('F0.2B normal history was seeded or lacks actual adapter observation');
   }
-  if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64 || families.depot.terminalBread !== 63
-      || families.depot.foodAvailable !== 63 || families.depot.foodFulfilled !== 0
+  if (!families.depot || !families.hive || families.depot.inputWheat !== 64 || families.depot.outputBread !== 64 || families.depot.terminalBread !== 64
+      || families.depot.foodAvailable !== 64 || families.depot.foodFulfilled !== 0
       || families.hive.inputBiomass !== 64 || families.hive.outputBiomass !== 0
       || families.hive.growthJobs !== 0 || families.hive.addedOrgans !== 1 || families.hive.spawnedBioforms !== 1) {
     throw new Error('F0.2B normal history has non-equivalent product quantities');

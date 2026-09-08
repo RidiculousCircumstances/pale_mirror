@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertPrimaryEvidence, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { acquireNativeExecutionGate } from '../src/native-execution-gate.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
@@ -18,7 +20,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
   const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false,
     targetVisitsBeforeDue: history === 'never-visited' ? 0 : 2, observedEpochs: [1, 2], releasedEpochs: history === 'visited-unloaded' ? [1] : [],
     safeUnload: history === 'visited-unloaded', zeroPlayerLoaded: history === 'zero-player', dueAction: 3 },
-    families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 63, foodAvailable: 63, foodFulfilled: 0 },
+    families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 64, foodAvailable: 64, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
     ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5 } } : {}) });
   const histories = lane === 'normal-never-visited' ? [normal('never-visited')]
@@ -37,6 +39,7 @@ function evidence(worker, index = Number(worker.at(-1))) {
     requiredTest: `scenario:${lane}`, requiredTestCount: conflict ? 3 : lane === 'normal-zero-player-recovery' ? 2 : 1, runtimeContentSha256: hash, jarSha256: hash, primarySha256: hash, namespaces, launchTarget: 'normal-disposable-v3-server',
     jvmEnvelope: { javaToolOptions: '-Xmx3G', maxHeapMiB: 3072, concurrentMinecraftProcesses: 2 },
     gracefulSaveGate: `/tmp/f02b-graceful-save-${expected.runId}-${expected.runAttempt}`,
+    executionGate: `/tmp/f02b-native-execution-${expected.runId}-${expected.runAttempt}`,
     terminal: { lane, domain, container: { status: 'ok', replica, custody }, replica, custody, ...(conflicts === undefined ? { histories } : { conflicts }) } };
 }
 
@@ -56,7 +59,8 @@ test('F0.2B primary receipts bind the retained runtime and complete normal-world
       runnerName: semantic.runnerName, launchTarget: semantic.launchTarget, requiredTest: semantic.requiredTest, requiredTestCount: semantic.requiredTestCount, jvmEnvelope: semantic.jvmEnvelope },
     runtime: { receipt: { worker: semantic.worker, runtimeContentSha256: semantic.runtimeContentSha256 }, preparedIdentity: { sourceContent: { sha256: hash }, preparedArtifact: { sha256: hash } } },
     manifests: [{ scenario: 'disposable-f02b-normal-never-visited.json', declarationSha256: hash, value: { status: 'ok', scenarioSha256: 'c'.repeat(64), scenarioDeclarationSha256: hash, recovery: { mode: 'graceful' }, diagnostics: [],
-      gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }] } }], terminal: semantic.terminal };
+      gracefulSaveGate: [{ mode: 'serialized', directory: semantic.gracefulSaveGate }],
+      nativeExecutionGate: { mode: 'serialized', directory: semantic.executionGate } } }], terminal: semantic.terminal };
   primary.manifests[0].sha256 = hashJson(primary.manifests[0].value);
   assert.equal(assertPrimaryEvidence(primary, semantic), primary);
   const drifted = structuredClone(primary); drifted.runtime.receipt.runtimeContentSha256 = 'c'.repeat(64);
@@ -93,6 +97,26 @@ test('F0.2B reserves adjacent RCON ports outside every other worker game socket'
   assert.equal(new Set(spaces.flatMap(value => [value.port, value.port + 1])).size, 8);
 });
 
+test('F0.2B native execution gate serializes live work and rejects malformed authority', async () => {
+  await assert.rejects(() => acquireNativeExecutionGate({ directory: 'relative', owner: {} }), /malformed/);
+  const root = await mkdtemp(resolve('build/f02b-native-execution-'));
+  try {
+    const first = await acquireNativeExecutionGate({ directory: root, owner: { worker: 'worker-0' } });
+    let acquired = false;
+    const secondPromise = acquireNativeExecutionGate({ directory: root, owner: { worker: 'worker-1' } })
+      .then(value => { acquired = true; return value; });
+    await new Promise(resolveDelay => setTimeout(resolveDelay, 50));
+    assert.equal(acquired, false);
+    await first.release();
+    const second = await secondPromise;
+    assert.equal(second.receipt.mode, 'serialized');
+    assert.equal(second.receipt.owner.worker, 'worker-1');
+    await second.release();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('F0.2B consumers use a private checkout and prepare only a disposable world from immutable runtime bytes', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const [workflow, runner, isolated, scenarioRunner, build] = await Promise.all([
@@ -110,9 +134,12 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /--memory-per-worker-mib=6144/);
   assert.equal((workflow.match(/JAVA_TOOL_OPTIONS: -Xmx3G/g) ?? []).length, 2);
   assert.match(workflow, /F02B_GRACEFUL_SAVE_GATE: \$\{\{ inputs\.task_root \}\}\/f02b-graceful-save-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+  assert.match(workflow, /F02B_EXECUTION_GATE: \$\{\{ inputs\.task_root \}\}\/f02b-native-execution-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(runner, /FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate/);
+  assert.match(runner, /FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate/);
   assert.match(isolated, /withGracefulSaveGate/);
+  assert.match(isolated, /acquireNativeExecutionGate/);
   assert.match(runner, /exact bounded JVM envelope/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
@@ -189,4 +216,6 @@ test('F0.2B semantic aggregate fails closed for missing, stale, duplicate and no
   assert.throws(() => mergeSemanticMatrix(unboundedJvm, expected), /exact bounded JVM envelope/);
   const missingGate = complete.map(value => structuredClone(value)); delete missingGate[0].gracefulSaveGate;
   assert.throws(() => mergeSemanticMatrix(missingGate, expected), /graceful-save gate/);
+  const missingExecutionGate = complete.map(value => structuredClone(value)); delete missingExecutionGate[0].executionGate;
+  assert.throws(() => mergeSemanticMatrix(missingExecutionGate, expected), /native execution gate/);
 });

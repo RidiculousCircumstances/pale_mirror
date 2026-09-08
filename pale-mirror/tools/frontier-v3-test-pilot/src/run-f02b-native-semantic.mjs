@@ -20,6 +20,10 @@ const gracefulSaveGate = `${process.env.F02B_GRACEFUL_SAVE_GATE ?? ''}`;
 if (!gracefulSaveGate.startsWith('/') || !gracefulSaveGate.endsWith(`f02b-graceful-save-${values.run}-${values.attempt}`)) {
   throw new Error('F0.2B normal-world semantic invocation has no exact graceful-save gate');
 }
+const executionGate = `${process.env.F02B_EXECUTION_GATE ?? ''}`;
+if (!executionGate.startsWith('/') || !executionGate.endsWith(`f02b-native-execution-${values.run}-${values.attempt}`)) {
+  throw new Error('F0.2B normal-world semantic invocation has no exact native execution gate');
+}
 for (const field of ['gradle', 'cache', 'world', 'process']) await mkdir(namespaces[field], { recursive: true });
 const scenarios = { 'normal-never-visited': ['disposable-f02b-normal-never-visited.json'], 'normal-visited-unloaded': ['disposable-f02b-normal-visited-unloaded.json'],
   'normal-zero-player-recovery': ['disposable-f02b-normal-zero-player.json', 'disposable-f02b-normal-product-recovery.json'],
@@ -52,7 +56,8 @@ try {
     pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
       GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
       FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared, FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: 'false',
-      FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate
+      FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
+      FRONTIER_V3_PILOT_EXECUTION_GATE: executionGate
     });
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
     if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
@@ -76,7 +81,7 @@ const primary = { schema: F02B_SCHEMA, kind: F02B_PRIMARY_KIND, status: 'passed'
     ...(value.beforeRestart == null ? {} : { beforeRestartSha256: hashJson(value.beforeRestart), beforeRestart: value.beforeRestart }) })), terminal };
 const primarySha256 = hashJson(primary);
 const evidence = { schema: F02B_SCHEMA, kind: F02B_KIND, status: 'passed', worker: values.worker, lane, ...identityFact, startedAtMillis, finishedAtMillis, gradlePid: pilotPid,
-  runtimeContentSha256, jarSha256, primarySha256, namespaces, gracefulSaveGate, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
+  runtimeContentSha256, jarSha256, primarySha256, namespaces, gracefulSaveGate, executionGate, scenarios, manifests: manifests.map(value => ({ scenario: value.scenario, manifest: value.manifest })), terminal };
 assertSemanticEvidence(evidence); await mkdir(dirname(output), { recursive: true }); await writeFile(resolve(dirname(output), 'primary.json'), `${JSON.stringify(primary)}\n`, { flag: 'wx' }); await writeFile(output, `${JSON.stringify(evidence)}\n`, { flag: 'wx' });
 
 function terminalFacts(manifests, assignedLane) {
