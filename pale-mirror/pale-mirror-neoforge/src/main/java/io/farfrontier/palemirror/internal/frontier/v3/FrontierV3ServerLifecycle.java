@@ -216,8 +216,13 @@ public final class FrontierV3ServerLifecycle {
 
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
+        // The server lifecycle publishes both startup callbacks.  The later
+        // callback is observational only: clearing pilot admission state here
+        // would let an already-started disposable world advance while it waits
+        // for its declared execution gate.
+        if (RUNTIMES.containsKey(server)) return;
         STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
-        if (!enabled() || RUNTIMES.containsKey(server)) return;
+        if (!enabled()) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         startConfigured(server, initialConfiguration(physicalWorld));
     }

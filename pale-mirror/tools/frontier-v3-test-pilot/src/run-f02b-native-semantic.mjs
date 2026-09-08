@@ -113,7 +113,11 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (!summary || !Number.isSafeInteger(summary.instant) || summary.instant < 0 || !initialWheat || initialWheat.count !== 64 || initialWheat.custody?.kind !== 'CONTAINER_SLOT'
       || !initialBiomass || initialBiomass.count !== 64 || initialBiomass.custody?.kind !== 'CONTAINER_SLOT'
       || !depot || !store || !settlement?.food || !hive || !depot.replica || !depot.custody || !store.replica || !store.custody) throw new Error('F0.2B normal scenario lacks terminal product or custody diagnostics');
-  const earlyDepot = depotObservations.at(0); const earlyStore = hiveObservations.at(0);
+  const actions = declaration.actions;
+  const initialDepotAction = actions.findIndex(action => action.type === 'inspect' && action.view === 'container' && action.id === 'container:1-depot') + 1;
+  const initialStoreAction = actions.findIndex(action => action.type === 'inspect' && action.view === 'container' && action.id === 'container:hive-east-store') + 1;
+  const earlyDepot = depotObservations.find(value => value.actionStep === initialDepotAction);
+  const earlyStore = hiveObservations.find(value => value.actionStep === initialStoreAction);
   const earlyWheat = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:wheat')?.count ?? 0;
   const earlyBread = earlyDepot?.occupied?.find(item => item.itemKind === 'minecraft:bread')?.count ?? 0;
   const earlyBiomass = earlyStore?.occupied?.find(item => item.itemKind === 'minecraft:rotten_flesh')?.count ?? 0;
@@ -125,7 +129,6 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   const history = id.includes('never-visited') ? 'never-visited' : id.includes('visited-unloaded') ? 'visited-unloaded'
     : id.includes('zero-player') ? 'zero-player' : id.includes('product-recovery') ? 'graceful-product-recovery' : null;
   if (!history) throw new Error('F0.2B normal scenario is not an admitted history');
-  const actions = declaration.actions;
   const due = actions.findIndex(action => action.type === 'fast_forward' || action.type === 'fast_forward_to_instant');
   const targetVisitsBeforeDue = actions.slice(0, due).filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length;
   const away = actions.findIndex(action => action.type === 'visit' && action.dimension === 'minecraft:overworld');

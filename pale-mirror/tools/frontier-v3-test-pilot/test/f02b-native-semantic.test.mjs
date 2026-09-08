@@ -148,6 +148,8 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(runner, /FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'/);
   assert.match(runner, /entry\?\.observed\?\.value/);
   assert.match(runner, /initialInputs/);
+  assert.match(runner, /initialDepotAction/);
+  assert.match(runner, /initialStoreAction/);
   assert.match(isolated, /withGracefulSaveGate/);
   assert.match(isolated, /acquireNativeExecutionGate/);
   assert.match(isolated, /initialCanonicalHold/);
