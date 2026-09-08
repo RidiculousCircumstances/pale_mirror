@@ -76,6 +76,8 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace/);
   assert.match(workflow, /working-directory: f02b-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
   assert.match(workflow, /path: f02b-merge-workspace/);
+  assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
+  assert.match(workflow, /path: f02b-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);

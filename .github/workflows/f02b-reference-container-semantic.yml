@@ -92,7 +92,7 @@ jobs:
         continue-on-error: true
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: pale-mirror/build/f02b-producer
+          path: f02b-${{ matrix.worker }}-workspace/pale-mirror/build/f02b-producer
       - name: Bind active GitHub job and runner identity
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -140,7 +140,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: f02b-${{ github.run_id }}-worker-*
-          path: pale-mirror/f02b-evidence
+          path: f02b-merge-workspace/pale-mirror/f02b-evidence
       - name: Write complete or incomplete fail-closed aggregate
         run: >-
           node tools/frontier-v3-test-pilot/src/merge-f02b-native-semantic.mjs --input=f02b-evidence
