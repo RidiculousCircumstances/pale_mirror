@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { appendFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, pilotDiagnosticActionStep, saveManifest, scenarioDeadlineMs, selectMutterXauthority, traceRecord } from './scenario.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { requirePreparedF0vBuild } from './prepared-build.mjs';
-import { preparedLaunch } from './prepared-launch.mjs';
+import { ensurePreparedLaunchWorkingDirectory, preparedLaunch } from './prepared-launch.mjs';
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleSignal, openLifecycleBarrierSession, publishLifecycleBarrier } from './lifecycle-barrier.mjs';
 import { deadlineWatchdog } from './deadline-watchdog.mjs';
 
@@ -301,11 +301,7 @@ async function launchPreparedClient() {
     'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment(),
     'pale_mirror.frontier_v3.test_pilot.lifecycle_terminal': lifecycleTerminalAssertion ? 'true' : 'false'
   }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${runtimeScenario.server.host}:${runtimeScenario.server.port}`]);
-  try {
-    if (!(await stat(launch.cwd)).isDirectory()) throw new Error('not a directory');
-  } catch (error) {
-    throw new Error(`prepared disposable client directory is unavailable: ${launch.cwd}`, { cause: error });
-  }
+  await ensurePreparedLaunchWorkingDirectory(launch);
   auditEnvironment.XDG_SESSION_TYPE = 'x11';
   auditEnvironment.WAYLAND_DISPLAY = '__pale_mirror_pilot_xwayland_only__';
   return spawn(launch.command, launch.args, { cwd: launch.cwd, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });

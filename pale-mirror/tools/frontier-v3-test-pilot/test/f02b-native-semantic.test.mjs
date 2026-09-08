@@ -67,10 +67,11 @@ test('F0.2B reserves adjacent RCON ports outside every other worker game socket'
 
 test('F0.2B consumers use a private checkout and prepare only a disposable world from immutable runtime bytes', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-  const [workflow, runner, isolated, build] = await Promise.all([
+  const [workflow, runner, isolated, scenarioRunner, build] = await Promise.all([
     readFile(resolve(project, '..', '.github/workflows/f02b-reference-container-semantic.yml'), 'utf8'),
     readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8'),
     readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs'), 'utf8'),
+    readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-scenario.mjs'), 'utf8'),
     readFile(resolve(project, 'pale-mirror-neoforge/build.gradle'), 'utf8')
   ]);
   assert.match(workflow, /path: f02b-\$\{\{ matrix\.worker \}\}-workspace/);
@@ -80,6 +81,7 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /path: f02b-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(runner, /FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true'/);
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
+  assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
 });
 
