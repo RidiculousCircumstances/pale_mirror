@@ -232,6 +232,18 @@ test('F0.2B graceful product recovery retains both family admissions and their a
   assert.equal(beforeRestart.filter(action => action.type === 'visit' && action.dimension === 'pale_mirror:frontier_graybox').length, 2);
   assert.equal(beforeRestart.filter(action => action.type === 'wait_until_diagnostic' && action.expect?.custody?.status === 'ACQUIRED').length, 2);
   assert.deepEqual(beforeRestart.at(-1), { type: 'inspect', view: 'reference_container', id: 'f02b' });
+  const recoveredDepot = scenario.actions.findIndex((action, index) => index >= restart && action.type === 'wait_until_diagnostic'
+    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'ACQUIRED');
+  const liveFood = scenario.assertions.find(assertion => assertion.after === recoveredDepot + 5);
+  const releasedDepot = scenario.actions.findIndex((action, index) => index > recoveredDepot && action.type === 'wait_until_diagnostic'
+    && action.id === 'container:1-depot' && action.expect?.custody?.status === 'RELEASED');
+  const coldAdvance = scenario.actions.findIndex((action, index) => index > releasedDepot && action.type === 'fast_forward_to_instant'
+    && action.targetInstant === 14000);
+  const coldFood = scenario.assertions.find(assertion => assertion.after === coldAdvance + 4);
+  assert.equal(liveFood?.expect.food.available, 64,
+    'a recovered live custodian excludes the competing COLD birth permit');
+  assert.equal(coldFood?.expect.food.available, 63,
+    'the same released, safely unloaded scope admits COLD without waiting for another visit');
 });
 
 test('F0.2B foreign-container lane observes the ordinary break before placing foreign evidence', async () => {
