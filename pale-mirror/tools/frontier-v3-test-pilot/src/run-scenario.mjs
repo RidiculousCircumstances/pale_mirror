@@ -12,6 +12,7 @@ import { requirePreparedF0vBuild } from './prepared-build.mjs';
 import { ensurePreparedLaunchWorkingDirectory, preparedLaunch } from './prepared-launch.mjs';
 import { LifecycleBarrier, LifecycleSignal, awaitLifecycleSignal, openLifecycleBarrierSession, publishLifecycleBarrier } from './lifecycle-barrier.mjs';
 import { deadlineWatchdog } from './deadline-watchdog.mjs';
+import { createEarlyDisplayFailureDetector } from './native-client-fatal-state.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [manifest.json]');
@@ -130,6 +131,7 @@ let actionTimingName = null;
 let recoveryBarrierScheduled = false;
 let terminalSegmentBarrierScheduled = false;
 const buffers = new Map();
+const earlyDisplayFailure = createEarlyDisplayFailureDetector();
 const sessionActionOffset = () => sessionControlDirectory !== undefined && existsSync(join(sessionControlDirectory, 'resumed'))
   ? scenario.restart.afterAction : 0;
 for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => {
@@ -138,6 +140,8 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
   const lines = buffer.split(/\r?\n/);
   buffers.set(stream, lines.pop());
   for (const line of lines) {
+    const fatalDisplay = earlyDisplayFailure.observe(line);
+    if (fatalDisplay !== null) failure ??= fatalDisplay;
     const pilotDiagnostic = diagnosticFromPilotLine(line);
     if (pilotDiagnostic != null) {
       try {

@@ -24,56 +24,49 @@ namespace_parent=$(dirname "$runtime_parent")
 display=:$((port - 25000))
 bwrap_bin=$(command -v bwrap || true)
 [[ -x "$bwrap_bin" ]] || { printf 'private CI display requires bubblewrap for its task-owned /tmp; install bwrap\n' >&2; exit 2; }
+probe="$PWD/scripts/private-xvfb-glx-probe.py"
+[[ -f "$probe" ]] || { printf 'private CI graphics probe is absent: %s\n' "$probe" >&2; exit 2; }
+python_bin=$(command -v python3 || true)
+[[ -x "$python_bin" ]] || { printf 'private CI display requires python3 for the GLX admission probe\n' >&2; exit 2; }
 
-# Xvfb's display locks and Unix sockets are hard-wired to /tmp. A task can have
-# a valid private native root while the shared tmpfs is quota-bound, so place
-# only the X server in a private mount namespace. X11's abstract Unix socket
-# remains available in the shared IPC namespace, so the Minecraft command can
-# use the assigned display from its ordinary host namespace without exposing a
-# TCP listener. NeoForge's native/session facilities therefore retain the same
-# launch behaviour as the accepted runtime. The X server's lock and filesystem
-# socket can never escape into shared /tmp, while a client cannot accidentally
-# use another worker's display because the display number is derived from the
-# worker-owned pilot port.
+# Xvfb's display locks and Unix sockets are hard-wired to /tmp. The consumer
+# must therefore run in the same task-private mount namespace as Xvfb: an
+# abstract-socket assumption is not a graphics admission proof. The retained
+# directory is bounded on exit and is the attribution root for either a failed
+# GLX admission or a failed command.
 set +e
-bwrap_ready="$runtime_dir/ready"
 "$bwrap_bin" --die-with-parent --bind / / --bind "$PWD" "$PWD" --bind "$namespace_parent" "$namespace_parent" \
   --dev /dev --proc /proc --tmpfs /tmp --chdir "$PWD" \
   bash -ceu '
-    runtime_dir=$1; display=$2; xvfb_bin=$3; ready=$4
-    "$xvfb_bin" "$display" -screen 0 1920x1080x24 -nolisten tcp >"$runtime_dir/xvfb.log" 2>&1 &
-    xvfb_pid=$!
-    cleanup() {
+    runtime_dir=$1; display=$2; xvfb_bin=$3; python_bin=$4; probe=$5
+    shift 5
+    xvfb_log="$runtime_dir/xvfb.log"; probe_receipt="$runtime_dir/glx-probe.json"; result="$runtime_dir/result"
+    status=1
+    finish() {
+      status=$?
       kill "$xvfb_pid" 2>/dev/null || true
       wait "$xvfb_pid" 2>/dev/null || true
+      if [[ -f "$xvfb_log" ]]; then tail -c 65536 "$xvfb_log" >"$xvfb_log.bounded"; mv "$xvfb_log.bounded" "$xvfb_log"; fi
+      printf "status=%s\\ndisplay=%s\\n" "$status" "$display" >"$result"
+      if (( status != 0 )); then printf "PM_PRIVATE_XVFB_DIAGNOSTIC=%s\\n" "$runtime_dir" >&2; fi
+      exit "$status"
     }
-    trap cleanup EXIT INT TERM
+    "$xvfb_bin" "$display" -screen 0 1920x1080x24 -nolisten tcp >"$xvfb_log" 2>&1 &
+    xvfb_pid=$!
+    trap finish EXIT INT TERM
     for _ in $(seq 1 20); do
       kill -0 "$xvfb_pid" 2>/dev/null || break
-      if [[ -S "/tmp/.X11-unix/X${display#:}" ]]; then break; fi
+      [[ -S "/tmp/.X11-unix/X${display#:}" ]] && break
       sleep 0.1
     done
-    kill -0 "$xvfb_pid" 2>/dev/null || { printf "private Xvfb failed; inspect %s/xvfb.log\\n" "$runtime_dir" >&2; exit 1; }
+    kill -0 "$xvfb_pid" 2>/dev/null || { printf "private Xvfb exited before admission\\n" >&2; exit 1; }
     [[ -S "/tmp/.X11-unix/X${display#:}" ]] || { printf "private Xvfb socket is absent\\n" >&2; exit 1; }
-    printf "ready\\n" >"$ready"
-    wait "$xvfb_pid"
-  ' bash "$runtime_dir" "$display" "$xvfb_bin" "$bwrap_ready" &
-bwrap_pid=$!
-cleanup() {
-  kill "$bwrap_pid" 2>/dev/null || true
-  wait "$bwrap_pid" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-for _ in $(seq 1 50); do
-  [[ -s "$bwrap_ready" ]] && break
-  kill -0 "$bwrap_pid" 2>/dev/null || break
-  sleep 0.1
-done
-[[ -s "$bwrap_ready" ]] || { printf 'private Xvfb failed; inspect %s/xvfb.log\n' "$runtime_dir" >&2; exit 1; }
-DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$@"
+    if ! DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$python_bin" "$probe" >"$probe_receipt" 2>&1; then
+      printf "private Xvfb GLX admission was rejected\\n" >&2
+      exit 1
+    fi
+    DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$@"
+  ' bash "$runtime_dir" "$display" "$xvfb_bin" "$python_bin" "$probe" "$@"
 status=$?
 set -e
-trap - EXIT INT TERM
-cleanup
-rm -rf -- "$runtime_dir"
 exit "$status"
