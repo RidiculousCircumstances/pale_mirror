@@ -37,6 +37,8 @@ import java.util.Set;
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class FrontierV3PilotNaturalDemandObserver {
     private static final String ARM_KIND = "f02b-natural-demand-episode-arm";
+    private static final String ARM_ACK_KIND = "f02b-natural-demand-episode-arm-ack";
+    private static final String STOP_OUTCOME_KIND = "f02b-natural-demand-stop-outcome";
     private static final String RECEIPT_KIND = "f02b-natural-demand-episode";
     private static final Map<MinecraftServer, Episode> EPISODES = new IdentityHashMap<>();
 
@@ -51,6 +53,7 @@ public final class FrontierV3PilotNaturalDemandObserver {
                 episode = arm(server);
                 if (episode == null) return;
                 EPISODES.put(server, episode);
+                publishArmAcknowledgement(episode);
             }
             boolean released = normalDemandLossReleased(episode);
             // The normal-demand receipt may be published by a neighbouring Post listener.
@@ -90,25 +93,32 @@ public final class FrontierV3PilotNaturalDemandObserver {
      */
     static void admitGracefulStop(MinecraftServer server, String nonce, Runnable haltAction) {
         Episode episode = EPISODES.get(server);
-        if (episode == null || !episode.releaseObserved || !server.getPlayerList().getPlayers().isEmpty()
-                || !FrontierV3ServerLifecycle.normalDemandLossReleased(server)) {
-            throw new IllegalStateException("pilot natural-demand stop admission is unarmed or natural demand is still live");
-        }
-        episode.stopAdmission.admit(server, System.getProperty(FrontierV3PilotLifecycleSignal.RUN_ID_PROPERTY, ""),
-                ProcessHandle.current().pid(), nonce, () -> {
-                    Observation observation = observe(server, episode, true);
-                    FrontierV3PilotNaturalDemandEpisode.Status status = episode.state.observe(
-                            observation.playerTickets, observation.holders, true);
-                    if (status == FrontierV3PilotNaturalDemandEpisode.Status.INVALID && !episode.invalidPublished) {
-                        try {
-                            publish(episode, "invalid", observation, episode.state.failure());
-                            episode.invalidPublished = true;
-                        } catch (IOException failure) {
-                            throw new IllegalStateException("pilot natural-demand invalidation evidence could not be retained", failure);
+        if (episode == null) throw new IllegalStateException("pilot natural-demand stop admission is unarmed");
+        try {
+            if (!episode.releaseObserved || !server.getPlayerList().getPlayers().isEmpty()
+                    || !FrontierV3ServerLifecycle.normalDemandLossReleased(server)) {
+                throw new IllegalStateException("pilot natural-demand stop admission is unarmed or natural demand is still live");
+            }
+            episode.stopAdmission.admit(server, System.getProperty(FrontierV3PilotLifecycleSignal.RUN_ID_PROPERTY, ""),
+                    ProcessHandle.current().pid(), nonce, () -> {
+                        Observation observation = observe(server, episode, true);
+                        FrontierV3PilotNaturalDemandEpisode.Status status = episode.state.observe(
+                                observation.playerTickets, observation.holders, true);
+                        if (status == FrontierV3PilotNaturalDemandEpisode.Status.INVALID && !episode.invalidPublished) {
+                            try {
+                                publish(episode, "invalid", observation, episode.state.failure());
+                                episode.invalidPublished = true;
+                            } catch (IOException failure) {
+                                throw new IllegalStateException("pilot natural-demand invalidation evidence could not be retained", failure);
+                            }
                         }
-                    }
-                    return status;
-                }, haltAction);
+                        return status;
+                    }, haltAction);
+            publishStopOutcome(episode, nonce, "admitted", null);
+        } catch (IllegalStateException failure) {
+            if (episode.stopAdmission.matchesNonce(nonce)) publishStopOutcome(episode, nonce, "rejected", failure.getMessage());
+            throw failure;
+        }
     }
 
     private static Episode arm(MinecraftServer server) throws IOException {
@@ -207,17 +217,44 @@ public final class FrontierV3PilotNaturalDemandObserver {
         FrontierV3LifecycleFilePublisher.publish(episode.directory.resolve("staging"), target, text);
     }
 
+    private static void publishArmAcknowledgement(Episode episode) throws IOException {
+        JsonObject value = baseReceipt(episode, ARM_ACK_KIND, "armed");
+        value.addProperty("stopAdmissionNonce", episode.stopAdmissionNonce);
+        Path target = episode.directory.resolve("signals/natural-demand-episode-armed-" + episode.serverRunId + ".json");
+        FrontierV3LifecycleFilePublisher.publish(episode.directory.resolve("staging"), target, value + "\n");
+    }
+
+    private static void publishStopOutcome(Episode episode, String nonce, String status, String reason) {
+        try {
+            JsonObject value = baseReceipt(episode, STOP_OUTCOME_KIND, status);
+            value.addProperty("stopAdmissionNonce", nonce);
+            if (reason != null) value.addProperty("reason", reason);
+            Path target = episode.directory.resolve("signals/natural-demand-stop-outcome-" + episode.serverRunId + "-" + nonce + ".json");
+            FrontierV3LifecycleFilePublisher.publish(episode.directory.resolve("staging"), target, value + "\n");
+        } catch (IOException failure) {
+            throw new IllegalStateException("pilot natural-demand stop outcome could not be retained", failure);
+        }
+    }
+
+    private static JsonObject baseReceipt(Episode episode, String kind, String status) {
+        JsonObject value = new JsonObject();
+        value.addProperty("schema", 1); value.addProperty("kind", kind); value.addProperty("status", status);
+        value.add("identity", episode.identity);
+        JsonObject server = new JsonObject(); server.addProperty("serverRunId", episode.serverRunId); server.addProperty("serverPid", episode.serverPid); value.add("server", server);
+        return value;
+    }
+
     private record Observation(Set<FrontierV3PilotNaturalDemandEpisode.ChunkKey> playerTickets,
             Map<FrontierV3PilotNaturalDemandEpisode.ChunkKey, FrontierV3PilotNaturalDemandEpisode.Holder> holders) { }
     private static final class Episode {
-        private final Path directory; private final JsonObject identity; private final String serverRunId; private final long serverPid;
+        private final Path directory; private final JsonObject identity; private final String serverRunId; private final long serverPid; private final String stopAdmissionNonce;
         private final FrontierV3PilotNaturalDemandEpisode state = new FrontierV3PilotNaturalDemandEpisode();
         private final Map<FrontierV3PilotNaturalDemandEpisode.ChunkKey, ChunkHolder> holders = new LinkedHashMap<>();
         private final FrontierV3PilotNaturalDemandStopAdmission stopAdmission;
         private boolean releaseObserved;
         private boolean eligiblePublished; private boolean invalidPublished;
         private Episode(Path directory, JsonObject identity, MinecraftServer server, String serverRunId, long serverPid, String stopAdmissionNonce) {
-            this.directory = directory; this.identity = identity; this.serverRunId = serverRunId; this.serverPid = serverPid;
+            this.directory = directory; this.identity = identity; this.serverRunId = serverRunId; this.serverPid = serverPid; this.stopAdmissionNonce = stopAdmissionNonce;
             this.stopAdmission = new FrontierV3PilotNaturalDemandStopAdmission(server, serverRunId, serverPid, stopAdmissionNonce);
         }
     }

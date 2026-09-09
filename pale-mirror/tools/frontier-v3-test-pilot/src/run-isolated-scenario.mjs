@@ -9,7 +9,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
 import { requestRconStop } from './rcon.mjs';
-import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeReady, requestPilotNaturalDemandStop } from './natural-demand-episode.mjs';
+import { runPilotWithNaturalDemandArm, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -138,15 +138,14 @@ try {
     await runPilot(ephemeralScenario, output, server, clientSegments, 'initial');
   } else if (!usePersistentClient) {
     await writeScenario(beforeRestartScenario, recovery.before);
-    if (recovery.mode === 'graceful' && naturalDemandStopCarrier) server.naturalDemandEpisodeArm = await armNaturalDemandEpisode(lifecycle, server);
     if (scenario.crash !== undefined) {
       crashEvidence = await runPilotUntilCrash(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', scenario.crash);
       server = null;
     } else {
-      await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart');
-      if (server.naturalDemandEpisodeArm !== undefined) {
-        await awaitNaturalDemandEpisodeReady(lifecycle, server, DURABLE_STOP_TIMEOUT_MS);
-      }
+      if (recovery.mode === 'graceful' && naturalDemandStopCarrier) {
+        server.naturalDemandEpisodeArm = await runPilotWithNaturalDemandArm({ lifecycle, server, timeoutMs: DURABLE_STOP_TIMEOUT_MS,
+          runPilot: () => runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart') });
+      } else await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart');
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (server !== null) {
@@ -692,13 +691,14 @@ async function stopServerSafely(server, serverPort, naturalDemandEpisodeArm = un
     const ownerObserver = server.ownerObserverArm === undefined ? undefined : startSaveOwnerObservation(server.ownerObserverArm, {
       output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
     });
-    if (naturalDemandEpisodeArm !== undefined) {
-      await requestPilotNaturalDemandStop(server, naturalDemandEpisodeArm);
-    } else {
-      await requestRconStop({ port: server.rconPort, password: server.rconPassword });
-    }
     try {
-      await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+      if (naturalDemandEpisodeArm !== undefined) {
+        await stopPilotNaturalDemandCarrier({ lifecycle, server, arm: naturalDemandEpisodeArm, timeoutMs: DURABLE_STOP_TIMEOUT_MS,
+          awaitDurable: () => awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS) });
+      } else {
+        await requestRconStop({ port: server.rconPort, password: server.rconPassword });
+        await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+      }
       ownerObserver?.finish({ kind: 'durable_server_save' });
     } catch (failure) {
       ownerObserver?.finish({ kind: 'durable_server_save_absent', failure: String(failure?.message ?? failure) });

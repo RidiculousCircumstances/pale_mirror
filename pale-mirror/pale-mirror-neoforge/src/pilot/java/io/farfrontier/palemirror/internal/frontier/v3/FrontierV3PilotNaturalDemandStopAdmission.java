@@ -43,6 +43,7 @@ final class FrontierV3PilotNaturalDemandStopAdmission {
     }
 
     boolean consumed() { return consumed; }
+    boolean matchesNonce(String suppliedNonce) { return nonce.equals(suppliedNonce); }
 
     private static String requireRunId(String value) {
         if (value == null || !value.matches("[0-9a-f-]{36}")) throw new IllegalArgumentException("server run id is invalid");
