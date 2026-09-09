@@ -35,10 +35,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Initialize isolated producer Gradle home
+        shell: bash
+        run: |
+          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
+          test -n "${GITHUB_ENV:-}" || { echo "GITHUB_ENV is required" >&2; exit 1; }
+          case "$RUNNER_TEMP" in
+            /*) ;;
+            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
+          esac
+          f02b_producer_gradle_home="$RUNNER_TEMP/f02b-${{ github.run_id }}-producer-gradle"
+          case "$f02b_producer_gradle_home" in
+            /|*$'\n'*|*$'\r'*) echo "producer Gradle home is malformed" >&2; exit 1 ;;
+          esac
+          mkdir -p "$f02b_producer_gradle_home"
+          printf 'GRADLE_USER_HOME=%s\n' "$f02b_producer_gradle_home" >> "$GITHUB_ENV"
       - name: Admit four isolated native slots before preparation
         run: >-
           node tools/frontier-v3-test-pilot/src/f0vb-capacity-preflight.mjs
-          --root="${{ inputs.task_root }}" --workers=4 --memory-per-worker-mib=6144 --output="$PWD/f02b-artifacts/producer/capacity.json"
+          --root="${{ inputs.task_root }}" --workers=4 --memory-per-worker-mib=6144 --output="$RUNNER_TEMP/f02b-artifacts/producer/capacity.json"
       - name: Build, package, and stage the one immutable runtime
         env:
           # The prepared runtime fingerprints Java's exact visible launch environment.
@@ -47,6 +62,7 @@ jobs:
         run: |
           mkdir -p "$PWD/build/f02b-producer"
           node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs --output=build/f02b-producer/prepared-build.json
+          node -e 'const fs = require("node:fs"); const identity = JSON.parse(fs.readFileSync("build/f02b-producer/prepared-build.json", "utf8")); if (identity.sourceDirty !== false) { throw new Error("F0.2B prepared source identity is dirty"); }'
           ./gradlew :pale-mirror-neoforge:verifyPackagedJar --offline --no-daemon
           node tools/frontier-v3-test-pilot/src/f0vc-prepared-runtime.mjs --mode=prepare \
             --store="${{ inputs.task_root }}" --prepared=build/f02b-producer/prepared-build.json \
@@ -55,7 +71,9 @@ jobs:
         if: always()
         with:
           name: f02b-${{ github.run_id }}-producer
-          path: f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer
+          path: |
+            f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer
+            ${{ runner.temp }}/f02b-artifacts/producer
           if-no-files-found: error
 
   semantic:

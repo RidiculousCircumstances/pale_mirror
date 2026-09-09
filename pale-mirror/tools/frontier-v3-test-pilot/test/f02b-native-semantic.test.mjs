@@ -234,6 +234,63 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
 });
 
+test('F0.2B producer establishes isolated Gradle state and preserves a clean prepared identity', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const workflow = await readFile(
+    resolve(project, '..', '.github/workflows/f02b-reference-container-semantic.yml'),
+    'utf8',
+  );
+  const producer = workflow.slice(
+    workflow.indexOf('  producer:\n'),
+    workflow.indexOf('  semantic:\n'),
+  );
+
+  assertF02bProducerEnvelope(producer);
+  assert.throws(
+    () => assertF02bProducerEnvelope(producer.replace('Initialize isolated producer Gradle home', 'skip Gradle initialization')),
+    /isolated producer Gradle home/,
+  );
+  assert.throws(
+    () => assertF02bProducerEnvelope(producer.replace(
+      '--output="$RUNNER_TEMP/f02b-artifacts/producer/capacity.json"',
+      '--output="$PWD/f02b-artifacts/producer/capacity.json"',
+    )),
+    /outside the checkout/,
+  );
+  assert.throws(
+    () => assertF02bProducerEnvelope(producer.replace(
+      'if (identity.sourceDirty !== false) { throw new Error("F0.2B prepared source identity is dirty"); }',
+      '',
+    )),
+    /clean prepared source identity/,
+  );
+});
+
+function assertF02bProducerEnvelope(producer) {
+  const gradleInitializer = producer.indexOf('Initialize isolated producer Gradle home');
+  const capacity = producer.indexOf('--output="$RUNNER_TEMP/f02b-artifacts/producer/capacity.json"');
+  const preparation = producer.indexOf('prepare-native-build.mjs');
+  const cleanIdentity = producer.indexOf('identity.sourceDirty !== false');
+  const stage = producer.indexOf('f0vc-prepared-runtime.mjs');
+
+  assert.ok(gradleInitializer >= 0, 'producer must initialize an isolated producer Gradle home');
+  assert.match(producer, /test -n "\$\{RUNNER_TEMP:-\}"/);
+  assert.match(producer, /test -n "\$\{GITHUB_ENV:-\}"/);
+  assert.match(producer, /f02b_producer_gradle_home="\$RUNNER_TEMP\/f02b-\$\{\{ github\.run_id \}\}-producer-gradle"/);
+  assert.match(producer, /mkdir -p "\$f02b_producer_gradle_home"/);
+  assert.match(producer, /printf 'GRADLE_USER_HOME=%s\\n' "\$f02b_producer_gradle_home" >> "\$GITHUB_ENV"/);
+  assert.ok(capacity >= 0, 'capacity evidence must be written outside the checkout');
+  assert.doesNotMatch(producer, /--output="\$PWD\/f02b-artifacts\/producer\/capacity\.json"/);
+  assert.ok(preparation >= 0, 'producer must prepare its native build identity');
+  assert.ok(cleanIdentity >= 0, 'producer must require a clean prepared source identity');
+  assert.ok(stage >= 0, 'producer must stage its prepared runtime');
+  assert.ok(
+    gradleInitializer < capacity && capacity < preparation && preparation < cleanIdentity && cleanIdentity < stage,
+    'Gradle initialization and external evidence must precede preparation, which must be clean before staging',
+  );
+  assert.match(producer, /\$\{\{ runner\.temp \}\}\/f02b-artifacts\/producer/);
+}
+
 test('F0.2B hive lane asserts the actual grown relay projection', async () => {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const scenario = JSON.parse(await readFile(resolve(project, 'tools/frontier-v3-test-pilot/scenarios/disposable-hive-growth.json'), 'utf8'));
