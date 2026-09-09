@@ -305,7 +305,7 @@ async function launchPreparedClient() {
     'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment(),
     'pale_mirror.frontier_v3.test_pilot.lifecycle_terminal': lifecycleTerminalAssertion ? 'true' : 'false'
   }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${runtimeScenario.server.host}:${runtimeScenario.server.port}`]);
-  await ensurePreparedLaunchWorkingDirectory(launch);
+  await ensurePreparedLaunchWorkingDirectory(launch, { automatedSemanticClient: true });
   auditEnvironment.XDG_SESSION_TYPE = 'x11';
   auditEnvironment.WAYLAND_DISPLAY = '__pale_mirror_pilot_xwayland_only__';
   return spawn(launch.command, launch.args, { cwd: launch.cwd, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });

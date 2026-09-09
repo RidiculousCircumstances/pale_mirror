@@ -6,6 +6,10 @@ import { delimiter, join, relative, resolve } from 'node:path';
 // RunGame ordinarily writes before Quick Play can act.  This is disposable
 // consumer state, never part of the immutable prepared artifact.
 const DISPOSABLE_CLIENT_OPTIONS = 'onboardAccessibility:b:true\nskipMultiplayerWarning:b:true\nnarrator:0\n';
+// This belongs only to the disposable automated semantic client.  NeoForge's
+// pre-game splash has no player or PMV3 meaning, while the eventual ordinary
+// Minecraft GLFW window remains the client that connects and renders actions.
+export const DISPOSABLE_SEMANTIC_CLIENT_FML_CONFIG = 'earlyWindowControl = false\n';
 
 /**
  * Builds one direct Minecraft JVM command from the already-fingerprinted moddev launch files.
@@ -56,7 +60,7 @@ export async function preparedLaunch(project, identity, role, properties = {}, p
  * already-fingerprinted disposable game directory before spawn.  This never changes a prepared
  * artifact, launch input or world file.
  */
-export async function ensurePreparedLaunchWorkingDirectory(launch) {
+export async function ensurePreparedLaunchWorkingDirectory(launch, { automatedSemanticClient = false } = {}) {
   if (!launch || typeof launch.cwd !== 'string' || launch.cwd.length === 0 || !launch.cwd.startsWith('/')) {
     throw new Error('prepared launch working directory is malformed');
   }
@@ -67,6 +71,11 @@ export async function ensurePreparedLaunchWorkingDirectory(launch) {
     await writeFile(join(launch.cwd, 'options.txt'), DISPOSABLE_CLIENT_OPTIONS, { encoding: 'utf8', flag: 'wx' });
   } catch (error) {
     if (error?.code !== 'EEXIST') throw error;
+  }
+  if (automatedSemanticClient) {
+    const config = join(launch.cwd, 'config');
+    await mkdir(config, { recursive: true });
+    await writeFile(join(config, 'fml.toml'), DISPOSABLE_SEMANTIC_CLIENT_FML_CONFIG, { encoding: 'utf8', flag: 'w' });
   }
   return launch;
 }
