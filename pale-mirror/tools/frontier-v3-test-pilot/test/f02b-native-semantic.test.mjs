@@ -264,11 +264,26 @@ test('F0.2B producer establishes isolated Gradle state and preserves a clean pre
     )),
     /clean prepared source identity/,
   );
+  assert.throws(
+    () => assertF02bProducerEnvelope(producer.replace(
+      'Bootstrap isolated producer Gradle home online',
+      'skip Gradle bootstrap',
+    )),
+    /bootstrap its private Gradle home online/,
+  );
+  assert.throws(
+    () => assertF02bProducerEnvelope(producer.replace(
+      'prepareFrontierV3PilotNativeEnvironment --no-daemon',
+      'prepareFrontierV3PilotNativeEnvironment --offline --no-daemon',
+    )),
+    /bootstrap must resolve online/,
+  );
 });
 
 function assertF02bProducerEnvelope(producer) {
   const gradleInitializer = producer.indexOf('Initialize isolated producer Gradle home');
   const capacity = producer.indexOf('--output="$RUNNER_TEMP/f02b-artifacts/producer/capacity.json"');
+  const bootstrap = producer.indexOf('Bootstrap isolated producer Gradle home online');
   const preparation = producer.indexOf('prepare-native-build.mjs');
   const cleanIdentity = producer.indexOf('identity.sourceDirty !== false');
   const stage = producer.indexOf('f0vc-prepared-runtime.mjs');
@@ -281,12 +296,17 @@ function assertF02bProducerEnvelope(producer) {
   assert.match(producer, /printf 'GRADLE_USER_HOME=%s\\n' "\$f02b_producer_gradle_home" >> "\$GITHUB_ENV"/);
   assert.ok(capacity >= 0, 'capacity evidence must be written outside the checkout');
   assert.doesNotMatch(producer, /--output="\$PWD\/f02b-artifacts\/producer\/capacity\.json"/);
+  assert.ok(bootstrap >= 0, 'producer must bootstrap its private Gradle home online');
+  assert.ok(
+    /Bootstrap isolated producer Gradle home online[\s\S]*?\.\/gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon/.test(producer),
+    'bootstrap must resolve online',
+  );
   assert.ok(preparation >= 0, 'producer must prepare its native build identity');
   assert.ok(cleanIdentity >= 0, 'producer must require a clean prepared source identity');
   assert.ok(stage >= 0, 'producer must stage its prepared runtime');
   assert.ok(
-    gradleInitializer < capacity && capacity < preparation && preparation < cleanIdentity && cleanIdentity < stage,
-    'Gradle initialization and external evidence must precede preparation, which must be clean before staging',
+    gradleInitializer < capacity && capacity < bootstrap && bootstrap < preparation && preparation < cleanIdentity && cleanIdentity < stage,
+    'Gradle initialization, external evidence and online bootstrap must precede clean offline preparation and staging',
   );
   assert.match(producer, /\$\{\{ runner\.temp \}\}\/f02b-artifacts\/producer/);
 }
