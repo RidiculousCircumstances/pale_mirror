@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { watch } from 'node:fs';
 import { createServer } from 'node:net';
 import test, { after } from 'node:test';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, NATURAL_DEMAND_STOP_COMMAND, naturalDemandStopCommand, requestPilotNaturalDemandStop, runPilotWithNaturalDemandArm, stopPilotNaturalDemandCarrier } from '../src/natural-demand-episode.mjs';
+import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, NATURAL_DEMAND_STOP_COMMAND, requestPilotNaturalDemandStop, runPilotWithNaturalDemandArm, stopPilotNaturalDemandCarrier } from '../src/natural-demand-episode.mjs';
 import { createLifecycleBarrierSession, newLifecycleIdentity } from '../src/lifecycle-barrier.mjs';
 import { decodeRconFrames, encodeRconFrame } from '../src/rcon.mjs';
 
@@ -16,8 +17,9 @@ after(async () => { await Promise.all(roots.map(root => rm(root, { recursive: tr
 test('the actual carrier never invokes client work before the exact server arm acknowledgement', async () => {
   const lifecycle = await fresh('arm-positive');
   let clients = 0;
+  const armWritten = awaitArmWritten(lifecycle);
   const pending = runPilotWithNaturalDemandArm({ lifecycle, server: SERVER, timeoutMs: 1_000, runPilot: async () => { clients += 1; } });
-  const arm = await readArm(lifecycle);
+  const arm = await armWritten;
   assert.equal(clients, 0);
   await writeArmAck(lifecycle, arm);
   const returned = await pending;
@@ -34,9 +36,10 @@ test('missing, stale, foreign, and malformed arm acknowledgements fail before cl
   ]) {
     const lifecycle = await fresh(`arm-${name}`);
     let clients = 0;
+    const armWritten = awaitArmWritten(lifecycle);
     const pending = runPilotWithNaturalDemandArm({ lifecycle, server: SERVER, timeoutMs: 20,
       runPilot: async () => { clients += 1; } });
-    const arm = await readArm(lifecycle);
+    const arm = await armWritten;
     if (mutate !== null) {
       const value = armAck(lifecycle, arm); mutate(value);
       await writeFile(join(lifecycle.directory, 'signals', `natural-demand-episode-armed-${SERVER.serverRunId}.json`), `${JSON.stringify(value)}\n`);
@@ -44,6 +47,20 @@ test('missing, stale, foreign, and malformed arm acknowledgements fail before cl
     await assert.rejects(pending, /arm was not acknowledged|server receipt/i, name);
     assert.equal(clients, 0, name);
   }
+});
+
+test('a receipt created in the former read-watch gap is consumed without a second filesystem event', async () => {
+  const lifecycle = await fresh('arm-read-watch-gap');
+  const arm = await armNaturalDemandEpisode(lifecycle, SERVER);
+  let createdAfterWatch = false;
+  const acknowledged = await awaitNaturalDemandEpisodeArmed(lifecycle, SERVER, arm, 1_000, {
+    afterWatchRegistered: async () => {
+      createdAfterWatch = true;
+      await writeArmAck(lifecycle, arm);
+    }
+  });
+  assert.equal(createdAfterWatch, true);
+  assert.equal(acknowledged.stopAdmissionNonce, arm.stopAdmissionNonce);
 });
 
 test('admitted command outcome enters the actual durable phase exactly once', async () => {
@@ -55,7 +72,7 @@ test('admitted command outcome enters the actual durable phase exactly once', as
   try {
     await stopPilotNaturalDemandCarrier({ lifecycle, server: { ...SERVER, rconPort: rcon.port, rconPassword: 'one-time-secret' }, arm, timeoutMs: 1_000,
       awaitDurable: async outcome => { durable += 1; assert.equal(outcome.status, 'admitted'); } });
-    assert.equal(await rcon.command, `${NATURAL_DEMAND_STOP_COMMAND} ${arm.stopAdmissionNonce}`);
+    assertStopCommand(rcon.commands[0], arm);
     assert.equal(durable, 1);
   } finally { await rcon.close(); }
 });
@@ -64,12 +81,35 @@ test('rejected command outcome never enters durable-save waiting', async () => {
   const lifecycle = await fresh('rejected');
   const arm = await armNaturalDemandEpisode(lifecycle, SERVER);
   await writeEligible(lifecycle);
-  const rcon = await outcomeRcon(lifecycle, arm, 'rejected', 'late natural demand');
+  const rcon = await outcomeRcon(lifecycle, arm, { status: 'rejected', reason: 'late natural demand' });
   let durable = 0;
   try {
     await assert.rejects(stopPilotNaturalDemandCarrier({ lifecycle, server: { ...SERVER, rconPort: rcon.port, rconPassword: 'one-time-secret' }, arm,
       timeoutMs: 1_000, awaitDurable: async () => { durable += 1; } }), /stop was rejected: late natural demand/);
     assert.equal(durable, 0);
+  } finally { await rcon.close(); }
+});
+
+test('a distinct replay gets its own rejected attempt receipt and cannot enter durable work twice', async () => {
+  const lifecycle = await fresh('attempt-replay');
+  const arm = await armNaturalDemandEpisode(lifecycle, SERVER);
+  await writeEligible(lifecycle);
+  const rcon = await outcomeRcon(lifecycle, arm, [
+    { status: 'admitted' },
+    { status: 'rejected', reason: 'pilot natural-demand stop admission was already consumed' }
+  ]);
+  let durable = 0;
+  const server = { ...SERVER, rconPort: rcon.port, rconPassword: 'one-time-secret' };
+  try {
+    await stopPilotNaturalDemandCarrier({ lifecycle, server, arm, timeoutMs: 1_000,
+      awaitDurable: async outcome => { durable += 1; assert.equal(outcome.status, 'admitted'); } });
+    await assert.rejects(stopPilotNaturalDemandCarrier({ lifecycle, server, arm, timeoutMs: 1_000,
+      awaitDurable: async () => { durable += 1; } }), /stop was rejected: pilot natural-demand stop admission was already consumed/);
+    assert.equal(rcon.commands.length, 2);
+    const first = assertStopCommand(rcon.commands[0], arm);
+    const replay = assertStopCommand(rcon.commands[1], arm);
+    assert.notEqual(first, replay);
+    assert.equal(durable, 1);
   } finally { await rcon.close(); }
 });
 
@@ -83,7 +123,7 @@ test('missing, stale, foreign, and malformed terminal outcomes fail before durab
     const lifecycle = await fresh(`outcome-${name}`);
     const arm = await armNaturalDemandEpisode(lifecycle, SERVER);
     await writeEligible(lifecycle);
-    const rcon = await outcomeRcon(lifecycle, arm, status, undefined, mutate);
+    const rcon = await outcomeRcon(lifecycle, arm, { status, mutate });
     let durable = 0;
     try {
       await assert.rejects(stopPilotNaturalDemandCarrier({ lifecycle, server: { ...SERVER, rconPort: rcon.port, rconPassword: 'one-time-secret' }, arm,
@@ -110,13 +150,27 @@ test('runner uses the executable arm and outcome consumers, never a source-only 
   assert.doesNotMatch(source, /requestRconStopWithNaturalDemandFence/);
 });
 
-async function readArm(lifecycle) {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const candidate = (await readdir(lifecycle.directory)).find(name => name.startsWith('natural-demand-episode-arm-'));
-    if (candidate !== undefined) return JSON.parse(await readFile(join(lifecycle.directory, candidate), 'utf8'));
-    await new Promise(resolve => setTimeout(resolve, 5));
-  }
-  throw new Error('test arm was not written');
+function awaitArmWritten(lifecycle) {
+  return new Promise((resolve, reject) => {
+    const watcher = watch(lifecycle.directory, { persistent: false });
+    watcher.once('error', error => { watcher.close(); reject(error); });
+    watcher.on('change', async (_event, filename) => {
+      if (typeof filename !== 'string' || !filename.startsWith('natural-demand-episode-arm-')) return;
+      try {
+        const arm = JSON.parse(await readFile(join(lifecycle.directory, filename), 'utf8'));
+        watcher.close(); resolve(arm);
+      } catch (error) { watcher.close(); reject(error); }
+    });
+  });
+}
+
+function assertStopCommand(command, arm) {
+  const parts = command.split(' ');
+  assert.equal(parts[0], NATURAL_DEMAND_STOP_COMMAND);
+  assert.equal(parts[1], arm.stopAdmissionNonce);
+  assert.match(parts[2], /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i);
+  assert.equal(parts.length, 3);
+  return parts[2];
 }
 
 function armAck(lifecycle, arm) {
@@ -133,9 +187,10 @@ async function writeEligible(lifecycle) {
   })}\n`);
 }
 
-async function outcomeRcon(lifecycle, arm, status, reason = undefined, mutate = value => value) {
-  let resolveCommand;
-  const command = new Promise(resolve => { resolveCommand = resolve; });
+async function outcomeRcon(lifecycle, arm, outcomes) {
+  const planned = (Array.isArray(outcomes) ? outcomes : [outcomes]).map(outcome =>
+    typeof outcome === 'string' ? { status: outcome } : { ...outcome });
+  const commands = [];
   let connectionCount = 0;
   const server = createServer((socket) => {
     connectionCount += 1;
@@ -146,18 +201,23 @@ async function outcomeRcon(lifecycle, arm, status, reason = undefined, mutate = 
       for (const frame of decoded.frames) {
         if (frame.id === 71_001) socket.write(encodeRconFrame(71_001, 2, ''));
         if (frame.id === 71_002) {
-          resolveCommand(frame.payload);
+          commands.push(frame.payload);
+          const current = planned.shift();
+          if (current === undefined) throw new Error('unexpected natural-demand stop command');
+          const attempt = assertStopCommand(frame.payload, arm);
+          const { status, reason = undefined, mutate = value => value } = current;
           if (status === 'absent') continue;
           const value = { schema: 1, kind: 'f02b-natural-demand-stop-outcome', status, identity: lifecycle.identity,
-            server: { ...SERVER }, stopAdmissionNonce: arm.stopAdmissionNonce, ...(reason === undefined ? {} : { reason }) };
+            server: { ...SERVER }, stopAdmissionNonce: arm.stopAdmissionNonce, stopAttemptId: attempt,
+            ...(reason === undefined ? {} : { reason }) };
           mutate(value);
-          await writeFile(join(lifecycle.directory, 'signals', `natural-demand-stop-outcome-${SERVER.serverRunId}-${arm.stopAdmissionNonce}.json`), `${JSON.stringify(value)}\n`);
+          await writeFile(join(lifecycle.directory, 'signals', `natural-demand-stop-outcome-${SERVER.serverRunId}-${attempt}.json`), `${JSON.stringify(value)}\n`);
         }
       }
     });
   });
   await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', error => error ? reject(error) : resolve()));
-  return { port: server.address().port, command, connections: () => connectionCount,
+  return { port: server.address().port, commands, connections: () => connectionCount,
     close: () => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())) };
 }
 

@@ -20,15 +20,18 @@ public final class FrontierV3PilotNaturalDemandStopCommand {
         event.getDispatcher().register(Commands.literal(COMMAND)
                 .requires(source -> source.hasPermission(4))
                 .then(Commands.argument("admission", StringArgumentType.word()).executes(context -> {
+                    return 0;
+                }).then(Commands.argument("attempt", StringArgumentType.word()).executes(context -> {
                     try {
                         FrontierV3PilotNaturalDemandObserver.admitGracefulStop(context.getSource().getServer(),
                                 StringArgumentType.getString(context, "admission"),
+                                StringArgumentType.getString(context, "attempt"),
                                 () -> context.getSource().getServer().halt(false));
                         return 1;
                     } catch (IllegalStateException failure) {
                         context.getSource().sendFailure(Component.literal(failure.getMessage()));
                         return 0;
                     }
-                })));
+                }))));
     }
 }

@@ -31,13 +31,13 @@ export async function runPilotWithNaturalDemandArm({ lifecycle, server, timeoutM
 }
 
 /** Reads the immutable server-thread acknowledgement; it is a launch barrier, not stop authority. */
-export async function awaitNaturalDemandEpisodeArmed(lifecycle, server, arm, timeoutMs) {
+export async function awaitNaturalDemandEpisodeArmed(lifecycle, server, arm, timeoutMs, options = {}) {
   requireLifecycle(lifecycle); requireServer(server); requireArm(arm);
   const path = join(lifecycle.directory, 'signals', `natural-demand-episode-armed-${server.serverRunId}.json`);
   return awaitReceipt(path, timeoutMs, value => {
     requireReceipt(value, ARM_ACK_KIND, 'armed', lifecycle.identity, server, arm.stopAdmissionNonce);
     return Object.freeze(value);
-  }, 'natural-demand arm was not acknowledged before client work');
+  }, 'natural-demand arm was not acknowledged before client work', options.afterWatchRegistered);
 }
 
 /**
@@ -50,33 +50,33 @@ export async function awaitNaturalDemandEpisodeReady(lifecycle, server, timeoutM
   const signals = join(lifecycle.directory, 'signals');
   const eligible = join(signals, `natural-demand-episode-eligible-${server.serverRunId}.json`);
   const invalid = join(signals, `natural-demand-episode-invalid-${server.serverRunId}.json`);
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
+  return awaitCondition(signals, timeoutMs, async () => {
     if (await exists(invalid)) throw new Error('natural-demand episode was invalidated before pilot stop admission');
     try {
       validateNaturalDemandEpisode(JSON.parse(await readFile(eligible, 'utf8')), lifecycle.identity, server);
-      return;
+      return true;
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
     }
-    await changed(signals, deadline);
-  }
-  throw new Error('natural-demand episode did not become eligible before pilot stop admission');
+    return undefined;
+  }, 'natural-demand episode did not become eligible before pilot stop admission');
 }
 
 /** Formats the pilot-only command. The server command, not this supervisor, owns admission. */
 export function naturalDemandStopCommand(arm) {
-  if (!arm || !UUID.test(arm.stopAdmissionNonce ?? '')) throw new Error('natural-demand stop admission is malformed');
-  return `${NATURAL_DEMAND_STOP_COMMAND} ${arm.stopAdmissionNonce}`;
+  requireArm(arm);
+  const attempt = randomUUID();
+  return Object.freeze({ attempt, command: `${NATURAL_DEMAND_STOP_COMMAND} ${arm.stopAdmissionNonce} ${attempt}` });
 }
 
 /** The isolated recovery consumer has no stop-fence authority; it only transports the armed command. */
 export async function requestPilotNaturalDemandStop(lifecycle, server, arm, timeoutMs) {
   requireLifecycle(lifecycle); requireServer(server); requireArm(arm);
-  await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command: naturalDemandStopCommand(arm) });
-  const path = join(lifecycle.directory, 'signals', `natural-demand-stop-outcome-${server.serverRunId}-${arm.stopAdmissionNonce}.json`);
+  const request = naturalDemandStopCommand(arm);
+  await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command: request.command });
+  const path = join(lifecycle.directory, 'signals', `natural-demand-stop-outcome-${server.serverRunId}-${request.attempt}.json`);
   return awaitReceipt(path, timeoutMs, value => {
-    requireReceipt(value, STOP_OUTCOME_KIND, value?.status, lifecycle.identity, server, arm.stopAdmissionNonce);
+    requireReceipt(value, STOP_OUTCOME_KIND, value?.status, lifecycle.identity, server, arm.stopAdmissionNonce, request.attempt);
     if (value.status === 'admitted') return Object.freeze(value);
     if (value.status === 'rejected' && typeof value.reason === 'string' && value.reason) {
       throw new Error(`natural-demand pilot stop was rejected: ${value.reason}`);
@@ -112,10 +112,10 @@ function validateNaturalDemandEpisode(value, identity, server) {
 function requireArm(value) {
   if (!value || !UUID.test(value.stopAdmissionNonce ?? '')) throw new Error('natural-demand stop admission is malformed');
 }
-function requireReceipt(value, kind, status, identity, server, nonce) {
+function requireReceipt(value, kind, status, identity, server, nonce, attempt = undefined) {
   if (!value || value.schema !== 1 || value.kind !== kind || value.status !== status || !sameJson(value.identity, identity)
       || value.server?.serverRunId !== server.serverRunId || value.server?.serverPid !== server.serverPid
-      || value.stopAdmissionNonce !== nonce) {
+      || value.stopAdmissionNonce !== nonce || (attempt !== undefined && value.stopAttemptId !== attempt)) {
     throw new Error('natural-demand server receipt is absent, stale, foreign, or malformed');
   }
 }
@@ -139,28 +139,55 @@ function requireServer(value) {
 function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
 function sameJson(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 async function exists(path) { try { await readFile(path); return true; } catch (error) { if (error?.code === 'ENOENT') return false; throw error; } }
-async function awaitReceipt(path, timeoutMs, validate, absent) {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) throw new Error('natural-demand receipt timeout is invalid');
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
+async function awaitReceipt(path, timeoutMs, validate, absent, afterWatchRegistered = undefined) {
+  return awaitCondition(join(path, '..'), timeoutMs, async () => {
     try { return validate(JSON.parse(await readFile(path, 'utf8'))); }
-    catch (error) { if (error?.code !== 'ENOENT') throw error; }
-    await changed(join(path, '..'), deadline);
-  }
-  throw new Error(absent);
+    catch (error) { if (error?.code === 'ENOENT') return undefined; throw error; }
+  }, absent, afterWatchRegistered);
 }
 async function writeImmutable(directory, target, value) {
   const temporary = join(directory, 'staging', `${randomUUID()}.pending`);
   try { await writeFile(temporary, value, { encoding: 'utf8', flag: 'wx' }); await link(temporary, target); }
   finally { await rm(temporary, { force: true }); }
 }
-function changed(directory, deadline) {
-  return new Promise((resolveWait, reject) => {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return resolveWait();
-    const watcher = watch(directory, { persistent: false }, () => finish());
-    const timer = setTimeout(() => finish(), remaining);
-    const finish = () => { clearTimeout(timer); watcher.close(); resolveWait(); };
-    watcher.once('error', error => { clearTimeout(timer); watcher.close(); reject(error); });
+async function awaitCondition(directory, timeoutMs, check, absent, afterWatchRegistered = undefined) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) throw new Error('natural-demand receipt timeout is invalid');
+  const deadline = Date.now() + timeoutMs;
+  let injected = false;
+  while (Date.now() <= deadline) {
+    const watcher = watch(directory, { persistent: false });
+    const changed = watcherEvent(watcher, deadline);
+    try {
+      if (!injected && typeof afterWatchRegistered === 'function') { injected = true; await afterWatchRegistered(); }
+      const immediate = await check();
+      if (immediate !== undefined) return immediate;
+      await changed.promise;
+    } finally {
+      changed.dispose();
+      watcher.close();
+    }
+  }
+  throw new Error(absent);
+}
+function watcherEvent(watcher, deadline) {
+  let settle;
+  const onChange = () => settle();
+  const onError = error => settle(error);
+  const remaining = deadline - Date.now();
+  const promise = new Promise((resolveWait, reject) => {
+    settle = error => {
+      clearTimeout(timer);
+      watcher.off('change', onChange);
+      watcher.off('error', onError);
+      if (error === undefined) resolveWait(); else reject(error);
+    };
   });
+  const timer = setTimeout(() => settle(), Math.max(0, remaining));
+  watcher.once('change', onChange);
+  watcher.once('error', onError);
+  return Object.freeze({ promise, dispose: () => {
+    clearTimeout(timer);
+    watcher.off('change', onChange);
+    watcher.off('error', onError);
+  } });
 }

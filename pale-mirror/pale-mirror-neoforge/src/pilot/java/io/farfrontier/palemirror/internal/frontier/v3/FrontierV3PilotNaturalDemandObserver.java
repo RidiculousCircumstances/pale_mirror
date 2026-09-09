@@ -40,6 +40,7 @@ public final class FrontierV3PilotNaturalDemandObserver {
     private static final String ARM_ACK_KIND = "f02b-natural-demand-episode-arm-ack";
     private static final String STOP_OUTCOME_KIND = "f02b-natural-demand-stop-outcome";
     private static final String RECEIPT_KIND = "f02b-natural-demand-episode";
+    private static final String UUID = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
     private static final Map<MinecraftServer, Episode> EPISODES = new IdentityHashMap<>();
 
     private FrontierV3PilotNaturalDemandObserver() { }
@@ -91,10 +92,11 @@ public final class FrontierV3PilotNaturalDemandObserver {
      * no lifecycle file is read here to decide whether a halt may occur: the retained in-memory
      * episode owns identity, release and closure truth at the command/use boundary.
      */
-    static void admitGracefulStop(MinecraftServer server, String nonce, Runnable haltAction) {
+    static void admitGracefulStop(MinecraftServer server, String nonce, String attempt, Runnable haltAction) {
         Episode episode = EPISODES.get(server);
         if (episode == null) throw new IllegalStateException("pilot natural-demand stop admission is unarmed");
         try {
+            if (attempt == null || !attempt.matches(UUID)) throw new IllegalStateException("pilot natural-demand stop attempt is malformed");
             if (!episode.releaseObserved || !server.getPlayerList().getPlayers().isEmpty()
                     || !FrontierV3ServerLifecycle.normalDemandLossReleased(server)) {
                 throw new IllegalStateException("pilot natural-demand stop admission is unarmed or natural demand is still live");
@@ -114,9 +116,11 @@ public final class FrontierV3PilotNaturalDemandObserver {
                         }
                         return status;
                     }, haltAction);
-            publishStopOutcome(episode, nonce, "admitted", null);
+            publishStopOutcome(episode, nonce, attempt, "admitted", null);
         } catch (IllegalStateException failure) {
-            if (episode.stopAdmission.matchesNonce(nonce)) publishStopOutcome(episode, nonce, "rejected", failure.getMessage());
+            if (episode.stopAdmission.matchesNonce(nonce) && attempt != null && attempt.matches(UUID)) {
+                publishStopOutcome(episode, nonce, attempt, "rejected", failure.getMessage());
+            }
             throw failure;
         }
     }
@@ -224,12 +228,13 @@ public final class FrontierV3PilotNaturalDemandObserver {
         FrontierV3LifecycleFilePublisher.publish(episode.directory.resolve("staging"), target, value + "\n");
     }
 
-    private static void publishStopOutcome(Episode episode, String nonce, String status, String reason) {
+    private static void publishStopOutcome(Episode episode, String nonce, String attempt, String status, String reason) {
         try {
             JsonObject value = baseReceipt(episode, STOP_OUTCOME_KIND, status);
             value.addProperty("stopAdmissionNonce", nonce);
+            value.addProperty("stopAttemptId", attempt);
             if (reason != null) value.addProperty("reason", reason);
-            Path target = episode.directory.resolve("signals/natural-demand-stop-outcome-" + episode.serverRunId + "-" + nonce + ".json");
+            Path target = episode.directory.resolve("signals/natural-demand-stop-outcome-" + episode.serverRunId + "-" + attempt + ".json");
             FrontierV3LifecycleFilePublisher.publish(episode.directory.resolve("staging"), target, value + "\n");
         } catch (IOException failure) {
             throw new IllegalStateException("pilot natural-demand stop outcome could not be retained", failure);
