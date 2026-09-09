@@ -26,7 +26,11 @@ public final class FrontierV3PilotFixtureBootstrap {
         FrontierV3ServerLifecycle.startModDevFixture(event.getServer(),
                 FrontierV3FixtureCatalog.configuration(profileId, new WorldId("frontier:graybox"), event.getServer().overworld().getSeed()));
         FrontierV3CrashBoundaryProbe.requireConfiguredMixinApplication();
-        FrontierV3PilotLifecycleSignal.serverRunReady();
+        // This is the first pilot-owned read after recovered state has been
+        // installed and before any disposable client may continue it.  The
+        // signal remains evidence only; it cannot schedule, load, or retain a
+        // physical surface.
+        FrontierV3PilotLifecycleSignal.serverRunReady(event.getServer());
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_FIXTURE profile={} source={} assertion={}", profile.id(), profile.sourceProfile(), profile.requiredAssertion());
     }
 

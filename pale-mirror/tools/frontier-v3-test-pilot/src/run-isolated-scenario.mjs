@@ -21,6 +21,7 @@ import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from '.
 import { withGracefulSaveGate } from './graceful-save-gate.mjs';
 import { prearmSaveOwnerObserver, startSaveOwnerObservation } from './save-owner-observer.mjs';
 import { admitSaveOwnerObserverContract, requireSaveOwnerObserverEvidence } from './f02b-save-owner-observer-contract.mjs';
+import { assertRecoveryCarrierManifest } from './f02b-native-semantic.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -32,6 +33,7 @@ const sourcePath = resolve(scenarioPath);
 // runtime-scenario digest so an evidence consumer never has to conflate them.
 const { scenario, sha256: scenarioDeclarationSha256 } = await loadScenario(sourcePath);
 if (scenario.isolation?.mode !== 'disposable_lite') throw new Error('isolated runner requires isolation.mode=disposable_lite');
+const recoveryCarrier = scenario.id === 'disposable_f02b_normal_product_recovery';
 // A post-recovery rendezvous would need a third explicitly declared recovery segment. Reject it
 // instead of replaying ordinary player actions after a killed JVM and manufacturing evidence.
 if (scenario.crash?.phase === 'after_restart') {
@@ -120,6 +122,7 @@ let completed = false;
 let abruptStopAttempted = false;
 const clientSegments = [];
 let recoveryMetadata = null;
+const recoveryCheckpoints = {};
 // A crash intentionally destroys the socket. Its recovery uses a fresh ordinary client; the
 // one-client persistent-restart proof stays a separate F0.V.4 scenario.
 const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined;
@@ -136,7 +139,6 @@ try {
   // immediately before the checkpoint; after the ordinary pilot exit the
   // runner asks Minecraft to perform its normal graceful stop without adding
   // any artificial chunk/ticket/quiescence authority.
-  const directGracefulRecoveryCarrier = scenario.id === 'disposable_f02b_normal_product_recovery';
   server = await startServer(true);
   if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
@@ -153,13 +155,14 @@ try {
         // the normal stop immediately after its own client segment.  Waiting
         // for a separate demand-loss release changes the save carrier into a
         // global vanilla-generation proof and can reject unrelated work.
-        awaitNormalDemandLoss: !directGracefulRecoveryCarrier
+        awaitNormalDemandLoss: !recoveryCarrier
       });
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (server !== null) {
       if (recovery.mode === 'graceful') {
         await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port));
+        if (recoveryCarrier) recoveryCheckpoints.durable = server.recoveryCheckpoint;
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId });
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
       }
@@ -172,6 +175,7 @@ try {
     }
     console.log('PMV3_ISOLATED recovery=server-stopped');
     server = await startServer(false);
+    if (recoveryCarrier) recoveryCheckpoints.recovered = server.recoveryCheckpoint;
     console.log('PMV3_ISOLATED recovery=server-restarted');
     // The replacement server is a normal live JVM and must receive the
     // ordinary durable stop path if the after-restart pilot fails.
@@ -180,6 +184,7 @@ try {
     await runPilot(afterRestartScenario, output, server, clientSegments, 'after_restart');
     console.log('PMV3_ISOLATED recovery=after-complete');
     recoveryMetadata = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest,
+      ...(recoveryCarrier ? { checkpoints: recoveryCheckpoints } : {}),
       crash: crashEvidence };
   } else {
     await mkdir(sessionDirectory, { recursive: true });
@@ -302,6 +307,12 @@ if (completed) {
   }
   manifest.initialCanonicalHold = initialCanonicalHold;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
+  if (recoveryCarrier) {
+    const beforeRestart = JSON.parse(await readFile(resolve(manifest.recovery.beforeRestartManifest), 'utf8'));
+    // The local carrier cannot report a raw child exit as RC-6 success.  This
+    // is the same validator used by the matrix worker's post-child consumer.
+    assertRecoveryCarrierManifest(manifest, beforeRestart);
+  }
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 }
 
@@ -354,6 +365,7 @@ async function startServer(reset) {
     'pale_mirror.frontier_v3.pilot.run_id': serverRunId,
     'pale_mirror.frontier_v3.pilot.lifecycle_control_directory': lifecycle.directory,
     'pale_mirror.frontier_v3.pilot.profile': scenario.server.profile ?? defaultPilotProfile(),
+    ...(recoveryCarrier ? { 'pale_mirror.frontier_v3.pilot.recovery_checkpoint': 'true' } : {}),
     ...(reset && initialCanonicalHold ? { 'pale_mirror.frontier_v3.pilot.initial_canonical_hold': 'true' } : {}),
     ...(crash === undefined ? {} : {
       'pale_mirror.frontier_v3.pilot.crash.boundary': crash.boundary,
@@ -378,6 +390,7 @@ async function startServer(reset) {
       throw new Error('pilot server readiness signal does not carry its exact JVM identity');
     }
     session.serverPid = signal.detail.serverPid;
+    if (recoveryCarrier) session.recoveryCheckpoint = recoveryCheckpointFromSignal(signal, 'recovery_boot');
   } catch (failure) {
     session.startupLifecycle = 'FAILED_BEFORE_READY';
     await stopUnreadyServer(session, port);
@@ -689,6 +702,22 @@ async function writeScenario(path, value) {
   await writeFile(path, `${JSON.stringify({ ...value, server: { ...value.server, host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
 }
 
+function recoveryCheckpointFromSignal(signal, phase) {
+  if (signal?.detail?.recoveryCheckpointPhase !== phase || typeof signal.detail?.recoveryCheckpoint !== 'string') {
+    throw new Error(`F0.2B recovery ${phase} checkpoint is absent from the exact pilot signal`);
+  }
+  let checkpoint;
+  try { checkpoint = JSON.parse(signal.detail.recoveryCheckpoint); }
+  catch { throw new Error(`F0.2B recovery ${phase} checkpoint is malformed`); }
+  if (checkpoint?.schema !== 1 || checkpoint.phase !== phase || checkpoint.serverRunId !== signal.detail.serverRunId
+      || checkpoint.serverPid !== signal.detail.serverPid || checkpoint.reference?.kind !== 'reference_container'
+      || checkpoint.reference?.id !== 'f02b' || checkpoint.depot?.kind !== 'container'
+      || checkpoint.depot?.id !== 'container:1-depot') {
+    throw new Error(`F0.2B recovery ${phase} checkpoint is foreign or incomplete`);
+  }
+  return checkpoint;
+}
+
 async function stopServerSafely(server, serverPort) {
   // RCON reaches Minecraft's normal `stop` command. SIGTERM reaches the JVM
   // shutdown hook and can interrupt world persistence. A request is never
@@ -709,7 +738,8 @@ async function stopServerSafely(server, serverPort) {
     });
     try {
       await requestRconStop({ port: server.rconPort, password: server.rconPassword });
-      await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+      const durable = await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
+      if (recoveryCarrier) server.recoveryCheckpoint = recoveryCheckpointFromSignal(durable, 'durable_stop');
       ownerObserver?.finish({ kind: 'durable_server_save' });
     } catch (failure) {
       ownerObserver?.finish({ kind: 'durable_server_save_absent', failure: String(failure?.message ?? failure) });

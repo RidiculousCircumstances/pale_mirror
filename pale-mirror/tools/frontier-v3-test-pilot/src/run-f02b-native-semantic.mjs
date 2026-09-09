@@ -4,7 +4,7 @@ import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { assertSemanticEvidence, F02B_KIND, F02B_PRIMARY_KIND, F02B_SCHEMA, hashJson, laneFor, recoveryMilestones } from './f02b-native-semantic.mjs';
+import { assertRecoveryCarrierManifest, assertSemanticEvidence, F02B_KIND, F02B_PRIMARY_KIND, F02B_SCHEMA, hashJson, laneFor, recoveryMilestones } from './f02b-native-semantic.mjs';
 import { consumeRuntime } from './f0vc-prepared-runtime.mjs';
 import { requiresSaveOwnerObserver, writeSaveOwnerObserverContract } from './f02b-save-owner-observer-contract.mjs';
 
@@ -117,6 +117,9 @@ try {
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
     const beforeRestart = beforeRestartManifest
       ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;
+    if (scenario === 'disposable-f02b-normal-product-recovery.json') {
+      assertRecoveryCarrierManifest(value, beforeRestart);
+    }
     manifests.push({ scenario, declaration, declarationSha256, manifest, value, beforeRestart });
   }
   runtimeContentSha256 = consumed.receipt.runtimeContentSha256;
@@ -264,8 +267,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (history === 'graceful-product-recovery') {
     const before = beforeRestart?.diagnostics?.map(diagnosticValue).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
     result.recovery = { mode: manifest.recovery?.mode, beforeEpoch: before?.custody?.epoch ?? null, afterEpoch: depot.custody?.epoch ?? null,
-      splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics), lifecycle: manifest.lifecycle,
-      world: manifest.recovery?.world, isolationWorld: manifest.isolation?.world };
+      splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics, manifest.recovery?.checkpoints), lifecycle: manifest.lifecycle,
+      checkpoints: manifest.recovery?.checkpoints, world: manifest.recovery?.world, isolationWorld: manifest.isolation?.world };
   }
   return result;
 }

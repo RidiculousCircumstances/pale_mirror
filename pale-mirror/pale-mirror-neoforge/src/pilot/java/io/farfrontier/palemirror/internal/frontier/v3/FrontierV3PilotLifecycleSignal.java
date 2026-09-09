@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.PaleMirrorMod;
+import net.minecraft.server.MinecraftServer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,15 +25,21 @@ import java.util.regex.Pattern;
 final class FrontierV3PilotLifecycleSignal {
     static final String CONTROL_DIRECTORY_PROPERTY = "pale_mirror.frontier_v3.pilot.lifecycle_control_directory";
     static final String RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
+    /** Enables only the disposable F0.2B recovery evidence carrier. */
+    static final String RECOVERY_CHECKPOINT_PROPERTY = "pale_mirror.frontier_v3.pilot.recovery_checkpoint";
 
     private FrontierV3PilotLifecycleSignal() { }
 
-    static void serverRunReady() {
-        publish("server_run_ready");
+    static void serverRunReady(MinecraftServer server) {
+        publish("server_run_ready", System.getProperty(RUN_ID_PROPERTY, ""), recoveryCheckpoint(server, "recovery_boot"));
     }
 
-    static void durableServerSave() {
-        publish("durable_server_save");
+    static void durableServerSave(MinecraftServer server) {
+        // This method is called only from the MinecraftServer.stopServer tail:
+        // the normal graceful save has completed, but the pilot has not
+        // restarted or reintroduced a client.  The snapshot is therefore the
+        // actual durable boundary, not an earlier action observation.
+        publish("durable_server_save", System.getProperty(RUN_ID_PROPERTY, ""), recoveryCheckpoint(server, "durable_stop"));
     }
 
     static void normalDemandLossRelease() {
@@ -81,10 +88,14 @@ final class FrontierV3PilotLifecycleSignal {
     }
 
     private static void publish(String kind) {
-        publish(kind, System.getProperty(RUN_ID_PROPERTY, ""));
+        publish(kind, System.getProperty(RUN_ID_PROPERTY, ""), null);
     }
 
     private static void publish(String kind, String suffix) {
+        publish(kind, suffix, null);
+    }
+
+    private static void publish(String kind, String suffix, JsonObject recoveryCheckpoint) {
         String configured = System.getProperty(CONTROL_DIRECTORY_PROPERTY, "");
         if (configured.isBlank()) return;
         try {
@@ -98,6 +109,10 @@ final class FrontierV3PilotLifecycleSignal {
                 throw new IllegalArgumentException("pilot lifecycle identity is invalid");
             }
             JsonObject detail = new JsonObject(); detail.addProperty("serverRunId", runId); detail.addProperty("serverPid", ProcessHandle.current().pid());
+            if (recoveryCheckpoint != null) {
+                detail.addProperty("recoveryCheckpointPhase", recoveryCheckpoint.get("phase").getAsString());
+                detail.addProperty("recoveryCheckpoint", recoveryCheckpoint.toString());
+            }
             JsonObject signal = new JsonObject(); signal.addProperty("schema", 1); signal.addProperty("signal", kind);
             signal.addProperty("suffix", suffix); signal.add("identity", identity); signal.add("detail", detail);
             Path signals = directory.resolve("signals");
@@ -108,5 +123,39 @@ final class FrontierV3PilotLifecycleSignal {
         } catch (IOException | IllegalArgumentException failure) {
             throw new IllegalStateException("pilot server could not publish its exact lifecycle readiness", failure);
         }
+    }
+
+    /**
+     * Captures the two RC-6 projections through the production read API.  The
+     * pilot merely serializes the immutable read into its already identity-bound
+     * lifecycle signal; it has no scheduling, persistence, ticket, custody, or
+     * shutdown authority.
+     */
+    private static JsonObject recoveryCheckpoint(MinecraftServer server, String phase) {
+        if (!Boolean.getBoolean(RECOVERY_CHECKPOINT_PROPERTY)) return null;
+        try {
+            JsonObject checkpoint = new JsonObject();
+            checkpoint.addProperty("schema", 1); checkpoint.addProperty("phase", phase);
+            checkpoint.addProperty("serverRunId", System.getProperty(RUN_ID_PROPERTY, ""));
+            checkpoint.addProperty("serverPid", ProcessHandle.current().pid());
+            checkpoint.add("reference", diagnosticPayload(FrontierV3ServerLifecycle.diagnostic(server, "reference_container", "f02b")));
+            checkpoint.add("depot", diagnosticPayload(FrontierV3ServerLifecycle.diagnostic(server, "container", "container:1-depot")));
+            return checkpoint;
+        } catch (RuntimeException failure) {
+            throw new IllegalStateException("pilot recovery checkpoint could not read the exact F0.2B boundary", failure);
+        }
+    }
+
+    /** Parses the exact production diagnostic envelope used by both checkpoint reads. */
+    static JsonObject diagnosticPayload(String diagnostic) {
+        Objects.requireNonNull(diagnostic, "diagnostic");
+        if (!diagnostic.startsWith(FrontierV3DiagnosticJson.PREFIX)) {
+            throw new IllegalArgumentException("pilot recovery checkpoint diagnostic prefix is invalid");
+        }
+        JsonElement payload = JsonParser.parseString(diagnostic.substring(FrontierV3DiagnosticJson.PREFIX.length()));
+        if (!payload.isJsonObject()) {
+            throw new IllegalArgumentException("pilot recovery checkpoint diagnostic payload is not an object");
+        }
+        return payload.getAsJsonObject();
     }
 }

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import net.minecraft.server.MinecraftServer;
 
 /** Pilot-only lifecycle owner for the optional crash-window mixin and rendezvous. */
 public final class FrontierV3PilotCrashHooks {
@@ -23,8 +24,8 @@ public final class FrontierV3PilotCrashHooks {
      * {@code MinecraftServer.stopServer} tail is the exact post-save boundary used
      * by the disposable supervisor.
      */
-    public static void afterMinecraftServerDurablyStopped() {
-        FrontierV3PilotLifecycleSignal.durableServerSave();
+    public static void afterMinecraftServerDurablyStopped(MinecraftServer server) {
+        FrontierV3PilotLifecycleSignal.durableServerSave(server);
     }
 
     public static void cropEffectBecameVisible(ResourceSiteHarvestJob job, BlockPosition cropSlot) {

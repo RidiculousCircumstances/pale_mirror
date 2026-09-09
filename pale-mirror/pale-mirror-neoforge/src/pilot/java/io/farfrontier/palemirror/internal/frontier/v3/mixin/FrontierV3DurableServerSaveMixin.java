@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3.mixin;
 
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PilotCrashHooks;
+import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,6 +17,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class FrontierV3DurableServerSaveMixin {
     @Inject(method = "stopServer", at = @At("TAIL"), require = 1)
     private void publishDurableServerSave(CallbackInfo ignored) {
-        FrontierV3PilotCrashHooks.afterMinecraftServerDurablyStopped();
+        FrontierV3PilotCrashHooks.afterMinecraftServerDurablyStopped((MinecraftServer) (Object) this);
     }
 }

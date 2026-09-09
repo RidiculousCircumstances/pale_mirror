@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertGracefulRecoveryLifecycle, assertPrimaryEvidence, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { assertGracefulRecoveryLifecycle, assertPrimaryEvidence, assertRecoveryCarrierManifest, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,12 +12,12 @@ const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'Ridicu
 
 function gracefulLifecycle({ includeDemandRelease = false } = {}) {
   const barriers = [
-    ['server_run_ready', { serverRunId: 'initial-server' }],
+    ['server_run_ready', { serverRunId: 'initial-server', serverPid: 111 }],
     ['client_normally_disconnected', { segment: 'before_restart' }],
     ...(includeDemandRelease ? [['normal_demand_loss_release', { serverRunId: 'initial-server' }]] : []),
     ['durable_server_save', { serverRunId: 'initial-server' }],
     ['game_port_closed', { port: 25575 }],
-    ['recovery_server_ready', { serverRunId: 'recovery-server' }],
+    ['recovery_server_ready', { serverRunId: 'recovery-server', serverPid: 222 }],
     ['action_checkpoint_acknowledged', { segment: 'after_restart', actionStep: 1 }]
   ];
   return barriers.map(([barrier, detail], index) => ({ sequence: index + 1, barrier, detail }));
@@ -37,12 +37,13 @@ function evidence(worker, index = Number(worker.at(-1))) {
     { id: 'schedule:hive-growth-task-start-task-hive-frontier-hive_grow_organism-1', subject: 'task:hive-frontier-hive_grow_organism-1', kind: 'frontier.hive.growth.task.start', dueAt: 3300, weight: 1 },
     { id: 'schedule:production-task-complete-production-1-1', subject: 'job:production-1-1', kind: 'frontier.settlement.production.task.complete', dueAt: 3220, weight: 1 }
   ];
-  const hydratedTasks = [{ ...activeTasks[0], status: 'ACTIVE' }, { ...activeTasks[1] }];
-  const hydratedSchedules = [
-    { id: 'schedule:hive-growth-task-complete-hive-growth-1', subject: 'job:hive-growth-1', kind: 'frontier.hive.growth.task.complete', dueAt: 3500, weight: 1 },
-    { ...activeSchedules[1], dueAt: 3480 }
-  ];
   const activeOrders = [{ task: 'task:settlement-1-settlement_produce_bread-1', job: 'job:production-1-1', reservation: 'reservation:production-1-1', reservationActive: true, status: 'ACCEPTED' }];
+  const durableReference = { kind: 'reference_container', id: 'f02b', instant: 3210,
+    tasks: structuredClone(activeTasks), schedules: activeSchedules.map(value => value.id.includes('production') ? { ...value, dueAt: 3230 } : { ...value, dueAt: 3310 }), orders: structuredClone(activeOrders) };
+  const durableDepot = { kind: 'container', id: 'container:1-depot', instant: 3210,
+    custody: { status: 'CHECKPOINTED', epoch: 2 }, replica: { revision: 3, fingerprint: 'sha256:depot-active' } };
+  const checkpoint = (phase, serverRunId, serverPid) => ({ schema: 1, phase, serverRunId, serverPid,
+    reference: structuredClone(durableReference), depot: structuredClone(durableDepot) });
   const normal = (history) => ({ history, admission: { profile: 'world', initialIntents: 0, initialReplica: false, initialCustody: false, initialInstant: 227,
     initialInputs: { depot: { wheat: 64, bread: 0 }, hive: { biomass: 64 } },
     targetVisitsBeforeDue: history === 'never-visited' ? 0 : 2, observedEpochs: [1, 2], releasedEpochs: history === 'visited-unloaded' ? [1] : [],
@@ -76,16 +77,21 @@ function evidence(worker, index = Number(worker.at(-1))) {
     families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 63, foodAvailable: 63, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
     ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5,
-      world: 'same-disposable-world', isolationWorld: 'same-disposable-world', lifecycle: gracefulLifecycle(), milestones: {
+      world: 'same-disposable-world', isolationWorld: 'same-disposable-world', lifecycle: gracefulLifecycle(),
+      checkpoints: { durable: checkpoint('durable_stop', 'initial-server', 111), recovered: checkpoint('recovery_boot', 'recovery-server', 222) }, milestones: {
       activeAdmission: { phase: 'before_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 14,
         tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
       activeDepotCustody: { phase: 'before_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
         actionStep: 15, custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active',
         chunk: 'LOADED', ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 },
-      hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3460, actionStep: 1,
-        tasks: structuredClone(hydratedTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(hydratedSchedules), orders: structuredClone(activeOrders) },
-      hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3460,
-        actionStep: 2, custodyStatus: 'RELEASED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+      durableInflight: { phase: 'durable_stop', kind: 'reference_container', id: 'f02b', instant: 3210,
+        tasks: structuredClone(durableReference.tasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(durableReference.schedules), orders: structuredClone(activeOrders) },
+      durableDepotCustody: { phase: 'durable_stop', kind: 'container', id: 'container:1-depot', instant: 3210,
+        custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+      recoveredInflight: { phase: 'recovery_boot', kind: 'reference_container', id: 'f02b', instant: 3210,
+        tasks: structuredClone(durableReference.tasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(durableReference.schedules), orders: structuredClone(activeOrders) },
+      recoveredDepotCustody: { phase: 'recovery_boot', kind: 'container', id: 'container:1-depot', instant: 3210,
+        custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
       afterReacquire: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 12500,
         tasks: [{ ...activeTasks[0] }, { ...activeTasks[1], status: 'COMPLETED' }], taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: [],
         orders: [{ ...activeOrders[0], reservationActive: false, status: 'FULFILLED' }] },
@@ -413,16 +419,16 @@ test('F0.2B graceful product recovery retains one exact observer-free production
     'the retained restart fence precedes production completion while the ordinary neutral-distance view has live custody of its exact production subject');
   const milestone = name => scenario.actions.findIndex(action => action.causalMilestone === name);
   const afterReacquire = milestone('recovery_after_reacquire');
-  const hydratedInflight = milestone('recovery_hydrated_inflight');
-  const hydratedCustody = milestone('recovery_hydrated_depot_custody');
+  const resumedInflight = milestone('recovery_after_resume_inflight');
+  const resumedCustody = milestone('recovery_after_resume_depot_custody');
   const terminalProduct = milestone('recovery_terminal_product');
-  const liveBread = scenario.actions.findIndex((action, index) => index > hydratedCustody && action.type === 'wait_until_container_item'
+  const liveBread = scenario.actions.findIndex((action, index) => index > resumedCustody && action.type === 'wait_until_container_item'
     && action.containerId === 'container:1-depot' && action.item === 'minecraft:bread' && action.count === 64);
   const coldHive = scenario.assertions.find(assertion => assertion.view === 'hive' && assertion.id === 'hive:frontier');
-  assert.ok(liveBread > hydratedCustody && liveBread < afterReacquire,
+  assert.ok(liveBread > resumedCustody && liveBread < afterReacquire,
     'the recovered live custodian reaches the exact 64-bread product boundary before later hive continuation');
-  assert.ok(hydratedInflight === restart && hydratedCustody === restart + 1 && afterReacquire > hydratedCustody && terminalProduct > afterReacquire,
-  'the first recovered reads hydrate the exact in-flight production operation and its custody fence before ordinary continuation reaches the terminal production fact');
+  assert.ok(resumedInflight === restart && resumedCustody === restart + 1 && afterReacquire > resumedCustody && terminalProduct > afterReacquire,
+  'the post-client reads remain distinct from the server-owned recovered checkpoint and precede terminal completion');
   assert.equal(coldHive?.after, scenario.actions.length,
     'the separate hive terminal fact remains an ordinary product assertion, not an inferred recovery boundary');
 });
@@ -436,22 +442,31 @@ test('F0.2B recovery causal oracle fails closed for missing, completed, stale, r
   assert.throws(() => assertRecoveryCausalMilestones(stale), /stale or wrong-subject/);
   const completedBeforeSave = structuredClone(milestones); completedBeforeSave.activeAdmission.tasks[1].status = 'COMPLETED';
   assert.throws(() => assertRecoveryCausalMilestones(completedBeforeSave), /active-admission/);
+  const reorderedActiveDue = structuredClone(milestones); reorderedActiveDue.activeAdmission.schedules[0].dueAt = 3210;
+  assert.throws(() => assertRecoveryCausalMilestones(reorderedActiveDue), /exact durable/,
+    'the earlier active observation must still retain valid production-before-hive due ordering');
   const releasedBeforeSave = structuredClone(milestones); releasedBeforeSave.activeDepotCustody.custodyStatus = 'RELEASED';
   assert.throws(() => assertRecoveryCausalMilestones(releasedBeforeSave), /active-custody/,
     'the declared stable checkpointed boundary cannot be replaced by a later release');
-  const replacedOperation = structuredClone(milestones); replacedOperation.hydratedInflight.tasks[1].id = 'task:settlement-1-replaced';
-  assert.throws(() => assertRecoveryCausalMilestones(replacedOperation), /same-operation hydrated/);
-  const lostReservation = structuredClone(milestones); lostReservation.hydratedInflight.orders[0].reservationActive = false;
-  assert.throws(() => assertRecoveryCausalMilestones(lostReservation), /same-operation hydrated/);
-  const reorderedDue = structuredClone(milestones); reorderedDue.hydratedInflight.schedules[1].dueAt += 1;
-  assert.throws(() => assertRecoveryCausalMilestones(reorderedDue), /same-operation hydrated/);
-  const staleCustody = structuredClone(milestones); staleCustody.hydratedDepotCustody.replicaRevision += 1;
-  assert.throws(() => assertRecoveryCausalMilestones(staleCustody), /same-operation hydrated/);
-  const staleEpoch = structuredClone(milestones); staleEpoch.hydratedDepotCustody.custodyEpoch += 1;
-  assert.throws(() => assertRecoveryCausalMilestones(staleEpoch), /same-operation hydrated/,
+  const replacedOperation = structuredClone(milestones); replacedOperation.recoveredInflight.tasks[1].id = 'task:settlement-1-replaced';
+  assert.throws(() => assertRecoveryCausalMilestones(replacedOperation), /recovered durable/);
+  const lostReservation = structuredClone(milestones); lostReservation.recoveredInflight.orders[0].reservationActive = false;
+  assert.throws(() => assertRecoveryCausalMilestones(lostReservation), /recovered durable/);
+  const reorderedDue = structuredClone(milestones); reorderedDue.recoveredInflight.schedules[1].dueAt += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(reorderedDue), /recovered durable/);
+  const staleCustody = structuredClone(milestones); staleCustody.recoveredDepotCustody.replicaRevision += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(staleCustody), /recovered durable/);
+  const staleEpoch = structuredClone(milestones); staleEpoch.recoveredDepotCustody.custodyEpoch += 1;
+  assert.throws(() => assertRecoveryCausalMilestones(staleEpoch), /recovered durable/,
     'the recovered custody epoch must be the persisted checkpoint chain, not a replacement lease');
-  const fabricatedCustody = structuredClone(milestones); fabricatedCustody.hydratedDepotCustody.custodyStatus = 'ACQUIRED';
-  assert.throws(() => assertRecoveryCausalMilestones(fabricatedCustody), /same-operation hydrated/);
+  const fabricatedCustody = structuredClone(milestones); fabricatedCustody.recoveredDepotCustody.custodyStatus = 'ACQUIRED';
+  assert.throws(() => assertRecoveryCausalMilestones(fabricatedCustody), /recovered durable/);
+  const shiftedInstantAndDue = structuredClone(milestones);
+  shiftedInstantAndDue.recoveredInflight.instant += 10;
+  shiftedInstantAndDue.recoveredInflight.schedules[1].dueAt += 10;
+  shiftedInstantAndDue.recoveredDepotCustody.instant += 10;
+  assert.throws(() => assertRecoveryCausalMilestones(shiftedInstantAndDue), /recovered durable/,
+    'equal remaining time cannot substitute for the exact persisted canonical instant and due');
   const wrongSubject = structuredClone(milestones); wrongSubject.terminalProduct.tasks[1].id = 'task:settlement-1-replaced';
   assert.throws(() => assertRecoveryCausalMilestones(wrongSubject), /exact terminal operation/);
   const duplicateTerminal = structuredClone(milestones); duplicateTerminal.terminalProduct.tasks.push({ ...duplicateTerminal.terminalProduct.tasks[1] });
@@ -467,10 +482,63 @@ test('F0.2B recovery post-child consumer requires the local durable-save, same-w
   assert.throws(() => assertGracefulRecoveryLifecycle(staleDurable), /durable_server_save/);
   const wrongWorld = structuredClone(recovery); wrongWorld.isolationWorld = 'replacement-world';
   assert.throws(() => assertGracefulRecoveryLifecycle(wrongWorld), /same-world lifecycle/);
-  const reordered = structuredClone(recovery); reordered.lifecycle.find(entry => entry.barrier === 'action_checkpoint_acknowledged').detail.actionStep = 2;
-  assert.throws(() => assertGracefulRecoveryLifecycle(reordered), /action_checkpoint_acknowledged/);
+  const reordered = structuredClone(recovery); reordered.checkpoints.recovered.serverRunId = 'initial-server';
+  assert.throws(() => assertGracefulRecoveryLifecycle(reordered), /stale, foreign, or reordered/);
+  const swappedPid = structuredClone(recovery); swappedPid.checkpoints.recovered.serverPid = 111;
+  assert.throws(() => assertGracefulRecoveryLifecycle(swappedPid), /stale, foreign, or reordered/,
+    'a valid positive PID from the initial JVM cannot satisfy the recovery JVM identity');
   const demandLoss = structuredClone(recovery); demandLoss.lifecycle = gracefulLifecycle({ includeDemandRelease: true });
   assert.throws(() => assertGracefulRecoveryLifecycle(demandLoss), /demand-loss release/);
+});
+
+test('F0.2B direct recovery carrier cannot report the retained raw escape as semantic green', async () => {
+  const project = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const directRunner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs'), 'utf8');
+  const matrixRunner = await readFile(resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs'), 'utf8');
+  assert.match(directRunner, /assertRecoveryCarrierManifest\(manifest, beforeRestart\)/,
+    'the raw local child consumes the same semantic gate before it writes status=ok');
+  assert.match(matrixRunner, /assertRecoveryCarrierManifest\(value, beforeRestart\)/,
+    'the final matrix post-child consumer uses that same gate');
+
+  const recovery = structuredClone(evidence('worker-2').terminal.histories.find(value => value.history === 'graceful-product-recovery').recovery);
+  const reference = (fact, milestone) => ({ kind: 'reference_container', id: 'f02b', instant: fact.instant,
+    pilotCausalMilestone: milestone, pilotActionStep: fact.actionStep, tasks: fact.tasks, schedules: fact.schedules, orders: fact.orders });
+  const container = (fact, milestone) => ({ kind: 'container', id: 'container:1-depot', instant: fact.instant,
+    pilotCausalMilestone: milestone, pilotActionStep: fact.actionStep,
+    custody: { status: fact.custodyStatus, epoch: fact.custodyEpoch }, replica: { revision: fact.replicaRevision, fingerprint: fact.replicaFingerprint },
+    physicalSocket: { chunk: fact.chunk, ordinaryPlayerNearby: fact.ordinaryPlayerNearby, presentationDemand: fact.presentationDemand,
+      eligibleObserverCount: fact.eligibleObserverCount, presentationObserverCount: fact.presentationObserverCount } });
+  const before = { status: 'ok', diagnostics: [
+    { value: reference(recovery.milestones.activeAdmission, 'recovery_active_admission') },
+    { value: container(recovery.milestones.activeDepotCustody, 'recovery_active_depot_custody') }
+  ] };
+  const manifest = { status: 'ok', isolation: { world: recovery.world }, recovery: { mode: 'graceful', world: recovery.world,
+    checkpoints: recovery.checkpoints }, lifecycle: recovery.lifecycle, diagnostics: [
+    { value: reference(recovery.milestones.afterReacquire, 'recovery_after_reacquire') },
+    { value: reference(recovery.milestones.terminalProduct, 'recovery_terminal_product') }
+  ] };
+  assert.doesNotThrow(() => assertRecoveryCarrierManifest(manifest, before));
+
+  // 600064 had only a later post-client, re-acquired view.  Deleting the two
+  // server-owned snapshots models that raw shape; it must now fail before any
+  // local or final path can declare a semantic success.
+  const retainedEscape = structuredClone(manifest); delete retainedEscape.recovery.checkpoints;
+  assert.throws(() => assertRecoveryCarrierManifest(retainedEscape, before), /missing causal milestone/);
+  const wrongOperation = structuredClone(manifest); wrongOperation.recovery.checkpoints.recovered.reference.tasks[1].id = 'task:replacement';
+  assert.throws(() => assertRecoveryCarrierManifest(wrongOperation, before), /recovered durable/);
+  const wrongDue = structuredClone(manifest); wrongDue.recovery.checkpoints.recovered.reference.schedules[1].dueAt += 1;
+  assert.throws(() => assertRecoveryCarrierManifest(wrongDue, before), /recovered durable/);
+  const equalRemainingShift = structuredClone(manifest);
+  equalRemainingShift.recovery.checkpoints.recovered.reference.instant += 10;
+  equalRemainingShift.recovery.checkpoints.recovered.reference.schedules[1].dueAt += 10;
+  equalRemainingShift.recovery.checkpoints.recovered.depot.instant += 10;
+  assert.throws(() => assertRecoveryCarrierManifest(equalRemainingShift, before), /recovered durable/);
+  const wrongFence = structuredClone(manifest); wrongFence.recovery.checkpoints.recovered.depot.custody.epoch += 1;
+  assert.throws(() => assertRecoveryCarrierManifest(wrongFence, before), /recovered durable/);
+  const foreignPid = structuredClone(manifest); foreignPid.recovery.checkpoints.recovered.serverPid = 111;
+  assert.throws(() => assertRecoveryCarrierManifest(foreignPid, before), /stale, foreign, or reordered/);
+  const wrongWorld = structuredClone(manifest); wrongWorld.isolation.world = 'foreign-world';
+  assert.throws(() => assertRecoveryCarrierManifest(wrongWorld, before), /same-world lifecycle/);
 });
 
 test('F0.2B recovery semantic milestones remain stable when an unrelated evidence action is inserted', async () => {

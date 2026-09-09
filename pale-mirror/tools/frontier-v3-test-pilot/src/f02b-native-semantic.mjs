@@ -150,7 +150,7 @@ export function mergeSemanticMatrix(evidence, expected) {
 export function hashJson(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 
 /** Extract the named, read-only recovery facts from both retained restart halves. */
-export function recoveryMilestones(diagnostics) {
+export function recoveryMilestones(diagnostics, checkpoints = undefined) {
   const byName = new Map();
   for (const entry of diagnostics) {
     const value = entry?.value;
@@ -159,26 +159,62 @@ export function recoveryMilestones(diagnostics) {
   }
   const reference = name => {
     const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      actionStep: value.pilotActionStep,
-      tasks: (value.tasks ?? []).map(task => ({ id: task.id, kind: task.kind, status: task.status })).sort(compareJson),
-      taskKinds: [...new Set((value.tasks ?? []).map(task => task.kind))].sort(),
-      schedules: (value.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject, kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
-      orders: (value.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation, reservationActive: order.reservationActive, status: order.status })).sort(compareJson) };
+    return entry && referenceFact(value, entry.phase, value.pilotActionStep);
   };
   const custody = name => {
     const entry = byName.get(name); const value = entry?.value;
-    return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
-      actionStep: value.pilotActionStep, custodyStatus: value.custody?.status, custodyEpoch: value.custody?.epoch,
-      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint,
-      chunk: value.physicalSocket?.chunk, ordinaryPlayerNearby: value.physicalSocket?.ordinaryPlayerNearby,
-      presentationDemand: value.physicalSocket?.presentationDemand,
-      eligibleObserverCount: value.physicalSocket?.eligibleObserverCount,
-      presentationObserverCount: value.physicalSocket?.presentationObserverCount };
+    return entry && custodyFact(value, entry.phase, value.pilotActionStep);
   };
+  const durable = checkpointFacts(checkpoints?.durable, 'durable_stop');
+  const recovered = checkpointFacts(checkpoints?.recovered, 'recovery_boot');
   return { activeAdmission: reference('recovery_active_admission'), afterReacquire: reference('recovery_after_reacquire'),
-    activeDepotCustody: custody('recovery_active_depot_custody'), hydratedInflight: reference('recovery_hydrated_inflight'),
-    hydratedDepotCustody: custody('recovery_hydrated_depot_custody'), terminalProduct: reference('recovery_terminal_product') };
+    activeDepotCustody: custody('recovery_active_depot_custody'), durableInflight: durable?.reference,
+    durableDepotCustody: durable?.depot, recoveredInflight: recovered?.reference,
+    recoveredDepotCustody: recovered?.depot, terminalProduct: reference('recovery_terminal_product') };
+}
+
+function referenceFact(value, phase, actionStep = null) {
+  return { phase, kind: value?.kind, id: value?.id, instant: value?.instant, actionStep,
+    tasks: (value?.tasks ?? []).map(task => ({ id: task.id, kind: task.kind, status: task.status })).sort(compareJson),
+    taskKinds: [...new Set((value?.tasks ?? []).map(task => task.kind))].sort(),
+    schedules: (value?.schedules ?? []).map(schedule => ({ id: schedule.id, subject: schedule.subject, kind: schedule.kind, dueAt: schedule.dueAt, weight: schedule.weight })).sort(compareJson),
+    orders: (value?.orders ?? []).map(order => ({ task: order.task, job: order.job, reservation: order.reservation, reservationActive: order.reservationActive, status: order.status })).sort(compareJson) };
+}
+
+function custodyFact(value, phase, actionStep = null) {
+  return { phase, kind: value?.kind, id: value?.id, instant: value?.instant, actionStep,
+    custodyStatus: value?.custody?.status, custodyEpoch: value?.custody?.epoch,
+    replicaRevision: value?.replica?.revision, replicaFingerprint: value?.replica?.fingerprint,
+    chunk: value?.physicalSocket?.chunk, ordinaryPlayerNearby: value?.physicalSocket?.ordinaryPlayerNearby,
+    presentationDemand: value?.physicalSocket?.presentationDemand,
+    eligibleObserverCount: value?.physicalSocket?.eligibleObserverCount,
+    presentationObserverCount: value?.physicalSocket?.presentationObserverCount };
+}
+
+function checkpointFacts(checkpoint, expectedPhase) {
+  if (!checkpoint || checkpoint.phase !== expectedPhase || checkpoint.reference?.kind !== 'reference_container'
+      || checkpoint.reference?.id !== 'f02b' || checkpoint.depot?.kind !== 'container'
+      || checkpoint.depot?.id !== 'container:1-depot') return null;
+  return { reference: referenceFact(checkpoint.reference, expectedPhase), depot: custodyFact(checkpoint.depot, expectedPhase) };
+}
+
+/**
+ * Shared direct-carrier gate. The isolated local carrier and the matrix worker
+ * both call this predicate, so a raw child exit cannot bypass RC-6 semantics.
+ */
+export function assertRecoveryCarrierManifest(manifest, beforeRestart) {
+  if (manifest?.status !== 'ok' || manifest?.recovery?.mode !== 'graceful' || !Array.isArray(beforeRestart?.diagnostics)
+      || !Array.isArray(manifest?.diagnostics)) {
+    throw new Error('F0.2B product recovery lacks complete retained restart receipts');
+  }
+  const diagnostics = [[beforeRestart, 'before_restart'], [manifest, 'after_restart']]
+    .flatMap(([receipt, phase]) => receipt.diagnostics.map(entry => ({ phase, value: entry?.value ?? entry?.observed?.value ?? null })));
+  const milestones = recoveryMilestones(diagnostics, manifest.recovery?.checkpoints);
+  const recovery = { mode: manifest.recovery.mode, milestones, lifecycle: manifest.lifecycle,
+    checkpoints: manifest.recovery.checkpoints, world: manifest.recovery.world, isolationWorld: manifest.isolation?.world };
+  assertRecoveryCausalMilestones(milestones);
+  assertGracefulRecoveryLifecycle(recovery);
+  return Object.freeze(recovery);
 }
 
 function immutableIdentity(value) {
@@ -321,7 +357,8 @@ function assertZeroPlayerBirthCatchup(value) {
  * unrelated hive state, or a reordered receipt cannot satisfy this predicate.
  */
 export function assertRecoveryCausalMilestones(milestones) {
-  const required = ['activeAdmission', 'activeDepotCustody', 'hydratedInflight', 'hydratedDepotCustody', 'afterReacquire', 'terminalProduct'];
+  const required = ['activeAdmission', 'activeDepotCustody', 'durableInflight', 'durableDepotCustody',
+    'recoveredInflight', 'recoveredDepotCustody', 'afterReacquire', 'terminalProduct'];
   if (!milestones || typeof milestones !== 'object' || required.some(key => !milestones[key])) {
     throw new Error('F0.2B product recovery has missing causal milestone evidence');
   }
@@ -340,15 +377,24 @@ export function assertRecoveryCausalMilestones(milestones) {
       || activeCustody.eligibleObserverCount !== 0 || activeCustody.presentationObserverCount !== 0) {
     throw new Error('F0.2B product recovery lacks exact naturally-live checkpoint evidence');
   }
-  const hydrated = milestones.hydratedInflight;
-  const hydratedCustody = milestones.hydratedDepotCustody;
-  if (hydrated.phase !== 'after_restart' || hydrated.kind !== 'reference_container' || hydrated.id !== 'f02b'
-      || !Number.isSafeInteger(hydrated.instant) || hydrated.instant < active.instant
-      || !sameInFlightProduction(exactInFlightProduction(active), exactInFlightProduction(hydrated))
-      || !Number.isSafeInteger(hydrated.actionStep)
-      || !exactDepotCustody(hydratedCustody, 'after_restart', 'RELEASED') || hydratedCustody.actionStep !== hydrated.actionStep + 1
-      || !sameCustody(activeCustody, hydratedCustody)) {
-    throw new Error('F0.2B product recovery lacks same-operation hydrated in-flight evidence');
+  const durable = milestones.durableInflight;
+  const durableCustody = milestones.durableDepotCustody;
+  if (durable.phase !== 'durable_stop' || durable.kind !== 'reference_container' || durable.id !== 'f02b'
+      || !Number.isSafeInteger(durable.instant) || durable.instant < active.instant
+      || !sameInFlightOperation(exactInFlightProduction(active), exactInFlightProduction(durable))
+      || !validActiveDueOrdering(active)
+      || !exactDepotCustody(durableCustody, 'durable_stop', 'CHECKPOINTED')
+      || !sameCustody(activeCustody, durableCustody)) {
+    throw new Error('F0.2B product recovery lacks exact durable in-flight evidence');
+  }
+  const recovered = milestones.recoveredInflight;
+  const recoveredCustody = milestones.recoveredDepotCustody;
+  if (recovered.phase !== 'recovery_boot' || recovered.kind !== 'reference_container' || recovered.id !== 'f02b'
+      || !Number.isSafeInteger(recovered.instant) || recovered.instant !== durable.instant
+      || !sameInFlightProduction(exactInFlightProduction(durable), exactInFlightProduction(recovered))
+      || !exactDepotCustody(recoveredCustody, 'recovery_boot', 'CHECKPOINTED')
+      || !sameCustody(durableCustody, recoveredCustody)) {
+    throw new Error('F0.2B product recovery lacks same-operation recovered durable evidence');
   }
   const after = milestones.afterReacquire;
   if (after.phase !== 'after_restart' || after.kind !== 'reference_container' || after.id !== 'f02b'
@@ -385,8 +431,10 @@ export function assertGracefulRecoveryLifecycle(recovery) {
     return { entry: lifecycle[index], index };
   };
   const initial = event('server_run_ready');
-  const initialRun = initial.entry.detail?.serverRunId;
-  if (typeof initialRun !== 'string' || initialRun.length === 0) throw new Error('F0.2B product recovery initial server identity is malformed');
+  const initialRun = initial.entry.detail?.serverRunId; const initialPid = initial.entry.detail?.serverPid;
+  if (typeof initialRun !== 'string' || initialRun.length === 0 || !Number.isSafeInteger(initialPid) || initialPid <= 1) {
+    throw new Error('F0.2B product recovery initial server identity is malformed');
+  }
   const disconnected = event('client_normally_disconnected', entry => entry.detail?.segment === 'before_restart', initial.index);
   const durable = event('durable_server_save', entry => entry.detail?.serverRunId === initialRun, disconnected.index);
   const closed = event('game_port_closed', entry => Number.isInteger(entry.detail?.port) && entry.detail.port > 0, durable.index);
@@ -394,17 +442,21 @@ export function assertGracefulRecoveryLifecycle(recovery) {
     throw new Error('F0.2B product recovery turned demand-loss release into a graceful-save prerequisite');
   }
   const restarted = event('recovery_server_ready', entry => typeof entry.detail?.serverRunId === 'string'
-    && entry.detail.serverRunId !== initialRun, closed.index);
-  const hydrated = milestones?.hydratedInflight;
-  const recoveredRead = event('action_checkpoint_acknowledged', entry => entry.detail?.segment === 'after_restart'
-    && entry.detail?.actionStep === hydrated?.actionStep, restarted.index);
-  const priorRecoveredRead = lifecycle.slice(restarted.index + 1, recoveredRead.index)
-    .some(entry => entry?.barrier === 'action_checkpoint_acknowledged' && entry.detail?.segment === 'after_restart');
-  if (priorRecoveredRead || !Number.isSafeInteger(hydrated?.actionStep)) {
-    throw new Error('F0.2B product recovery first recovered checkpoint is stale or reordered');
+    && entry.detail.serverRunId !== initialRun && Number.isSafeInteger(entry.detail?.serverPid) && entry.detail.serverPid > 1, closed.index);
+  const checkpoints = recovery?.checkpoints;
+  const durableCheckpoint = checkpoints?.durable; const recoveredCheckpoint = checkpoints?.recovered;
+  if (!exactCheckpoint(durableCheckpoint, 'durable_stop', initialRun, initialPid)
+      || !exactCheckpoint(recoveredCheckpoint, 'recovery_boot', restarted.entry.detail.serverRunId, restarted.entry.detail.serverPid)) {
+    throw new Error('F0.2B product recovery first recovered checkpoint is stale, foreign, or reordered');
   }
   return Object.freeze({ initialRun, recoveryRun: restarted.entry.detail.serverRunId, durableSequence: durable.entry.sequence,
-    closedSequence: closed.entry.sequence, recoveredReadSequence: recoveredRead.entry.sequence });
+    closedSequence: closed.entry.sequence, recoveredReadSequence: restarted.entry.sequence });
+}
+
+function exactCheckpoint(value, phase, serverRunId, serverPid) {
+  return value?.schema === 1 && value.phase === phase && value.serverRunId === serverRunId && value.serverPid === serverPid
+    && Number.isSafeInteger(serverPid) && serverPid > 1 && value.reference?.kind === 'reference_container'
+    && value.reference?.id === 'f02b' && value.depot?.kind === 'container' && value.depot?.id === 'container:1-depot';
 }
 
 function exactProductionCompletion(value) {
@@ -418,7 +470,7 @@ function exactProductionCompletion(value) {
 
 function exactDepotCustody(value, phase, status) {
   return value?.phase === phase && value.kind === 'container' && value.id === 'container:1-depot'
-    && value.custodyStatus === status && Number.isSafeInteger(value.actionStep) && Number.isSafeInteger(value.custodyEpoch)
+    && value.custodyStatus === status && Number.isSafeInteger(value.custodyEpoch)
     && Number.isSafeInteger(value.replicaRevision) && typeof value.replicaFingerprint === 'string' && value.replicaFingerprint.startsWith('sha256:');
 }
 
@@ -466,7 +518,22 @@ function sameInFlightProduction(left, right) {
     && JSON.stringify(left.order) === JSON.stringify(right.order)
     && left.schedule.id === right.schedule.id && left.schedule.subject === right.schedule.subject
     && left.schedule.kind === right.schedule.kind && left.schedule.weight === right.schedule.weight
-    && left.remaining === right.remaining;
+    && left.schedule.dueAt === right.schedule.dueAt && left.remaining === right.remaining;
+}
+
+function sameInFlightOperation(left, right) {
+  return left != null && right != null && JSON.stringify(left.task) === JSON.stringify(right.task)
+    && JSON.stringify(left.order) === JSON.stringify(right.order)
+    && left.schedule.id === right.schedule.id && left.schedule.subject === right.schedule.subject
+    && left.schedule.kind === right.schedule.kind && left.schedule.weight === right.schedule.weight;
+}
+
+function validActiveDueOrdering(value) {
+  const production = exactInFlightProduction(value);
+  const hive = value?.schedules?.filter(candidate => candidate.id === 'schedule:hive-growth-task-start-task-hive-frontier-hive_grow_organism-1'
+    && candidate.subject === 'task:hive-frontier-hive_grow_organism-1' && candidate.kind === 'frontier.hive.growth.task.start'
+    && candidate.weight === 1 && Number.isSafeInteger(candidate.dueAt)) ?? [];
+  return production != null && hive.length === 1 && production.schedule.dueAt < hive[0].dueAt;
 }
 
 function assertHistoryComparator(checked) {
