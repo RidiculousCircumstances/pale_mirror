@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertPrimaryEvidence, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
+import { assertGracefulRecoveryLifecycle, assertPrimaryEvidence, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,19 @@ import { validateScenario } from '../src/scenario.mjs';
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
   workflowRef: 'RidiculousCircumstances/pale_mirror/.github/workflows/f02b-reference-container-semantic.yml@refs/heads/main', runId: 44, runAttempt: 1 });
+
+function gracefulLifecycle({ includeDemandRelease = false } = {}) {
+  const barriers = [
+    ['server_run_ready', { serverRunId: 'initial-server' }],
+    ['client_normally_disconnected', { segment: 'before_restart' }],
+    ...(includeDemandRelease ? [['normal_demand_loss_release', { serverRunId: 'initial-server' }]] : []),
+    ['durable_server_save', { serverRunId: 'initial-server' }],
+    ['game_port_closed', { port: 25575 }],
+    ['recovery_server_ready', { serverRunId: 'recovery-server' }],
+    ['action_checkpoint_acknowledged', { segment: 'after_restart', actionStep: 1 }]
+  ];
+  return barriers.map(([barrier, detail], index) => ({ sequence: index + 1, barrier, detail }));
+}
 
 function evidence(worker, index = Number(worker.at(-1))) {
   const lane = laneFor(worker); const namespaces = f02bNamespaces({ workspace: `/tmp/f02b/workspace-${worker}`, temp: `/tmp/f02b/${worker}`, runId: 44, runAttempt: 1, worker });
@@ -62,11 +75,13 @@ function evidence(worker, index = Number(worker.at(-1))) {
       physicalIntentKinds: ['EXACT_ITEM_CONSUMPTION:CONFIRMED', 'PRODUCTION_TRANSFORMATION:CONFIRMED'], admissionAction: 3 } },
     families: { depot: { inputWheat: 64, outputBread: 64, terminalBread: 63, foodAvailable: 63, foodFulfilled: 0 },
       hive: { inputBiomass: 64, outputBiomass: 0, growthJobs: 0, addedOrgans: 1, spawnedBioforms: 1 } },
-    ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5, milestones: {
+    ...(history === 'graceful-product-recovery' ? { recovery: { mode: 'graceful', beforeEpoch: 1, afterEpoch: 2, splitAfterAction: 5,
+      world: 'same-disposable-world', isolationWorld: 'same-disposable-world', lifecycle: gracefulLifecycle(), milestones: {
       activeAdmission: { phase: 'before_restart', kind: 'reference_container', id: 'f02b', instant: 3200, actionStep: 14,
         tasks: structuredClone(activeTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(activeSchedules), orders: structuredClone(activeOrders) },
       activeDepotCustody: { phase: 'before_restart', kind: 'container', id: 'container:1-depot', instant: 3200,
-        actionStep: 15, custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active' },
+        actionStep: 15, custodyStatus: 'CHECKPOINTED', custodyEpoch: 2, replicaRevision: 3, replicaFingerprint: 'sha256:depot-active',
+        chunk: 'LOADED', ordinaryPlayerNearby: false, presentationDemand: false, eligibleObserverCount: 0, presentationObserverCount: 0 },
       hydratedInflight: { phase: 'after_restart', kind: 'reference_container', id: 'f02b', instant: 3460, actionStep: 1,
         tasks: structuredClone(hydratedTasks), taskKinds: ['GROW_HIVE_ORGANISM', 'PRODUCE_BREAD'], schedules: structuredClone(hydratedSchedules), orders: structuredClone(activeOrders) },
       hydratedDepotCustody: { phase: 'after_restart', kind: 'container', id: 'container:1-depot', instant: 3460,
@@ -441,6 +456,21 @@ test('F0.2B recovery causal oracle fails closed for missing, completed, stale, r
   assert.throws(() => assertRecoveryCausalMilestones(wrongSubject), /exact terminal operation/);
   const duplicateTerminal = structuredClone(milestones); duplicateTerminal.terminalProduct.tasks.push({ ...duplicateTerminal.terminalProduct.tasks[1] });
   assert.throws(() => assertRecoveryCausalMilestones(duplicateTerminal), /exact terminal operation/);
+});
+
+test('F0.2B recovery post-child consumer requires the local durable-save, same-world and first-read chain', () => {
+  const recovery = evidence('worker-2').terminal.histories.find(value => value.history === 'graceful-product-recovery').recovery;
+  assert.doesNotThrow(() => assertGracefulRecoveryLifecycle(recovery));
+  const missing = structuredClone(recovery); delete missing.lifecycle;
+  assert.throws(() => assertGracefulRecoveryLifecycle(missing), /same-world lifecycle/);
+  const staleDurable = structuredClone(recovery); staleDurable.lifecycle[2].detail.serverRunId = 'foreign-server';
+  assert.throws(() => assertGracefulRecoveryLifecycle(staleDurable), /durable_server_save/);
+  const wrongWorld = structuredClone(recovery); wrongWorld.isolationWorld = 'replacement-world';
+  assert.throws(() => assertGracefulRecoveryLifecycle(wrongWorld), /same-world lifecycle/);
+  const reordered = structuredClone(recovery); reordered.lifecycle.find(entry => entry.barrier === 'action_checkpoint_acknowledged').detail.actionStep = 2;
+  assert.throws(() => assertGracefulRecoveryLifecycle(reordered), /action_checkpoint_acknowledged/);
+  const demandLoss = structuredClone(recovery); demandLoss.lifecycle = gracefulLifecycle({ includeDemandRelease: true });
+  assert.throws(() => assertGracefulRecoveryLifecycle(demandLoss), /demand-loss release/);
 });
 
 test('F0.2B recovery semantic milestones remain stable when an unrelated evidence action is inserted', async () => {

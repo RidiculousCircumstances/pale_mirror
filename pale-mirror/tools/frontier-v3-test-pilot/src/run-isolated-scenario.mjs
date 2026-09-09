@@ -9,7 +9,6 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
 import { requestRconStop } from './rcon.mjs';
-import { runPilotWithNaturalDemandArm, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -130,7 +129,14 @@ const gracefulSaveGateReceipts = [];
 timing.begin('scenario.total');
 try {
   const recovery = restartSegments(scenario);
-  const naturalDemandStopCarrier = scenario.id === 'disposable_f02b_normal_product_recovery';
+  // RC-6 saves the exact local production/custody checkpoint as it stands.  It
+  // must not wait for the unrelated, all-level natural-demand observer: an
+  // ordinary holder replacement elsewhere is not an F0.2B recovery fact.
+  // The scenario itself retains the naturally-loaded, zero-demand depot fact
+  // immediately before the checkpoint; after the ordinary pilot exit the
+  // runner asks Minecraft to perform its normal graceful stop without adding
+  // any artificial chunk/ticket/quiescence authority.
+  const directGracefulRecoveryCarrier = scenario.id === 'disposable_f02b_normal_product_recovery';
   server = await startServer(true);
   if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
@@ -142,15 +148,18 @@ try {
       crashEvidence = await runPilotUntilCrash(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', scenario.crash);
       server = null;
     } else {
-      if (recovery.mode === 'graceful' && naturalDemandStopCarrier) {
-        server.naturalDemandEpisodeArm = await runPilotWithNaturalDemandArm({ lifecycle, server, timeoutMs: DURABLE_STOP_TIMEOUT_MS,
-          runPilot: () => runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart') });
-      } else await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart');
+      await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', {
+        // The exact product-recovery checkpoint is deliberately followed by
+        // the normal stop immediately after its own client segment.  Waiting
+        // for a separate demand-loss release changes the save carrier into a
+        // global vanilla-generation proof and can reject unrelated work.
+        awaitNormalDemandLoss: !directGracefulRecoveryCarrier
+      });
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (server !== null) {
       if (recovery.mode === 'graceful') {
-        await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port, server.naturalDemandEpisodeArm));
+        await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port));
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId });
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
       }
@@ -277,6 +286,10 @@ if (completed) {
   manifest.isolation = { world, port, freshWorld: true };
   manifest.scenarioDeclarationSha256 = scenarioDeclarationSha256;
   manifest.recovery = recoveryMetadata;
+  // Retain the immutable supervisor journal so the post-child F0.2B consumer
+  // can reject a missing/stale/wrong-server durable-save or recovered-read
+  // chain instead of inferring persistence from a later terminal state.
+  manifest.lifecycle = await readLifecycleBarriers(lifecycle);
   manifest.build = buildIdentity;
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
@@ -432,7 +445,8 @@ async function serverSignalOrExit(server, signal, suffix, timeoutMs, label) {
     exit.close();
   }
 }
-async function runPilot(scenarioFile, manifest, server, clientSegments, segment) {
+async function runPilot(scenarioFile, manifest, server, clientSegments, segment, { awaitNormalDemandLoss = true } = {}) {
+  if (typeof awaitNormalDemandLoss !== 'boolean') throw new Error('pilot demand-loss policy is malformed');
   await requirePreparedF0vBuild(project, buildIdentity);
   const phase = `client_segment.${segment}`;
   timing.begin(phase);
@@ -448,14 +462,18 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment)
   if (code !== 0) throw new Error(`isolated native pilot exited with ${code}`);
   // A nonterminal before-restart segment deliberately leaves final assertions to the recovery
   // half, so the client wrapper has no reason to append its own terminal disconnect barrier.
-  // Its ordinary exit is nevertheless the exact demand-loss predecessor; record it once here
-  // before asking the server to release custody.  A terminal segment has already recorded the
-  // same barrier from its authenticated client acknowledgement and is left unchanged.
+  // Its ordinary exit is nevertheless retained before the stop path.  Some
+  // independent histories prove demand-loss release; the RC-6 local recovery
+  // carrier intentionally does not turn that separate condition into a stop
+  // admission prerequisite.
   const barriers = await readLifecycleBarriers(lifecycle);
   if (barriers.at(-1)?.barrier !== LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED) {
     await publishLifecycleBarrier(lifecycle, LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED,
       { clientPid: pilot.pid, segment });
   }
+  const clientManifest = JSON.parse(await readFile(manifest, 'utf8'));
+  clientSegments.push({ segment, manifest, runId: clientManifest.runId, timing: clientManifest.timing });
+  if (!awaitNormalDemandLoss) return;
   // Terminal semantics are frozen before the runner writes this nonce.  The server can now
   // observe its ordinary demand-loss hysteresis/release without a client or a cleanup RCON
   // request racing that ownership boundary.
@@ -464,8 +482,6 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment)
   await serverSignalOrExit(server, LifecycleSignal.NORMAL_DEMAND_LOSS_RELEASE, server.serverRunId,
     DURABLE_STOP_TIMEOUT_MS, 'normal demand-loss release');
   await publishLifecycleBarrier(lifecycle, LifecycleBarrier.NORMAL_DEMAND_LOSS_RELEASE, { serverRunId: server.serverRunId, segment });
-  const clientManifest = JSON.parse(await readFile(manifest, 'utf8'));
-  clientSegments.push({ segment, manifest, runId: clientManifest.runId, timing: clientManifest.timing });
 }
 
 /**
@@ -673,7 +689,7 @@ async function writeScenario(path, value) {
   await writeFile(path, `${JSON.stringify({ ...value, server: { ...value.server, host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
 }
 
-async function stopServerSafely(server, serverPort, naturalDemandEpisodeArm = undefined) {
+async function stopServerSafely(server, serverPort) {
   // RCON reaches Minecraft's normal `stop` command. SIGTERM reaches the JVM
   // shutdown hook and can interrupt world persistence. A request is never
   // evidence: the pilot-only typed durable-save acknowledgement below must be
@@ -692,13 +708,8 @@ async function stopServerSafely(server, serverPort, naturalDemandEpisodeArm = un
       output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
     });
     try {
-      if (naturalDemandEpisodeArm !== undefined) {
-        await stopPilotNaturalDemandCarrier({ lifecycle, server, arm: naturalDemandEpisodeArm, timeoutMs: DURABLE_STOP_TIMEOUT_MS,
-          awaitDurable: () => awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS) });
-      } else {
-        await requestRconStop({ port: server.rconPort, password: server.rconPassword });
-        await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
-      }
+      await requestRconStop({ port: server.rconPort, password: server.rconPassword });
+      await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
       ownerObserver?.finish({ kind: 'durable_server_save' });
     } catch (failure) {
       ownerObserver?.finish({ kind: 'durable_server_save_absent', failure: String(failure?.message ?? failure) });

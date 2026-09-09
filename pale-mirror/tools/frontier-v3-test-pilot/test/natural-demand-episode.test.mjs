@@ -143,10 +143,10 @@ test('malformed arm cannot reach authenticated command transport', async () => {
   } finally { await rcon.close(); }
 });
 
-test('runner uses the executable arm and outcome consumers, never a source-only stop fence', async () => {
+test('the natural-demand transport remains diagnostic-only and cannot become the RC-6 recovery stop fence', async () => {
   const source = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
-  assert.match(source, /runPilotWithNaturalDemandArm\(/);
-  assert.match(source, /stopPilotNaturalDemandCarrier\(/);
+  assert.doesNotMatch(source, /runPilotWithNaturalDemandArm\(/);
+  assert.doesNotMatch(source, /stopPilotNaturalDemandCarrier\(/);
   assert.doesNotMatch(source, /requestRconStopWithNaturalDemandFence/);
 });
 

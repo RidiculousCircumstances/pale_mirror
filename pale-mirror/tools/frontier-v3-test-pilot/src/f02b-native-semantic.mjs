@@ -170,7 +170,11 @@ export function recoveryMilestones(diagnostics) {
     const entry = byName.get(name); const value = entry?.value;
     return entry && { phase: entry.phase, kind: value.kind, id: value.id, instant: value.instant,
       actionStep: value.pilotActionStep, custodyStatus: value.custody?.status, custodyEpoch: value.custody?.epoch,
-      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint };
+      replicaRevision: value.replica?.revision, replicaFingerprint: value.replica?.fingerprint,
+      chunk: value.physicalSocket?.chunk, ordinaryPlayerNearby: value.physicalSocket?.ordinaryPlayerNearby,
+      presentationDemand: value.physicalSocket?.presentationDemand,
+      eligibleObserverCount: value.physicalSocket?.eligibleObserverCount,
+      presentationObserverCount: value.physicalSocket?.presentationObserverCount };
   };
   return { activeAdmission: reference('recovery_active_admission'), afterReacquire: reference('recovery_after_reacquire'),
     activeDepotCustody: custody('recovery_active_depot_custody'), hydratedInflight: reference('recovery_hydrated_inflight'),
@@ -294,6 +298,7 @@ function assertNormalHistory(history) {
   } else if (history.history === 'graceful-product-recovery') {
     if (history.recovery?.mode !== 'graceful' || admission.targetVisitsBeforeDue < 1 || !history.recovery.beforeEpoch || !history.recovery.afterEpoch) throw new Error('F0.2B product recovery lacks a fenced custody boundary');
     assertRecoveryCausalMilestones(history.recovery.milestones);
+    assertGracefulRecoveryLifecycle(history.recovery);
   } else throw new Error('F0.2B normal history is unknown');
 }
 
@@ -331,6 +336,10 @@ export function assertRecoveryCausalMilestones(milestones) {
   if (!exactDepotCustody(activeCustody, 'before_restart', 'CHECKPOINTED') || activeCustody.actionStep !== active.actionStep + 1) {
     throw new Error('F0.2B product recovery lacks retained active-custody evidence');
   }
+  if (activeCustody.chunk !== 'LOADED' || activeCustody.ordinaryPlayerNearby !== false || activeCustody.presentationDemand !== false
+      || activeCustody.eligibleObserverCount !== 0 || activeCustody.presentationObserverCount !== 0) {
+    throw new Error('F0.2B product recovery lacks exact naturally-live checkpoint evidence');
+  }
   const hydrated = milestones.hydratedInflight;
   const hydratedCustody = milestones.hydratedDepotCustody;
   if (hydrated.phase !== 'after_restart' || hydrated.kind !== 'reference_container' || hydrated.id !== 'f02b'
@@ -354,6 +363,48 @@ export function assertRecoveryCausalMilestones(milestones) {
     throw new Error('F0.2B product recovery lacks exact terminal operation evidence');
   }
   return milestones;
+}
+
+/**
+ * The recovery result is accepted only when its retained supervisor journal
+ * proves a local, same-world graceful persistence chain.  This deliberately
+ * excludes the global natural-demand observer: direct ordinary stop follows
+ * the exact naturally-live checkpoint and cannot be gated by unrelated
+ * vanilla holders.
+ */
+export function assertGracefulRecoveryLifecycle(recovery) {
+  const lifecycle = recovery?.lifecycle;
+  const milestones = recovery?.milestones;
+  if (!Array.isArray(lifecycle) || lifecycle.length === 0 || recovery?.world !== recovery?.isolationWorld
+      || typeof recovery.world !== 'string' || recovery.world.length === 0) {
+    throw new Error('F0.2B product recovery lacks same-world lifecycle evidence');
+  }
+  const event = (barrier, predicate = () => true, after = -1) => {
+    const index = lifecycle.findIndex((entry, candidate) => candidate > after && entry?.barrier === barrier && predicate(entry));
+    if (index < 0) throw new Error(`F0.2B product recovery lacks lifecycle barrier ${barrier}`);
+    return { entry: lifecycle[index], index };
+  };
+  const initial = event('server_run_ready');
+  const initialRun = initial.entry.detail?.serverRunId;
+  if (typeof initialRun !== 'string' || initialRun.length === 0) throw new Error('F0.2B product recovery initial server identity is malformed');
+  const disconnected = event('client_normally_disconnected', entry => entry.detail?.segment === 'before_restart', initial.index);
+  const durable = event('durable_server_save', entry => entry.detail?.serverRunId === initialRun, disconnected.index);
+  const closed = event('game_port_closed', entry => Number.isInteger(entry.detail?.port) && entry.detail.port > 0, durable.index);
+  if (lifecycle.slice(disconnected.index + 1, durable.index).some(entry => entry?.barrier === 'normal_demand_loss_release')) {
+    throw new Error('F0.2B product recovery turned demand-loss release into a graceful-save prerequisite');
+  }
+  const restarted = event('recovery_server_ready', entry => typeof entry.detail?.serverRunId === 'string'
+    && entry.detail.serverRunId !== initialRun, closed.index);
+  const hydrated = milestones?.hydratedInflight;
+  const recoveredRead = event('action_checkpoint_acknowledged', entry => entry.detail?.segment === 'after_restart'
+    && entry.detail?.actionStep === hydrated?.actionStep, restarted.index);
+  const priorRecoveredRead = lifecycle.slice(restarted.index + 1, recoveredRead.index)
+    .some(entry => entry?.barrier === 'action_checkpoint_acknowledged' && entry.detail?.segment === 'after_restart');
+  if (priorRecoveredRead || !Number.isSafeInteger(hydrated?.actionStep)) {
+    throw new Error('F0.2B product recovery first recovered checkpoint is stale or reordered');
+  }
+  return Object.freeze({ initialRun, recoveryRun: restarted.entry.detail.serverRunId, durableSequence: durable.entry.sequence,
+    closedSequence: closed.entry.sequence, recoveredReadSequence: recoveredRead.entry.sequence });
 }
 
 function exactProductionCompletion(value) {

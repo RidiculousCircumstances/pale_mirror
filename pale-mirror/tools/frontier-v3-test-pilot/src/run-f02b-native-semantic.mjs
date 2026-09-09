@@ -264,7 +264,8 @@ function normalHistory(scenario, declaration, manifest, beforeRestart) {
   if (history === 'graceful-product-recovery') {
     const before = beforeRestart?.diagnostics?.map(diagnosticValue).filter(value => value?.kind === 'container' && value.id === 'container:1-depot').at(-1);
     result.recovery = { mode: manifest.recovery?.mode, beforeEpoch: before?.custody?.epoch ?? null, afterEpoch: depot.custody?.epoch ?? null,
-      splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics) };
+      splitAfterAction: manifest.recovery?.splitAfterAction ?? null, milestones: recoveryMilestones(diagnostics), lifecycle: manifest.lifecycle,
+      world: manifest.recovery?.world, isolationWorld: manifest.isolation?.world };
   }
   return result;
 }
