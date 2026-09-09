@@ -16,15 +16,35 @@ const isolated = resolve(project, 'tools/frontier-v3-test-pilot/src/run-isolated
 
 test('F0.2B dispatcher-to-isolated-child transport admits an exact required observer contract before server work', async () => {
   await withTransport(async fixture => {
-    const result = await invokeDispatcher(fixture);
-    assert.equal(result.code, 0, result.stderr);
-    const receipt = JSON.parse(await readFile(resolve(project, 'build/f02b-native/910055-1-worker-2/owner-observation/disposable-f02b-normal-product-recovery',
-      `admission-worker-2-910055-1-${fixture.scenario.id}.json`), 'utf8'));
-    assert.equal(receipt.status, 'admitted');
-    assert.equal(receipt.identity.scenarioDeclarationSha256, fixture.declarationSha256);
-    assert.deepEqual(receipt.scheduledSlotOffsetsMs, [0, 20_000, 60_000, 80_000]);
-    await assertNoServerCommand(fixture);
-    await rm(resolve(project, 'build/f02b-native/910055-1-worker-2'), { recursive: true, force: true });
+    try {
+      const result = await invokeDispatcher(fixture);
+      assert.equal(result.code, 0, result.stderr);
+      const receipt = JSON.parse(await readFile(resolve(project, 'build/f02b-native/910055-1-worker-2/owner-observation/disposable-f02b-normal-product-recovery',
+        `admission-worker-2-910055-1-${fixture.scenario.id}.json`), 'utf8'));
+      assert.equal(receipt.status, 'admitted');
+      assert.equal(receipt.identity.scenarioDeclarationSha256, fixture.declarationSha256);
+      assert.deepEqual(receipt.scheduledSlotOffsetsMs, [0, 20_000, 60_000, 80_000]);
+      await assertNoServerCommand(fixture);
+    } finally { await removeDispatcherRoot(910055); }
+  });
+});
+
+test('F0.2B production post-child consumer accepts exactly one valid return and rejects every invalid returned requirement', async () => {
+  await withTransport(async fixture => {
+    const cases = [['valid', undefined], ['absent', 'absent'], ['wrong_status', 'wrong-status'],
+      ['wrong_identity', 'wrong-identity'], ['incomplete', 'incomplete']];
+    for (const [index, [name, mutation]] of cases.entries()) {
+      const run = 910060 + index;
+      try {
+        const result = await invokeDispatcher(fixture, { run, mutation });
+        if (mutation === undefined) assert.equal(result.code, 0, result.stderr);
+        else {
+          assert.notEqual(result.code, 0, `${name} unexpectedly reached the post-child consumer`);
+          assert.match(result.stderr, /required save-owner observer return is absent, foreign, or incomplete/);
+        }
+        await assertNoServerCommand(fixture);
+      } finally { await removeDispatcherRoot(run); }
+    }
   });
 });
 
@@ -108,20 +128,21 @@ async function invokeChild(fixture, supplied) {
   });
 }
 
-async function invokeDispatcher(fixture) {
+async function invokeDispatcher(fixture, { run = 910055, mutation = undefined } = {}) {
   const namespaces = { gradle: join(fixture.root, 'gradle'), cache: join(fixture.root, 'cache'), world: join(fixture.root, 'world'),
     process: join(fixture.root, 'process'), port: 26204, display: ':f02b-transport-test' };
   const namespacePath = join(fixture.root, 'namespaces.json'); const identityPath = join(fixture.root, 'identity.json');
   await writeFile(namespacePath, JSON.stringify(namespaces)); await writeFile(identityPath, JSON.stringify({ jobId: 1, runnerId: 2, runnerName: 'observer-transport' }));
   const runner = resolve(project, 'tools/frontier-v3-test-pilot/src/run-f02b-native-semantic.mjs');
-  const args = [runner, `--namespaces=${namespacePath}`, `--identity=${identityPath}`, `--output=${join(fixture.root, 'semantic.json')}`,
-    `--log=${join(fixture.root, 'semantic.log')}`, `--runtime=${join(fixture.root, 'runtime.json')}`, '--worker=worker-2', '--lane=normal-zero-player-recovery',
-    '--run=910055', '--attempt=1', '--qualification=f02b-r21', '--repository=RidiculousCircumstances/pale_mirror', '--head=' + 'a'.repeat(40),
+  const args = [runner, `--namespaces=${namespacePath}`, `--identity=${identityPath}`, `--output=${join(fixture.root, `semantic-${run}.json`)}`,
+    `--log=${join(fixture.root, `semantic-${run}.log`)}`, `--runtime=${join(fixture.root, `runtime-${run}.json`)}`, '--worker=worker-2', '--lane=normal-zero-player-recovery',
+    `--run=${run}`, '--attempt=1', '--qualification=f02b-r21', '--repository=RidiculousCircumstances/pale_mirror', '--head=' + 'a'.repeat(40),
     '--workflow-sha=' + 'a'.repeat(40), '--workflow=RidiculousCircumstances/pale_mirror/.github/workflows/f02b-reference-container-semantic.yml@refs/heads/main'];
   return await new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, args, { cwd: project, env: { ...process.env, DISPLAY: namespaces.display, JAVA_TOOL_OPTIONS: '-Xmx3G',
-      F02B_GRACEFUL_SAVE_GATE: join(fixture.root, 'f02b-graceful-save-910055-1'), FRONTIER_V3_GRADLE: fixture.gradle,
-      FRONTIER_V3_TEST_F02B_SAVE_OWNER_DISPATCH_ONLY: 'true', FRONTIER_V3_TEST_SAVE_OWNER_OBSERVER_ADMISSION_ONLY: 'true' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      F02B_GRACEFUL_SAVE_GATE: join(fixture.root, `f02b-graceful-save-${run}-1`), FRONTIER_V3_GRADLE: fixture.gradle,
+      FRONTIER_V3_TEST_F02B_SAVE_OWNER_DISPATCH_ONLY: 'true', FRONTIER_V3_TEST_SAVE_OWNER_OBSERVER_ADMISSION_ONLY: 'true',
+      ...(mutation === undefined ? {} : { FRONTIER_V3_TEST_F02B_SAVE_OWNER_RETURN_MUTATION: mutation }) }, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = ''; let stderr = '';
     child.stdout.setEncoding('utf8').on('data', value => { stdout += value; }); child.stderr.setEncoding('utf8').on('data', value => { stderr += value; });
     child.once('error', reject); child.once('exit', code => resolveResult({ code, stdout, stderr }));
@@ -130,4 +151,7 @@ async function invokeDispatcher(fixture) {
 
 async function assertNoServerCommand(fixture) {
   await assert.rejects(access(fixture.marker, constants.F_OK), /ENOENT/);
+}
+async function removeDispatcherRoot(run) {
+  await rm(resolve(project, `build/f02b-native/${run}-1-worker-2`), { recursive: true, force: true });
 }

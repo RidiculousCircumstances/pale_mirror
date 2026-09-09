@@ -63,6 +63,12 @@ const dispatchIsolatedScenario = async ({ scenario, declaration, declarationSha2
   });
   return { pilotPid, observerContract };
 };
+const readReturnedScenarioReceipt = async ({ manifest, scenario, declarationSha256, observerContract }) => {
+  const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
+  if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
+  if (observerContract !== null) assertRequiredObserverReturn(value, observerContract, declarationSha256, scenario);
+  return value;
+};
 const diagnosticDispatchOnly = process.env.FRONTIER_V3_TEST_F02B_SAVE_OWNER_DISPATCH_ONLY;
 if (diagnosticDispatchOnly !== undefined && diagnosticDispatchOnly !== 'true') throw new Error('F0.2B save-owner observer dispatch test mode is invalid');
 if (diagnosticDispatchOnly === 'true') {
@@ -73,6 +79,18 @@ if (diagnosticDispatchOnly === 'true') {
   const dispatched = await dispatchIsolatedScenario({ scenario, declaration, declarationSha256,
     manifest: `${root}/${scenario.replace(/\.json$/, '')}.manifest.json` });
   if (dispatched.observerContract === null) throw new Error('F0.2B diagnostic dispatch omitted its required observer contract');
+  const returned = substitutedObserverReturn(dispatched.observerContract, declarationSha256);
+  const mutation = process.env.FRONTIER_V3_TEST_F02B_SAVE_OWNER_RETURN_MUTATION;
+  if (mutation !== undefined && !['absent', 'wrong-status', 'wrong-identity', 'incomplete'].includes(mutation)) {
+    throw new Error('F0.2B save-owner observer return test mutation is invalid');
+  }
+  if (mutation === 'absent') delete returned.ownerObservationRequirement;
+  if (mutation === 'wrong-status') returned.ownerObservationRequirement.status = 'admitted';
+  if (mutation === 'wrong-identity') returned.ownerObservationRequirement.identity.worker = 'worker-3';
+  if (mutation === 'incomplete') returned.ownerObservation.slots.pop();
+  const manifest = `${root}/${scenario.replace(/\.json$/, '')}.manifest.json`;
+  await writeFile(manifest, `${JSON.stringify(returned)}\n`, { flag: 'wx' });
+  await readReturnedScenarioReceipt({ manifest, scenario, declarationSha256, observerContract: dispatched.observerContract });
   stream.end(); await new Promise(resolveClose => stream.once('close', resolveClose));
   console.log(JSON.stringify({ status: 'admitted', observerContract: dispatched.observerContract.path }));
   process.exit(0);
@@ -95,13 +113,7 @@ try {
     const manifest = `${root}/${scenario.replace(/\.json$/, '')}.manifest.json`;
     const dispatched = await dispatchIsolatedScenario({ scenario, declaration, declarationSha256, manifest });
     const { observerContract } = dispatched; pilotPid = dispatched.pilotPid;
-    const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
-    if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
-    if (observerContract !== null && (value.ownerObservationRequirement?.status !== 'admitted'
-      || value.ownerObservationRequirement?.contract?.sha256 !== observerContract.sha256
-      || value.ownerObservationRequirement?.identity?.scenarioDeclarationSha256 !== declarationSha256)) {
-      throw new Error(`F0.2B required save-owner observer admission is absent: ${scenario}`);
-    }
+    const value = await readReturnedScenarioReceipt({ manifest, scenario, declarationSha256, observerContract });
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
     const beforeRestart = beforeRestartManifest
       ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;
@@ -138,6 +150,29 @@ function terminalFacts(manifests, assignedLane) {
   const selected = finalHistory.containers.depot;
   return { lane: assignedLane, scenarioIds: manifests.map(value => value.scenario), domain: { family: 'normal-world-product-comparator' },
     container: selected, replica: selected.replica, custody: selected.custody, histories };
+}
+
+function assertRequiredObserverReturn(value, observerContract, declarationSha256, scenario) {
+  const requirement = value?.ownerObservationRequirement; const observation = value?.ownerObservation;
+  const expected = observerContract.contract.identity; const slots = observerContract.contract.scheduledSlotOffsetsMs;
+  if (requirement?.status !== 'accepted' || requirement.contract?.sha256 !== observerContract.sha256
+      || JSON.stringify(requirement.identity) !== JSON.stringify(expected) || requirement.identity?.scenario !== scenario
+      || requirement.identity?.scenarioDeclarationSha256 !== declarationSha256 || !Array.isArray(requirement.scheduledSlotOffsetsMs)
+      || JSON.stringify(requirement.scheduledSlotOffsetsMs) !== JSON.stringify(slots) || observation?.status !== 'completed'
+      || !Array.isArray(observation.slots) || observation.slots.length !== slots.length
+      || observation.slots.some((slot, index) => slot?.index !== index || slot.offsetMs !== slots[index]
+        || (slot.status !== 'captured' && slot.status !== 'unavailable') || typeof slot.receipt !== 'string' || slot.receipt.length === 0
+        || !/^[0-9a-f]{64}$/.test(slot.sha256 ?? '') || (slot.status === 'unavailable' && !slot.reason?.kind))) {
+    throw new Error(`F0.2B required save-owner observer return is absent, foreign, or incomplete: ${scenario}`);
+  }
+  return value;
+}
+function substitutedObserverReturn(observerContract, scenarioDeclarationSha256) {
+  const slots = observerContract.contract.scheduledSlotOffsetsMs.map((offsetMs, index) => ({ index, offsetMs, status: 'captured',
+    receipt: `build/f02b-native/substitute/slot-${index}.json`, sha256: 'a'.repeat(64) }));
+  return { scenarioDeclarationSha256, ownerObservationRequirement: { status: 'accepted', contract: { sha256: observerContract.sha256 },
+    identity: { ...observerContract.contract.identity }, scheduledSlotOffsetsMs: [...observerContract.contract.scheduledSlotOffsetsMs] },
+  ownerObservation: { status: 'completed', slots } };
 }
 
 function normalHistory(scenario, declaration, manifest, beforeRestart) {
