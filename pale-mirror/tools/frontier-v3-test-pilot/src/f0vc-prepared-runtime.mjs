@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { chmod, cp, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
-import { arch, homedir, platform } from 'node:os';
+import { arch, platform } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fingerprintPreparedBuild, fingerprintPreparedSource, portablePreparedBuildIdentity } from './prepared-build.mjs';
@@ -17,14 +17,16 @@ const RUNTIME_KIND = 'frontier-v3-f0vc-prepared-runtime';
  * deliberately outside a checkout: consumers can only derive private reflink views from this
  * immutable content-addressed root and never invoke Gradle to recreate candidate bytes.
  */
-export async function prepareRuntime({ store, output, prepared }) {
-  const checkedStore = taskRoot(store); const identity = prepared ?? await loadPrepared(resolve(project, 'build/f0vc/prepared-build.json'));
+export async function prepareRuntime({ store, output, prepared, projectRoot = project, environment = process.env }) {
+  const checkedProject = projectRootPath(projectRoot); const checkedStore = taskRoot(store);
+  const gradleRoot = await declaredProducerGradleRoot(environment);
+  const identity = prepared ?? await loadPrepared(resolve(checkedProject, 'build/f0vc/prepared-build.json'));
   const portable = portablePreparedBuildIdentity(identity);
-  const manifest = JSON.parse(await readFile(resolve(project, identity.launchManifest.path), 'utf8'));
-  const inputs = await collectInputs(manifest, identity);
-  const environment = await runtimeEnvironment();
-  const core = { schema: RUNTIME_SCHEMA, kind: RUNTIME_KIND, producerProject: project, source: identity.sourceContent,
-    portablePreparedIdentity: portable, environment, inputs };
+  const manifest = JSON.parse(await readFile(resolve(checkedProject, identity.launchManifest.path), 'utf8'));
+  const inputs = await collectInputs(manifest, identity, { projectRoot: checkedProject, gradleRoot });
+  const runtime = await runtimeEnvironment(checkedProject);
+  const core = { schema: RUNTIME_SCHEMA, kind: RUNTIME_KIND, producerProject: checkedProject, source: identity.sourceContent,
+    portablePreparedIdentity: portable, environment: runtime, inputs };
   const contentSha256 = hash(JSON.stringify(core));
   const root = resolve(checkedStore, 'prepared', contentSha256);
   try { await stat(resolve(root, 'manifest.json')); }
@@ -48,8 +50,8 @@ export async function prepareRuntime({ store, output, prepared }) {
   }
   const checked = await readRuntimeManifest(resolve(root, 'manifest.json'));
   if (checked.contentSha256 !== contentSha256) throw new Error('F0.VC prepared runtime cache identity drifted');
-  await mkdir(dirname(resolve(project, output)), { recursive: true });
-  await writeFile(resolve(project, output), `${JSON.stringify({ manifest: resolve(root, 'manifest.json'), contentSha256, portablePreparedIdentity: portable }, null, 2)}\n`, { flag: 'wx' });
+  await mkdir(dirname(resolve(checkedProject, output)), { recursive: true });
+  await writeFile(resolve(checkedProject, output), `${JSON.stringify({ manifest: resolve(root, 'manifest.json'), contentSha256, portablePreparedIdentity: portable }, null, 2)}\n`, { flag: 'wx' });
   return checked;
 }
 
@@ -125,7 +127,7 @@ export async function requireRuntimeSourceIdentity(expected, workspace) {
   return actual;
 }
 
-async function collectInputs(launch, identity) {
+async function collectInputs(launch, identity, { projectRoot, gradleRoot }) {
   if (launch?.schema !== 1 || !launch.server || !launch.client || typeof launch.modFolders !== 'string') throw new Error('F0.VC producer launch manifest is malformed');
   const sources = new Map();
   const add = async (path, role, text = false) => {
@@ -135,14 +137,14 @@ async function collectInputs(launch, identity) {
     // A content address names the enclosing immutable manifest, never a JVM launch member.
     // NeoForge derives module identity from a JAR's basename and some generated arguments rely
     // on stable sibling paths, so retain the complete project/Gradle relative topology verbatim.
-    const target = runtimeTargetFor(source);
+    const target = runtimeTargetFor(source, { projectRoot, gradleRoot });
     sources.set(source, { source, target, role, text, sha256: await digestPath(source) });
   };
-  await add(resolve(project, identity.preparedArtifact.path), 'artifact');
-  await add(resolve(project, identity.launchManifest.path), 'launch-manifest', true);
+  await add(resolve(projectRoot, identity.preparedArtifact.path), 'artifact');
+  await add(resolve(projectRoot, identity.launchManifest.path), 'launch-manifest', true);
   for (const role of ['server', 'client']) {
     const view = launch[role];
-    for (const field of ['vmArgs', 'programArgs', 'classpath']) await add(resolve(project, view[field]), `${role}-${field}`, true);
+    for (const field of ['vmArgs', 'programArgs', 'classpath']) await add(resolve(projectRoot, view[field]), `${role}-${field}`, true);
     for (const item of view.launchClasspath) await add(item, `${role}-classpath`);
   }
   for (const part of launch.modFolders.split(':')) {
@@ -167,8 +169,8 @@ async function collectInputs(launch, identity) {
  * Maps only declared direct-launch roots into the consumer view without changing a launcher
  * member's basename or its relationship to sibling Gradle-cache entries.
  */
-export function runtimeTargetFor(sourcePath, { projectRoot = project, gradleRoot = resolve(homedir(), '.gradle') } = {}) {
-  const source = resolve(sourcePath); const checkedProject = resolve(projectRoot); const checkedGradle = resolve(gradleRoot);
+export function runtimeTargetFor(sourcePath, { projectRoot = project, gradleRoot } = {}) {
+  const source = resolve(sourcePath); const checkedProject = projectRootPath(projectRoot); const checkedGradle = declaredRootPath(gradleRoot, 'producer Gradle user home');
   if (inside(checkedProject, source)) return relative(checkedProject, source);
   if (inside(checkedGradle, source)) return `.f0vc-runtime/gradle/${relative(checkedGradle, source)}`;
   throw new Error(`F0.VC producer launch input escapes the declared project or Gradle runtime roots: ${source}`);
@@ -180,11 +182,11 @@ export function rewriteConsumerText(text, paths, producerProject, consumerProjec
   return rewritten.split(producerProject).join(consumerProject);
 }
 
-async function runtimeEnvironment() {
+async function runtimeEnvironment(projectRoot = project) {
   const java = await javaExecutable(); const version = await childOutput(java, ['--version']);
   const files = ['gradle/wrapper/gradle-wrapper.properties', 'gradle.properties', 'settings.gradle', 'build.gradle'];
-  const locks = await lockFiles(project);
-  const values = await Promise.all([...files, ...locks].map(async (path) => ({ path, sha256: hash(await readFile(resolve(project, path))) })));
+  const checkedProject = projectRootPath(projectRoot); const locks = await lockFiles(checkedProject);
+  const values = await Promise.all([...files, ...locks].map(async (path) => ({ path, sha256: hash(await readFile(resolve(checkedProject, path))) })));
   return Object.freeze([{ key: 'node', value: process.version }, { key: 'os', value: `${platform()}-${arch()}` },
     { key: 'java', value: hash(version) }, ...values.map((value) => ({ key: `file:${value.path}`, value: value.sha256 }))].sort((a, b) => a.key.localeCompare(b.key)));
 }
@@ -215,6 +217,21 @@ async function makeReadOnly(path) {
 async function removeExact(path) { await new Promise((resolveRemove) => { const task = spawn('rm', ['-rf', '--', path], { stdio: 'ignore' }); task.once('exit', () => resolveRemove()); task.once('error', () => resolveRemove()); }); }
 async function absent(path, label) { try { await stat(path); throw new Error(`F0.VC refuses to overwrite ${label}`); } catch (error) { if (error?.code !== 'ENOENT') throw error; } }
 function taskRoot(value) { const root = resolve(value ?? ''); if (!root.startsWith('/home/rd/proj/pm-f0vc-')) throw new Error('F0.VC prepared store must be a dedicated task root'); return root; }
+async function declaredProducerGradleRoot(environment) {
+  const root = declaredRootPath(environment?.GRADLE_USER_HOME, 'producer Gradle user home');
+  try {
+    if (!(await stat(root)).isDirectory()) throw new Error('not a directory');
+  } catch (error) {
+    throw new Error(`F0.VC declared producer Gradle user home is missing or not a directory: ${root}`, { cause: error });
+  }
+  return root;
+}
+function projectRootPath(value) { return declaredRootPath(value, 'producer project root'); }
+function declaredRootPath(value, label) {
+  if (typeof value !== 'string' || !value.startsWith('/')) throw new Error(`F0.VC ${label} must be an absolute declared path`);
+  const root = resolve(value); if (root === '/') throw new Error(`F0.VC ${label} must not be the filesystem root`);
+  return root;
+}
 async function javaExecutable() {
   const home = process.env.JAVA_HOME;
   if (typeof home === 'string' && home.startsWith('/')) return resolve(home, 'bin/java');
