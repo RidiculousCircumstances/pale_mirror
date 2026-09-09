@@ -20,6 +20,7 @@ import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycl
 import { awaitChildExit, awaitWithin, childExitWatch, deadlineWatchdog } from './deadline-watchdog.mjs';
 import { withGracefulSaveGate } from './graceful-save-gate.mjs';
 import { prearmSaveOwnerObserver, startSaveOwnerObservation } from './save-owner-observer.mjs';
+import { admitSaveOwnerObserverContract, requireSaveOwnerObserverEvidence } from './f02b-save-owner-observer-contract.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -41,13 +42,34 @@ if (process.env.FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD !== undefined && !initi
   throw new Error('FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD must be true when declared');
 }
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const ownerObservationRequirement = await admitSaveOwnerObserverContract({ project,
+  requirement: process.env.FRONTIER_V3_F02B_SAVE_OWNER_OBSERVER_REQUIREMENT,
+  contractPath: process.env.FRONTIER_V3_SAVE_OWNER_OBSERVER_CONTRACT,
+  observerRoot: process.env.FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT,
+  worker: process.env.FRONTIER_V3_PILOT_WORKER_ID,
+  lane: process.env.FRONTIER_V3_F02B_DIAGNOSTIC_LANE,
+  runId: process.env.FRONTIER_V3_F02B_DIAGNOSTIC_RUN,
+  runAttempt: process.env.FRONTIER_V3_F02B_DIAGNOSTIC_ATTEMPT,
+  scenario: basename(sourcePath), scenarioId: scenario.id, scenarioDeclarationSha256
+});
+const diagnosticAdmissionOnly = process.env.FRONTIER_V3_TEST_SAVE_OWNER_OBSERVER_ADMISSION_ONLY;
+if (diagnosticAdmissionOnly !== undefined && diagnosticAdmissionOnly !== 'true') {
+  throw new Error('F0.2B save-owner observer admission test mode is invalid');
+}
+// Node-only orchestration recurrence: this is deliberately after the child has
+// admitted the exact dispatcher contract and before build/Gradle/server work.
+if (diagnosticAdmissionOnly === 'true') {
+  if (ownerObservationRequirement === null) throw new Error('F0.2B save-owner observer admission test requires a contract');
+  console.log(JSON.stringify({ status: 'admitted', receipt: ownerObservationRequirement.receipt }));
+  process.exit(0);
+}
 const timing = new PhaseTiming();
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 timing.begin('source.build_identity_resolution');
 const buildIdentity = await resolvePreparedBuild(project, gradle);
 timing.end('source.build_identity_resolution');
 const jfr = jfrCaptureRequest(process.env, project);
-const saveOwnerObserverRoot = process.env.FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT;
+const saveOwnerObserverRoot = ownerObservationRequirement?.evidenceRoot ?? process.env.FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT;
 if (saveOwnerObserverRoot !== undefined && saveOwnerObserverRoot === '') {
   throw new Error('FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT must not be empty when declared');
 }
@@ -227,6 +249,8 @@ try {
           startupLifecycle: server?.startupLifecycle ?? lastServerAttempt?.startupLifecycle ?? null,
           gracefulShutdown: server?.gracefulShutdown ?? lastServerAttempt?.gracefulShutdown ?? null,
           ownerObservation: ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation),
+          ownerObservationRequirement: ownerObservationRequirementFact(ownerObservationRequirement,
+            server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation),
           cleanupFailures: boundedCleanupFailures(cleanupFailures) },
         termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
         lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
@@ -252,6 +276,12 @@ if (completed) {
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
+  manifest.ownerObservationRequirement = ownerObservationRequirementFact(ownerObservationRequirement,
+    server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
+  if (ownerObservationRequirement !== null) {
+    requireSaveOwnerObserverEvidence(ownerObservationRequirement,
+      server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
+  }
   manifest.initialCanonicalHold = initialCanonicalHold;
   manifest.timing = timing.finish({ runner: 'isolated-native', restartMode: recoveryMetadata?.mode ?? 'none' });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -787,6 +817,21 @@ function ownerObservationFact(value) {
       receipt: typeof slot.receipt?.path === 'string' ? relative(project, slot.receipt.path) : null, sha256: slot.receipt?.sha256 ?? null,
       facts: slot.facts ?? null, ...(slot.reason === undefined ? {} : { reason: slot.reason }) })) : [],
     ...(value.failure === undefined ? {} : { failure: value.failure }) };
+}
+function ownerObservationRequirementFact(requirement, value) {
+  if (requirement === null) return { status: 'optional' };
+  try {
+    requireSaveOwnerObserverEvidence(requirement, value);
+    return { status: 'accepted', receipt: relative(project, requirement.receipt), contract: { path: relative(project, requirement.contract.path), sha256: requirement.contract.sha256 },
+      identity: requirement.identity, evidenceRoot: relative(project, requirement.evidenceRoot),
+      scheduledSlotOffsetsMs: requirement.scheduledSlotOffsetsMs };
+  } catch (failure) {
+    // A failure bundle may preserve the underlying runner error, but consumers
+    // must see that it is not an attributable diagnostic result.
+    return { status: 'rejected', receipt: relative(project, requirement.receipt), contract: { path: relative(project, requirement.contract.path), sha256: requirement.contract.sha256 },
+      identity: requirement.identity, evidenceRoot: relative(project, requirement.evidenceRoot),
+      scheduledSlotOffsetsMs: requirement.scheduledSlotOffsetsMs, reason: String(failure?.message ?? failure) };
+  }
 }
 function killIfPresent(pid) {
   try { process.kill(pid, 'SIGKILL'); }

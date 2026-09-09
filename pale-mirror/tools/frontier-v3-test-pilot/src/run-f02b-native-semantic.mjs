@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { assertSemanticEvidence, F02B_KIND, F02B_PRIMARY_KIND, F02B_SCHEMA, hashJson, laneFor, recoveryMilestones } from './f02b-native-semantic.mjs';
 import { consumeRuntime } from './f0vc-prepared-runtime.mjs';
+import { requiresSaveOwnerObserver, writeSaveOwnerObserverContract } from './f02b-save-owner-observer-contract.mjs';
 
 const values = Object.fromEntries(process.argv.slice(2).map(value => { const [key, entry] = value.slice(2).split('=', 2); return [key, entry]; }));
 const namespaces = JSON.parse(await readFile(resolve(values.namespaces ?? ''), 'utf8'));
@@ -39,6 +40,43 @@ const run = async (args, extra = {}) => {
   if (code !== 0) throw new Error(`F0.2B normal-world lane failed (${code})`);
   return child.pid;
 };
+const dispatchIsolatedScenario = async ({ scenario, declaration, declarationSha256, manifest }) => {
+  const observerContract = requiresSaveOwnerObserver({ worker: values.worker, lane, scenario })
+    ? await writeSaveOwnerObserverContract({ project: process.cwd(), output: `${root}/observer-contracts/${scenario}`,
+      worker: values.worker, lane, runId: values.run, runAttempt: values.attempt, scenario, scenarioId: declaration.id,
+      scenarioDeclarationSha256: declarationSha256, evidenceRoot: `${root}/owner-observation/${scenario.replace(/\.json$/, '')}` })
+    : null;
+  const pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
+    GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
+    FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared,
+    FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: usePersistentClient ? 'true' : 'false',
+    FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
+    FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true',
+    ...(observerContract === null ? {} : {
+      FRONTIER_V3_F02B_SAVE_OWNER_OBSERVER_REQUIREMENT: 'required',
+      FRONTIER_V3_F02B_DIAGNOSTIC_LANE: lane,
+      FRONTIER_V3_F02B_DIAGNOSTIC_RUN: String(values.run),
+      FRONTIER_V3_F02B_DIAGNOSTIC_ATTEMPT: String(values.attempt),
+      FRONTIER_V3_SAVE_OWNER_OBSERVER_CONTRACT: observerContract.path,
+      FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT: observerContract.contract.evidenceRoot
+    })
+  });
+  return { pilotPid, observerContract };
+};
+const diagnosticDispatchOnly = process.env.FRONTIER_V3_TEST_F02B_SAVE_OWNER_DISPATCH_ONLY;
+if (diagnosticDispatchOnly !== undefined && diagnosticDispatchOnly !== 'true') throw new Error('F0.2B save-owner observer dispatch test mode is invalid');
+if (diagnosticDispatchOnly === 'true') {
+  const scenario = 'disposable-f02b-normal-product-recovery.json';
+  const declarationSource = await readFile(resolve(`tools/frontier-v3-test-pilot/scenarios/${scenario}`));
+  const declarationSha256 = createHash('sha256').update(declarationSource).digest('hex');
+  const declaration = JSON.parse(declarationSource);
+  const dispatched = await dispatchIsolatedScenario({ scenario, declaration, declarationSha256,
+    manifest: `${root}/${scenario.replace(/\.json$/, '')}.manifest.json` });
+  if (dispatched.observerContract === null) throw new Error('F0.2B diagnostic dispatch omitted its required observer contract');
+  stream.end(); await new Promise(resolveClose => stream.once('close', resolveClose));
+  console.log(JSON.stringify({ status: 'admitted', observerContract: dispatched.observerContract.path }));
+  process.exit(0);
+}
 let pilotPid; let runtimeContentSha256; let consumed; const manifests = [];
 try {
   // F0.VC owns the only build/package/transform pass.  This consumer gets a
@@ -55,15 +93,15 @@ try {
     const declarationSha256 = createHash('sha256').update(declarationSource).digest('hex');
     const declaration = JSON.parse(declarationSource);
     const manifest = `${root}/${scenario.replace(/\.json$/, '')}.manifest.json`;
-    pilotPid = await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', `tools/frontier-v3-test-pilot/scenarios/${scenario}`, manifest], {
-      GRADLE_USER_HOME: namespaces.gradle, FRONTIER_V3_PILOT_PORT: String(namespaces.port), FRONTIER_V3_NATIVE_PROCESS_ROOT: namespaces.process,
-      FRONTIER_V3_PILOT_WORKER_ID: values.worker, FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared,
-      FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT: usePersistentClient ? 'true' : 'false',
-      FRONTIER_V3_PILOT_PREPARED_RUNTIME: 'true', FRONTIER_V3_PILOT_GRACEFUL_SAVE_GATE: gracefulSaveGate,
-      FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD: 'true'
-    });
+    const dispatched = await dispatchIsolatedScenario({ scenario, declaration, declarationSha256, manifest });
+    const { observerContract } = dispatched; pilotPid = dispatched.pilotPid;
     const value = JSON.parse(await readFile(resolve(manifest), 'utf8'));
     if (value.scenarioDeclarationSha256 !== declarationSha256) throw new Error(`F0.2B scenario receipt is not bound to its immutable declaration: ${scenario}`);
+    if (observerContract !== null && (value.ownerObservationRequirement?.status !== 'admitted'
+      || value.ownerObservationRequirement?.contract?.sha256 !== observerContract.sha256
+      || value.ownerObservationRequirement?.identity?.scenarioDeclarationSha256 !== declarationSha256)) {
+      throw new Error(`F0.2B required save-owner observer admission is absent: ${scenario}`);
+    }
     const beforeRestartManifest = value?.recovery?.beforeRestartManifest;
     const beforeRestart = beforeRestartManifest
       ? JSON.parse(await readFile(resolve(beforeRestartManifest), 'utf8')) : null;

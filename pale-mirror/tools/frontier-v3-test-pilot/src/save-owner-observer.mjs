@@ -10,11 +10,11 @@ const MAX_TEXT_BYTES = 512 * 1024;
 const CAPTURE_TIMEOUT_MS = 5_000;
 // Cadence is forensic only. The final point leaves time to retain evidence
 // before the unchanged 90-second graceful-save failure bound.
-const DEFAULT_SLOT_OFFSETS_MS = Object.freeze([0, 20_000, 60_000, 80_000]);
+export const SAVE_OWNER_OBSERVER_SLOT_OFFSETS_MS = Object.freeze([0, 20_000, 60_000, 80_000]);
 
 /** External, fail-closed forensic observer for one runner-owned JVM. */
 export async function prearmSaveOwnerObserver({ project, root, lifecycleIdentity, server,
-  captureTimeoutMs = CAPTURE_TIMEOUT_MS, slotOffsetsMs = DEFAULT_SLOT_OFFSETS_MS }) {
+  captureTimeoutMs = CAPTURE_TIMEOUT_MS, slotOffsetsMs = SAVE_OWNER_OBSERVER_SLOT_OFFSETS_MS }) {
   requireObject(lifecycleIdentity, 'owner observer lifecycle identity');
   requireServer(server);
   if (!Number.isInteger(captureTimeoutMs) || captureTimeoutMs < 25 || captureTimeoutMs > CAPTURE_TIMEOUT_MS) {

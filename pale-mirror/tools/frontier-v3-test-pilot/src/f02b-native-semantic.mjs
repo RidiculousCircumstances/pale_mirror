@@ -104,8 +104,30 @@ export function assertPrimaryEvidence(primary, semantic) {
     } else if ('beforeRestart' in receipt || 'beforeRestartSha256' in receipt) {
       throw new Error('F0.2B primary evidence has an undeclared restart receipt');
     }
+    if (receipt.scenario === 'disposable-f02b-normal-product-recovery.json') {
+      assertRequiredSaveOwnerObservation(receipt.value, primary, receipt);
+    }
   }
   return primary;
+}
+
+/** The ordered discriminator's primary receipt must retain the child admission and every late slot. */
+export function assertRequiredSaveOwnerObservation(value, primary, receipt) {
+  const requirement = value?.ownerObservationRequirement;
+  const observation = value?.ownerObservation;
+  if (requirement?.status !== 'accepted' || !HASH.test(requirement.contract?.sha256 ?? '')
+      || requirement.identity?.worker !== primary.worker || requirement.identity?.lane !== primary.lane
+      || requirement.identity?.runId !== primary.identity.runId || requirement.identity?.runAttempt !== primary.identity.runAttempt
+      || requirement.identity?.scenario !== receipt.scenario || requirement.identity?.scenarioDeclarationSha256 !== receipt.declarationSha256
+      || !Array.isArray(requirement.scheduledSlotOffsetsMs) || !sameJson(requirement.scheduledSlotOffsetsMs, [0, 20_000, 60_000, 80_000])
+      || observation?.status !== 'completed' || !Array.isArray(observation.slots)
+      || observation.slots.length !== requirement.scheduledSlotOffsetsMs.length
+      || observation.slots.some((slot, index) => slot?.index !== index || slot.offsetMs !== requirement.scheduledSlotOffsetsMs[index]
+        || (slot.status !== 'captured' && slot.status !== 'unavailable') || typeof slot.receipt !== 'string' || slot.receipt.length === 0
+        || !HASH.test(slot.sha256 ?? '') || (slot.status === 'unavailable' && !slot.reason?.kind))) {
+    throw new Error('F0.2B primary evidence lacks required save-owner observation or scheduled-slot receipts');
+  }
+  return value;
 }
 
 export function mergeSemanticMatrix(evidence, expected) {
