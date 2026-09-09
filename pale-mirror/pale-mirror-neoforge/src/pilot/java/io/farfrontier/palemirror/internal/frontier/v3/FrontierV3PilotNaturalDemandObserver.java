@@ -169,7 +169,7 @@ public final class FrontierV3PilotNaturalDemandObserver {
             String dimension = level.dimension().location().toString();
             ChunkMap map = level.getChunkSource().chunkMap;
             FrontierV3PilotChunkMapAccessor chunkMap = (FrontierV3PilotChunkMapAccessor) map;
-            DistanceManager manager = chunkMap.paleMirror$distanceManager();
+            DistanceManager manager = map.getDistanceManager();
             Long2ObjectMap<SortedArraySet<Ticket<?>>> tickets = ((FrontierV3PilotDistanceManagerAccessor) manager).paleMirror$tickets();
             for (Long2ObjectMap.Entry<SortedArraySet<Ticket<?>>> entry : tickets.long2ObjectEntrySet()) {
                 if (entry.getValue().stream().anyMatch(ticket -> ticket.getType() == TicketType.PLAYER)) {

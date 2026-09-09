@@ -155,6 +155,10 @@ dependencies {
     // Pilot-only crash rendezvous is unit-tested from the ordinary test source set, but never
     // participates in main compilation or the distributable JAR.
     testImplementation sourceSets.pilot.output
+    // Pilot ABI regressions resolve mapped Minecraft fields reflectively.  They need the
+    // pilot compile/runtime inputs while remaining ordinary test-only code.
+    testImplementation files(sourceSets.pilot.compileClasspath)
+    testRuntimeOnly files(sourceSets.pilot.runtimeClasspath)
     testImplementation testFixtures(project(':pale-mirror-frontier'))
     // API classes are referenced only by the isolated client plugin. JourneyMap
     // itself stays optional and is never packaged into Pale Mirror.
