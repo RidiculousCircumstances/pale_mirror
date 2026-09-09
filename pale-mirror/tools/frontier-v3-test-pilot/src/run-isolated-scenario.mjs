@@ -9,6 +9,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
 import { requestRconStop } from './rcon.mjs';
+import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeReady, requestPilotNaturalDemandStop } from './natural-demand-episode.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -129,6 +130,7 @@ const gracefulSaveGateReceipts = [];
 timing.begin('scenario.total');
 try {
   const recovery = restartSegments(scenario);
+  const naturalDemandStopCarrier = scenario.id === 'disposable_f02b_normal_product_recovery';
   server = await startServer(true);
   if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
@@ -136,16 +138,20 @@ try {
     await runPilot(ephemeralScenario, output, server, clientSegments, 'initial');
   } else if (!usePersistentClient) {
     await writeScenario(beforeRestartScenario, recovery.before);
+    if (recovery.mode === 'graceful' && naturalDemandStopCarrier) server.naturalDemandEpisodeArm = await armNaturalDemandEpisode(lifecycle, server);
     if (scenario.crash !== undefined) {
       crashEvidence = await runPilotUntilCrash(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', scenario.crash);
       server = null;
     } else {
       await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart');
+      if (server.naturalDemandEpisodeArm !== undefined) {
+        await awaitNaturalDemandEpisodeReady(lifecycle, server, DURABLE_STOP_TIMEOUT_MS);
+      }
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (server !== null) {
       if (recovery.mode === 'graceful') {
-        await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port));
+        await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port, server.naturalDemandEpisodeArm));
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId });
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
       }
@@ -668,7 +674,7 @@ async function writeScenario(path, value) {
   await writeFile(path, `${JSON.stringify({ ...value, server: { ...value.server, host: '127.0.0.1', port } }, null, 2)}\n`, 'utf8');
 }
 
-async function stopServerSafely(server, serverPort) {
+async function stopServerSafely(server, serverPort, naturalDemandEpisodeArm = undefined) {
   // RCON reaches Minecraft's normal `stop` command. SIGTERM reaches the JVM
   // shutdown hook and can interrupt world persistence. A request is never
   // evidence: the pilot-only typed durable-save acknowledgement below must be
@@ -683,10 +689,14 @@ async function stopServerSafely(server, serverPort) {
       server.ownerObserverArm = await prearmSaveOwnerObserver({ project, root: saveOwnerObserverRoot,
         lifecycleIdentity: lifecycle.identity, server: { ...server, lifecycleDirectory: lifecycle.directory, worldDirectory: disposableWorld } });
     }
-    await requestRconStop({ port: server.rconPort, password: server.rconPassword });
     const ownerObserver = server.ownerObserverArm === undefined ? undefined : startSaveOwnerObservation(server.ownerObserverArm, {
       output: server.output, outputRevision: server.outputRevision, outputAfter: server.outputAfter
     });
+    if (naturalDemandEpisodeArm !== undefined) {
+      await requestPilotNaturalDemandStop(server, naturalDemandEpisodeArm);
+    } else {
+      await requestRconStop({ port: server.rconPort, password: server.rconPassword });
+    }
     try {
       await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE, server.serverRunId, DURABLE_STOP_TIMEOUT_MS);
       ownerObserver?.finish({ kind: 'durable_server_save' });

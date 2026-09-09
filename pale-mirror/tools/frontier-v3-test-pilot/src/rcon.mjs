@@ -1,7 +1,7 @@
 import { createConnection } from 'node:net';
 
 const AUTH_ID = 71_001;
-const STOP_ID = 71_002;
+const COMMAND_ID = 71_002;
 
 /** Encodes one vanilla RCON frame; packet lengths are little-endian by protocol contract. */
 export function encodeRconFrame(id, type, payload) {
@@ -38,7 +38,13 @@ export function decodeRconFrames(bytes) {
  * Acceptance is not persistence evidence: callers must still wait for Minecraft's flush marker.
  */
 export function requestRconStop({ port, password, timeoutMs = 10_000 }) {
-  if (!Number.isInteger(port) || port < 1024 || port > 65535 || typeof password !== 'string' || !password) {
+  return requestRconCommand({ port, password, command: 'stop', timeoutMs });
+}
+
+/** Authenticated transport handoff for one exact server command, never a lifecycle acknowledgement. */
+export function requestRconCommand({ port, password, command, timeoutMs = 10_000 }) {
+  if (!Number.isInteger(port) || port < 1024 || port > 65535 || typeof password !== 'string' || !password
+      || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command)) {
     return Promise.reject(new Error('invalid disposable RCON endpoint'));
   }
   return new Promise((resolveStop, rejectStop) => {
@@ -59,7 +65,7 @@ export function requestRconStop({ port, password, timeoutMs = 10_000 }) {
           if (!accepted && frame.id === -1) return finish(new Error('disposable RCON rejected its one-time credential'));
           if (!accepted && frame.id === AUTH_ID) {
             accepted = true;
-            socket.write(encodeRconFrame(STOP_ID, 2, 'stop'), (error) => {
+            socket.write(encodeRconFrame(COMMAND_ID, 2, command), (error) => {
               // This is transport handoff only, not an assertion that Minecraft has
               // persisted or completed shutdown.  Vanilla RCON does not reliably
               // respond to `stop`; the lifecycle owner must obtain the separately

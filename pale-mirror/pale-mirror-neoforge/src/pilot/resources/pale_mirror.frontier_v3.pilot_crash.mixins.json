@@ -6,7 +6,9 @@
   "mixins": [
     "FrontierV3DurableServerSaveMixin",
     "FrontierV3DurableCrashWindowMixin",
-    "FrontierV3HarvestCrashWindowMixin"
+    "FrontierV3HarvestCrashWindowMixin",
+    "FrontierV3PilotChunkMapAccessor",
+    "FrontierV3PilotDistanceManagerAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
