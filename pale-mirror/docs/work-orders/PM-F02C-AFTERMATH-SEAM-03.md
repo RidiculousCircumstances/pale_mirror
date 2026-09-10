@@ -1,8 +1,11 @@
 # PM-F02C-AFTERMATH-SEAM-03: reconcile the real aftermath owner seam
 
-Status: `HANDOFF_PENDING`. Parent slice: F0.2C. Risk: critical-code/native.
-Engineer: supervising root. Builder: fresh `gpt-5.6-terra`, reasoning `high`,
-assigned only after an exact private WIP checkpoint and isolated worktree exist.
+Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Engineer: supervising root. Builder: `/root/terra_f02c_aftermath_seam`, fresh
+`gpt-5.6-terra`, reasoning `high`, in isolated worktree
+`/home/rd/proj/pm-f02c-aftermath-seam-03/pale-mirror` on branch
+`work/f02c-aftermath-seam-03` at exact private WIP checkpoint
+`3e82665b4f4752982cfa70f65e3728a1bf83ccbd`.
 Independent challenger: fresh read-only agent at stable terminal delivery.
 
 ## Product outcome
@@ -81,5 +84,6 @@ component and cannot admit native execution.
   unbounded design, proof substitution or inability to represent the real seam
   cheaply.
 
-Observation epoch: set when the fresh builder starts. Hourly economy and
-ten-minute liveness rules follow the binding protocol.
+Observation epoch: `2026-09-10T09:00:18Z`. First economy-audit boundary:
+`2026-09-10T10:00:18Z` if still executing. Ten-minute liveness follows the
+binding protocol.
