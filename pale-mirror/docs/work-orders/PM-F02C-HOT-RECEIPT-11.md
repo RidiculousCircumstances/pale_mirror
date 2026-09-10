@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-11: admit and deliver the exact HOT assault receipt
 
-Specification revision: 2. Status: `METHOD_BOUNDARY_CORRECTION_EXECUTING`.
+Specification revision: 3. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C.
 Risk: critical-code/native. Engineer: supervising root. Intended sole builder:
 `/root/terra_f02c_hot_receipt11`, fresh `gpt-5.6-terra` with reasoning `high`.
@@ -130,3 +130,32 @@ rejection closes this context.
 
 Correction observation epoch: `2026-09-10T16:35:29Z`. Ten-minute liveness and
 hourly economy audits apply while execution is active.
+
+## R4 terminal method decision
+
+Terra returned clean private checkpoint
+`2139f55c4c009cc30d6e569ca5d1ac72a62b4847`, parent `ecfdc46f`, tree
+`f50bc56e39f0475697574e3737084791abfa3d3a`. The final focused scene receipt
+passed 64/64 in 47 seconds with SHA-256
+`815e98792aefb672e9c07e0702359257ea8eba4e18c4dfa3f50440a81926b83f`;
+the declaration test passed 2/2 with SHA-256
+`f9bb6bb44336e8bcbe12f5c167e49c04e03fe063579a98b4d6ebc596a58e38cc`.
+No complete, native or CI gate ran, both worktrees are clean and no task JVM,
+display, port or world process remains.
+
+Independent `FINAL_REVIEW` rejects the method on three bounded gaps. First,
+the framed identifier generator is injective enough for this boundary, but the
+production pending-intent consumer still selects by cause/status and can adopt
+a same-cause/current-epoch intent created for a foreign lease identity or
+revision; the negatives compare generated IDs without exercising that consumer.
+Second, the purported template-local test writes bodies and floors around
+relative `(32,8,0)`, outside the tiny `bastion/mobs/empty` interior, so a green
+parallel run is not isolated evidence. Third, the Node mutations validate only
+scenario declaration expectations; they never consume the runner-retained
+`{assertion, observed}` records or lifecycle ordering, so replaced, replayed or
+misassociated restart evidence can pass the tested boundary.
+
+This is the second semantic rejection in this builder context. The context is
+terminal and receives no further correction narrative. Useful clean bytes and
+the two scoped receipts transfer to successor order 12; full/native expense
+remains unadmitted and no product acceptance is inferred.
