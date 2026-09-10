@@ -38,7 +38,7 @@ final class FrontierV3AmbientAdmissionPolicy {
     /** The only substituted boundary in the ordinary-JVM policy test. */
     @FunctionalInterface
     interface EffectPort {
-        Optional<FrontierWorldState> execute(Selection selection);
+        Optional<EffectResult> execute(Selection selection);
     }
 
     enum Effect { DRAIN_HOT, ABANDON_PREPARED }
@@ -48,6 +48,18 @@ final class FrontierV3AmbientAdmissionPolicy {
             Objects.requireNonNull(actorId, "actor id");
             Objects.requireNonNull(state, "state");
             Objects.requireNonNull(effect, "effect");
+        }
+    }
+
+    /**
+     * The canonical transition checkpoint and released result returned by the physical port.
+     * A port is not allowed to turn an apparent body-side success into admission authority by
+     * returning an arbitrary replacement snapshot.
+     */
+    record EffectResult(FrontierWorldState drainingState, FrontierWorldState resultingState) {
+        EffectResult {
+            Objects.requireNonNull(drainingState, "draining state");
+            Objects.requireNonNull(resultingState, "resulting state");
         }
     }
 
@@ -109,8 +121,32 @@ final class FrontierV3AmbientAdmissionPolicy {
             FrontierSceneAdmission.ReservationAdmission currentAdmission = admissionFor(state);
             boolean reserved = currentAdmission.reserves(actorId);
             Optional<Effect> effect = selectedEffect(actorId, state, reserved);
-            Optional<FrontierWorldState> resultingState = effect.flatMap(value -> effects.execute(new Selection(actorId, state, value)));
+            Optional<FrontierWorldState> resultingState = effect.flatMap(value -> effects.execute(new Selection(actorId, state, value)))
+                    .filter(result -> hasCanonicalPostcondition(new Selection(actorId, state, effect.orElseThrow()), result))
+                    .map(EffectResult::resultingState);
             return new Decision(actorId, state, currentAdmission, reserved, effect, resultingState);
+        }
+
+        private static boolean hasCanonicalPostcondition(Selection selection, EffectResult result) {
+            AmbientActorLease initialLease = selection.state().ambientLeases().get(selection.actorId());
+            var initialActor = selection.state().actorLocations().get(selection.actorId());
+            AmbientActorLease drainingLease = result.drainingState().ambientLeases().get(selection.actorId());
+            var drainingActor = result.drainingState().actorLocations().get(selection.actorId());
+            AmbientActorLease releasedLease = result.resultingState().ambientLeases().get(selection.actorId());
+            var releasedActor = result.resultingState().actorLocations().get(selection.actorId());
+            if (initialLease == null || initialActor == null || drainingLease == null || drainingActor == null
+                    || releasedLease == null || releasedActor == null
+                    || drainingLease.status() != AmbientLeaseStatus.DRAINING || releasedLease.status() != AmbientLeaseStatus.CLOSED
+                    || !initialLease.actorId().equals(selection.actorId()) || !drainingLease.actorId().equals(selection.actorId())
+                    || !releasedLease.actorId().equals(selection.actorId())) return false;
+            return switch (selection.effect()) {
+                case ABANDON_PREPARED -> initialLease.status() == AmbientLeaseStatus.PREPARED
+                        && drainingActor.equals(initialActor)
+                        && releasedActor.body().equals(initialLease.handoffBody())
+                        && releasedActor.condition().equals(initialActor.condition());
+                case DRAIN_HOT -> initialLease.status() == AmbientLeaseStatus.HOT
+                        && releasedActor.condition().status() == ActorLifeStatus.ALIVE;
+            };
         }
 
         private static Optional<Effect> selectedEffect(SubjectId actorId, FrontierWorldState state, boolean reserved) {

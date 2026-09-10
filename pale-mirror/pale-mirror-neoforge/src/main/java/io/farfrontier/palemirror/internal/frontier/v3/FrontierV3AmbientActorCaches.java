@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import net.minecraft.world.entity.Mob;
 
 import java.util.IdentityHashMap;

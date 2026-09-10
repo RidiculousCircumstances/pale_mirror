@@ -24,19 +24,18 @@ final class FrontierV3AmbientActorReservationHandoff {
         return admissionPolicy.decide(actorId, state, selection -> execute(level, runtime, selection));
     }
 
-    private static Optional<FrontierWorldState> execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                         FrontierV3AmbientAdmissionPolicy.Selection selection) {
+    private static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                                     FrontierV3AmbientAdmissionPolicy.Selection selection) {
         Entity body = level.getEntity(FrontierV3AmbientActorExecutor.entityId(selection.state(), selection.actorId()));
-        boolean applied = switch (selection.effect()) {
+        return switch (selection.effect()) {
             case DRAIN_HOT -> body instanceof Mob mob && FrontierV3AmbientActorExecutor.owned(mob, selection.actorId(),
                     FrontierV3AmbientActorExecutor.bioform(selection.state(), selection.actorId()))
-                    && FrontierV3AmbientActorExecutor.drain(runtime, mob);
+                    ? FrontierV3AmbientActorExecutor.drainForAdmission(runtime, mob) : Optional.empty();
             case ABANDON_PREPARED -> {
                 var lease = selection.state().ambientLeases().get(selection.actorId());
-                yield lease != null && FrontierV3AmbientActorExecutor.abandonPreparedForReservation(
+                yield lease == null ? Optional.empty() : FrontierV3AmbientActorExecutor.abandonPreparedForReservation(
                         level, runtime, selection.state(), selection.actorId(), lease);
             }
         };
-        return applied ? runtime.decodedState() : Optional.empty();
     }
 }

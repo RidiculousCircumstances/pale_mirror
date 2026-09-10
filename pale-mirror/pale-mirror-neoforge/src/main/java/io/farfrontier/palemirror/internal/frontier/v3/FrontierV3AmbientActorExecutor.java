@@ -210,7 +210,7 @@ final class FrontierV3AmbientActorExecutor {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId)) && drain(runtime, mob)) admitted++;
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
-                        && abandonPreparedForReservation(level, runtime, state, actorId, lease)) {
+                        && abandonPreparedForReservation(level, runtime, state, actorId, lease).isPresent()) {
                     admitted++;
                 }
                 forgetColdDemand(runtime, actorId);
@@ -679,51 +679,63 @@ final class FrontierV3AmbientActorExecutor {
     }
     /** Durably captures then removes a loaded HOT body; the return value proves no serialized duplicate remains. */
     static boolean drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
+        return drainForAdmission(runtime, body).isPresent();
+    }
+
+    static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> drainForAdmission(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return false;
+        if (state == null) return Optional.empty();
         String rawActorId = body.getPersistentData().getString(ACTOR_KEY);
-        if (rawActorId.isBlank()) return false;
+        if (rawActorId.isBlank()) return Optional.empty();
         SubjectId actorId;
-        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return Optional.empty(); }
         var current = state.actorLocations().get(actorId);
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(body.getUUID())
                 || !owned(body, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
-                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
+                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return Optional.empty();
         BodyPosition position = observedBody(body);
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.TRANSIT) {
-            if (journey == null) return false;
+            if (journey == null) return Optional.empty();
             BodyPosition cursor = BodyPosition.above(new SurfaceAnchor(journey.currentPosition()));
-            if (!position.equals(cursor)) return false;
+            if (!position.equals(cursor)) return Optional.empty();
             position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, state.ambientLeases().get(actorId));
             BodyPosition cursor = member == null ? null : member.currentSurface().standingBody();
-            if (cursor == null || !position.equals(cursor)) return false;
+            if (cursor == null || !position.equals(cursor)) return Optional.empty();
             position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, state.ambientLeases().get(actorId));
             BodyPosition cursor = member == null ? null : BodyPosition.above(new SurfaceAnchor(member.currentPosition()));
-            if (cursor == null || !position.equals(cursor)) return false;
+            if (cursor == null || !position.equals(cursor)) return Optional.empty();
             position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) {
             HiveTaskAssembly.Member member = hiveAssemblyMember(state, actorId, state.ambientLeases().get(actorId));
             BodyPosition cursor = member == null ? null : member.currentSurface().standingBody();
-            if (cursor == null || !position.equals(cursor)) return false;
+            if (cursor == null || !position.equals(cursor)) return Optional.empty();
             position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
-            if (!position.equals(current.body())) return false;
+            if (!position.equals(current.body())) return Optional.empty();
             position = current.body();
         }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
-        submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
-        submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health));
+        if (!(submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+        FrontierWorldState drained = runtime.decodedState().orElse(null);
+        if (drained == null || drained.ambientLeases().get(actorId) == null
+                || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return Optional.empty();
+        if (!(submit(runtime, "ambient-release", actorId.value(), new AmbientLeaseReleased(actorId, position, health))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+        FrontierWorldState released = runtime.decodedState().orElse(null);
+        if (released == null || released.ambientLeases().get(actorId) == null
+                || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
         body.discard();
-        return true;
+        return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, released));
     }
 
     /**
@@ -732,25 +744,29 @@ final class FrontierV3AmbientActorExecutor {
      * canonical hand-off body and health are therefore the only admissible release evidence;
      * a mismatched physical UUID/body remains a conflict and blocks the successor.
      */
-    static boolean abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                  FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+    static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                                                    FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         Entity body = level.getEntity(entityId(state, actorId));
         if (body != null && (!(body instanceof Mob mob) || !owned(mob, actorId, bioform(state, actorId))
-                || !observedBody(mob).equals(lease.handoffBody()))) return false;
+                || !observedBody(mob).equals(lease.handoffBody()))) return Optional.empty();
         if (!(submit(runtime, "ambient-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING)) instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) {
-            return false;
+            return Optional.empty();
         }
         FrontierWorldState drained = runtime.decodedState().orElse(null);
         if (drained == null || drained.ambientLeases().get(actorId) == null
-                || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
+                || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return Optional.empty();
         var condition = drained.actorLocations().get(actorId);
-        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE) return false;
+        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
         boolean released = submit(runtime, "ambient-reserved-release", actorId.value(),
                 new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
-        if (released && body != null) body.discard();
-        return released;
+        if (!released) return Optional.empty();
+        FrontierWorldState resulting = runtime.decodedState().orElse(null);
+        if (resulting == null || resulting.ambientLeases().get(actorId) == null
+                || resulting.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
+        if (body != null) body.discard();
+        return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, resulting));
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         PENDING_ADMISSIONS.remove(runtime);
