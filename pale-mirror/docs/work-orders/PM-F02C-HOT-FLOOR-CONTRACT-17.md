@@ -1,6 +1,6 @@
 # PM-F02C-HOT-FLOOR-CONTRACT-17: make every assault floor physically serviceable
 
-Specification revision: 3. Status: `EXECUTING`.
+Specification revision: 4. Status: `FINAL_REVIEW_REJECTED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_floor17`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -95,3 +95,50 @@ the 64/64 localized-floor carrier as the requested seam and amended the evidence
 split above. Observation epoch reset at `2026-09-10T19:56:48Z`; the next bounded
 liveness audit is due after ten minutes of silence, and the economy audit remains
 due at `20:35:01Z` if execution is still active.
+
+## Terminal result and independent review
+
+Terra returned clean private commit
+`219e27ec48207852f4d5b6661edbbe5a1d1acd11`, parent `3ed045b4`, tree
+`6a17d76b35b45257c8a3907e73cb077cfbcc6587`. The two-path delta makes scene
+admission consume the loss-masked current `FrontierGrayboxPlan`, requires a
+declared body surface with planned headroom and removes the complete candidate
+after exact provider-surface loss. That provider-serviceability/loss-mask
+boundary and its focused negative are accepted for reuse.
+
+The focused `HiveSettlementAssaultProcessTest` receipt passed 11/11, including
+the retained R11 unclaimed floor and `KNOWN_SEMANTIC_LOSS` negative. The complete
+changed-candidate gate produced 1,269 JUnit tests with zero failures/errors,
+303/303 required GameTests in 3.966 minutes followed by all-dimensions saved
+shutdown, and packaged JAR
+`81253a90678fb5d2299347c9092ca77e2e3fbd37778d9468e1920ecc5371265f`.
+The pre-decision 64/64 localized-floor scene run remains non-claimable component
+evidence and is not repeated.
+
+Final review rejects the candidate's attacker-floor semantics. Normative
+`architecture.yml#frontier-v3-settlement-assault` requires one distinct local
+perimeter floor per attacker. `SettlementResidentIngressPlan.ownedSurfaces()`
+contains the apron plus the Hall connector and ingress ramp, while the candidate
+sorts that whole set nearest-first and accepts generic public/route surfaces.
+For seed 91 the settlement anchor is `(-360,64,-340)`, yet the first choices are
+the internal Hall connector `(-367..-378,64,-340)`, not the perimeter. The new
+test proves only generic provider serviceability, uniqueness, defender
+non-overlap and anchor inequality; it cannot reject a connector, ramp or other
+internal declared surface. A fresh read-only challenger independently confirmed
+this architecture and oracle defect.
+
+The sole native R12 reached server readiness but the client exited 255 before
+connection or any setup/action/diagnostic fact. Its trace contains only
+`run_started` and `run_finished`; the client crash explicitly reports `Failed to
+initialize GLFW` / `Failed to detect any supported platform`. Manifest fragment
+SHA-256 is `b32ee43120ee4fa311e35449280ee614e49b185ac1547e17463112095a75d022`;
+client crash SHA-256 is
+`d642027bfa4dc6b7eda971bc44b28a1ce924424a0dbb6e0b305ca0866c57280e`.
+This is launch-envelope evidence only, not a HOT product result. The invocation
+did not retain proof that the carrier ran as a child of the already accepted
+same-namespace `scripts/with-private-xvfb.sh` GLX admission boundary.
+
+The task root is absent, ports 25575/25576 and X97/X575 sockets are closed, and
+no task-owned process survived. Execution lasted less than one hour, so no
+hourly economy audit became due. Order18 inherits only the accepted
+provider/loss-mask bytes and the two still-open outcomes above.
