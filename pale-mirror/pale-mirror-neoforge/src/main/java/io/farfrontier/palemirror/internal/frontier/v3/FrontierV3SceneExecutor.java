@@ -523,9 +523,12 @@ final class FrontierV3SceneExecutor {
                     .thenComparing(body -> body.member().actorId())).orElseThrow();
             if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
             forgetLastObserved(runtime, lease.id());
-            String key = state.bootstrap().worldId().value().replace(':', '-') + "-" + sceneCause.value().replace(':', '-')
-                    + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause);
-            PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-" + key), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
+            PhysicalIntentId intentId = settlementAssault
+                    ? FrontierV3SettlementAssaultReceiptBinding.intentId(state, lease, sceneCause)
+                    : new PhysicalIntentId("intent:scene-strike-" + state.bootstrap().worldId().value().replace(':', '-') + "-"
+                    + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
+            String key = intentId.value().substring("intent:scene-strike-".length());
+            PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
                     sceneCause, List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }

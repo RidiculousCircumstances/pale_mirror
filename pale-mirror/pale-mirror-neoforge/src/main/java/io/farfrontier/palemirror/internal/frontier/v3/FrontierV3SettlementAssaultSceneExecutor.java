@@ -170,15 +170,14 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         rememberObserved(level, runtime, state, lease);
     }
 
-    /** The executor's durable ID binds a receipt to one lease revision without widening its shared cause. */
+    /** The durable ID is an exact lease association; a shared cause alone cannot fence a replay. */
     private static boolean confirmedStrikeForThisLease(FrontierWorldState state, SceneLease lease) {
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         if (cause == null) return false;
-        String leaseSuffix = "-r" + lease.revision() + "-s";
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                 && intent.status() == PhysicalIntentStatus.CONFIRMED
                 && SettlementAssaultCauseIdentity.belongsTo(cause.assaultId(), intent.causeSubjectId())
-                && intent.id().value().contains(leaseSuffix));
+                && FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent));
     }
 
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

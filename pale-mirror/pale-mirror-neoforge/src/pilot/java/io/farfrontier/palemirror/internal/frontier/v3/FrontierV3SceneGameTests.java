@@ -552,20 +552,30 @@ public final class FrontierV3SceneGameTests {
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(candidate.handoffPosition().x() + 0.5D, candidate.handoffPosition().y() + 1.0D, candidate.handoffPosition().z() + 0.5D);
         helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause, expectedAttacker,
-                expectedTarget, null, 330));
+                expectedTarget, null, null, 330));
     }
 
     /** Drives only the registered production owner until its exact receipt can drain normally. */
     private static void driveSettlementAssaultReceipt(GameTestHelper helper, ServerLevel level,
                                                        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                                        ServerPlayer observer, SettlementAssaultSceneCandidate candidate, SubjectId expectedCause,
-                                                       SubjectId expectedAttacker, SubjectId expectedTarget, PhysicalIntent confirmed, int remaining) {
+                                                       SubjectId expectedAttacker, SubjectId expectedTarget, PhysicalIntent confirmed,
+                                                       FixedScalar independentlyObservedBefore, int remaining) {
         if (remaining <= 0) throw new IllegalStateException("registered settlement assault did not reach its exact receipt and COLD hand-off");
         FrontierV3SceneExecutor.tick(level, runtime);
         FrontierWorldState current = state(runtime);
         SceneLease lease = current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isSettlementAssault).findFirst()
                 .orElseThrow(() -> new IllegalStateException("registered settlement-assault owner did not create its typed lease"));
         if (confirmed == null) {
+            PhysicalIntent inFlight = current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE)
+                    .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING).findFirst().orElse(null);
+            if (inFlight != null && independentlyObservedBefore == null) {
+                Entity target = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(expectedTarget)).findFirst().orElseThrow().entityId());
+                if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) {
+                    throw new IllegalStateException("the exact target must be a live Minecraft body before the owned hit");
+                }
+                independentlyObservedBefore = fixed(living.getHealth());
+            }
             PhysicalIntent receiptIntent = current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE)
                     .filter(intent -> intent.status() == PhysicalIntentStatus.CONFIRMED).findFirst().orElse(null);
             if (receiptIntent != null) {
@@ -575,8 +585,28 @@ public final class FrontierV3SceneGameTests {
                 helper.assertValueEqual(receiptIntent.subjectIds(), List.of(expectedAttacker, expectedTarget), "the real owner must retain the separately exact live attacker and target");
                 helper.assertValueEqual(receipt.attackerId(), expectedAttacker, "the receipt must retain the exact live attacker");
                 helper.assertValueEqual(receipt.targetId(), expectedTarget, "the receipt must retain the exact live target");
-                helper.assertTrue(receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0,
-                        "the registered owner must confirm real Minecraft damage, not only a durable transition");
+                Entity target = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(expectedTarget)).findFirst().orElseThrow().entityId());
+                if (!(target instanceof net.minecraft.world.entity.LivingEntity living) || independentlyObservedBefore == null) {
+                    throw new IllegalStateException("the exact target must retain independent before/after Minecraft samples");
+                }
+                FixedScalar independentlyObservedAfter = fixed(living.getHealth());
+                FrontierV3SettlementAssaultReceiptBinding.requireObservedHealthTransition(receiptIntent, receipt,
+                        independentlyObservedBefore, independentlyObservedAfter);
+                helper.assertTrue(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(current, lease, receiptIntent),
+                        "the retained receipt must have the one exact current-lease association");
+                PhysicalIntent foreignRevision = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(
+                        receiptIntent.id().value().replace("-r" + lease.revision() + "-s0", "-r" + (lease.revision() + 1L) + "-s0")),
+                        receiptIntent.kind(), receiptIntent.status(), receiptIntent.causeSubjectId(), receiptIntent.subjectIds(),
+                        receiptIntent.origin(), receiptIntent.radiusBlocks(), receiptIntent.postcondition(), receiptIntent.postconditionObservationId(), receiptIntent.targetSlot());
+                helper.assertFalse(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(current, lease, foreignRevision),
+                        "a same-cause foreign lease revision must never satisfy the exactly-once HOT receipt fence");
+                try {
+                    FrontierV3SettlementAssaultReceiptBinding.requireObservedHealthTransition(receiptIntent,
+                            new SceneStrikeObservation(receipt.id(), receipt.intentId(), receipt.attackerId(), receipt.targetId(),
+                                    independentlyObservedBefore, new FixedScalar(independentlyObservedBefore.raw() - FixedScalar.SCALE)),
+                            independentlyObservedBefore, independentlyObservedBefore);
+                    throw new IllegalStateException("a forged decreasing receipt without hurt must fail the independent health oracle");
+                } catch (IllegalArgumentException expected) { }
                 helper.assertValueEqual(current.strategicPlans().settlementAssaults().get(candidate.assaultId()).nextStrikeEpoch(), 1,
                         "one confirmed receipt must advance the assault epoch exactly once");
                 observer.setPos(candidate.handoffPosition().x() + FrontierV3SceneDemand.RADIUS_BLOCKS + 80.5D,
@@ -596,8 +626,9 @@ public final class FrontierV3SceneGameTests {
             runtime.shutdown(); level.getServer().getPlayerList().remove(observer); helper.succeed(); return;
         }
         PhysicalIntent next = confirmed;
+        FixedScalar nextObservedBefore = independentlyObservedBefore;
         helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause,
-                expectedAttacker, expectedTarget, next, remaining - 1));
+                expectedAttacker, expectedTarget, next, nextObservedBefore, remaining - 1));
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -795,6 +826,7 @@ public final class FrontierV3SceneGameTests {
                 && intent.causeSubjectId().equals(FrontierSceneBehaviors.logistics(lease).operationId()) && intent.status() == PhysicalIntentStatus.PREPARED).findFirst()
                 .orElseThrow(() -> new IllegalStateException("the HOT scene did not prepare its exact next strike"));
     }
+    private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage()
                 .orElseThrow(() -> new IllegalStateException("the v3 GameTest runtime must remain active: "
