@@ -74,9 +74,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: f02b-${{ github.run_id }}-producer
+          # Keep the action's common archive root at f02b-producer.  Combining
+          # this with RUNNER_TEMP evidence lifts the root to the runner work
+          # directory and nests the immutable runtime below the producer checkout.
+          name: f02b-${{ github.run_id }}-producer-runtime
           path: |
-            f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer
+            f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer/runtime.json
+            f02b-${{ github.run_id }}-producer-workspace/pale-mirror/build/f02b-producer/portable-runtime
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: f02b-${{ github.run_id }}-producer-metadata
+          path: |
             ${{ runner.temp }}/f02b-artifacts/producer
           if-no-files-found: error
 
@@ -117,7 +127,7 @@ jobs:
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: f02b-${{ github.run_id }}-producer
+          name: f02b-${{ github.run_id }}-producer-runtime
           path: f02b-${{ github.run_id }}-${{ matrix.worker }}-workspace/pale-mirror/build/f02b-producer
       - name: Bind downloaded immutable runtime to this worker
         run: >-

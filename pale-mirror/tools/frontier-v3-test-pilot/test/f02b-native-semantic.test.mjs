@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertGracefulRecoveryLifecycle, assertPrimaryEvidence, assertRecoveryCarrierManifest, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateScenario } from '../src/scenario.mjs';
@@ -218,6 +218,9 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /working-directory: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
+  assert.match(workflow, /name: f02b-\$\{\{ github\.run_id \}\}-producer-runtime[\s\S]*?f02b-\$\{\{ github\.run_id \}\}-producer-workspace\/pale-mirror\/build\/f02b-producer\/runtime\.json[\s\S]*?f02b-\$\{\{ github\.run_id \}\}-producer-workspace\/pale-mirror\/build\/f02b-producer\/portable-runtime/);
+  assert.match(workflow, /name: f02b-\$\{\{ github\.run_id \}\}-producer-metadata[\s\S]*?\$\{\{ runner\.temp \}\}\/f02b-artifacts\/producer/);
+  assert.match(workflow, /actions\/download-artifact@v4[\s\S]*?name: f02b-\$\{\{ github\.run_id \}\}-producer-runtime[\s\S]*?path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
   assert.match(workflow, /f02b-portable-runtime-artifact\.mjs --mode=stage/);
   assert.match(workflow, /f02b-portable-runtime-artifact\.mjs --mode=bind/);
   assert.match(workflow, /--runtime="\$PWD\/build\/f02b-producer\/runtime\.consumer\.json"/);
@@ -242,10 +245,11 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
 });
 
-test('F0.2B producer artifact transports its runtime manifest and full immutable closure to a fresh worker', async (context) => {
+test('F0.2B action-defined producer artifact extracts its runtime manifest and full immutable closure into a fresh worker', async (context) => {
   const root = await mkdtemp('/home/rd/proj/pm-f02b-portable-runtime-test-');
   context.after(() => rm(root, { recursive: true, force: true }));
-  const producer = join(root, 'producer'); const worker = join(root, 'fresh-worker'); const store = join(root, 'store');
+  const actionWork = join(root, 'runner', '_work'); const producer = join(actionWork, 'pale_mirror', 'pale_mirror', 'f02b-34429834971-producer-workspace', 'pale-mirror', 'build', 'f02b-producer');
+  const worker = join(root, 'fresh-worker'); const store = join(root, 'store');
   const entryBytes = Buffer.from('immutable-launch-member');
   const entrySha256 = createHash('sha256').update(entryBytes).digest('hex');
   const manifestCore = { schema: 1, kind: 'frontier-v3-f0vc-prepared-runtime', producerProject: producer,
@@ -257,22 +261,39 @@ test('F0.2B producer artifact transports its runtime manifest and full immutable
   const stored = join(store, 'prepared', actualContent); await mkdir(join(stored, 'entries'), { recursive: true });
   for (const entry of manifest.inputs) await writeFile(join(stored, 'entries', entry.id), entryBytes);
   await writeFile(join(stored, 'manifest.json'), JSON.stringify(manifest));
-  await mkdir(join(producer, 'build'), { recursive: true });
-  const runtime = join(producer, 'build', 'runtime.json'); await writeFile(runtime, JSON.stringify({ manifest: join(stored, 'manifest.json'), contentSha256: actualContent }));
-  const artifact = join(producer, 'artifact'); await stagePortableRuntimeArtifact({ runtime, output: artifact });
-  await mkdir(worker, { recursive: true });
-  const downloaded = join(worker, 'downloaded'); await mkdir(downloaded, { recursive: true });
-  const archive = join(root, 'producer-artifact.tgz');
-  await execFile('tar', ['-czf', archive, '-C', artifact, '.']);
-  await execFile('tar', ['-xzf', archive, '-C', downloaded]);
-  const bound = join(worker, 'runtime.consumer.json'); await bindPortableRuntimeArtifact({ runtime, artifact: downloaded, output: bound });
-  await verifyPortableRuntimeArtifact({ runtime, artifact: downloaded });
+  await mkdir(producer, { recursive: true });
+  const runtime = join(producer, 'runtime.json'); await writeFile(runtime, JSON.stringify({ manifest: join(stored, 'manifest.json'), contentSha256: actualContent }));
+  const portable = join(producer, 'portable-runtime'); await stagePortableRuntimeArtifact({ runtime, output: portable });
+
+  // This is the real failed v68 action layout: upload-artifact received the
+  // producer directory and RUNNER_TEMP evidence, so its archive LCA was the
+  // runner work root and download-artifact preserved that nested checkout path.
+  const metadata = join(actionWork, '_temp', 'f02b-artifacts', 'producer'); await mkdir(metadata, { recursive: true });
+  await writeFile(join(metadata, 'capacity.json'), '{}');
+  const oldArchive = join(root, 'v68-mixed-producer.zip');
+  await execFile('zip', ['-qr', oldArchive,
+    'pale_mirror/pale_mirror/f02b-34429834971-producer-workspace/pale-mirror/build/f02b-producer',
+    '_temp/f02b-artifacts/producer'], { cwd: actionWork });
+  const oldDownloaded = join(worker, 'old-download'); await mkdir(oldDownloaded, { recursive: true });
+  await execFile('unzip', ['-q', oldArchive, '-d', oldDownloaded]);
+  const oldExpectedRoot = join(oldDownloaded, 'build', 'f02b-producer');
+  await assert.rejects(bindPortableRuntimeArtifact({ runtime: join(oldExpectedRoot, 'runtime.json'), artifact: join(oldExpectedRoot, 'portable-runtime'), output: join(worker, 'old.json') }), /unreadable|ENOENT/,
+    'mixed producer/TEMP action inputs must reject the observed nested v68 extraction shape');
+  assert.equal((await readFile(join(oldDownloaded, 'pale_mirror', 'pale_mirror', 'f02b-34429834971-producer-workspace', 'pale-mirror', 'build', 'f02b-producer', 'runtime.json'), 'utf8')).length > 0, true,
+    'the regression must retain the observed action-defined nested producer root');
+
+  // The corrected action uploads only the two runtime inputs.  Their exact LCA
+  // is f02b-producer, so download-artifact extracts runtime.json and the
+  // portable closure directly into the worker's declared destination.
+  const archive = join(root, 'runtime-only-producer.zip');
+  await execFile('zip', ['-qr', archive, 'runtime.json', 'portable-runtime'], { cwd: producer });
+  const downloaded = join(worker, 'build', 'f02b-producer'); await mkdir(downloaded, { recursive: true });
+  await execFile('unzip', ['-q', archive, '-d', downloaded]);
+  const downloadedRuntime = join(downloaded, 'runtime.json');
+  const bound = join(worker, 'runtime.consumer.json'); await bindPortableRuntimeArtifact({ runtime: downloadedRuntime, artifact: join(downloaded, 'portable-runtime'), output: bound });
+  await verifyPortableRuntimeArtifact({ runtime: downloadedRuntime, artifact: join(downloaded, 'portable-runtime') });
   const value = JSON.parse(await readFile(bound, 'utf8'));
-  assert.ok(value.manifest.startsWith('downloaded/'), 'worker must bind to its downloaded artifact, never the producer store');
-  const oldShape = join(worker, 'old-producer-workspace-shape', 'pale-mirror', 'build', 'f02b-producer');
-  await mkdir(oldShape, { recursive: true }); await cp(runtime, join(oldShape, 'runtime.json'));
-  await assert.rejects(bindPortableRuntimeArtifact({ runtime, artifact: oldShape, output: join(worker, 'old.json') }), /unreadable|ENOENT/,
-    'the old nested producer-workspace artifact has no portable immutable closure');
+  assert.ok(value.manifest.startsWith('build/f02b-producer/portable-runtime/'), 'worker must bind to its downloaded artifact, never the producer store');
 });
 
 test('F0.2B producer establishes isolated Gradle state and preserves a clean prepared identity', async () => {
