@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertGracefulRecoveryLifecycle, assertPrimaryEvidence, assertRecoveryCarrierManifest, assertRecoveryCausalMilestones, f02bNamespaces, hashJson, laneFor, mergeSemanticMatrix } from '../src/f02b-native-semantic.mjs';
-import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateScenario } from '../src/scenario.mjs';
+import { createHash } from 'node:crypto';
+import { execFile as execute } from 'node:child_process';
+import { promisify } from 'node:util';
+import { bindPortableRuntimeArtifact, stagePortableRuntimeArtifact, verifyPortableRuntimeArtifact } from '../src/f02b-portable-runtime-artifact.mjs';
 
 const sha = 'a'.repeat(40); const hash = 'b'.repeat(64);
+const execFile = promisify(execute);
 const expected = Object.freeze({ qualificationId: 'f02b-r1', repository: 'RidiculousCircumstances/pale_mirror', headSha: sha, workflowSha: sha,
   workflowRef: 'RidiculousCircumstances/pale_mirror/.github/workflows/f02b-reference-container-semantic.yml@refs/heads/main', runId: 44, runAttempt: 1 });
 
@@ -213,6 +218,9 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(workflow, /working-directory: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.worker \}\}-workspace\/pale-mirror\/build\/f02b-producer/);
+  assert.match(workflow, /f02b-portable-runtime-artifact\.mjs --mode=stage/);
+  assert.match(workflow, /f02b-portable-runtime-artifact\.mjs --mode=bind/);
+  assert.match(workflow, /--runtime="\$PWD\/build\/f02b-producer\/runtime\.consumer\.json"/);
   assert.match(workflow, /path: f02b-\$\{\{ github\.run_id \}\}-merge-workspace\/pale-mirror\/f02b-evidence/);
   assert.match(workflow, /--memory-per-worker-mib=6144/);
   assert.equal((workflow.match(/JAVA_TOOL_OPTIONS: -Xmx3G/g) ?? []).length, 2);
@@ -232,6 +240,39 @@ test('F0.2B consumers use a private checkout and prepare only a disposable world
   assert.match(isolated, /-PfrontierV3PilotPreparedRuntime=true/);
   assert.match(scenarioRunner, /ensurePreparedLaunchWorkingDirectory/);
   assert.match(build, /frontierV3PilotPreparedRuntime != 'true'/);
+});
+
+test('F0.2B producer artifact transports its runtime manifest and full immutable closure to a fresh worker', async (context) => {
+  const root = await mkdtemp('/home/rd/proj/pm-f02b-portable-runtime-test-');
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const producer = join(root, 'producer'); const worker = join(root, 'fresh-worker'); const store = join(root, 'store');
+  const entryBytes = Buffer.from('immutable-launch-member');
+  const entrySha256 = createHash('sha256').update(entryBytes).digest('hex');
+  const manifestCore = { schema: 1, kind: 'frontier-v3-f0vc-prepared-runtime', producerProject: producer,
+    source: { sha256: 'b'.repeat(64) }, portablePreparedIdentity: { fixture: true }, environment: [],
+    inputs: Array.from({ length: 8 }, (_, index) => ({ id: createHash('sha256').update(`entry-${index}`).digest('hex'), sha256: entrySha256,
+      source: `${producer}/source-${index}`, target: `runtime-${index}`, text: false, role: 'fixture' })) };
+  const actualContent = createHash('sha256').update(JSON.stringify(manifestCore)).digest('hex');
+  const manifest = { ...manifestCore, contentSha256: actualContent, entriesRoot: 'entries' };
+  const stored = join(store, 'prepared', actualContent); await mkdir(join(stored, 'entries'), { recursive: true });
+  for (const entry of manifest.inputs) await writeFile(join(stored, 'entries', entry.id), entryBytes);
+  await writeFile(join(stored, 'manifest.json'), JSON.stringify(manifest));
+  await mkdir(join(producer, 'build'), { recursive: true });
+  const runtime = join(producer, 'build', 'runtime.json'); await writeFile(runtime, JSON.stringify({ manifest: join(stored, 'manifest.json'), contentSha256: actualContent }));
+  const artifact = join(producer, 'artifact'); await stagePortableRuntimeArtifact({ runtime, output: artifact });
+  await mkdir(worker, { recursive: true });
+  const downloaded = join(worker, 'downloaded'); await mkdir(downloaded, { recursive: true });
+  const archive = join(root, 'producer-artifact.tgz');
+  await execFile('tar', ['-czf', archive, '-C', artifact, '.']);
+  await execFile('tar', ['-xzf', archive, '-C', downloaded]);
+  const bound = join(worker, 'runtime.consumer.json'); await bindPortableRuntimeArtifact({ runtime, artifact: downloaded, output: bound });
+  await verifyPortableRuntimeArtifact({ runtime, artifact: downloaded });
+  const value = JSON.parse(await readFile(bound, 'utf8'));
+  assert.ok(value.manifest.startsWith('downloaded/'), 'worker must bind to its downloaded artifact, never the producer store');
+  const oldShape = join(worker, 'old-producer-workspace-shape', 'pale-mirror', 'build', 'f02b-producer');
+  await mkdir(oldShape, { recursive: true }); await cp(runtime, join(oldShape, 'runtime.json'));
+  await assert.rejects(bindPortableRuntimeArtifact({ runtime, artifact: oldShape, output: join(worker, 'old.json') }), /unreadable|ENOENT/,
+    'the old nested producer-workspace artifact has no portable immutable closure');
 });
 
 test('F0.2B producer establishes isolated Gradle state and preserves a clean prepared identity', async () => {
