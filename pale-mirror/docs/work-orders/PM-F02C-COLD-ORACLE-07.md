@@ -1,7 +1,7 @@
 # PM-F02C-COLD-ORACLE-07: admit and execute the exact COLD recovery oracle
 
 Specification revision: 1.
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `METHOD_REJECTED`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Executor: `/root/terra_f02c_cold_oracle08`, one
 fresh `gpt-5.6-terra` with reasoning `high`, in a fresh isolated worktree from
 private checkpoint `4e4bafa7ef38520133221b1aa4cdf0f02921967c`, tree
@@ -117,3 +117,32 @@ permits intermediate source review or a heartbeat.
 
 Observation epoch: `2026-09-10T12:20:08Z`. First economy-audit boundary:
 `2026-09-10T13:20:08Z` if still executing.
+
+## Terminal method review
+
+The builder returned `COLD_ORACLE_READY` at clean private commit
+`bf6d01b3fa47dab6088e3d879994432a49536788`, tree
+`ffa9108a17396fd2990119f449f81f3bd915ba6f`, parent `4e4bafa7`.
+It added one read-only authority-revision diagnostic field, its focused contract
+and a revised declaration/oracle. The focused Node path passed 2/2 in about
+0.2 seconds; the diagnostic contract passed 25/25 in 3 minutes 3 seconds. No
+GameTest, complete critical, native or CI run occurred.
+
+Independent method challenge admits the declarative action ordering but rejects
+the oracle evidence. Its Node input is a hand-built list of raw diagnostic
+values rather than a retained runner manifest. It selects the last matching raw
+poll response, so assertion-bound history is indistinguishable from duplicate,
+reordered or replayed diagnostics, and its mutations do not cover the complete
+claimed causal field set.
+
+The engineer additionally finds an actual producer/consumer mismatch. The
+default persistent-client restart path stores the whole global action history
+in the final manifest and does not publish `recovery.beforeRestartManifest`;
+the dedicated carrier wrapper nevertheless requires that path and would pass
+`undefined` as its pre-restart receipt. The unexecuted native wrapper is
+therefore known-invalid before Minecraft.
+
+This is the repeated proof-category failure circuit breaker. The executor is
+terminal and no heavy run is authorized. Preserve the diagnostic field and its
+focused receipt, but replace the raw-poll/ad-hoc-manifest method with the actual
+runner's assertion-bound retained-evidence boundary before more execution.
