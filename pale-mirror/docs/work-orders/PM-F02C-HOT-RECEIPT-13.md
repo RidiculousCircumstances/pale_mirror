@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-13: execute the HOT component lane and bind restart phases
 
-Specification revision: 2. Status: `METHOD_ADMITTED_EXECUTING_FOCUSED`.
+Specification revision: 3. Status: `IMPASSE_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_receipt13`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -104,3 +104,23 @@ actually executed, the aggregate selection did not fall below the prior 64,
 and all tests passed. Before checkpointing, make the adjacent scene-run comment
 factually match the now-enabled template namespace; this is documentation
 hygiene, not a new method or semantic change. No full/native/CI work.
+
+## Terminal result
+
+R7 is preserved at clean private commit
+`3536a7c899244648c50552bff01e5e8d3bdd1a6d`, parent `0b3f409e`, tree
+`6de453ff09ea3637ab82f1fce23fdcfecf71a0e9`. The accepted Node receipt remains
+4/4 with SHA-256 `5de09aec...b339b7`; no successor reruns it.
+
+The focused selector now starts64 tests, so R6's silent exclusion is closed,
+but both authorized attempts stop before individual execution with `Missing
+test structure: pale_mirror_visuals:temperate/residence_1`. The second attempt
+did execute Visuals `processResources`; the source and generated NBT both exist
+and have SHA-256 `dae2b25f...2c75b3`. Enabled namespaces include
+`pale_mirror_visuals`, but the failing run's mod list registers only
+`pale_mirror`; a separately retained successful Visuals GameTest run registers
+`pale_mirror_visuals`. Thus output-file existence and a task dependency are not
+effective-resource-pack evidence. Logs are retained at SHA-256
+`f8e02374...95507` and `a18595a9...ee3ea`. No target-batch marker, physical
+claim, full/native/CI execution or surviving task process exists. This context
+is terminal; order14 owns only the effective runtime-resource boundary.
