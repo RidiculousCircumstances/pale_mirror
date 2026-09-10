@@ -1,7 +1,7 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
 Specification revision: 4.
-Status: `EXPENSIVE_EXECUTING`. Parent slice: F0.2C. Risk:
+Status: `NATIVE_EXECUTING`. Parent slice: F0.2C. Risk:
 critical-code/native. Engineer: supervising root. Executors through
 `/root/terra_f02c_cold_identity11` are terminal. The sole successor is
 `/root/terra_f02c_cold_identity12`, one fresh `gpt-5.6-terra` with reasoning
@@ -231,6 +231,29 @@ COLD flow. No CI/provider matrix, benchmark, general native matrix, confidence
 rerun or unrelated leaf is authorized. Applicable earlier receipts are
 composed rather than repeated.
 
+CI-5 is independently `ACCEPTED` on the exact immutable candidate: the sole
+clean-HEAD critical gate completed in 232 seconds with 304/304 GameTests,
+orderly saved-world shutdown, packaged-JAR verification and JAR SHA-256
+`068611a438501714996bfcebfa240fc58ce36c283999897a779fbc3f6c04694a`.
+Its receipt SHA-256 is
+`a05075755266013591fed4130bf1a7c66ace5452aabac034eef4e9e4adf33900`.
+It is not rerun.
+
+The first CI-6 controller stopped after about 5.2 seconds because it probed
+`xdpyinfo` immediately after starting private `Xvfb :97`; no socket/readiness,
+preparation, Minecraft process, world, lifecycle, final manifest or semantic
+receipt existed. Independent terminal review classifies this as a bounded
+infrastructure-admission race, not product/carrier evidence, and the semantic
+native grant is unconsumed.
+
+One replacement CI-6 attempt on the unchanged candidate is proportionate and
+authorized. Before preparation it must require a live task-owned Xvfb child,
+the exact private X11 socket and successful `xdpyinfo` within a hard bounded
+readiness deadline of at most ten seconds. This is command-level admission,
+not a source/framework change. If readiness fails, or once preparation/native
+begins any result is negative, return terminal evidence without another retry.
+Do not rerun CI-5, focused tests, build verification or any other lane.
+
 After specification admission, one fresh Terra-high successor may make only
 the revision-4 correction and return `COLD_IDENTITY_READY_R4`. One bounded
 method review then permits exactly one clean-HEAD critical gate and one targeted
@@ -254,6 +277,6 @@ full hour; neither inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
 epoch for revision 4: `2026-09-10T13:45:58Z`; first economy-audit boundary:
-`2026-09-10T15:02:14Z` if still executing after expensive resumption at
-`2026-09-10T14:02:14Z`. Revision-4 specification review
+`2026-09-10T15:17:46Z` if still executing after replacement-native resumption
+at `2026-09-10T14:17:46Z`. Revision-4 specification review
 epoch: `2026-09-10T13:41:24Z`.
