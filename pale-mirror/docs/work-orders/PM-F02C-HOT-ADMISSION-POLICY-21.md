@@ -1,6 +1,6 @@
 # PM-F02C-HOT-ADMISSION-POLICY-21: expose one bounded production admission policy
 
-Specification revision: 3. Status: `METHOD_CORRECTION_EXECUTING`.
+Specification revision: 4. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_admission_policy21`, one fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -173,3 +173,28 @@ authorize another local iteration or expensive proof.
 
 Correction execution epoch: `2026-09-10T21:56:11Z`; first bounded liveness
 audit after silence is due `22:06:11Z`; economy audit remains due `22:28:05Z`.
+
+## Terminal correction review
+
+The final correction is clean private commit
+`7274b6ea73e80b30b38bdc794b1965ea860669fd`, parent `cf4a5741`, tree
+`00d1f331408306c7810d6a6f1bc0d7c9d770709d`. It independently exposes and
+counts the real provider compiler, gives two original-state actor decisions,
+executes all four fault controls, retains the exact perimeter loss, keeps one
+budget owner and reduces the executor to 965 lines. The focused current test is
+green 1/1 in 2.57 seconds. These method improvements are useful WIP.
+
+Fresh final challenge nevertheless rejects the method on three exact gaps.
+The substituted `ABANDON_PREPARED` effect returns a prebuilt state whose lease
+is still `PREPARED`, unlike production's canonical `DRAINING` then
+`AmbientLeaseReleased` transition. The later actor is another unresolved
+attacker, which remains reserved independently of candidate eligibility, and
+the test asserts only candidate lists rather than that actor's changed
+reservation/effect outcome. Finally, the task root contains no retained exact
+command/classpath/source manifest binding the reported manual compilation and
+JUnit launch to every current changed source/caller output.
+
+This is the context's second rejected method. No further instruction, edit or
+test may run in this builder context. Successor order22 preserves all accepted
+bytes and proof facts and owns only a valid canonical hand-off result, a
+candidate-dependent later actor decision and attributable compact receipts.
