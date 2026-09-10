@@ -201,6 +201,30 @@ class HiveSettlementAssaultProcessTest {
                 "one unavailable registered support must keep the complete assault out of scene admission");
     }
 
+    @Test void attackerFloorsUseOnlyTheBoundedResidentApronInsteadOfIngressOrRouteSurfaces() {
+        Fixture fixture = fixture(true);
+        Settlement settlement = FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), fixture.sighting().settlementId());
+        SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(fixture.state().bootstrap().bounds(),
+                fixture.state().bootstrap().terrain(), settlement, fixture.state().bootstrap().ruleset().facilityCapacity().intactHousingBeds());
+        java.util.Set<BlockPosition> perimeter = ingress.perimeterSurfaces().stream().map(SurfaceAnchor::support)
+                .collect(java.util.stream.Collectors.toSet());
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
+
+        assertTrue(assault.attackers().stream().map(attacker -> attacker.route().getLast()).allMatch(perimeter::contains),
+                "every attacker destination must be one of the bounded resident-apron perimeter floors, never a Hall connector, ingress ramp, or generic route");
+        BlockPosition hallConnector = settlement.anchor().offset(-7, 0, 0);
+        BlockPosition ingressRamp = ingress.ownedSurfaces().stream().map(SurfaceAnchor::support)
+                .filter(position -> Math.abs(position.x() - settlement.anchor().x()) > 30 || Math.abs(position.z() - settlement.anchor().z()) > 30)
+                .findFirst().orElseThrow();
+        BlockPosition genericRoute = FrontierGrayboxPlan.compile(fixture.state()).cells().values().stream()
+                .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE).map(GrayboxCell::position).findFirst().orElseThrow();
+        assertFalse(perimeter.contains(hallConnector), "the known Hall connector is declared provider geometry but not an assault perimeter");
+        assertFalse(perimeter.contains(ingressRamp), "the ingress ramp is declared provider geometry but not an assault perimeter");
+        assertFalse(perimeter.contains(genericRoute), "an arbitrary generic route surface is not an assault perimeter");
+    }
+
     @Test void battleWaitsForDistinctCompiledFloorsAndConflictsInsteadOfMovingASeparatedDefender() {
         Fixture fixture = fixture(true); FrontierWorldState state = fixture.state();
         List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state, HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));

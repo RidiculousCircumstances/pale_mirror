@@ -68,7 +68,7 @@ public final class SettlementResidentIngressPlan {
 
         List<BlockPosition> homes = homeSlots(apron, housingBeds);
         TraversalTopology topology = topology(settlementId, port, apron, connector, ramp);
-        return new Plan(homes, immutableSet(owned), foundationCells(terrain, owned), topology);
+        return new Plan(homes, immutableSet(new LinkedHashSet<>(apron)), immutableSet(owned), foundationCells(terrain, owned), topology);
     }
 
     private static List<SurfaceAnchor> perimeter(WorldBounds bounds, BlockPosition anchor, Set<BlockPosition> structureCells) {
@@ -217,13 +217,15 @@ public final class SettlementResidentIngressPlan {
         return Collections.unmodifiableSet(new LinkedHashSet<>(values));
     }
 
-    public record Plan(List<BlockPosition> homeSlots, Set<SurfaceAnchor> ownedSurfaces, Set<BlockPosition> foundationCells,
+    public record Plan(List<BlockPosition> homeSlots, Set<SurfaceAnchor> perimeterSurfaces, Set<SurfaceAnchor> ownedSurfaces, Set<BlockPosition> foundationCells,
                        TraversalTopology topology) {
         public Plan {
-            homeSlots = List.copyOf(homeSlots); ownedSurfaces = immutableSet(ownedSurfaces); foundationCells = immutableSet(foundationCells);
+            homeSlots = List.copyOf(homeSlots); perimeterSurfaces = immutableSet(perimeterSurfaces); ownedSurfaces = immutableSet(ownedSurfaces);
+            foundationCells = immutableSet(foundationCells);
             topology = Objects.requireNonNull(topology, "resident ingress topology");
-            if (homeSlots.isEmpty() || ownedSurfaces.isEmpty() || topology.nodes().isEmpty()) {
-                throw new IllegalArgumentException("resident ingress plan must retain homes, surfaces and topology");
+            if (homeSlots.isEmpty() || perimeterSurfaces.isEmpty() || ownedSurfaces.isEmpty() || !ownedSurfaces.containsAll(perimeterSurfaces)
+                    || topology.nodes().isEmpty()) {
+                throw new IllegalArgumentException("resident ingress plan must retain homes, perimeter surfaces, owned surfaces and topology");
             }
         }
     }

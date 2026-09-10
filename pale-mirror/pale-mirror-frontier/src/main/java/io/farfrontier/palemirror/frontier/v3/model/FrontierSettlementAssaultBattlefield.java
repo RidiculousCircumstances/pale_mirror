@@ -89,7 +89,7 @@ public final class FrontierSettlementAssaultBattlefield {
     private static List<BlockPosition> declaredProviderFloors(FrontierWorldState state, Settlement settlement) {
         Map<BlockPosition, GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells();
         return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().stream()
+                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().stream()
                 .map(SurfaceAnchor::support).sorted(Comparator.comparingLong((BlockPosition position) -> distanceSquared(settlement.anchor(), position))
                         .thenComparingInt(BlockPosition::x)
                         .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
