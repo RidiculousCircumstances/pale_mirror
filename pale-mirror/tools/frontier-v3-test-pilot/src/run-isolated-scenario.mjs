@@ -22,6 +22,7 @@ import { withGracefulSaveGate } from './graceful-save-gate.mjs';
 import { prearmSaveOwnerObserver, startSaveOwnerObservation } from './save-owner-observer.mjs';
 import { admitSaveOwnerObserverContract, requireSaveOwnerObserverEvidence } from './f02b-save-owner-observer-contract.mjs';
 import { assertRecoveryCarrierManifest } from './f02b-native-semantic.mjs';
+import { resolveIsolatedScenarioOuterAttempt } from './isolated-scenario-attempt.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -65,6 +66,9 @@ if (diagnosticAdmissionOnly === 'true') {
   console.log(JSON.stringify({ status: 'admitted', receipt: ownerObservationRequirement.receipt }));
   process.exit(0);
 }
+// The wrapper may precommit one current outer attempt. It is correlation-only:
+// scenario/declaration authority and the distinct client action run ID remain unchanged.
+const runId = resolveIsolatedScenarioOuterAttempt(process.env.FRONTIER_V3_ISOLATED_OUTER_ATTEMPT);
 const timing = new PhaseTiming();
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
 timing.begin('source.build_identity_resolution');
@@ -76,7 +80,6 @@ if (saveOwnerObserverRoot !== undefined && saveOwnerObserverRoot === '') {
   throw new Error('FRONTIER_V3_SAVE_OWNER_OBSERVER_ROOT must not be empty when declared');
 }
 let retainedOwnerObservation = null;
-const runId = randomUUID();
 const lifecycle = await createLifecycleBarrierSession(resolve(project, 'build/frontier-v3-scenarios'), newLifecycleIdentity({
   buildIdentitySha256: createHash('sha256').update(JSON.stringify(buildIdentity)).digest('hex'),
   workerId: process.env.FRONTIER_V3_PILOT_WORKER_ID ?? 'local-standalone', runId, scenarioId: scenario.id,

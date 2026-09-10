@@ -161,22 +161,35 @@ export async function readLifecycleBarriers(session) {
   catch (error) { throw new Error(`lifecycle barrier journal is unavailable: ${String(error?.message ?? error)}`); }
   const eventNames = names.filter((name) => /^\d{4}-[a-z_]+\.json$/.test(name)).sort();
   if (eventNames.length !== names.length) throw new Error('lifecycle barrier journal contains an unknown entry');
-  const events = [];
+  const entries = [];
   for (const name of eventNames) {
     const value = JSON.parse(await readFile(join(eventsDirectory(checked.directory), name), 'utf8'));
-    validateEvent(value, checked.identity, events.length + 1);
+    const sequence = entries.length + 1;
+    validateEvent(value, checked.identity, sequence);
     const expectedName = `${String(value.sequence).padStart(4, '0')}-${value.barrier}.json`;
     if (name !== expectedName) throw new Error('lifecycle barrier filename does not match its payload');
-    const previous = events.at(-1)?.barrier;
-    if (previous === undefined ? !INITIAL.has(value.barrier) : !NEXT[previous].has(value.barrier)) {
+    entries.push(value);
+  }
+  return validateLifecycleBarrierRecords(entries, checked.identity);
+}
+
+/** Reuses the journal's production identity/order rules for a retained manifest copy. */
+export function validateLifecycleBarrierRecords(entries, expectedIdentity) {
+  const identity = validateIdentity(expectedIdentity);
+  if (!Array.isArray(entries)) throw new Error('lifecycle barrier records are malformed');
+  const records = [];
+  for (const entry of entries) {
+    validateEvent(entry, identity, records.length + 1);
+    const previous = records.at(-1)?.barrier;
+    if (previous === undefined ? !INITIAL.has(entry.barrier) : !NEXT[previous].has(entry.barrier)) {
       throw new Error('lifecycle barrier journal is out of order');
     }
-    if (duplicateBarrier(events, value.barrier, value.detail)) {
+    if (duplicateBarrier(records, entry.barrier, entry.detail)) {
       throw new Error('lifecycle barrier journal contains a duplicate acknowledgement');
     }
-    events.push(Object.freeze(value));
+    records.push(Object.freeze(entry));
   }
-  return Object.freeze(events);
+  return Object.freeze(records);
 }
 
 /** Bounded waiter for one exact acknowledgement. Absence is failure, never inferred progress. */

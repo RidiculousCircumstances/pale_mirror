@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { validateLifecycleBarrierRecords } from './lifecycle-barrier.mjs';
 
 const CAUSE = 'cause:development-settlement-assault-epoch-4-attacker-bioform-west-19';
 const PROVENANCE = 'captive-bomber-strike:assault:development-settlement-assault';
@@ -29,6 +31,46 @@ export function assertF02cAftermathCarrier({ clearDeclaration, clearManifest }) 
 }
 
 export function assertF02cAftermathDeclaration(value) { return assertClearDeclaration(value); }
+
+/**
+ * Identity checks for the exact final persistent manifest.  Semantic receipt
+ * parsing remains below this boundary, after all byte/source/run checks pass.
+ */
+export function assertF02cAftermathIdentity({ declaration, declarationSha256, manifest, outerAttempt }) {
+  if (!uuid(outerAttempt) || !sha256(declarationSha256) || manifest?.schema !== 2 || manifest.status !== 'ok'
+      || manifest.scenarioId !== declaration.id || manifest.scenarioSha256 !== declarationSha256
+      || manifest.scenarioDeclarationSha256 !== declarationSha256) {
+    throw new Error('F0.2C carrier has a foreign declaration or final manifest identity');
+  }
+  if (!uuid(manifest.runId) || manifest.runId === outerAttempt || !Array.isArray(manifest.actions)
+      || manifest.actions.length !== declaration.actions.length || !Array.isArray(manifest.clientSegments)
+      || manifest.clientSegments.length !== 1) {
+    throw new Error('F0.2C carrier conflates or omits its outer/client run identities');
+  }
+  for (const [index, entry] of manifest.actions.entries()) {
+    if (!isDeepStrictEqual(entry?.action, declaration.actions[index]) || entry.correlation !== `scenario:${manifest.runId}:${index + 1}`) {
+      throw new Error('F0.2C carrier has a stale or foreign client action correlation');
+    }
+  }
+  const client = manifest.clientSegments[0];
+  if (client?.segment !== 'persistent_restart' || client.runId !== manifest.runId || client.reusedJvm !== true) {
+    throw new Error('F0.2C carrier lacks its one persistent client identity');
+  }
+  if (manifest.recovery?.clientSession?.runId !== outerAttempt || manifest.recovery.clientSession.reusedJvm !== true) {
+    throw new Error('F0.2C carrier lacks its precommitted recovery attempt');
+  }
+  const buildIdentitySha256 = sha256Json(manifest.build);
+  const records = validateLifecycleBarrierRecords(manifest.lifecycle, {
+    schema: 1, buildIdentitySha256, workerId: manifest.lifecycle?.[0]?.identity?.workerId,
+    runId: outerAttempt, scenarioId: manifest.scenarioId, segmentId: 'native-scenario',
+    nonce: manifest.lifecycle?.[0]?.identity?.nonce, sessionId: manifest.lifecycle?.[0]?.identity?.sessionId
+  });
+  if (records.length === 0 || records.some((record) => record.identity.runId !== outerAttempt)) {
+    throw new Error('F0.2C carrier lifecycle does not retain its precommitted attempt');
+  }
+  return Object.freeze({ outerAttempt, clientRunId: manifest.runId,
+    lifecycle: Object.freeze({ runId: records[0].identity.runId, sessionId: records[0].identity.sessionId, nonce: records[0].identity.nonce }) });
+}
 
 function assertClearDeclaration(value) {
   const actions = value?.actions ?? [];
@@ -126,3 +168,6 @@ function assertSamePending(left, right, phase) {
 function revision(value) { return Number.isSafeInteger(value?.revision) && value.revision >= 0; }
 function validPosition(value) { return Number.isInteger(value?.x) && Number.isInteger(value?.y) && Number.isInteger(value?.z); }
 function samePosition(left, right) { return validPosition(left) && validPosition(right) && left.x === right.x && left.y === right.y && left.z === right.z; }
+function sha256(value) { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); }
+function uuid(value) { return typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value); }
+function sha256Json(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
