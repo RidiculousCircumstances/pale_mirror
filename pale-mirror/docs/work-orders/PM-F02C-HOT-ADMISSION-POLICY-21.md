@@ -1,6 +1,6 @@
 # PM-F02C-HOT-ADMISSION-POLICY-21: expose one bounded production admission policy
 
-Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 3. Status: `METHOD_CORRECTION_EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_admission_policy21`, one fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -116,3 +116,60 @@ Use branch `terra/f02c-hot-admission-policy-21`, worktree
 verified and execution assigned at `2026-09-10T21:28:05Z`. First bounded
 liveness audit is due at `21:38:05Z` after silence; first economy audit is due
 at `22:28:05Z` if execution remains active.
+
+## First method review and sole correction
+
+Terra returned clean private `cf4a57414a7191f475afedced0f5226ca375d74b`,
+parent `665e6277`, tree `e304e0b62fd19299f3edec1d26034e96a5c1e255`.
+The production extraction is useful: the actual NeoForge tick creates one
+disposable policy session, reservation hand-off and later ambient admission use
+it, the runtime-global reservation cache is gone, one actor-limit owner remains
+and the executor is 969 lines. The fixture also constructs two genuine
+candidates and binds one named attacker to a declared perimeter surface while
+the independent assault survives its loss.
+
+The fresh method challenger rejects the proof. The counter at the admission
+compiler boundary does not observe the provider compilation inside the assault
+owner, so a return to one compile per assault stays green. The scan replaces
+state manually on its first callback, returns no successful transfer, never
+executes production hand-off eligibility/effect selection and gives the
+two-assault admission to only one actor. It contains no claimed injected fault
+controls or actor-specific reservation decisions. The retained 1/1 JUnit is
+genuinely current policy/test bytecode and fast (1.362 seconds in JUnit, 1.55
+seconds process), but no exact complete changed-production compile command,
+classpath/source manifest or adapter class output was retained.
+
+This is the one permitted consolidated semantic correction for this builder:
+
+1. Preserve the accepted extraction and fixture/loss facts. Make provider-view
+   derivation an observable production-owner boundary so a counting wrapper
+   delegates to the real compiler and independently distinguishes reservation
+   derivations from provider compilations. One state segment with two eligible
+   assaults must report one of each.
+2. The production policy, not a test callback, owns reservation, life,
+   physiology and lease eligibility plus selection of the permitted hand-off
+   effect. A substituted unit-test effect port may execute or reject that
+   selected effect; it may not replace the entire decision policy. A successful
+   selected effect must produce the replacement canonical state consumed by
+   the next policy decision.
+3. Exercise at least two actor decisions against the original two-assault
+   admission before the successful transition. After the transition, assert a
+   later named actor's reserve/effect decision from the changed contents, with
+   the lost assault absent and the independent assault present.
+4. Exercise explicit in-process fault controls for derivation per actor,
+   provider compile per assault, stale replacement contents and substitute
+   floor. Each control must make the relevant oracle fail for that cause; do
+   not claim ordinary positive assertions as unexecuted mutation evidence.
+5. Retain an exact focused current-test discovery receipt and a separate exact
+   compile receipt for every changed production source, including the actual
+   NeoForge caller wiring. Record command, Java/classpath/source identity,
+   duration, exit and hashes. Continue to forbid Minecraft/NeoForge runtime,
+   GameTest, full gate, package and native work at this checkpoint.
+
+Terra retains freedom over the coherent policy/port/API shape and exact tests.
+Return one corrected `METHOD_ADMISSION` packet and stop. A second rejection
+closes this context and triggers a fresh architecture successor; it does not
+authorize another local iteration or expensive proof.
+
+Correction execution epoch: `2026-09-10T21:56:11Z`; first bounded liveness
+audit after silence is due `22:06:11Z`; economy audit remains due `22:28:05Z`.
