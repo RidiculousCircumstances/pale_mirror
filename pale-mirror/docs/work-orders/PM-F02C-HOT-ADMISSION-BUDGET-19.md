@@ -1,6 +1,6 @@
 # PM-F02C-HOT-ADMISSION-BUDGET-19: bound assault scene admission per state revision
 
-Specification revision: 1. Status: `EXECUTING`.
+Specification revision: 2. Status: `FINAL_REVIEW_INCOMPLETE`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_admission_budget19`, fresh `gpt-5.6-terra`,
 reasoning `high`.
@@ -107,3 +107,35 @@ Use branch `terra/f02c-hot-admission-budget-19`, worktree
 Execution assigned at `2026-09-10T20:51:14Z` after exact clean custody was
 verified. First bounded liveness audit is due at `21:01:14Z` after silence;
 first economy audit is due at `21:51:14Z` if execution remains active.
+
+## Terminal review
+
+Clean private WIP `1ff8835ef33d758c21153c60fc92a8d210e8f13b`, parent
+`cb4429176c0befaf66d54695b810cab9605a6647`, tree
+`bd598d80a8220dec7e0c4dab1cc9a2d68011b6f7` is useful but does not complete
+the order. Its actor hand-off loop soundly reuses the existing state-identity
+reservation cache and refreshes after runtime state replacement without adding
+canonical authority. Its new physical-loss control is non-vacuous: an installed
+active assault has a real candidate before loss and loses it afterward.
+
+The claimed boundedness discriminator is rejected. It calls the pre-existing
+cache directly and never executes the changed production hand-off loop, so it
+would pass the baseline it is supposed to distinguish; the retained baseline
+marker in fact discovers zero target tests. The candidate also still compiles
+the complete graybox plan once per active settlement-assault candidate inside
+one reservation derivation, so multiple assaults do not share one provider
+view for the same immutable state.
+
+The sole critical gate stopped deterministically at `verifyLargeFiles`: the
+changed executor is 1,007 lines against the unchanged 1,000-line ceiling. Log
+SHA-256 is
+`142fb9b6871fd3cba4dafcee90eb6e357f6936fea6627aa8ac77b59ea67f97d5`.
+This is a modularity rejection, not a gameplay/runtime failure. No GameTest,
+package verification or native R14 ran, and no source/test/config edit followed
+the red gate. Cleanup is zero; the retained order19 root is about 56KiB.
+
+Successor order20 preserves the useful WIP but must complete multi-assault
+provider reuse, restore the module ceiling and replace the non-discriminating
+test with a baseline-failing production-composition method. Because this exact
+carrier/oracle was rejected as non-faithful, a fresh read-only method challenger
+is mandatory before any full gate or native execution.
