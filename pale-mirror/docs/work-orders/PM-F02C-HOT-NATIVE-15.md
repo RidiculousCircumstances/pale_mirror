@@ -1,6 +1,6 @@
 # PM-F02C-HOT-NATIVE-15: execute the authentic HOT restart history
 
-Specification revision: 2. Status: `EXECUTING`.
+Specification revision: 3. Status: `TERMINAL_GATE_RED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_native15`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -84,3 +84,17 @@ Execution assigned at `2026-09-10T18:41:55Z` from the exact clean baseline and
 isolated custody paths above. Observation epoch: `2026-09-10T18:41:55Z`; first
 economy audit is due at `2026-09-10T19:41:55Z` if execution remains active.
 Ten-minute liveness audits apply only during executor silence.
+
+## Terminal result
+
+Terra returned at `2026-09-10T18:47:18Z` without changing the candidate or
+launching native. Resource and declaration/entrypoint admission passed. The
+single clean critical gate stopped at `verifyLargeFiles`: production
+`FrontierV3DiagnosticJson.java` has 1,016 lines against the binding 1,000-line
+ratchet. It already had 1,015 lines before the one-line HOT receipt field, so
+this is accumulated structural debt exposed by the final composition, not a
+native/product result and not evidence of repeated builder-context loss.
+Receipt `critical-gate.log` has SHA-256
+`7bd3a94aba43b5afb9b2989b2f2b8af01c4c4c86100e3319b41d4d3bfaedd845`.
+All task-owned processes are stopped. Successor order16 owns the bounded
+structural correction; this order grants no rerun.
