@@ -1,8 +1,9 @@
 # PM-F02C-HOT-HANDOFF-RECEIPT-22: bind admission to a valid hand-off result
 
-Specification revision: 1. Status: `FRAMED_AWAITING_EXECUTION`.
+Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`, after exact custody.
+Executor: `/root/terra_f02c_hot_handoff_receipt22`, one fresh
+`gpt-5.6-terra`, reasoning `high`.
 
 Start from clean private WIP
 `7274b6ea73e80b30b38bdc794b1965ea860669fd`, parent `cf4a5741`, tree
@@ -86,4 +87,7 @@ publication, deployment or v2 work.
 
 Use branch `terra/f02c-hot-handoff-receipt-22`, worktree
 `/home/rd/proj/pm-f02c-hot-handoff-receipt-22` and task root
-`/home/rd/proj/pm-f02c-hot-handoff-receipt-22-tmp`.
+`/home/rd/proj/pm-f02c-hot-handoff-receipt-22-tmp`. Exact clean custody was
+verified and execution assigned at `2026-09-10T22:19:06Z`. First bounded
+liveness audit is due at `22:29:06Z` after silence; first economy audit is due
+at `23:19:06Z` if execution remains active.
