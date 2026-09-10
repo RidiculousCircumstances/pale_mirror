@@ -1,8 +1,9 @@
 # PM-F02C-HOT-RESOURCE-14: make the focused HOT structure effective
 
-Specification revision: 1. Status: `READY_ASSIGNMENT`.
+Specification revision: 2. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/GameTest harness. Engineer:
-supervising root. Executor: fresh `gpt-5.6-terra`, reasoning `high`.
+supervising root. Executor: `/root/terra_f02c_hot_resource14`, fresh
+`gpt-5.6-terra`, reasoning `high`.
 
 This successor inherits `docs/engineering-agent-operating-model-v4.md`. It owns
 one bounded harness outcome, not another HOT semantic redesign.
