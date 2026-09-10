@@ -45,11 +45,15 @@ final class FrontierV3AmbientActorCaches {
     }
 
     static Set<SubjectId> reservedActors(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
+        return reservationAdmission(runtime, state).reservedActorIds();
+    }
+
+    static FrontierSceneAdmission.ReservationAdmission reservationAdmission(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
         ReservationCache cached = RESERVATIONS.get(runtime);
-        if (cached != null && cached.state() == state) return cached.actors();
-        Set<SubjectId> actors = FrontierSceneAdmission.reservedActors(state);
-        RESERVATIONS.put(runtime, new ReservationCache(state, actors));
-        return actors;
+        if (cached != null && cached.state() == state) return cached.admission();
+        FrontierSceneAdmission.ReservationAdmission admission = FrontierSceneAdmission.reservationAdmission(state);
+        RESERVATIONS.put(runtime, new ReservationCache(state, admission));
+        return admission;
     }
 
     static FrontierSceneAdmission.GenericAmbientAdmission genericAmbientAdmission(FrontierV3ServerRuntime<?, ?> runtime,
@@ -68,6 +72,6 @@ final class FrontierV3AmbientActorCaches {
     }
 
     record Observed(BodyPosition body, FixedScalar health) { }
-    private record ReservationCache(FrontierWorldState state, Set<SubjectId> actors) { }
+    private record ReservationCache(FrontierWorldState state, FrontierSceneAdmission.ReservationAdmission admission) { }
     private record GenericAdmissionCache(FrontierWorldState state, FrontierSceneAdmission.GenericAmbientAdmission admission) { }
 }

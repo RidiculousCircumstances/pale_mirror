@@ -19,8 +19,6 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -41,10 +39,9 @@ class FrontierV3AmbientActorReservationCacheTest {
                     "the ordinary fixture must install an active assault before admission is observed");
             assertFalse(candidate.memberPositions().isEmpty(), "the active assault must have a real provider-backed candidate before loss");
 
-            Set<SubjectId> firstAdmission = null;
+            var firstAdmission = FrontierV3AmbientActorReservationHandoff.reservedActors(runtime, before);
             for (SubjectId actorId : before.actorLocations().keySet()) {
-                Set<SubjectId> admission = FrontierV3AmbientActorCaches.reservedActors(runtime, before);
-                if (firstAdmission == null) firstAdmission = admission;
+                var admission = FrontierV3AmbientActorReservationHandoff.reservedActors(runtime, before);
                 assertSame(firstAdmission, admission, "one immutable canonical revision must reuse its derived reservation view for every ambient actor scan");
                 if (candidate.memberPositions().containsKey(actorId)) {
                     assertTrue(admission.contains(actorId), "the real candidate member must stay reserved during its ordinary hand-off");
@@ -64,7 +61,7 @@ class FrontierV3AmbientActorReservationCacheTest {
                     "the same active assault must lose admission when its selected exact provider support is lost");
             assertFalse(FrontierGrayboxPlan.compile(afterLoss).cells().containsKey(lostSupport),
                     "the current physical-provider view must apply the loss mask immediately");
-            assertNotSame(firstAdmission, FrontierV3AmbientActorCaches.reservedActors(runtime, afterLoss),
+            assertNotSame(firstAdmission, FrontierV3AmbientActorReservationHandoff.reservedActors(runtime, afterLoss),
                     "a changed canonical state object must never reuse the prior revision's derived admission view");
         } finally {
             FrontierV3AmbientActorExecutor.forget(runtime);

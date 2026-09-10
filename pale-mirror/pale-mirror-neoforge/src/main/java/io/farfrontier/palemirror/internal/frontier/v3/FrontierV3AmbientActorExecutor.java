@@ -121,7 +121,7 @@ final class FrontierV3AmbientActorExecutor {
         // reserved exact identity first, then let the bounded ambient pass handle voluntary
         // movement and new admissions.  Each transfer remains durable and independently
         // validates its exact body before discard.
-        handOffReservedActors(level, runtime, state);
+        FrontierV3AmbientActorReservationHandoff.run(level, runtime, state);
         state = runtime.decodedState().orElse(null);
         if (state == null) return;
         int admitted = 0;
@@ -284,41 +284,6 @@ final class FrontierV3AmbientActorExecutor {
         }
     }
 
-    /**
-     * Gives a successor scene's exact pre-lease reservation priority over ordinary ambient
-     * goals.  The deterministic full scan is bounded by successful durable hand-offs rather
-     * than by the first arbitrary actor in lexical order: actors without a live predecessor
-     * cost only a read.  A conflict deliberately remains unresolved for the normal visible
-     * recovery path; this method never replaces or guesses a body.
-     */
-    private static void handOffReservedActors(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                              FrontierWorldState initialState) {
-        int transferred = 0;
-        FrontierWorldState reservationState = initialState;
-        java.util.Set<SubjectId> reservedActors = reservedActors(runtime, reservationState);
-        for (SubjectId actorId : initialState.actorLocations().keySet().stream().sorted().toList()) {
-            if (transferred >= MAX_ACTORS_PER_TICK) return;
-            FrontierWorldState state = runtime.decodedState().orElse(null);
-            if (state == null) return;
-            if (state != reservationState) {
-                reservationState = state;
-                reservedActors = reservedActors(runtime, reservationState);
-            }
-            if (!reservedActors.contains(actorId)) continue;
-            var location = state.actorLocations().get(actorId);
-            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !HivePhysiologySupport.permitsAmbientLease(state, actorId)) continue;
-            AmbientActorLease lease = state.ambientLeases().get(actorId);
-            if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) continue;
-            if (lease.status() == AmbientLeaseStatus.HOT) {
-                Entity body = level.getEntity(entityId(state, actorId));
-                if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId)) && drain(runtime, mob)) transferred++;
-                continue;
-            }
-            if (lease.status() == AmbientLeaseStatus.PREPARED
-                    && abandonPreparedForReservation(level, runtime, state, actorId, lease)) transferred++;
-        }
-    }
     static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         return materialize(level, state, actorId, canonicalBody, FrontierV3StandingPosition::aboveExactFloor);
     }
@@ -771,8 +736,8 @@ final class FrontierV3AmbientActorExecutor {
      * canonical hand-off body and health are therefore the only admissible release evidence;
      * a mismatched physical UUID/body remains a conflict and blocks the successor.
      */
-    private static boolean abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                         FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+    static boolean abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                  FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         Entity body = level.getEntity(entityId(state, actorId));
         if (body != null && (!(body instanceof Mob mob) || !owned(mob, actorId, bioform(state, actorId))
                 || !observedBody(mob).equals(lease.handoffBody()))) return false;

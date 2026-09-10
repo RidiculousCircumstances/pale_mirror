@@ -27,10 +27,11 @@ public final class FrontierSettlementAssaultSceneSupport {
     }
 
     static java.util.List<SettlementAssaultSceneCandidate> candidates(FrontierWorldState state) {
+        FrontierSettlementAssaultBattlefield.ProviderView providerView = FrontierSettlementAssaultBattlefield.providerView(state);
         return state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
                 .sorted(java.util.Comparator.comparing(SettlementAssault::id))
-                .map(assault -> FrontierSettlementAssaultBattlefield.candidate(state, assault)).flatMap(java.util.Optional::stream).toList();
+                .map(assault -> FrontierSettlementAssaultBattlefield.candidate(state, assault, providerView)).flatMap(java.util.Optional::stream).toList();
     }
 
     static void validatePrepared(FrontierWorldState state, SceneLease lease) {

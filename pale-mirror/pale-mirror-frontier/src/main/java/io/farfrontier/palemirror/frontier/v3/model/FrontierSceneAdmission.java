@@ -164,6 +164,15 @@ public final class FrontierSceneAdmission {
      * state. This prevents recompiling every COLD scene candidate once per candidate body.
      */
     public static Set<SubjectId> reservedActors(FrontierWorldState state) {
+        return reservationAdmission(state).reservedActorIds();
+    }
+
+    /**
+     * Complete, disposable reservation result for one immutable state object.  The materializer
+     * reuses this value for its whole hand-off scan and discards it when a command replaces the
+     * state, so neither reservations nor provider observations become canonical state.
+     */
+    public static ReservationAdmission reservationAdmission(FrontierWorldState state) {
         Objects.requireNonNull(state, "state");
         Set<SubjectId> reserved = new LinkedHashSet<>();
         state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
@@ -179,8 +188,10 @@ public final class FrontierSceneAdmission {
         state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> reserved.addAll(assault.attackerIds()));
-        state.coldEngagementSceneCandidates().forEach(candidate -> reserved.addAll(candidate.actorIds()));
-        state.coldSettlementAssaultSceneCandidates().forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
+        java.util.List<SceneEngagementCandidate> engagementCandidates = state.coldEngagementSceneCandidates();
+        java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = FrontierSettlementAssaultSceneSupport.candidates(state);
+        engagementCandidates.forEach(candidate -> reserved.addAll(candidate.actorIds()));
+        assaultCandidates.forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A completed engineering assembly is the next exclusive physical owner, even before
         // its scene lease is prepared.  Without this reservation an ordinary ambient visit can
         // re-open one of the exact crew between COLD completion and scene admission (notably
@@ -195,7 +206,22 @@ public final class FrontierSceneAdmission {
         // Field work uses the same atomic ambient-to-scene hand-off.  It deliberately is not
         // a pre-lease COLD reservation: the loaded Villager must remain available for that
         // hand-off rather than be drained and respawned at a guessed canonical surface.
-        return Set.copyOf(reserved);
+        return new ReservationAdmission(reserved, engagementCandidates, assaultCandidates);
+    }
+
+    /** Immutable read-only output of the production ambient-to-scene hand-off policy. */
+    public record ReservationAdmission(Set<SubjectId> reservedActorIds,
+                                       java.util.List<SceneEngagementCandidate> engagementCandidates,
+                                       java.util.List<SettlementAssaultSceneCandidate> settlementAssaultCandidates) {
+        public ReservationAdmission {
+            reservedActorIds = Set.copyOf(Objects.requireNonNull(reservedActorIds, "reserved actor ids"));
+            engagementCandidates = java.util.List.copyOf(Objects.requireNonNull(engagementCandidates, "engagement candidates"));
+            settlementAssaultCandidates = java.util.List.copyOf(Objects.requireNonNull(settlementAssaultCandidates, "settlement assault candidates"));
+        }
+
+        public boolean reserves(SubjectId actorId) {
+            return reservedActorIds.contains(Objects.requireNonNull(actorId, "actor id"));
+        }
     }
 
     /** The assault itself may progress COLD; every other authority remains exclusive. */

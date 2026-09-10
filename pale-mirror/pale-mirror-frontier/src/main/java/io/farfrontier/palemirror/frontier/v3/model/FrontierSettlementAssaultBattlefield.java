@@ -41,6 +41,15 @@ public final class FrontierSettlementAssaultBattlefield {
     }
 
     public static Optional<SettlementAssaultSceneCandidate> candidate(FrontierWorldState state, SettlementAssault assault) {
+        return candidate(state, assault, providerView(state));
+    }
+
+    static ProviderView providerView(FrontierWorldState state) {
+        return new ProviderView(FrontierGrayboxPlan.compile(state).cells());
+    }
+
+    static Optional<SettlementAssaultSceneCandidate> candidate(FrontierWorldState state, SettlementAssault assault,
+                                                                ProviderView providerView) {
         if ((assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE && assault.status() != SettlementAssaultStatus.COLD_COMBAT)
                 || !FrontierSettlementAssaultSceneSupport.targetIntact(state, assault)) {
             return Optional.empty();
@@ -48,7 +57,7 @@ public final class FrontierSettlementAssaultBattlefield {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
-        Map<BlockPosition, GrayboxCell> providerCells = FrontierGrayboxPlan.compile(state).cells();
+        Map<BlockPosition, GrayboxCell> providerCells = providerView.cells();
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
@@ -77,6 +86,19 @@ public final class FrontierSettlementAssaultBattlefield {
      */
     static boolean serviceableFloor(FrontierWorldState state, BlockPosition position) {
         return serviceableFloor(FrontierGrayboxPlan.compile(state).cells(), position);
+    }
+
+    /** One disposable loss-masked physical-provider observation for one admission derivation. */
+    static final class ProviderView {
+        private final Map<BlockPosition, GrayboxCell> cells;
+
+        private ProviderView(Map<BlockPosition, GrayboxCell> cells) {
+            this.cells = cells;
+        }
+
+        private Map<BlockPosition, GrayboxCell> cells() {
+            return cells;
+        }
     }
 
     private static boolean serviceableFloor(Map<BlockPosition, GrayboxCell> cells, BlockPosition position) {
