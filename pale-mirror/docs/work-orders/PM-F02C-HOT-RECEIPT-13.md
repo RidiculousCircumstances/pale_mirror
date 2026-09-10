@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-13: execute the HOT component lane and bind restart phases
 
-Specification revision: 1. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 2. Status: `METHOD_ADMITTED_EXECUTING_FOCUSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_receipt13`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -82,3 +82,25 @@ is the maximum; a second rejection closes this context.
 Observation epoch: `2026-09-10T17:48:44Z`; first economy audit is due at
 `2026-09-10T18:48:44Z` if execution remains active. Ten-minute liveness audits
 apply only during executor silence.
+
+## Method admission
+
+The fresh read-only challenger independently returns `METHOD_ADMITTED` for the
+current three-path WIP on baseline `0b3f409e`. The scene-task namespace change
+is local to that run and its unchanged batch filter excludes unrelated Visuals
+tests. The carrier reuses the shared validator and then binds unique records in
+strict order across checkpoint-2/before completion, disconnect/save/port close,
+recovery/reconnect and checkpoint-6/after completion/terminal. Swapped details,
+changed completion phases and duplicate phases fail the actual preflight
+consumer. Retained Node log SHA-256 is
+`5de09aec768e106c90d9b7127b07c10a4e57f5814e1d88f44640ac2ce8b339b7`
+with 4/4 passed and zero skipped.
+
+Terra may now run the one focused scene GameTest after the already-passed
+resource probe, correct an ordinary in-scope focused failure if necessary, then
+form one clean private checkpoint and return `HOT_METHOD_READY_R7`. The terminal
+receipt must prove the unique `pm-frontier-v3-scene-strikes:0` one-test batch
+actually executed, the aggregate selection did not fall below the prior 64,
+and all tests passed. Before checkpointing, make the adjacent scene-run comment
+factually match the now-enabled template namespace; this is documentation
+hygiene, not a new method or semantic change. No full/native/CI work.
