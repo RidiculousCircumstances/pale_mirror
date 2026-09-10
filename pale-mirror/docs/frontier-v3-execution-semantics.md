@@ -147,6 +147,15 @@ selection, durable intent, physical observation, confirmation, drain/release
 and the next COLD epoch; comparing generated IDs or manually installing any of
 those intermediate states is insufficient.
 
+These facts may be composed across explicitly bounded evidence tiers. A focused
+GameTest can establish the exact lifecycle-called registry turn against a real
+`ServerLevel`, SavedData and file-backed runtime without claiming that its
+template load is natural player demand. A separately reviewed declarative
+native carrier must join that turn to the dedicated dimension, ordinary player
+demand, world-root store and actual process restart. Neither receipt is promoted
+beyond its tier; together they cover the production seam without inventing a
+fake `MinecraftServer` or requiring a client-only history from a unit test.
+
 ## 5. Scene boundaries are not gameplay boundaries
 
 Scenes are bounded execution leases, not isolated arenas. Projectile flight,

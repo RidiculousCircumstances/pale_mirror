@@ -1,7 +1,8 @@
 # PM-F02C-PRODUCTION-CARRIER-05: expose and prove the real physical turn
 
+Specification revision: 2.
 Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
-Engineer: supervising root. Executor: `/root/terra_f02c_production_carrier05`,
+Engineer: supervising root. Executor: `/root/terra_f02c_physical_turn06`,
 one fresh `gpt-5.6-terra` with reasoning `high`, in a new isolated
 branch/worktree from private WIP checkpoint
 `f5eea75b085bba1a3d62e38ea9368e1f0c66d8e3` (parent `fb48c27f`, tree
@@ -11,6 +12,12 @@ This order inherits `docs/engineering-agent-operating-model-v4.md`. It is the
 architecture/method reset required after two successive carriers proved only
 direct or synthetic owner composition. The executor owns diagnosis, local
 design, algorithms, helpers, paths and exact commands inside this boundary.
+
+Revision 1 ended in a correct `ARCHITECTURE` return with no source change at
+clean `f5eea75b`: a focused GameTest cannot truthfully claim dedicated-dimension
+lifecycle, player demand and real restart together. Its executor is terminal.
+Revision 2 composes exact partial receipts instead of demanding one impossible
+monolithic focused test.
 
 ## Outcome and exclusions
 
@@ -53,9 +60,31 @@ or test-only production branch.
   naturally loaded with no force-load, global scan, unbounded retry/history or
   scene barrier.
 
-If the complete production turn or ordinary HOT lifecycle cannot be exercised
-faithfully below a broad/native run, return `ARCHITECTURE` with the smallest
-missing seam and no substitute proof. Do not hide the gap behind another helper.
+The minimum acceptable seam is one production physical-turn entrypoint invoked
+by lifecycle whose authority is exactly the complete registry. Its name and
+local design belong to the executor. It must not become a second controller,
+selected registry or aftermath facade. If that exact turn cannot be exercised
+in a focused real-`ServerLevel` carrier, return `ARCHITECTURE` with no substitute
+proof. Dedicated dimension, authentic player demand and process restart remain
+native-tier claims and are not required to masquerade as focused evidence.
+
+## Evidence-tier firewall
+
+1. Pure and physical-adapter tests prove cause/status/revision rules,
+   idempotence and classification only.
+2. One focused GameTest invokes the exact production physical turn on a real
+   `ServerLevel`, uses ordinary SavedData and a file-backed runtime rooted under
+   the actual disposable server world path, and proves full-registry ordering,
+   blocks, ledger transitions, foreign preservation and unrelated progress. It
+   does not claim the dedicated dimension, player demand or process restart.
+3. Focused scene evidence may prove ordinary registered scene admission,
+   bodies, executor, receipt, drain/release and COLD hand-off. It does not infer
+   authentic player demand from a loaded GameTest template.
+4. One pre-admitted declarative native scenario alone joins the dedicated
+   `frontier_graybox` dimension, actual lifecycle and world-root store, natural
+   player loading/demand, ordinary HOT strike, COLD aftermath and real restart.
+   Its fixture declares only initial canonical preconditions and may not install
+   the lease, intent, receipt, release, tombstone or terminal aftermath.
 
 ## Write scope
 
@@ -71,19 +100,22 @@ instead of editing it.
 
 | ID | Required outcome | Cheapest faithful evidence | Negative/recovery |
 | --- | --- | --- | --- |
-| AC-1 | Complete production registry, untouched real ledger, delayed bounded cursor: `PENDING -> REALIZED` once | focused real-`ServerLevel` owner-seam GameTest through the lifecycle registry entrypoint | a skipped target must stay pending; a duplicate turn cannot advance the terminal revision |
+| AC-1 | Complete production registry, untouched real ledger, delayed bounded cursor: `PENDING -> REALIZED` once | focused GameTest through the exact production physical turn with real `ServerLevel`, SavedData and file-backed runtime | a skipped target must stay pending; a duplicate turn cannot advance the terminal revision |
 | AC-2 | Foreign material is preserved and unrelated work advances | same complete-registry carrier with positive foreign block and a second process | no overwrite, head-of-line stall, global conflict or manufactured tombstone |
-| AC-3 | Ordinary HOT receipt and release advance exactly one shared assault epoch before COLD resumes | focused scene GameTest through ordinary admission, bodies, executor, receipt, drain/release and due engine | wrong actor/epoch/mode/lease, replay and stale receipt fail through the same production boundary |
-| AC-4 | Recovery preserves both owner histories | codec/SavedData recovery at pre-classification, classified and durable-before-effect boundaries; targeted restart carrier where the lower tier cannot prove the save boundary | no replay, AIR-as-foreign conversion, cause replacement or duplicate COLD strike |
+| AC-3 | Ordinary HOT receipt and release advance exactly one shared assault epoch before COLD resumes | focused registered-scene carrier for the closed machinery, plus the one native carrier for authentic player demand | wrong actor/epoch/mode/lease, replay and stale receipt fail through the corresponding ordinary boundary |
+| AC-4 | Recovery preserves both owner histories | codec/SavedData recovery for serializable state; the one native carrier for actual lifecycle/save/restart | no replay, AIR-as-foreign conversion, cause replacement or duplicate COLD strike |
 | AC-5 | Stable final candidate is bounded and packaged | one clean-HEAD critical-code gate after method admission | packaged JAR excludes fixtures/pilot authority; no new debt ceiling, force-load or unbounded state |
 
 ## Method admission and verification economy
 
 Terra first iterates focused pure/component tests and the smallest owner-seam and
-scene GameTests. It then returns one `SEAM_READY` packet before any complete
-critical or native gate. The packet names for AC-1 through AC-4 the exact
-production entrypoint, untouched history, plausible defect, terminal oracle,
-negative/restart mutation, command/duration/receipt and candidate identity.
+scene GameTests, and completes the declarative native scenario plus its cheap
+schema/oracle mutation tests without launching it. It then returns one
+`SEAM_READY` packet before any complete critical or native gate. The packet
+names for AC-1 through AC-4 the exact subject and evidence tier, production
+entrypoint, untouched history, plausible defect, terminal oracle, negative or
+restart mutation, command/duration/receipt and candidate identity. It must state
+explicitly which claims remain native-only.
 
 Because this order follows repeated synthetic-carrier rejection, one fresh
 read-only challenger must admit the stable method. On rejection the executor
@@ -94,7 +126,7 @@ or confidence rerun. Existing `f5eea75b` focused component evidence may be
 reused only for its narrow algorithm claim; older broad/JAR/native receipts do
 not identify the changed candidate.
 
-Use only `/home/rd/proj/pm-f02c-production-carrier-05-tmp` for task-private
+Use only `/home/rd/proj/pm-f02c-production-carrier-05-r2-tmp` for task-private
 temporary/evidence state. Before JVM/native work, prove bounded create/write/
 fsync/atomic-rename/delete on every used filesystem. Retain compact exact-
 identity receipts and no more than one current local-heavy root. The builder
@@ -114,5 +146,5 @@ ten minutes of silence while `EXECUTING`; one economy audit after each complete
 hour. Neither is a source review or heartbeat. The next complete/native gate is
 not authorized until method admission.
 
-Observation epoch: `2026-09-10T11:04:25Z`. First economy-audit boundary:
-`2026-09-10T12:04:25Z` if still executing.
+Observation epoch: `2026-09-10T11:24:34Z`. First economy-audit boundary:
+`2026-09-10T12:24:34Z` if still executing.

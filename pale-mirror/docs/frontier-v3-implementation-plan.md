@@ -331,6 +331,14 @@ separate ordinary scene-execution→receipt→release→next-COLD-epoch carrier,
 including restart/replay and wrong-identity controls; helper-level cause-ID
 equality cannot substitute for that history.
 
+Use exact partial-receipt composition rather than an impossible all-in-one
+focused fixture: a real-`ServerLevel` GameTest proves the lifecycle-called full
+physical turn, SavedData and file-backed runtime, while one pre-admitted native
+scenario alone joins dedicated-dimension selection, ordinary player demand,
+world-root persistence and actual restart. GameTest template loading is not
+natural demand, and the native run may not compensate for a synthetic registry
+or manually installed causal transition.
+
 The original sequence placed this checkpoint after independent F0.2B
 acceptance. By explicit user authority on 2026-09-08, the failed F0.2B native
 attempt's shared-mutable-run collision pulls the checkpoint forward at a safe,
