@@ -23,18 +23,19 @@ public final class FrontierSettlementAssaultBattlefield {
         }
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
+        Map<BlockPosition, GrayboxCell> providerCells = FrontierGrayboxPlan.compile(state).cells();
         Set<BlockPosition> occupied = new LinkedHashSet<>();
         for (SubjectId defender : defenderIds) {
             ActorLocation location = state.actorLocations().get(defender);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
+                    || !serviceableFloor(providerCells, location.supportingSurface().support())
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
                     location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) {
                 return Optional.empty();
             }
         }
-        List<BlockPosition> choices = FrontierSettlementActorSlots.slots(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement.anchor(), structureCells,
-                attackerCount + occupied.size() + 16).stream().filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(),
-                        settlementEnvelopeSquared, structureCells, position))
+        List<BlockPosition> choices = declaredProviderFloors(state, settlement).stream()
+                .filter(position -> localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells, position))
                 .filter(position -> !occupied.contains(position)).limit(attackerCount).toList();
         return choices.size() == attackerCount ? Optional.of(choices) : Optional.empty();
     }
@@ -47,12 +48,14 @@ public final class FrontierSettlementAssaultBattlefield {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
+        Map<BlockPosition, GrayboxCell> providerCells = FrontierGrayboxPlan.compile(state).cells();
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
         for (SubjectId member : members) {
             ActorLocation location = state.actorLocations().get(member);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
+                    || !serviceableFloor(providerCells, location.supportingSurface().support())
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
                     location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
                 return Optional.empty();
@@ -65,6 +68,37 @@ public final class FrontierSettlementAssaultBattlefield {
     static boolean localClearFloor(FrontierWorldState state, Settlement settlement, BlockPosition position) {
         return localClearFloor(state.bootstrap().bounds(), settlement.anchor(), residentEnvelopeSquared(state, settlement),
                 FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures()), position);
+    }
+
+    /**
+     * The graybox plan is the one registered physical provider for the current flat-provider
+     * contract.  A battle may use only one of its declared load-bearing surface columns; clear
+     * terrain is not a provider and cannot become one when the scene is visited.
+     */
+    static boolean serviceableFloor(FrontierWorldState state, BlockPosition position) {
+        return serviceableFloor(FrontierGrayboxPlan.compile(state).cells(), position);
+    }
+
+    private static boolean serviceableFloor(Map<BlockPosition, GrayboxCell> cells, BlockPosition position) {
+        GrayboxCell support = cells.get(position);
+        return support != null && isDeclaredBodySurface(support)
+                && !cells.containsKey(position.offset(0, 1, 0))
+                && !cells.containsKey(position.offset(0, 2, 0));
+    }
+
+    private static List<BlockPosition> declaredProviderFloors(FrontierWorldState state, Settlement settlement) {
+        Map<BlockPosition, GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells();
+        return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
+                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().stream()
+                .map(SurfaceAnchor::support).sorted(Comparator.comparingLong((BlockPosition position) -> distanceSquared(settlement.anchor(), position))
+                        .thenComparingInt(BlockPosition::x)
+                        .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
+                .filter(position -> serviceableFloor(cells, position)).toList();
+    }
+
+    private static boolean isDeclaredBodySurface(GrayboxCell cell) {
+        return cell.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE
+                || cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE;
     }
 
     private static boolean localClearFloor(WorldBounds bounds, BlockPosition anchor, long settlementEnvelopeSquared,

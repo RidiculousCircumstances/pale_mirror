@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -170,6 +171,34 @@ class HiveSettlementAssaultProcessTest {
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), new SettlementAssaultStarted(assault));
 
         assertTrue(HiveSettlementAssaultProcess.planProgress(state, DefenderEquipmentProcess.review(assault, 201L)).isEmpty());
+    }
+
+    @Test void assaultFloorsRequireOneDeclaredGrayboxProviderAndRejectTheRetainedUnclaimedColumn() {
+        Fixture fixture = fixture(true);
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(fixture.state(),
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        SettlementAssault assault = assertInstanceOf(SettlementAssaultStarted.class, start.get(1).payload()).assault();
+        java.util.List<BlockPosition> supports = new java.util.ArrayList<>(assault.attackers().stream()
+                .map(attacker -> attacker.route().getLast()).toList());
+        supports.addAll(assault.defenderIds().stream().map(id -> fixture.state().actorLocations().get(id).supportingSurface().support()).toList());
+        assertEquals(assault.attackerIds().size() + assault.defenderIds().size(), supports.size());
+        assertTrue(supports.stream().allMatch(position -> FrontierSettlementAssaultBattlefield.serviceableFloor(fixture.state(), position)),
+                "every admitted assault support must have one declared provider surface and planned headroom");
+
+        BlockPosition retainedR11AttackerFloor = new BlockPosition(-362, 64, -346);
+        assertFalse(FrontierSettlementAssaultBattlefield.serviceableFloor(fixture.state(), retainedR11AttackerFloor),
+                "the retained R11 attacker floor is clear terrain, not a declared graybox provider surface");
+
+        BlockPosition unavailable = assault.attackers().getFirst().route().getLast();
+        GrayboxCell provider = FrontierGrayboxPlan.compile(fixture.state()).cells().get(unavailable);
+        java.util.Map<BlockPosition, PhysicalDelta> losses = new java.util.LinkedHashMap<>(fixture.state().physicalDeltas());
+        losses.put(unavailable, new PhysicalDelta(unavailable, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                Optional.of(provider.ownerId()), Optional.of(provider.semanticPart()), "test:assault-provider-unavailable"));
+        FrontierWorldState unavailableState = fixture.state().withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(losses));
+        assertFalse(FrontierSettlementAssaultBattlefield.serviceableFloor(unavailableState, unavailable),
+                "a missing declared provider surface must fail admission instead of becoming an opportunistic floor");
+        assertTrue(unavailableState.coldSettlementAssaultSceneCandidates().isEmpty(),
+                "one unavailable registered support must keep the complete assault out of scene admission");
     }
 
     @Test void battleWaitsForDistinctCompiledFloorsAndConflictsInsteadOfMovingASeparatedDefender() {
