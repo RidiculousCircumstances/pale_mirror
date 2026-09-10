@@ -50,9 +50,23 @@ final class FrontierV3GrayboxExecutor {
     private FrontierV3GrayboxExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return;
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        Cursor cursor = cursor(runtime, state);
+        retireStaleWorksiteStaging(level, ledger, cursor);
+        tick(FrontierV3AftermathPhysicalWorld.minecraft(level), runtime, state, cursor);
+    }
+
+    /** Same production cursor and ownership rule, with a narrow physical adapter for seam tests. */
+    static void tick(FrontierV3AftermathPhysicalWorld world, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         if (runtime.canonicalState().isEmpty()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        tick(world, runtime, state, cursor(runtime, state));
+    }
+
+    private static Cursor cursor(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || !input.equals(cursor.input())) {
@@ -60,10 +74,14 @@ final class FrontierV3GrayboxExecutor {
             cursor = Cursor.from(input, plan, cursor);
             CURSORS.put(runtime, cursor);
         }
-        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        retireStaleWorksiteStaging(level, ledger, cursor);
+        return cursor;
+    }
+
+    private static void tick(FrontierV3AftermathPhysicalWorld world, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                             FrontierWorldState state, Cursor cursor) {
+        FrontierV3GrayboxLedger ledger = world.ledger();
         for (int count = 0; count < MAX_CELLS_PER_TICK; count++) {
-            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> level.hasChunkAt(toMinecraft(candidate))).orElse(null);
+            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> world.naturallyLoaded(candidate.position())).orElse(null);
             if (cell == null) return;
             // A loss is an exact canonical mask over the retained immutable baseline.  Keeping
             // it out of StructuralInput prevents one player break (or one explosion cell) from
@@ -73,10 +91,10 @@ final class FrontierV3GrayboxExecutor {
             // CURRENT.  We never use the cached baseline to recreate a lost cell.
             PhysicalDelta delta = state.physicalDeltas().get(cell.position());
             if (delta != null) {
-                if (matchesKnownLoss(delta, cell)) retainKnownLoss(level, ledger, cell);
+                if (matchesKnownLoss(delta, cell)) retainKnownLoss(world, cell);
                 continue;
             }
-            project(level, ledger, cell);
+            project(world, cell);
         }
     }
 
@@ -181,27 +199,29 @@ final class FrontierV3GrayboxExecutor {
 
     /** Applies exactly one loaded desired cell; exposed package-private for negative GameTests. */
     static ProjectionResult project(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
-        BlockPos position = toMinecraft(cell);
-        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
-        BlockState expected = material(cell.material());
-        FrontierV3GrayboxLedger.Claim prior = ledger.claim(position);
+        return project(FrontierV3AftermathPhysicalWorld.minecraft(level), cell);
+    }
+
+    static ProjectionResult project(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell) {
+        io.farfrontier.palemirror.frontier.v3.model.BlockPosition position = cell.position();
+        if (!world.naturallyLoaded(position)) return ProjectionResult.DEFERRED;
+        FrontierV3GrayboxLedger ledger = world.ledger();
+        FrontierV3GrayboxLedger.Claim prior = ledger.claim(toMinecraft(cell));
         if (prior != null) {
             if (prior.conflicted() || !matches(prior, cell)) return ProjectionResult.CONFLICT;
-            if (level.getBlockState(position).equals(expected)) return ProjectionResult.CURRENT;
-            ledger.conflict(position);
+            if (world.hasMaterial(position, cell.material())) return ProjectionResult.CURRENT;
+            ledger.conflict(toMinecraft(cell));
             return ProjectionResult.CONFLICT;
         }
-        if (!level.getBlockState(position).isAir()) {
-            ledger.obstructed(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        if (!world.isAir(position)) {
+            ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
             return ProjectionResult.CONFLICT;
         }
-        if (requiresSupport(cell.semanticPart()) && level.getBlockState(position.below()).isAir()) return ProjectionResult.DEFERRED;
+        if (requiresSupport(cell.semanticPart()) && world.isAir(cell.position().offset(0, -1, 0))) return ProjectionResult.DEFERRED;
         // Reserve capacity before mutating the world: an exhausted provenance ledger is fail-closed.
-        ledger.ensureCapacityFor(position);
-        if (!level.setBlock(position, expected, 3) || !level.getBlockState(position).equals(expected)) {
-            return ProjectionResult.DEFERRED;
-        }
-        ledger.applied(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        ledger.ensureCapacityFor(toMinecraft(cell));
+        if (!world.placeMaterial(position, cell.material())) return ProjectionResult.DEFERRED;
+        ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
         return ProjectionResult.APPLIED;
     }
 
@@ -212,9 +232,12 @@ final class FrontierV3GrayboxExecutor {
      * the block: foreign/non-air geometry remains untouched and will make repair visibly fail.
      */
     static void retainKnownLoss(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
-        BlockPos position = toMinecraft(cell);
-        if (!level.hasChunkAt(position) || !level.getBlockState(position).isAir()) return;
-        ledger.damaged(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        retainKnownLoss(FrontierV3AftermathPhysicalWorld.minecraft(level), cell);
+    }
+
+    static void retainKnownLoss(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell) {
+        if (!world.naturallyLoaded(cell.position()) || !world.isAir(cell.position())) return;
+        world.ledger().damaged(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
     }
 
     /** A masked cell receives a tombstone only for its own exact canonical semantic loss. */

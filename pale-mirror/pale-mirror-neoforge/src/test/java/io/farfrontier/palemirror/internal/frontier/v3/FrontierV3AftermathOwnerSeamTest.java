@@ -1,109 +1,138 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath;
+import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCell;
+import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
-import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStrike;
-import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
+import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Exercises the registered production owner algorithms from an unclaimed COLD loss. */
 class FrontierV3AftermathOwnerSeamTest {
     @Test
-    void ordinaryColdDueActionAndRegisteredHotScenePublishTheSameExactStrikeNamespace() {
-        var coldConfiguration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:aftermath-cold-seam"), 41L);
-        var coldEngine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>)
-                FrontierEngines.createCanonicalStateAccess(coldConfiguration);
-        long dueAt = coldConfiguration.initialSchedules().getFirst().dueAt().ticks();
-        coldEngine.advanceTo(new SimInstant(dueAt), new WorkBudget(64, 512));
-        FrontierWorldState cold = coldEngine.canonicalState().state();
-        var aftermath = cold.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
-        assertTrue(cold.physicalDeltas().containsKey(aftermath.cells().getFirst().position()),
-                "the ordinary due action, not a ledger fixture, commits the canonical loss before projection");
-        assertTrue(FrontierGrayboxPlan.compileStructuralBaseline(cold).cells().containsKey(aftermath.cells().getFirst().position()),
-                "the bounded projector retains the actual structural candidate so it can observe the semantic-loss mask");
-        assertTrue(!FrontierGrayboxPlan.compile(cold).cells().containsKey(aftermath.cells().getFirst().position()),
-                "the ordinary COLD loss masks that exact projection candidate before deferred aftermath is admitted");
-        var physicalOrder = FrontierV3PhysicalExecutors.registry().diagnostics().stream().map(FrontierV3PhysicalExecutorRegistry.Diagnostic::id).toList();
-        assertTrue(physicalOrder.indexOf("graybox-projection") < physicalOrder.indexOf("deferred-aftermath"),
-                "the actual physical registry observes the bounded graybox candidate before aftermath consumes it");
+    void ordinaryColdDueActionWaitsForItsRealBoundedProjectorBeforeDeferredAftermathResolves() {
+        var base = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:aftermath-owner-seam"), 41L);
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(base);
+        long dueAt = base.initialSchedules().getFirst().dueAt().ticks();
+        engine.advanceTo(new SimInstant(dueAt), new WorkBudget(64, 512));
+        FrontierWorldState cold = engine.canonicalState().state();
+        DeferredAftermath aftermath = cold.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
+        DeferredAftermathCell target = aftermath.cells().getFirst();
+        assertTrue(cold.physicalDeltas().containsKey(target.position()), "ordinary COLD scheduling commits the loss before either physical owner runs");
+        var baselineTarget = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(cold).cells().get(target.position());
+        assertTrue(baselineTarget != null && FrontierV3GrayboxExecutor.matchesKnownLoss(cold.physicalDeltas().get(target.position()), baselineTarget),
+                "the ordinary loss must mask the exact projector cell rather than a test-only coordinate");
 
-        FrontierWorldState coldBoundary = coldConfiguration.initialState();
-        SettlementAssault assault = coldBoundary.strategicPlans().settlementAssaults().values().iterator().next();
-        var candidate = coldBoundary.coldSettlementAssaultSceneCandidates().getFirst();
-        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
-                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(coldBoundary.bootstrap().worldId(), actor))).toList();
-        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:aftermath-owner-seam"), coldBoundary.bootstrap().worldId(),
-                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), new SimInstant(400L), 1L,
-                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), java.util.Optional.empty());
-        FrontierWorldState hot = coldBoundary.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
-        SettlementAssault hotAssault = hot.strategicPlans().settlementAssaults().get(assault.id());
-        long epoch = SettlementAssaultCauseIdentity.hotEpoch(hotAssault, hot.physicalIntents().values());
-        SubjectId attacker = hotAssault.combatantAttackerIds().stream().sorted().skip(Math.floorMod(epoch, hotAssault.combatantAttackerIds().size())).findFirst().orElseThrow();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(rebased(base, cold, dueAt), new EphemeralStore(), 10_000);
+        try {
+            FrontierWorldState runtimeCold = runtime.decodedState().orElseThrow();
+            assertTrue(runtimeCold.physicalDeltas().containsKey(target.position()), "the runtime must retain the ordinary COLD loss");
+            assertTrue(FrontierV3GrayboxExecutor.matchesKnownLoss(runtimeCold.physicalDeltas().get(target.position()), baselineTarget), "runtime hydration must retain the exact loss identity");
+            TestPhysicalWorld world = new TestPhysicalWorld(cold, target.position());
+            assertNull(world.claim(target.position()), "the physical ledger starts untouched");
+            FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            assertEquals(DeferredAftermathCellStatus.PENDING, cell(runtime, aftermath).status(),
+                    "AIR remains pending while the real bounded projector has not reached this exact target");
+            assertNull(world.claim(target.position()), "aftermath cannot manufacture the projector's tombstone");
+            FrontierWorldState restartState = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+            FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown();
+            runtime = FrontierV3ServerRuntime.start(rebased(base, restartState, dueAt), new EphemeralStore(), 10_000);
+            assertEquals(DeferredAftermathCellStatus.PENDING, cell(runtime, aftermath).status(),
+                    "codec restart before projector classification retains absence as pending rather than a foreign conflict");
 
-        SubjectId published = FrontierV3SceneBehaviorRegistry.strikeCause(hot, lease, attacker, epoch);
-        assertEquals(aftermath.causeId(), published,
-                "the registered HOT behavior, not a helper-only comparison, publishes the same ordinary COLD strike cause");
-        assertNotEquals(published, FrontierV3SceneBehaviorRegistry.strikeCause(hot, lease, attacker, epoch + 1L));
-        assertNotEquals(published, FrontierV3SceneBehaviorRegistry.strikeCause(hot, lease, new SubjectId("bioform:substituted"), epoch));
+            for (int tick = 0; tick < 512 && cell(runtime, aftermath).status() != DeferredAftermathCellStatus.REALIZED; tick++) {
+                FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            }
+            assertEquals(DeferredAftermathCellStatus.REALIZED, cell(runtime, aftermath).status(),
+                    "projector provenance and deferred aftermath converge exactly once");
+            assertTrue(world.isAir(target.position()), "the COLD loss stays AIR; no old physical effect is replayed");
+            assertTrue(world.claim(target.position()).conflicted(), "the exact tombstone remains the durable anti-replay fence");
+            long revision = runtime.canonicalState().orElseThrow().revision().value();
+            FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            assertEquals(revision, runtime.canonicalState().orElseThrow().revision().value(), "terminal aftermath cannot resolve twice");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
 
-        List<SubjectId> targets = ((epoch & 1L) == 0L ? hotAssault.defenderIds() : hotAssault.combatantAttackerIds()).stream().sorted().toList();
-        SubjectId target = targets.get(Math.floorMod(epoch, targets.size()));
-        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:aftermath-owner-seam"), PhysicalIntentKind.SCENE_STRIKE,
-                PhysicalIntentStatus.PREPARED, published, List.of(attacker, target),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
-        FrontierWorldState confirmed = hot.preparePhysicalIntent(intent)
-                .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty())
-                .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(new SceneStrikeObservation(
-                        new PhysicalObservationId("observation:aftermath-owner-seam"), intent.id(), attacker, target,
-                        FixedScalar.ONE, FixedScalar.ZERO)));
-        assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(intent.id()).status(),
-                "the exact shared HOT cause survives receipt and immutable-state validation");
-        assertEquals(epoch + 1L, confirmed.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
-                "HOT confirmation advances the canonical assault epoch itself rather than an executor-local offset");
+    @Test
+    void positiveForeignMaterialSurvivesAndBecomesOneLocalConflict() {
+        var base = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:aftermath-owner-foreign"), 41L);
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(base);
+        long dueAt = base.initialSchedules().getFirst().dueAt().ticks(); engine.advanceTo(new SimInstant(dueAt), new WorkBudget(64, 512));
+        FrontierWorldState cold = engine.canonicalState().state(); DeferredAftermath aftermath = cold.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
+        DeferredAftermathCell target = aftermath.cells().getFirst(); TestPhysicalWorld world = new TestPhysicalWorld(cold, target.position());
+        world.foreign(target.position(), GrayboxMaterial.HIVE_GANGLION);
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(rebased(base, cold, dueAt), new EphemeralStore(), 10_000);
+        try {
+            FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            assertEquals(DeferredAftermathCellStatus.CONFLICTED, cell(runtime, aftermath).status(), "positive unowned material is one local typed conflict");
+            assertTrue(world.hasMaterial(target.position(), GrayboxMaterial.HIVE_GANGLION), "foreign material is preserved, never overwritten");
+            long revision = runtime.canonicalState().orElseThrow().revision().value(); FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            assertEquals(revision, runtime.canonicalState().orElseThrow().revision().value(), "a terminal foreign conflict cannot replay");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
 
-        FrontierWorldState released = confirmed.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING)
-                .releaseSceneLease(lease.id(), lease.members().stream().map(member -> {
-                    var actor = confirmed.actorLocations().get(member.actorId());
-                    return new SceneMemberPosition(member.actorId(), actor.body(), actor.condition().health());
-                }).toList());
-        SettlementAssault resumed = released.strategicPlans().settlementAssaults().get(assault.id());
-        SettlementAssaultStrike continuation = HiveSettlementAssaultProcess.planCombat(released,
-                        HiveSettlementAssaultProcess.combat(resumed, 600L)).stream()
-                .map(value -> value.payload()).filter(SettlementAssaultStrike.class::isInstance)
-                .map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
-        assertEquals(epoch + 1L, continuation.epoch(),
-                "ordinary COLD continuation consumes the epoch confirmed by HOT before the lease released");
-        assertNotEquals(published, SettlementAssaultCauseIdentity.strike(continuation.assaultId(), continuation.attackerId(), continuation.epoch()),
-                "release and COLD continuation cannot recreate the exact already-confirmed HOT cause");
+    private static DeferredAftermathCell cell(FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime, DeferredAftermath original) {
+        return runtime.decodedState().orElseThrow().deferredAftermath().entries().get(original.id()).cells().getFirst();
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> rebased(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
+                                                                                                      FrontierWorldState state, long instant) {
+        return new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(instant), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+    }
+    private static final class TestPhysicalWorld implements FrontierV3AftermathPhysicalWorld {
+        private final Set<Long> loadedChunks; private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
+        private final Map<BlockPosition, GrayboxMaterial> blocks = new HashMap<>();
+        private TestPhysicalWorld(FrontierWorldState state, BlockPosition target) {
+            List<Long> chunks = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(state).cells().values().stream()
+                    .map(cell -> chunk(cell.position())).distinct().sorted().toList();
+            int targetChunk = chunks.indexOf(chunk(target));
+            if (targetChunk < 64) throw new IllegalStateException("fixture cannot delay its target behind one bounded projector turn");
+            java.util.Set<Long> loaded = new java.util.HashSet<>(chunks.subList(0, 64));
+            loaded.add(chunk(target)); loadedChunks = Set.copyOf(loaded);
+        }
+        @Override public boolean naturallyLoaded(BlockPosition position) {
+            return loadedChunks.contains(chunk(position));
+        }
+        @Override public boolean isAir(BlockPosition position) { return !blocks.containsKey(position); }
+        @Override public boolean hasMaterial(BlockPosition position, GrayboxMaterial material) { return blocks.get(position) == material; }
+        @Override public boolean placeMaterial(BlockPosition position, GrayboxMaterial material) { blocks.put(position, material); return true; }
+        @Override public boolean clear(BlockPosition position) { blocks.remove(position); return true; }
+        @Override public FrontierV3GrayboxLedger ledger() { return ledger; }
+        private void foreign(BlockPosition position, GrayboxMaterial material) { blocks.put(position, material); }
+        private FrontierV3GrayboxLedger.Claim claim(BlockPosition position) { return ledger.claim(new net.minecraft.core.BlockPos(position.x(), position.y(), position.z())); }
+        private static long chunk(BlockPosition position) { return ((long) (position.x() >> 4) << 32) ^ (position.z() >> 4 & 0xffffffffL); }
+    }
+    private static final class EphemeralStore implements FrontierStore {
+        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) { return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value()); }
+        @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("owner seam does not compact"); }
+        @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) { throw new UnsupportedOperationException("owner seam does not compact"); }
     }
 }

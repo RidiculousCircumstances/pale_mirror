@@ -11,7 +11,7 @@ final class FrontierV3PhysicalExecutors {
             executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("resource-site-explosion-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
             executor("cargo-carrier-impact-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("explosion-observation"), "cargo-carrier-impact", FrontierV3CargoCarrierImpactExecutor::tick),
 
-            executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3GrayboxExecutor::tick),
+            executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
             executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
             executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
             executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
@@ -50,7 +50,7 @@ final class FrontierV3PhysicalExecutors {
             executor("structural-repair", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-handoff"), "structural-repair-effect", FrontierV3StructuralRepairExecutor::tick),
             executor("route-construction", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("structural-repair"), "route-construction-effect", FrontierV3RouteConstructionExecutor::tick),
             executor("route-maintenance", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-construction"), "route-maintenance-effect", FrontierV3RouteMaintenanceExecutor::tick),
-            executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3DeferredAftermathExecutor::tick),
+            executor("deferred-aftermath", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("route-maintenance"), "deferred-aftermath-effect", FrontierV3AftermathOwnerComposition::aftermath),
 
             executor("scenes", FrontierV3PhysicalExecutorRegistry.Stage.SCENE, Set.of("deferred-aftermath", "object-boards"), "scene-leases", FrontierV3SceneExecutor::tick)
     ));

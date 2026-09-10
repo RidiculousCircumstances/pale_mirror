@@ -42,6 +42,8 @@ final class FrontierV3GrayboxLedger extends SavedData {
         return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(FrontierV3GrayboxLedger::new,
                 FrontierV3GrayboxLedger::load, DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME);
     }
+    /** Same bounded provenance implementation for the physical-owner composition harness. */
+    static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     void ensureCapacityFor(BlockPos position) {
         if (!claims.containsKey(position.asLong()) && claims.size() >= MAX_CELLS) {
