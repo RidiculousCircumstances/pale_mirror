@@ -89,7 +89,8 @@ public final class FrontierSettlementAssaultBattlefield {
     }
 
     /** One disposable loss-masked physical-provider observation for one admission derivation. */
-    static final class ProviderView {
+    /** Immutable current physical-provider observation used by one admission derivation. */
+    public static final class ProviderView {
         private final Map<BlockPosition, GrayboxCell> cells;
 
         private ProviderView(Map<BlockPosition, GrayboxCell> cells) {

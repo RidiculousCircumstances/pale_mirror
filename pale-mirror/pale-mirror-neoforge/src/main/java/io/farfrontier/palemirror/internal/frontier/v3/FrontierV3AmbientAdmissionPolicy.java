@@ -1,12 +1,19 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.HivePhysiologySupport;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /** One bounded, disposable admission pass for the ambient-to-scene hand-off. */
@@ -19,27 +26,51 @@ final class FrontierV3AmbientAdmissionPolicy {
         return begin(initialState, FrontierSceneAdmission::reservationAdmission);
     }
 
-    static Session begin(FrontierWorldState initialState, AdmissionCompiler compiler) {
-        return new Session(initialState, compiler);
+    static Session begin(FrontierWorldState initialState, AdmissionDeriver deriver) {
+        return new Session(initialState, deriver);
     }
 
     @FunctionalInterface
-    interface AdmissionCompiler {
-        FrontierSceneAdmission.ReservationAdmission compile(FrontierWorldState state);
+    interface AdmissionDeriver {
+        FrontierSceneAdmission.ReservationAdmission derive(FrontierWorldState state);
     }
 
+    /** The only substituted boundary in the ordinary-JVM policy test. */
     @FunctionalInterface
-    interface ActorDecision {
-        boolean decide(SubjectId actorId, FrontierWorldState state, FrontierSceneAdmission.ReservationAdmission admission);
+    interface EffectPort {
+        Optional<FrontierWorldState> execute(Selection selection);
+    }
+
+    enum Effect { DRAIN_HOT, ABANDON_PREPARED }
+
+    record Selection(SubjectId actorId, FrontierWorldState state, Effect effect) {
+        Selection {
+            Objects.requireNonNull(actorId, "actor id");
+            Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(effect, "effect");
+        }
+    }
+
+    record Decision(SubjectId actorId, FrontierWorldState state, FrontierSceneAdmission.ReservationAdmission admission,
+                    boolean reserved, Optional<Effect> selectedEffect, Optional<FrontierWorldState> resultingState) {
+        Decision {
+            Objects.requireNonNull(actorId, "actor id");
+            Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(admission, "admission");
+            selectedEffect = Objects.requireNonNull(selectedEffect, "selected effect");
+            resultingState = Objects.requireNonNull(resultingState, "resulting state");
+        }
+
+        boolean applied() { return resultingState.isPresent(); }
     }
 
     static final class Session {
-        private final AdmissionCompiler compiler;
+        private final AdmissionDeriver deriver;
         private FrontierWorldState source;
         private FrontierSceneAdmission.ReservationAdmission admission;
 
-        private Session(FrontierWorldState initialState, AdmissionCompiler compiler) {
-            this.compiler = Objects.requireNonNull(compiler, "admission compiler");
+        private Session(FrontierWorldState initialState, AdmissionDeriver deriver) {
+            this.deriver = Objects.requireNonNull(deriver, "admission deriver");
             refresh(Objects.requireNonNull(initialState, "initial state"));
         }
 
@@ -52,23 +83,54 @@ final class FrontierV3AmbientAdmissionPolicy {
             return admissionFor(state).reserves(actorId);
         }
 
-        int scan(Collection<SubjectId> actorIds, Supplier<FrontierWorldState> currentState, ActorDecision decision) {
+        List<Decision> scan(Collection<SubjectId> actorIds, Supplier<FrontierWorldState> currentState, EffectPort effects) {
             Objects.requireNonNull(actorIds, "actor ids");
             Objects.requireNonNull(currentState, "current state");
-            Objects.requireNonNull(decision, "actor decision");
+            Objects.requireNonNull(effects, "effects");
+            List<Decision> decisions = new ArrayList<>();
             int applied = 0;
+            FrontierWorldState carriedState = null;
             for (SubjectId actorId : actorIds.stream().sorted(Comparator.naturalOrder()).toList()) {
-                if (applied >= MAX_ACTORS_PER_TICK) return applied;
-                FrontierWorldState state = currentState.get();
-                if (state == null) return applied;
-                if (decision.decide(actorId, state, admissionFor(state))) applied++;
+                if (applied >= MAX_ACTORS_PER_TICK) return List.copyOf(decisions);
+                FrontierWorldState state = carriedState != null ? carriedState : currentState.get();
+                if (state == null) return List.copyOf(decisions);
+                Decision decision = decide(actorId, state, effects);
+                decisions.add(decision);
+                if (decision.applied()) applied++;
+                carriedState = decision.resultingState().orElse(null);
             }
-            return applied;
+            return List.copyOf(decisions);
+        }
+
+        Decision decide(SubjectId actorId, FrontierWorldState state, EffectPort effects) {
+            Objects.requireNonNull(actorId, "actor id");
+            Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(effects, "effects");
+            FrontierSceneAdmission.ReservationAdmission currentAdmission = admissionFor(state);
+            boolean reserved = currentAdmission.reserves(actorId);
+            Optional<Effect> effect = selectedEffect(actorId, state, reserved);
+            Optional<FrontierWorldState> resultingState = effect.flatMap(value -> effects.execute(new Selection(actorId, state, value)));
+            return new Decision(actorId, state, currentAdmission, reserved, effect, resultingState);
+        }
+
+        private static Optional<Effect> selectedEffect(SubjectId actorId, FrontierWorldState state, boolean reserved) {
+            if (!reserved) return Optional.empty();
+            var location = state.actorLocations().get(actorId);
+            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE || !HivePhysiologySupport.permitsAmbientLease(state, actorId)) {
+                return Optional.empty();
+            }
+            AmbientActorLease lease = state.ambientLeases().get(actorId);
+            if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) return Optional.empty();
+            return switch (lease.status()) {
+                case HOT -> Optional.of(Effect.DRAIN_HOT);
+                case PREPARED -> Optional.of(Effect.ABANDON_PREPARED);
+                default -> Optional.empty();
+            };
         }
 
         private void refresh(FrontierWorldState state) {
             source = state;
-            admission = Objects.requireNonNull(compiler.compile(state), "reservation admission");
+            admission = Objects.requireNonNull(deriver.derive(state), "reservation admission");
         }
     }
 }

@@ -3,13 +3,18 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
@@ -36,16 +41,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class FrontierV3AmbientActorReservationCacheTest {
+class FrontierV3AmbientAdmissionPolicyTest {
     @Test
-    void productionAdmissionPolicySharesOneLossMaskedProviderViewThenRebuildsOnlyForTheReplacementState() {
+    void productionAdmissionPolicyOwnsSelectionAndOneProviderViewPerStateSegment() {
             FrontierWorldState before = twoEligibleAssaults();
             List<io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate> initialCandidates =
                     FrontierSceneAdmission.reservationAdmission(before).settlementAssaultCandidates();
@@ -70,26 +76,147 @@ class FrontierV3AmbientActorReservationCacheTest {
             assertTrue(afterLoss.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> candidate.assaultId().equals(secondAssault.id())),
                     "the intact independent assault must remain eligible after the other assault loses its support");
 
-            AtomicReference<FrontierWorldState> current = new AtomicReference<>(before);
-            List<FrontierSceneAdmission.ReservationAdmission> observed = new ArrayList<>();
-            int[] compilations = {0};
-            FrontierV3AmbientAdmissionPolicy.Session policy = FrontierV3AmbientAdmissionPolicy.begin(before, state -> {
-                compilations[0]++;
-                return FrontierSceneAdmission.reservationAdmission(state);
-            });
-            policy.scan(before.actorLocations().keySet(), current::get, (actorId, state, admission) -> {
-                observed.add(admission);
-                if (state == before) current.set(afterLoss);
-                return false;
+            List<SubjectId> scanActors = firstAssault.attackerIds().stream().sorted().limit(3).toList();
+            SubjectId firstActor = scanActors.getFirst();
+            SubjectId handoffActor = scanActors.get(1);
+            SubjectId laterActor = scanActors.get(2);
+            before = withPreparedLease(before, handoffActor);
+            afterLoss = withPreparedLease(afterLoss, handoffActor);
+            FrontierWorldState originalState = before;
+            FrontierWorldState replacementState = afterLoss;
+            AtomicInteger derivations = new AtomicInteger();
+            AtomicInteger providers = new AtomicInteger();
+            AtomicInteger beforeDerivations = new AtomicInteger();
+            AtomicInteger replacementDerivations = new AtomicInteger();
+            AtomicInteger beforeProviders = new AtomicInteger();
+            AtomicInteger replacementProviders = new AtomicInteger();
+            FrontierSceneAdmission.ProviderCompiler realProvider = FrontierSceneAdmission.providerCompiler();
+            FrontierV3AmbientAdmissionPolicy.AdmissionDeriver countedDeriver = state -> {
+                derivations.incrementAndGet();
+                if (state == originalState) beforeDerivations.incrementAndGet();
+                if (state == replacementState) replacementDerivations.incrementAndGet();
+                return FrontierSceneAdmission.reservationAdmission(state, providerState -> {
+                    providers.incrementAndGet();
+                    if (providerState == originalState) beforeProviders.incrementAndGet();
+                    if (providerState == replacementState) replacementProviders.incrementAndGet();
+                    return realProvider.compile(providerState);
+                });
+            };
+            FrontierV3AmbientAdmissionPolicy.Session policy = FrontierV3AmbientAdmissionPolicy.begin(originalState, countedDeriver);
+            List<FrontierV3AmbientAdmissionPolicy.Selection> selected = new ArrayList<>();
+            List<FrontierV3AmbientAdmissionPolicy.Decision> decisions = policy.scan(scanActors, () -> originalState, selection -> {
+                selected.add(selection);
+                assertEquals(handoffActor, selection.actorId(), "only the policy-selected prepared lease may execute the test effect");
+                assertEquals(FrontierV3AmbientAdmissionPolicy.Effect.ABANDON_PREPARED, selection.effect());
+                return Optional.of(replacementState);
             });
 
-            assertEquals(2, compilations[0], "one real reservation derivation and its one loss-masked provider compilation are permitted per immutable state segment");
-            assertEquals(2, observed.stream().distinct().count(), "the scan must replace its one shared admission only after the canonical state object changes");
-            FrontierSceneAdmission.ReservationAdmission replacement = observed.stream().filter(admission -> !admission.settlementAssaultCandidates().contains(firstCandidate)).findFirst().orElseThrow();
+            assertEquals(3, decisions.size());
+            assertEquals(originalState, decisions.get(0).state());
+            assertEquals(originalState, decisions.get(1).state());
+            assertEquals(replacementState, decisions.get(2).state());
+            assertEquals(firstActor, decisions.get(0).actorId());
+            assertTrue(decisions.get(0).reserved());
+            assertTrue(decisions.get(0).selectedEffect().isEmpty(), "the policy rejects a reserved actor with no active lease before the selected hand-off");
+            assertEquals(handoffActor, decisions.get(1).actorId());
+            assertEquals(FrontierV3AmbientAdmissionPolicy.Effect.ABANDON_PREPARED, decisions.get(1).selectedEffect().orElseThrow());
+            assertTrue(decisions.get(1).applied());
+            assertEquals(laterActor, decisions.get(2).actorId());
+            assertEquals(1, selected.size());
+            assertEquals(2, derivations.get(), "one reservation derivation is permitted for each immutable state segment");
+            assertEquals(2, providers.get(), "the real provider compiler runs once, independently of reservation derivation, for each segment");
+            assertEquals(1, beforeDerivations.get());
+            assertEquals(1, replacementDerivations.get());
+            assertEquals(1, beforeProviders.get());
+            assertEquals(1, replacementProviders.get());
+            FrontierSceneAdmission.ReservationAdmission replacement = decisions.get(2).admission();
             assertFalse(replacement.settlementAssaultCandidates().stream().anyMatch(candidate -> candidate.assaultId().equals(firstAssault.id())),
                     "a later actor decision must use the changed state contents, not a stale reservation view");
             assertTrue(replacement.settlementAssaultCandidates().stream().anyMatch(candidate -> candidate.assaultId().equals(secondAssault.id())),
                     "a later actor decision must retain the other independently admissible assault");
+
+            assertDerivationPerActorIsDetected(before, scanActors, countedDeriver);
+            assertProviderPerAssaultIsDetected(before, realProvider);
+            assertStaleReplacementIsDetected(before, afterLoss, scanActors, countedDeriver);
+            assertSubstituteFloorIsDetected(before, afterLoss, firstAssault, lostAttacker, scanActors, countedDeriver);
+    }
+
+    private static void assertDerivationPerActorIsDetected(FrontierWorldState state, List<SubjectId> actors,
+                                                           FrontierV3AmbientAdmissionPolicy.AdmissionDeriver deriver) {
+        AtomicInteger derivations = new AtomicInteger();
+        FrontierV3AmbientAdmissionPolicy.AdmissionDeriver counted = value -> {
+            derivations.incrementAndGet();
+            return deriver.derive(value);
+        };
+        for (SubjectId actor : actors) {
+            FrontierV3AmbientAdmissionPolicy.begin(state, counted).decide(actor, state, selection -> Optional.empty());
+        }
+        assertThrows(AssertionError.class, () -> assertEquals(1, derivations.get(),
+                "fault control: deriving inside the actor loop must violate the state-segment count"));
+    }
+
+    private static void assertProviderPerAssaultIsDetected(FrontierWorldState state, FrontierSceneAdmission.ProviderCompiler realProvider) {
+        AtomicInteger providers = new AtomicInteger();
+        FrontierSceneAdmission.reservationAdmission(state, providerState -> {
+            int activeAssaults = (int) providerState.strategicPlans().settlementAssaults().values().stream()
+                    .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT).count();
+            FrontierSettlementAssaultBattlefield.ProviderView view = null;
+            for (int index = 0; index < activeAssaults; index++) {
+                providers.incrementAndGet();
+                view = realProvider.compile(providerState);
+            }
+            return view;
+        });
+        assertThrows(AssertionError.class, () -> assertEquals(1, providers.get(),
+                "fault control: compiling the real provider once per assault must violate the segment count"));
+    }
+
+    private static void assertStaleReplacementIsDetected(FrontierWorldState before, FrontierWorldState afterLoss, List<SubjectId> actors,
+                                                         FrontierV3AmbientAdmissionPolicy.AdmissionDeriver realDeriver) {
+        FrontierV3AmbientAdmissionPolicy.Session stalePolicy = FrontierV3AmbientAdmissionPolicy.begin(before,
+                ignored -> realDeriver.derive(before));
+        List<FrontierV3AmbientAdmissionPolicy.Decision> decisions = stalePolicy.scan(actors, () -> before, selection -> Optional.of(afterLoss));
+        assertThrows(AssertionError.class, () -> assertFalse(decisions.get(2).admission().settlementAssaultCandidates().stream()
+                        .anyMatch(candidate -> candidate.assaultId().value().contains("first")),
+                "fault control: stale replacement contents must retain the lost assault"));
+    }
+
+    private static void assertSubstituteFloorIsDetected(FrontierWorldState before, FrontierWorldState afterLoss, SettlementAssault firstAssault,
+                                                        SubjectId lostAttacker, List<SubjectId> actors,
+                                                        FrontierV3AmbientAdmissionPolicy.AdmissionDeriver deriver) {
+        FrontierWorldState substituted = withSubstituteFloor(afterLoss, firstAssault, lostAttacker);
+        FrontierV3AmbientAdmissionPolicy.Session policy = FrontierV3AmbientAdmissionPolicy.begin(before, deriver);
+        List<FrontierV3AmbientAdmissionPolicy.Decision> decisions = policy.scan(actors, () -> before, selection -> Optional.of(substituted));
+        assertThrows(AssertionError.class, () -> assertFalse(decisions.get(2).admission().settlementAssaultCandidates().stream()
+                        .anyMatch(candidate -> candidate.assaultId().equals(firstAssault.id())),
+                "fault control: a replacement that substitutes another attacker floor must violate the exact-support loss oracle"));
+    }
+
+    private static FrontierWorldState withPreparedLease(FrontierWorldState state, SubjectId actorId) {
+        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases());
+        BodyPosition body = state.actorLocations().get(actorId).body();
+        leases.put(actorId, new AmbientActorLease(actorId, body, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO,
+                1L, AmbientLeaseStatus.PREPARED, AmbientGoalKind.GUARD, body));
+        return state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases));
+    }
+
+    private static FrontierWorldState withSubstituteFloor(FrontierWorldState state, SettlementAssault assault, SubjectId attacker) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
+        Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells();
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> occupied = java.util.stream.Stream.concat(assault.attackerIds().stream(), assault.defenderIds().stream())
+                .filter(actor -> !actor.equals(attacker)).map(actor -> state.actorLocations().get(actor).supportingSurface().support())
+                .collect(java.util.stream.Collectors.toSet());
+        io.farfrontier.palemirror.frontier.v3.model.BlockPosition substitute = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
+                        state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().stream().map(SurfaceAnchor::support)
+                .filter(position -> !occupied.contains(position)).filter(position -> {
+                    GrayboxCell cell = cells.get(position);
+                    return cell != null && (cell.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || cell.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE)
+                            && !cells.containsKey(position.offset(0, 1, 0)) && !cells.containsKey(position.offset(0, 2, 0));
+                }).findFirst().orElseThrow();
+        Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(state.actorLocations());
+        ActorLocation original = locations.get(attacker);
+        locations.put(attacker, new ActorLocation(BodyPosition.above(new SurfaceAnchor(substitute)), original.condition()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
     }
 
     private static FrontierWorldState twoEligibleAssaults() {

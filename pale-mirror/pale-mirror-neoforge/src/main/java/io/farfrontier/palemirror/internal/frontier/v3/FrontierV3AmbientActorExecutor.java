@@ -167,19 +167,15 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
-            if (admissionPolicy.reserves(state, actorId)) {
+            FrontierV3AmbientAdmissionPolicy.Decision handoff = FrontierV3AmbientActorReservationHandoff.runOne(
+                    level, runtime, state, actorId, admissionPolicy);
+            if (handoff.reserved()) {
                 // Reservation alone is not a hand-off: the successor scene is forbidden to
                 // overlap this HOT authority.  Capture this exact observed body first, close
                 // the ambient lease durably, and only then let the next scene turn materialize
                 // the same canonical identity.  This is deliberately general rather than a
                 // harvest special case; every pre-lease candidate uses the same ownership law.
-                if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
-                    Entity body = level.getEntity(entityId(state, actorId));
-                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId)) && drain(runtime, mob)) admitted++;
-                } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
-                        && abandonPreparedForReservation(level, runtime, state, actorId, lease)) {
-                    admitted++;
-                }
+                if (handoff.applied()) admitted++;
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;

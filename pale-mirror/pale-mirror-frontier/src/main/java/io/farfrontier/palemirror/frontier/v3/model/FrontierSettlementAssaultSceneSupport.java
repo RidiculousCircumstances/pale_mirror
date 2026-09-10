@@ -28,6 +28,11 @@ public final class FrontierSettlementAssaultSceneSupport {
 
     static java.util.List<SettlementAssaultSceneCandidate> candidates(FrontierWorldState state) {
         FrontierSettlementAssaultBattlefield.ProviderView providerView = FrontierSettlementAssaultBattlefield.providerView(state);
+        return candidates(state, providerView);
+    }
+
+    static java.util.List<SettlementAssaultSceneCandidate> candidates(FrontierWorldState state,
+                                                                       FrontierSettlementAssaultBattlefield.ProviderView providerView) {
         return state.strategicPlans().settlementAssaults().values().stream()
                 .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
                 .sorted(java.util.Comparator.comparing(SettlementAssault::id))
