@@ -1,13 +1,12 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
-Specification revision: 3.
-Status: `CORRECTION_EXECUTING`. Parent slice: F0.2C. Risk:
-critical-code/native. Engineer: supervising root. Executors through
-`/root/terra_f02c_cold_identity10` are terminal. The sole successor is
-`/root/terra_f02c_cold_identity11`, one fresh `gpt-5.6-terra` with reasoning
-`high`, from private WIP checkpoint
-`9bbb6be41ef8ce0bc865e5ec92fece91f12dd791`, tree
-`4d41c76c3978fef55a95d2502cecb967851d2dc3`, parent `1c8bd3df`.
+Specification revision: 4.
+Status: `SPEC_REVIEW`. Parent slice: F0.2C. Risk: critical-code/native.
+Engineer: supervising root. Executors through
+`/root/terra_f02c_cold_identity11` are terminal. No writer is assigned.
+Latest private WIP checkpoint is
+`84acdc10ec16f5880c3cc19f50c99641b26a1ff9`, tree
+`32e29bb7474c2281f26c326abb5a9bcaf504285c`, parent `9bbb6be4`.
 
 This order inherits `docs/engineering-agent-operating-model-v4.md`. It fixes the
 remaining identity hole before another implementation context is allowed. It
@@ -84,7 +83,7 @@ legitimate trace and are ignored, not prohibited.
 | ID | Required outcome | Cheapest faithful evidence |
 | --- | --- | --- |
 | CI-1 | Exact declaration bytes, wrapper hash and manifest source identity form one chain | focused production-envelope positive plus one-field hash/source mutations |
-| CI-2 | Precommitted outer attempt, client action run and lifecycle identity remain distinct, joined and non-replayable | focused runner-shaped attempt, both run roles, correlation, lifecycle identity/sequence/build mutations |
+| CI-2 | Precommitted outer attempt, client action run and lifecycle identity remain distinct, joined and non-replayable | focused ordinary-path orchestration-input and recovery-metadata component contracts; the actual cross-process join belongs only to CI-6 |
 | CI-3 | Assertion metadata cannot lend authority to a foreign observed payload | focused `kind`, `id`, global-step and duplicate-bound-record mutations |
 | CI-4 | The wrapper records the validated final-manifest digest and identity in its terminal receipt | pure wrapper preflight/receipt contract without Minecraft |
 | CI-5 | The unchanged product candidate plus admitted receipt are bounded and packaged | one clean-HEAD critical gate after method admission |
@@ -147,24 +146,63 @@ existing carrier is fit for expense. A new conceptual proof category after
 this correction stops the carrier for engineer redesign or narrower claim; it
 does not authorize another automatic identity/oracle expansion.
 
-After method admission, exactly one clean-HEAD critical gate and one targeted
-native flow are permitted. Any negative returns to independent product review;
-no automatic rerun or further proof implementation begins.
+Revision 3 at `84acdc10` is `METHOD_REJECTED`. It did cross the real wrapper's
+spawn and environment injection and exercised the receipt constructor, but its
+new admission-only supervisor branch exited before the production lifecycle,
+recovery metadata and final-manifest owner. The test then supplied those bytes
+independently. It could therefore stay green after production retention was
+removed or changed. This is the new `production-retention-owner fidelity`
+category that revision 3 required the engineer to redesign rather than extend.
 
-The successor uses fresh worktree
-`/home/rd/proj/pm-f02c-cold-identity-09-r3` and only
-`/home/rd/proj/pm-f02c-cold-identity-09-r3-tmp` for task-private evidence. It
+Revision 4 narrows the proof tiers instead of attempting another synthetic
+end-to-end Node carrier:
+
+- the isolated supervisor has no test/admission environment that can return
+  success before its ordinary manifest-producing path;
+- focused Node evidence proves only that the exact ordinary wrapper invocation
+  carries the precommitted attempt and that the exact ordinary supervisor
+  recovery-metadata construction retains it. The exercised units must be the
+  same units called by production, so removing either production connection
+  fails the applicable component contract; the Node result does not claim that
+  a child, lifecycle or manifest actually ran;
+- focused Node evidence separately proves declaration/manifest/observed-field
+  validation and production terminal-receipt construction from an already
+  completed valid manifest. Synthetic manifest bytes are permitted only for
+  these parser/consumer component claims and are reported as such;
+- CI-6, the one targeted native flow, is the sole evidence that joins the real
+  wrapper child environment, isolated supervisor, lifecycle, completed final
+  manifest, semantic assertions and terminal receipt. Its wrapper must consume
+  only the manifest emitted by that same attempt; missing, stale or differently
+  retained outer identity fails before success.
+
+No new identity, schema, oracle field, scenario action or proof framework is
+required. The revision-3 admission-only bypass is removed rather than hardened.
+The existing five focused checks may be reorganized or reduced to match their
+honest component claims; they are not evidence for CI-6. This explicit tier
+split is the method redesign. A fresh read-only specification review must admit
+its satisfiability and adequacy before another writer is assigned.
+
+After specification admission, one fresh Terra-high successor may make only
+the revision-4 correction and return `COLD_IDENTITY_READY_R4`. One bounded
+method review then permits exactly one clean-HEAD critical gate and one targeted
+native flow. Any negative returns to independent product review; no automatic
+rerun or further proof implementation begins.
+
+If the specification is admitted, the successor uses fresh worktree
+`/home/rd/proj/pm-f02c-cold-identity-09-r4` and only
+`/home/rd/proj/pm-f02c-cold-identity-09-r4-tmp` for task-private evidence. It
 proves bounded create/write/fsync/atomic-rename/delete before work, owns every
 task process and leaves the unrelated listener on port 25565 and all
 predecessor roots untouched.
 
 ## Delivery and supervision
 
-The executor returns only `COLD_IDENTITY_READY_R3`, a named exception or a
-complete terminal packet. Supervision remains event-driven: one liveness check
-after ten minutes of silence and one economy audit per full hour; neither
-inspects WIP.
+The specification challenger returns only `SPEC_ADMITTED` or `SPEC_REJECTED`
+and performs no writes or tests. A later executor returns only
+`COLD_IDENTITY_READY_R4`, a named exception or a complete terminal packet.
+Supervision remains event-driven: one liveness check after ten minutes of
+writer silence and one economy audit per full hour; neither inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
-epoch for revision 3: `2026-09-10T13:28:55Z`; first economy-audit boundary:
-`2026-09-10T14:28:55Z` if still executing.
+epoch for revision 4 is not set before a writer exists. Revision-4 specification
+review epoch: `2026-09-10T13:41:24Z`.
