@@ -1,6 +1,6 @@
 # PM-F02C-HOT-GATE-CORRECTION-16: restore the diagnostic structure ratchet
 
-Specification revision: 2. Status: `EXECUTING`.
+Specification revision: 3. Status: `TERMINAL_PRODUCT_RED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_gate16`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -66,3 +66,29 @@ Execution assigned at `2026-09-10T18:51:48Z` from the exact clean baseline and
 isolated custody paths above. The first ten-minute liveness audit is due at
 `2026-09-10T19:01:48Z` after silence; the first economy audit is due at
 `2026-09-10T19:51:48Z` if execution remains active.
+
+## Terminal result
+
+Scoped structural correction `3ed045b4a22dab68c8619e8c454e0e70bcb51230`
+is accepted: scene diagnostics moved to a coherent helper, the primary file is
+874 lines, affected diagnostics and `verifyLargeFiles` pass, and no diagnostic
+field or authority changed. The complete gate's runtime/package leaves and
+303/303 GameTests passed with saved shutdown; one stale pure-test intent ID was
+then aligned to the already-existing production binding and its exact seven-test
+class passed. No monolithic confidence rerun was performed.
+
+The one native attempt is a valid product negative, not a HOT receipt. After
+the ordinary visit the exact lease remained `PREPARED`; readiness returned
+`AWAITING_EXACT_FLOOR`, all 28 bodies remained absent and no strike intent or
+receipt was created. It timed out at its action-2 terminal barrier, then saved
+all dimensions and stopped cleanly. Bundle SHA-256 is
+`bc4c39175b30e3a13f357bdffc4a6e87591931e9374eeaab3e73ace3c6272587`.
+
+Independent read-only review decoded the retained graybox ledger: all 24
+resident supports have exact settlement public-surface claims, while all four
+attacker supports are unclaimed; the first sorted missing support is
+`bioform:west-18 @ (-362,64,-346)`. The candidate compiler accepts actor floors
+using canonical-clear geometry without proving a registered physical provider
+serves them, while the immutable structural projection excludes moving actors.
+The scene correctly refuses to invent or substitute a floor and therefore
+defers on the first attacker. Successor order17 owns this production seam.
