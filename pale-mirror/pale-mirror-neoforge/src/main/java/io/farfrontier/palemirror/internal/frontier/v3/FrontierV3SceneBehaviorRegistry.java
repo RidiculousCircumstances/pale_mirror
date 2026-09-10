@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import net.minecraft.server.level.ServerLevel;
@@ -13,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * Closed NeoForge behavior registry for scene-local materialization.
@@ -27,29 +28,33 @@ import java.util.function.Function;
 final class FrontierV3SceneBehaviorRegistry {
     private static final FrontierV3SceneBehaviorRegistry CURRENT = new FrontierV3SceneBehaviorRegistry(List.of(
             new Behavior(SceneCauseKind.SETTLEMENT_ASSAULT, FrontierV3SettlementAssaultSceneExecutor::tick,
-                    lease -> FrontierSceneBehaviors.settlementAssault(lease).assaultId(), false,
+                    (state, lease, attacker, epoch) -> {
+                        SettlementAssault assault = FrontierSceneBehaviors.settlementAssault(lease) == null ? null
+                                : state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
+                        return assault == null || attacker == null ? null : SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
+                    }, false,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.ENGINEERING_WORKSITE, FrontierV3EngineeringWorkSceneExecutor::tick,
-                    lease -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.MEDICAL_TREATMENT, FrontierV3MedicalTreatmentSceneExecutor::tick,
-                    lease -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierV3ResourceSiteHarvestSceneExecutor::tick,
-                    lease -> null, false, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
                     Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition)),
             new Behavior(SceneCauseKind.PRODUCTION_WORK, FrontierV3ProductionWorkSceneExecutor::tick,
-                    lease -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.SERVICE_WORK, FrontierV3SettlementServiceWorkSceneExecutor::tick,
-                    lease -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.ROUTE_PATROL, FrontierV3RoutePatrolSceneExecutor::tick,
-                    lease -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
+                    (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty()),
             new Behavior(SceneCauseKind.LOGISTICS, FrontierV3SceneExecutor::tickLogistics,
-                    lease -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true,
+                    (state, lease, attacker, epoch) -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty())));
 
@@ -86,9 +91,9 @@ final class FrontierV3SceneBehaviorRegistry {
         for (Runnable turn : turns) turn.run();
     }
 
-    static SubjectId strikeCause(SceneLease lease) {
+    static SubjectId strikeCause(FrontierWorldState state, SceneLease lease, SubjectId attacker, long epoch) {
         for (Behavior behavior : CURRENT.ordered) {
-            if (behavior.kind() == lease.cause().kind()) return behavior.strikeCause().apply(lease);
+            if (behavior.kind() == lease.cause().kind()) return behavior.strikeCause().apply(state, lease, attacker, epoch);
         }
         throw new IllegalStateException("unregistered NeoForge scene cause: " + lease.cause().kind());
     }
@@ -126,7 +131,7 @@ final class FrontierV3SceneBehaviorRegistry {
         return FrontierV3StandingPosition.aboveExactFloor(level, floor);
     }
 
-    record Behavior(SceneCauseKind kind, Tick tick, Function<SceneLease, SubjectId> strikeCause, boolean hasCargoCarrier,
+    record Behavior(SceneCauseKind kind, Tick tick, StrikeCause strikeCause, boolean hasCargoCarrier,
                     StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider) {
         Behavior {
             Objects.requireNonNull(kind, "scene kind");
@@ -139,6 +144,9 @@ final class FrontierV3SceneBehaviorRegistry {
 
     @FunctionalInterface
     interface Tick { boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime); }
+
+    @FunctionalInterface
+    interface StrikeCause { SubjectId apply(FrontierWorldState state, SceneLease lease, SubjectId attacker, long epoch); }
 
     /** Typed physical policy owned by a registered behavior, never selected by generic cause tests. */
     @FunctionalInterface
