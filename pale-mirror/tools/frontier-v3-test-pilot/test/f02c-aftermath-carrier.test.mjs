@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertF02cAftermathCarrier } from '../src/f02c-aftermath-carrier.mjs';
 import { resolveIsolatedScenarioOuterAttempt } from '../src/isolated-scenario-attempt.mjs';
-import { preflightF02cAftermathCarrier } from '../src/run-f02c-aftermath-carrier.mjs';
+import { buildF02cAftermathCarrierReceipt, preflightF02cAftermathCarrier, runIsolatedScenario } from '../src/run-f02c-aftermath-carrier.mjs';
 
 const selector = 'cause:development-settlement-assault-epoch-4-attacker-bioform-west-19';
 const position = { x: -360, y: 64, z: -340 };
@@ -67,9 +67,23 @@ test('F0.2C identity preflight binds production declaration bytes, distinct run 
   assert.equal(receipt.terminal.revision, 45);
 });
 
+test('F0.2C wrapper crosses the production child environment seam and constructs its terminal receipt', async () => {
+  const value = envelope();
+  const output = await runIsolatedScenario({ scenarioPath: new URL('../scenarios/disposable-cold-bomber-aftermath-restart.json', import.meta.url).pathname,
+    manifestPath: 'unused-admission-manifest.json', root: new URL('../', import.meta.url).pathname, outerAttempt, attemptAdmissionOnly: true });
+  const admission = JSON.parse(output.trim());
+  assert.deepEqual(admission, { status: 'admitted', outerAttempt, recoveryClientSession: { runId: outerAttempt, reusedJvm: true } });
+  const receipt = buildF02cAftermathCarrierReceipt(preflightF02cAftermathCarrier(value));
+  assert.equal(receipt.finalManifest.sha256, hash(value.manifestSource));
+  assert.equal(receipt.identity.precommittedOuterAttempt, admission.recoveryClientSession.runId);
+  assert.deepEqual(receipt.identity, { precommittedOuterAttempt: outerAttempt, clientRunner: { runId: clientRunId },
+    lifecycle: { runId: outerAttempt, sessionId, nonce } });
+});
+
 test('F0.2C identity preflight rejects each production-shaped one-defect mutation', () => {
   for (const mutate of [
     value => { value.declarationSha256 = 'f'.repeat(64); },
+    value => { manifest(value).scenarioDeclarationSha256 = 'f'.repeat(64); },
     value => { manifest(value).scenarioSha256 = 'e'.repeat(64); },
     value => { manifest(value).scenarioId = 'other_scenario'; },
     value => { manifest(value).recovery.clientSession.runId = clientRunId; },

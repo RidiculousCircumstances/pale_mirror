@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertF02cAftermathCarrier, assertF02cAftermathDeclaration, assertF02cAftermathIdentity } from './f02c-aftermath-carrier.mjs';
-import { ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV } from './isolated-scenario-attempt.mjs';
+import { ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV, ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV } from './isolated-scenario-attempt.mjs';
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -25,6 +25,37 @@ export function preflightF02cAftermathCarrier({ scenario, declarationSource, dec
   return Object.freeze({ terminal, declarationSha256, finalManifestSha256, identity });
 }
 
+/** Production terminal receipt construction, retained separately from native execution. */
+export function buildF02cAftermathCarrierReceipt(validated, manifestFile = 'clear.manifest.json') {
+  if (!validated?.terminal || !/^[a-f0-9]{64}$/.test(validated.declarationSha256)
+      || !/^[a-f0-9]{64}$/.test(validated.finalManifestSha256)
+      || typeof manifestFile !== 'string' || manifestFile.length === 0) {
+    throw new Error('F0.2C carrier cannot construct a terminal receipt from an unvalidated manifest');
+  }
+  return Object.freeze({ schema: 2, kind: 'f02c-deferred-aftermath-native-carrier', status: 'passed', terminal: validated.terminal,
+    declaration: { scenario: 'disposable-cold-bomber-aftermath-restart.json', sha256: validated.declarationSha256 },
+    finalManifest: { file: manifestFile, sha256: validated.finalManifestSha256 },
+    identity: { precommittedOuterAttempt: validated.identity.outerAttempt, clientRunner: { runId: validated.identity.clientRunId },
+      lifecycle: validated.identity.lifecycle },
+    scenarios: { clear: { scenario: 'disposable-cold-bomber-aftermath-restart.json', declarationSha256: validated.declarationSha256, manifest: manifestFile } } });
+}
+
+/** Real wrapper-child composition, with a bounded no-Minecraft admission mode for Node evidence. */
+export async function runIsolatedScenario({ scenarioPath, manifestPath, root, outerAttempt, attemptAdmissionOnly = false }) {
+  if (typeof scenarioPath !== 'string' || typeof manifestPath !== 'string' || typeof root !== 'string' || typeof outerAttempt !== 'string'
+      || typeof attemptAdmissionOnly !== 'boolean') throw new Error('F0.2C carrier isolated scenario invocation is malformed');
+  const child = spawn(process.execPath, ['tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', scenarioPath, manifestPath], {
+    cwd: project, env: { ...process.env, FRONTIER_V3_NATIVE_PROCESS_ROOT: resolve(root, 'process'), [ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV]: outerAttempt,
+      ...(attemptAdmissionOnly ? { [ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV]: 'true' } : {}) }, stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let stdout = ''; let stderr = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; process.stdout.write(chunk); });
+  child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; process.stderr.write(chunk); });
+  const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
+  if (code !== 0) throw new Error(`F0.2C native carrier scenario failed (${code}): ${stderr.trim()}`);
+  return stdout;
+}
+
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) await main();
 
 async function main() {
@@ -39,22 +70,12 @@ async function main() {
   assertF02cAftermathDeclaration(declaration);
   const manifestPath = resolve(root, 'clear.manifest.json');
   const outerAttempt = randomUUID();
-  await run([process.execPath, 'tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', declarationPath, manifestPath], root, outerAttempt);
+  await runIsolatedScenario({ scenarioPath: declarationPath, manifestPath, root, outerAttempt });
   const envelope = { scenario, declarationSource, declarationSha256, manifestSource: await readFile(manifestPath), outerAttempt };
   const validated = preflightF02cAftermathCarrier(envelope);
-  const receipt = { schema: 2, kind: 'f02c-deferred-aftermath-native-carrier', status: 'passed', terminal: validated.terminal,
-    declaration: { scenario, sha256: validated.declarationSha256 }, finalManifest: { file: 'clear.manifest.json', sha256: validated.finalManifestSha256 },
-    identity: { precommittedOuterAttempt: validated.identity.outerAttempt, clientRunner: { runId: validated.identity.clientRunId }, lifecycle: validated.identity.lifecycle },
-    scenarios: { clear: { scenario, declarationSha256: validated.declarationSha256, manifest: 'clear.manifest.json' } } };
+  const receipt = buildF02cAftermathCarrierReceipt(validated);
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx' });
   console.log(JSON.stringify(receipt));
-}
-
-async function run(args, root, outerAttempt) {
-  const child = spawn(args[0], args.slice(1), { cwd: project,
-    env: { ...process.env, FRONTIER_V3_NATIVE_PROCESS_ROOT: resolve(root, 'process'), [ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV]: outerAttempt }, stdio: 'inherit' });
-  const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
-  if (code !== 0) throw new Error(`F0.2C native carrier scenario failed (${code})`);
 }
 
 function digest(value) { return createHash('sha256').update(value).digest('hex'); }
