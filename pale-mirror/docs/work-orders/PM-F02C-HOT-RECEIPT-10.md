@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
 
-Specification revision: 1. Status: `FRAMED`. Parent slice: F0.2C. Risk:
+Specification revision: 2. Status: `FRAMED`. Parent slice: F0.2C. Risk:
 critical-code/native. Engineer: supervising root. Builder: one fresh
 `gpt-5.6-terra` with reasoning `high`, not yet assigned. Baseline is the
 accepted COLD candidate
@@ -32,11 +32,14 @@ execute the same strike in both modes.
    assault behavior acquire one exact lease with its real roster. A fixture may
    supply an admitted assault precondition, but may not create the HOT lease,
    intent, observation, confirmation, release or next epoch.
-2. **Shared cause and exact bodies.** The HOT intent cause is derived from the
-   retained assault, selected attacker and current `nextStrikeEpoch` by the same
-   semantic cause contract used by COLD. Its subject IDs are the exact live
-   lease members and its observation retains those same IDs. Mode is absent
-   from the cause identity.
+2. **Shared cause and separately fenced bodies.** The HOT intent cause is
+   derived exclusively from the retained assault, selected attacker and current
+   `nextStrikeEpoch` by the same `(assault, attacker, epoch)` semantic cause
+   contract used by COLD. Neither mode nor target is part of that cause
+   identity. The exact target is instead bound separately, together with the
+   attacker, through the `PhysicalIntent.subjectIds` and the matching
+   `SceneStrikeObservation`; both must match the live lease roster. This order
+   must not change or invalidate the accepted COLD cause identity.
 3. **Durable physical effect.** PREPARED and RUNNING remain distinct. Only the
    registered HOT effect owner enters RUNNING immediately before real Minecraft
    damage. Confirmation requires the exact intent and a real before/after
@@ -61,7 +64,7 @@ execute the same strike in both modes.
 | ID | Product claim | Cheapest faithful evidence |
 | --- | --- | --- |
 | HI-1 | Natural demand reaches the registered settlement-assault HOT behavior from a history without lease/intent | focused real owner-seam GameTest plus declarative carrier preflight |
-| HI-2 | Ordinary HOT selection creates the exact shared cause/current epoch and exact members | focused production-path positive with one-field actor/target/epoch/mode/lease negatives |
+| HI-2 | Ordinary HOT selection creates the exact shared `(assault, attacker, epoch)` cause and separately binds the exact target in intent/observation | focused production-path positive with one-field attacker/target/epoch/mode/lease negatives |
 | HI-3 | Real Minecraft damage produces the exact durable observation and advances the epoch once | smallest scene GameTest through the real executor and state reducer |
 | HI-4 | Drain/release hands the same assault to the next COLD epoch without replay | focused complete owner sequence including duplicate/stale receipt and release controls |
 | HI-5 | Confirmed strike plus next-epoch continuation survives restart | focused codec/runtime recovery plus one targeted native restart history after method admission |
@@ -89,6 +92,11 @@ Because this is a new cross-owner proof boundary after repeated synthetic HOT
 evidence, one fresh read-only challenger must return `METHOD_ADMITTED` before
 any complete critical or native work. A rejection returns to the engineer; it
 does not authorize another proof framework or expensive run.
+
+Revision 1 was specification-rejected before builder assignment because HI-2
+could be read as placing the target inside shared cause identity. Revision 2
+retains the accepted COLD tuple unchanged and fences the target only through
+the intent and observation. No implementation or evidence was invalidated.
 
 After method admission, run a clean-HEAD critical gate only when final product
 or packaged-JAR inputs differ from the already accepted COLD candidate. If
