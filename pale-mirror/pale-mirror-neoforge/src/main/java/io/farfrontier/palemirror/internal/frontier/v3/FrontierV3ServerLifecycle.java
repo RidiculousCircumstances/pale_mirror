@@ -401,12 +401,12 @@ public final class FrontierV3ServerLifecycle {
                 // The disposable-pilot fence excludes only canonical progression.
                 // Real loaded-world observation, custody acquire/checkpoint/release,
                 // and their fail-closed physical checks remain ordinary server work.
-                FrontierV3PhysicalExecutors.registry().tick(FrontierV3PhysicalWorld.require(server), runtime);
+                runPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
                 advanceQueuedCanonicalTime(server, runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
-                FrontierV3PhysicalExecutors.registry().tick(physicalWorld, runtime);
+                runPhysicalTurn(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
                 // A due action may itself fail closed.  Do not mask that primary quarantine by
                 // asking the now-unavailable runtime for a second fast-forward state image.
@@ -420,6 +420,18 @@ public final class FrontierV3ServerLifecycle {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
             RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
+    }
+
+    /**
+     * Executes the one closed physical turn used by the server lifecycle.
+     *
+     * <p>This intentionally exposes no selected executor or aftermath shortcut: callers either
+     * execute the complete registered plan against a real loaded level, or do not exercise the
+     * production physical composition at all.</p>
+     */
+    static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
+                Objects.requireNonNull(runtime, "runtime"));
     }
 
     public static void stop(MinecraftServer server) {
