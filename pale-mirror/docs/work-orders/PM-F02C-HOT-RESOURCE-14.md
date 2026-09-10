@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RESOURCE-14: make the focused HOT structure effective
 
-Specification revision: 2. Status: `EXECUTING`.
+Specification revision: 3. Status: `FINAL_REVIEW_CORRECTION`.
 Parent slice: F0.2C. Risk: critical-code/GameTest harness. Engineer:
 supervising root. Executor: `/root/terra_f02c_hot_resource14`, fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -74,3 +74,33 @@ publication, deployment or predecessor cleanup.
 Observation epoch: `2026-09-10T18:09:05Z`; first economy audit is due at
 `2026-09-10T19:09:05Z` if execution remains active. Ten-minute liveness audits
 apply only during executor silence.
+
+## R8 final review
+
+R8 at clean `06aa49d8`, tree `8daebebe`, proves the new logical test mod can
+make the exact NBT effective: its retained log selects64 tests, runs the unique
+one-test strike batch, passes64/64 and shuts down with all dimensions saved.
+The resource receipt also matches the source and copied NBT at
+`dae2b25f...2c75b3`. Those receipts are valid candidate evidence.
+
+The checkpoint is not yet accepted because it removes
+`project(':pale-mirror-visuals').sourceSets.main` from the pre-R8
+`pale_mirror` logical mod. The subsequent `runs.configureEach` therefore makes
+ordinary default/full/economy/client runs load a narrower source composition,
+contrary to outcome2; checking only logical mod names cannot detect that
+regression. Preserve the exact pre-R8 ordinary `pale_mirror` source-set
+composition while keeping the scene-only contributor absent from every run
+except `frontierV3SceneGameTestServer`.
+
+The provenance task must also stop treating literal Java source substrings for
+the grid dimensions/anchor as proof. That is a brittle source-shape assertion,
+not resource provenance or runtime-bounds evidence; the unchanged GameTest's
+runtime envelope assertions own that claim. Keep the cheap discriminator
+limited to effective test-resource provenance and run composition, and make it
+detect loss of the baseline Visuals source set. Correct the adjacent stale
+scene-run comment to describe the final design.
+
+After this one bounded correction, rerun only the cheap provenance task and the
+focused scene GameTest because its effective input composition changed. Reuse
+Node and all other receipts; no full/native/CI. Return a clean
+`HOT_RESOURCE_READY_R9` or a genuine exception.
