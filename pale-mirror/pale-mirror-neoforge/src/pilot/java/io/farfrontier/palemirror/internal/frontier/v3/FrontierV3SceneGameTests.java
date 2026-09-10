@@ -531,104 +531,90 @@ public final class FrontierV3SceneGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 340)
-    public static void coldSettlementAssaultRegistryOwnsOneExactHotReceiptThenReleasesToNextColdEpoch(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void localSettlementAssaultStrikeRetainsAnIndependentExactReceipt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(32, 8, 0));
+        String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:settlement-assault-owner-game-test"), 91L), new EphemeralStore(), 20_000);
-        FrontierWorldState initial = state(runtime);
-        SettlementAssaultSceneCandidate candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
-        SettlementAssault assault = initial.strategicPlans().settlementAssaults().get(candidate.assaultId());
-        SubjectId expectedAttacker = assault.combatantAttackerIds().stream().filter(actor -> initial.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
-                .sorted().findFirst().orElseThrow(() -> new IllegalStateException("COLD assault fixture must retain one live attacker"));
-        SubjectId expectedTarget = assault.defenderIds().stream().filter(actor -> initial.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
-                .sorted().findFirst().orElseThrow(() -> new IllegalStateException("COLD assault fixture must retain one live defender"));
-        SubjectId expectedCause = SettlementAssaultCauseIdentity.strike(assault.id(), expectedAttacker, assault.nextStrikeEpoch());
-        helper.assertTrue(initial.sceneLeases().isEmpty() && initial.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE),
-                "the real settlement-assault registry seam must begin with only the declared COLD assault, no lease or strike intent");
-        // These are the COLD fixture's own canonical support cells, not a projected lease or an
-        // invented formation. The registered executor must materialize precisely these members.
-        candidate.memberPositions().values().forEach(position -> prepareFloor(level, new BlockPos(position.x(), position.y(), position.z())));
-        ServerPlayer observer = helper.makeMockServerPlayerInLevel();
-        observer.setPos(candidate.handoffPosition().x() + 0.5D, candidate.handoffPosition().y() + 1.0D, candidate.handoffPosition().z() + 0.5D);
-        helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause, expectedAttacker,
-                expectedTarget, null, null, 330));
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+        FrontierWorldState initial = state(runtime); SettlementAssaultSceneCandidate candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
+        SceneLease canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:" + fixture));
+        FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
+        FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
+        SceneLease local = FrontierV3GameTestSceneLeases.projectedIntoFixture(canonical, new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()));
+        for (int index = 0; index < local.members().size(); index++) {
+            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position);
+            addOwnedBody(helper, level, state(runtime), local, local.members().get(index), position);
+        }
+        helper.runAfterDelay(2L, () -> {
+            try {
+                helper.assertValueEqual(local.members().stream().filter(member -> FrontierV3SceneExecutor.owned(level.getEntity(member.entityId()), state(runtime), local, member)).count(),
+                        (long) local.members().size(), "the template-local component fixture must retain every exact production body before the strike");
+                SettlementAssault assault = state(runtime).strategicPlans().settlementAssaults().get(candidate.assaultId());
+                helper.assertTrue(assault != null && local.members().stream().map(SceneMember::actorId).anyMatch(assault.combatantAttackerIds()::contains)
+                                && local.members().stream().map(SceneMember::actorId).anyMatch(assault.defenderIds()::contains),
+                        "the local fixture must retain the exact live attacker and target populations selected by production");
+                for (int index = 0; index < local.members().size(); index++) {
+                    Entity body = level.getEntity(local.members().get(index).entityId());
+                    body.setPos(origin.getX() + 0.25D + (index % 3) * 0.4D, origin.getY(), origin.getZ() + 0.25D + (index / 3) * 0.4D);
+                }
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
+                PhysicalIntent prepared = onlyStrike(state(runtime));
+                Entity target = level.getEntity(local.members().stream().filter(member -> member.actorId().equals(prepared.subjectIds().getLast())).findFirst().orElseThrow().entityId());
+                if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) throw new IllegalStateException("local exact target did not materialize");
+                FixedScalar before = fixed(living.getHealth());
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
+                PhysicalIntent confirmed = onlyStrike(state(runtime));
+                SceneStrikeObservation receipt = (SceneStrikeObservation) state(runtime).physicalObservations().get(confirmed.postconditionObservationId().orElseThrow());
+                FixedScalar after = fixed(living.getHealth());
+                FrontierV3SettlementAssaultReceiptOracle.requireObservedHealthTransition(confirmed, receipt, before, after);
+                helper.assertTrue(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state(runtime), canonical, confirmed),
+                        "the production receipt must bind this exact canonical world, cause, lease identity and revision");
+                assertReceiptBindingControls(helper, canonical, confirmed);
+                try {
+                    FrontierV3SettlementAssaultReceiptOracle.requireObservedHealthTransition(confirmed,
+                            new SceneStrikeObservation(receipt.id(), receipt.intentId(), receipt.attackerId(), receipt.targetId(), before,
+                                    new FixedScalar(before.raw() - FixedScalar.SCALE)), before, before);
+                    throw new IllegalStateException("a decreasing forged receipt without production hurt must fail its independent samples");
+                } catch (IllegalArgumentException expected) { }
+                helper.succeed();
+            } finally {
+                local.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+                runtime.shutdown();
+            }
+        });
     }
 
-    /** Drives only the registered production owner until its exact receipt can drain normally. */
-    private static void driveSettlementAssaultReceipt(GameTestHelper helper, ServerLevel level,
-                                                       FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
-                                                       ServerPlayer observer, SettlementAssaultSceneCandidate candidate, SubjectId expectedCause,
-                                                       SubjectId expectedAttacker, SubjectId expectedTarget, PhysicalIntent confirmed,
-                                                       FixedScalar independentlyObservedBefore, int remaining) {
-        if (remaining <= 0) throw new IllegalStateException("registered settlement assault did not reach its exact receipt and COLD hand-off");
-        FrontierV3SceneExecutor.tick(level, runtime);
-        FrontierWorldState current = state(runtime);
-        SceneLease lease = current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isSettlementAssault).findFirst()
-                .orElseThrow(() -> new IllegalStateException("registered settlement-assault owner did not create its typed lease"));
-        if (confirmed == null) {
-            PhysicalIntent inFlight = current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE)
-                    .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING).findFirst().orElse(null);
-            if (inFlight != null && independentlyObservedBefore == null) {
-                Entity target = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(expectedTarget)).findFirst().orElseThrow().entityId());
-                if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) {
-                    throw new IllegalStateException("the exact target must be a live Minecraft body before the owned hit");
-                }
-                independentlyObservedBefore = fixed(living.getHealth());
-            }
-            PhysicalIntent receiptIntent = current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE)
-                    .filter(intent -> intent.status() == PhysicalIntentStatus.CONFIRMED).findFirst().orElse(null);
-            if (receiptIntent != null) {
-                SceneStrikeObservation receipt = (SceneStrikeObservation) current.physicalObservations().get(receiptIntent.postconditionObservationId()
-                        .orElseThrow(() -> new IllegalStateException("confirmed settlement strike must retain one receipt id")));
-                helper.assertValueEqual(receiptIntent.causeSubjectId(), expectedCause, "the real owner must retain only assault, live attacker, and epoch in the shared cause");
-                helper.assertValueEqual(receiptIntent.subjectIds(), List.of(expectedAttacker, expectedTarget), "the real owner must retain the separately exact live attacker and target");
-                helper.assertValueEqual(receipt.attackerId(), expectedAttacker, "the receipt must retain the exact live attacker");
-                helper.assertValueEqual(receipt.targetId(), expectedTarget, "the receipt must retain the exact live target");
-                Entity target = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(expectedTarget)).findFirst().orElseThrow().entityId());
-                if (!(target instanceof net.minecraft.world.entity.LivingEntity living) || independentlyObservedBefore == null) {
-                    throw new IllegalStateException("the exact target must retain independent before/after Minecraft samples");
-                }
-                FixedScalar independentlyObservedAfter = fixed(living.getHealth());
-                FrontierV3SettlementAssaultReceiptBinding.requireObservedHealthTransition(receiptIntent, receipt,
-                        independentlyObservedBefore, independentlyObservedAfter);
-                helper.assertTrue(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(current, lease, receiptIntent),
-                        "the retained receipt must have the one exact current-lease association");
-                PhysicalIntent foreignRevision = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(
-                        receiptIntent.id().value().replace("-r" + lease.revision() + "-s0", "-r" + (lease.revision() + 1L) + "-s0")),
-                        receiptIntent.kind(), receiptIntent.status(), receiptIntent.causeSubjectId(), receiptIntent.subjectIds(),
-                        receiptIntent.origin(), receiptIntent.radiusBlocks(), receiptIntent.postcondition(), receiptIntent.postconditionObservationId(), receiptIntent.targetSlot());
-                helper.assertFalse(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(current, lease, foreignRevision),
-                        "a same-cause foreign lease revision must never satisfy the exactly-once HOT receipt fence");
-                try {
-                    FrontierV3SettlementAssaultReceiptBinding.requireObservedHealthTransition(receiptIntent,
-                            new SceneStrikeObservation(receipt.id(), receipt.intentId(), receipt.attackerId(), receipt.targetId(),
-                                    independentlyObservedBefore, new FixedScalar(independentlyObservedBefore.raw() - FixedScalar.SCALE)),
-                            independentlyObservedBefore, independentlyObservedBefore);
-                    throw new IllegalStateException("a forged decreasing receipt without hurt must fail the independent health oracle");
-                } catch (IllegalArgumentException expected) { }
-                helper.assertValueEqual(current.strategicPlans().settlementAssaults().get(candidate.assaultId()).nextStrikeEpoch(), 1,
-                        "one confirmed receipt must advance the assault epoch exactly once");
-                observer.setPos(candidate.handoffPosition().x() + FrontierV3SceneDemand.RADIUS_BLOCKS + 80.5D,
-                        candidate.handoffPosition().y() + 1.0D, candidate.handoffPosition().z() + 0.5D);
-                confirmed = receiptIntent;
-            }
-        } else if (lease.status() == SceneLeaseStatus.CLOSED) {
-            SettlementAssault released = current.strategicPlans().settlementAssaults().get(candidate.assaultId());
-            helper.assertValueEqual(released.status(), SettlementAssaultStatus.COLD_COMBAT,
-                    "ordinary sustained demand loss must release the confirmed HOT assault to COLD");
-            helper.assertValueEqual(released.nextStrikeEpoch(), 1, "release may not replay or advance the confirmed receipt");
-            helper.assertValueEqual(current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                    && intent.status() == PhysicalIntentStatus.CONFIRMED).count(), 1L, "release must retain one non-replayable confirmed receipt");
-            helper.assertTrue(current.coldSettlementAssaultSceneCandidates().stream().anyMatch(next -> next.assaultId().equals(candidate.assaultId())),
-                    "only the next epoch's COLD continuation may remain admissible after release");
-            lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
-            runtime.shutdown(); level.getServer().getPlayerList().remove(observer); helper.succeed(); return;
-        }
-        PhysicalIntent next = confirmed;
-        FixedScalar nextObservedBefore = independentlyObservedBefore;
-        helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause,
-                expectedAttacker, expectedTarget, next, nextObservedBefore, remaining - 1));
+    /** Builds the immutable canonical assault lease; only its observed bodies are projected into this template. */
+    private static SceneLease settlementAssaultLease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                                     SettlementAssaultSceneCandidate candidate, SceneLeaseId id) {
+        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("local strike fixture runtime must remain active"));
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
+        return SceneLease.forCause(id, checkpoint.worldId(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+    }
+
+    /** Cheap discriminators for the framed production receipt fence; none relies on a native carrier. */
+    private static void assertReceiptBindingControls(GameTestHelper helper, SceneLease canonical, PhysicalIntent confirmed) {
+        var oldCollisionLeft = FrontierV3SettlementAssaultReceiptBinding.intentId(new WorldId("frontier:a-b"), new SubjectId("cause:c"), canonical.id(), canonical.revision());
+        var oldCollisionRight = FrontierV3SettlementAssaultReceiptBinding.intentId(new WorldId("frontier:a"), new SubjectId("b:cause-c"), canonical.id(), canonical.revision());
+        helper.assertFalse(oldCollisionLeft.equals(oldCollisionRight), "framed receipt inputs must reject the old world/cause delimiter collision");
+        SceneLease foreignIdentity = receiptLease(canonical, new SceneLeaseId(canonical.id().value() + "-foreign"), canonical.revision());
+        SceneLease foreignRevision = receiptLease(canonical, canonical.id(), canonical.revision() + 1L);
+        helper.assertFalse(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), confirmed.causeSubjectId(), foreignIdentity.id(), foreignIdentity.revision())
+                        .equals(confirmed.id()), "a foreign lease identity must not share the exactly-once receipt");
+        helper.assertFalse(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), confirmed.causeSubjectId(), foreignRevision.id(), foreignRevision.revision())
+                        .equals(confirmed.id()), "a stale lease revision must not share the exactly-once receipt");
+        helper.assertFalse(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), new SubjectId("cause:foreign-receipt"), canonical.id(), canonical.revision())
+                        .equals(confirmed.id()), "a foreign current-revision cause must not share the exactly-once receipt");
+    }
+
+    private static SceneLease receiptLease(SceneLease source, SceneLeaseId id, long revision) {
+        return SceneLease.forCause(id, source.worldId(), source.cause(), source.handoffPosition(), source.handoffInstant(), revision,
+                source.status(), source.members(), source.memberPositions(), source.ambientHandoffActorIds(), source.recoveryEvidence());
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

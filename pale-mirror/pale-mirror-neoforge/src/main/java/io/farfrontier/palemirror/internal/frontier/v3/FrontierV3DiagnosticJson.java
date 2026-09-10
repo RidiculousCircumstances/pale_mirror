@@ -832,6 +832,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"strikeCause\":\"" + quote(strike == null ? "" : strike.causeSubjectId().value())
                 + "\",\"strikeAttacker\":\"" + quote(strike == null ? "" : strike.subjectIds().getFirst().value())
                 + "\",\"strikeTarget\":\"" + quote(strike == null ? "" : strike.subjectIds().getLast().value())
+                + "\",\"strikeIntent\":\"" + quote(strike == null ? "" : strike.id().value())
                 + "\",\"strikeReceipt\":\"" + quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + ",\"strikeEpoch\":" + strikeEpoch + ",\"nextStrikeEpoch\":" + (assaultState == null ? -1 : assaultState.nextStrikeEpoch())
                 + ",\"assaultStatus\":\"" + (assaultState == null ? "" : assaultState.status()) + "\""
