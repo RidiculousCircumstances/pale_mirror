@@ -1,10 +1,11 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
 Specification revision: 4.
-Status: `SPEC_REVIEW`. Parent slice: F0.2C. Risk: critical-code/native.
-Engineer: supervising root. Executors through
-`/root/terra_f02c_cold_identity11` are terminal. No writer is assigned.
-Latest private WIP checkpoint is
+Status: `CORRECTION_EXECUTING`. Parent slice: F0.2C. Risk:
+critical-code/native. Engineer: supervising root. Executors through
+`/root/terra_f02c_cold_identity11` are terminal. The sole successor is
+`/root/terra_f02c_cold_identity12`, one fresh `gpt-5.6-terra` with reasoning
+`high`, from private WIP checkpoint
 `84acdc10ec16f5880c3cc19f50c99641b26a1ff9`, tree
 `32e29bb7474c2281f26c326abb5a9bcaf504285c`, parent `9bbb6be4`.
 
@@ -180,7 +181,9 @@ required. The revision-3 admission-only bypass is removed rather than hardened.
 The existing five focused checks may be reorganized or reduced to match their
 honest component claims; they are not evidence for CI-6. This explicit tier
 split is the method redesign. A fresh read-only specification review must admit
-its satisfiability and adequacy before another writer is assigned.
+its satisfiability and adequacy before another writer is assigned. The review
+is `SPEC_ADMITTED`: it found the tier split satisfiable, non-circular and
+economical, with no need for another Node identity/oracle layer.
 
 After specification admission, one fresh Terra-high successor may make only
 the revision-4 correction and return `COLD_IDENTITY_READY_R4`. One bounded
@@ -188,7 +191,7 @@ method review then permits exactly one clean-HEAD critical gate and one targeted
 native flow. Any negative returns to independent product review; no automatic
 rerun or further proof implementation begins.
 
-If the specification is admitted, the successor uses fresh worktree
+The successor uses fresh worktree
 `/home/rd/proj/pm-f02c-cold-identity-09-r4` and only
 `/home/rd/proj/pm-f02c-cold-identity-09-r4-tmp` for task-private evidence. It
 proves bounded create/write/fsync/atomic-rename/delete before work, owns every
@@ -197,12 +200,13 @@ predecessor roots untouched.
 
 ## Delivery and supervision
 
-The specification challenger returns only `SPEC_ADMITTED` or `SPEC_REJECTED`
-and performs no writes or tests. A later executor returns only
-`COLD_IDENTITY_READY_R4`, a named exception or a complete terminal packet.
-Supervision remains event-driven: one liveness check after ten minutes of
-writer silence and one economy audit per full hour; neither inspects WIP.
+The specification challenger is terminal after `SPEC_ADMITTED` and performed
+no writes or tests. The executor returns only `COLD_IDENTITY_READY_R4`, a named
+exception or a complete terminal packet. Supervision remains event-driven: one
+liveness check after ten minutes of writer silence and one economy audit per
+full hour; neither inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
-epoch for revision 4 is not set before a writer exists. Revision-4 specification
-review epoch: `2026-09-10T13:41:24Z`.
+epoch for revision 4: `2026-09-10T13:45:58Z`; first economy-audit boundary:
+`2026-09-10T14:45:58Z` if still executing. Revision-4 specification review
+epoch: `2026-09-10T13:41:24Z`.
