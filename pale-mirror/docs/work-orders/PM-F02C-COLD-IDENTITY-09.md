@@ -158,8 +158,10 @@ category that revision 3 required the engineer to redesign rather than extend.
 Revision 4 narrows the proof tiers instead of attempting another synthetic
 end-to-end Node carrier:
 
-- the isolated supervisor has no test/admission environment that can return
-  success before its ordinary manifest-producing path;
+- the dedicated wrapper's ordinary child invocation neither sets nor inherits
+  any test/admission control that can return success before the supervisor's
+  manifest-producing path; unrelated test-only supervisor modes may remain for
+  their own focused harnesses but are never ambient authority for this carrier;
 - focused Node evidence proves only that the exact ordinary wrapper invocation
   carries the precommitted attempt and that the exact ordinary supervisor
   recovery-metadata construction retains it. The exercised units must be the
@@ -185,6 +187,18 @@ its satisfiability and adequacy before another writer is assigned. The review
 is `SPEC_ADMITTED`: it found the tier split satisfiable, non-circular and
 economical, with no need for another Node identity/oracle layer.
 
+The first revision-4 method review is `METHOD_REJECTED` on one direct
+non-bypass invariant, not a new proof category. The supervisor retains a
+pre-existing F0.2B save-owner observer admission-only environment flag and the
+dedicated wrapper copied ambient `process.env` wholesale, so an externally set
+flag could still exit successfully before lifecycle/final-manifest production.
+The same executor receives one consolidated correction: the ordinary F0.2C
+invocation must fail to forward or activate test-only early-exit controls, and
+one focused ambient-control negative must fail if that exclusion is removed.
+Do not delete or redesign the other harness's scoped mode, add a general
+environment framework or broaden evidence. All other revision-4 component
+claims were methodologically accepted and are reused.
+
 After specification admission, one fresh Terra-high successor may make only
 the revision-4 correction and return `COLD_IDENTITY_READY_R4`. One bounded
 method review then permits exactly one clean-HEAD critical gate and one targeted
@@ -208,5 +222,6 @@ full hour; neither inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
 epoch for revision 4: `2026-09-10T13:45:58Z`; first economy-audit boundary:
-`2026-09-10T14:45:58Z` if still executing. Revision-4 specification review
+`2026-09-10T14:55:40Z` if still executing after correction resumption at
+`2026-09-10T13:55:40Z`. Revision-4 specification review
 epoch: `2026-09-10T13:41:24Z`.
