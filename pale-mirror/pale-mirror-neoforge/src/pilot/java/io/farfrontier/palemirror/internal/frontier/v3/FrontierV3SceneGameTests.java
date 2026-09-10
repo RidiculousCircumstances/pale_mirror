@@ -66,6 +66,8 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
@@ -531,12 +533,16 @@ public final class FrontierV3SceneGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 40)
     public static void localSettlementAssaultStrikeRetainsAnIndependentExactReceipt(GameTestHelper helper) {
-        // This component proof has no claim about natural player demand.  Its every write and
-        // body remains in the tiny bastion/mobs/empty template, rather than spilling into a
-        // neighbouring parallel GameTest cell.
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
+        // This component proof has no claim about natural player demand. It owns the decoded
+        // pale_mirror_visuals:temperate/residence_1 [10, 7, 9] template and proves every fixture
+        // write and observed body remains inside the actual GameTest envelope.
+        ServerLevel level = helper.getLevel(); AABB templateBounds = helper.getBounds();
+        helper.assertTrue(templateBounds.getXsize() == 10.0D && templateBounds.getYsize() == 7.0D
+                        && templateBounds.getZsize() == 9.0D,
+                "the authored settlement-assault component template must retain its [10, 7, 9] envelope");
+        BlockPos origin = helper.absolutePos(new BlockPos(1, 1, 1));
         String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
@@ -545,9 +551,11 @@ public final class FrontierV3SceneGameTests {
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         SceneLease local = FrontierV3GameTestSceneLeases.projectedIntoFixture(canonical, new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()));
+        helper.assertTrue(local.members().size() <= 24, "the authored template reserves a bounded 4 by 6 local body grid");
         for (int index = 0; index < local.members().size(); index++) {
-            BlockPos position = origin.offset(index & 1, 0, index / 2); prepareFloor(level, position);
-            addOwnedBody(helper, level, state(runtime), local, local.members().get(index), position);
+            BlockPos position = origin.offset(index % 4, 0, index / 4); prepareFloorWithinTemplate(helper, level, templateBounds, position);
+            Entity body = addOwnedBody(helper, level, state(runtime), local, local.members().get(index), position);
+            requireEntityWithinTemplate(helper, templateBounds, body, "every owned fixture body must enter inside the authored envelope");
         }
         helper.runAfterDelay(2L, () -> {
             try {
@@ -561,17 +569,20 @@ public final class FrontierV3SceneGameTests {
                 for (int index = 0; index < local.members().size(); index++) {
                     Entity body = level.getEntity(local.members().get(index).entityId());
                     body.setPos(origin.getX() + 0.25D + (index % 3) * 0.4D, origin.getY(), origin.getZ() + 0.25D + (index / 3) * 0.4D);
+                    requireEntityWithinTemplate(helper, templateBounds, body, "every strike-position write must remain inside the authored envelope");
                 }
                 FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
                 FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
                 PhysicalIntent prepared = onlyStrike(state(runtime));
                 Entity target = level.getEntity(local.members().stream().filter(member -> member.actorId().equals(prepared.subjectIds().getLast())).findFirst().orElseThrow().entityId());
                 if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) throw new IllegalStateException("local exact target did not materialize");
+                requireEntityWithinTemplate(helper, templateBounds, living, "the health-observed strike target must remain inside the authored envelope");
                 FixedScalar before = fixed(living.getHealth());
                 FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
                 PhysicalIntent confirmed = onlyStrike(state(runtime));
                 SceneStrikeObservation receipt = (SceneStrikeObservation) state(runtime).physicalObservations().get(confirmed.postconditionObservationId().orElseThrow());
                 FixedScalar after = fixed(living.getHealth());
+                requireEntityWithinTemplate(helper, templateBounds, living, "the post-strike health observation must remain inside the authored envelope");
                 FrontierV3SettlementAssaultReceiptOracle.requireObservedHealthTransition(confirmed, receipt, before, after);
                 helper.assertTrue(FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state(runtime), canonical, confirmed),
                         "the production receipt must bind this exact canonical world, cause, lease identity and revision");
@@ -802,6 +813,20 @@ public final class FrontierV3SceneGameTests {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(position, Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(position.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+    private static void prepareFloorWithinTemplate(GameTestHelper helper, ServerLevel level, AABB templateBounds, BlockPos position) {
+        requireBlockWithinTemplate(helper, templateBounds, position.below(), "the fixture support-block write must remain inside the authored envelope");
+        requireBlockWithinTemplate(helper, templateBounds, position, "the fixture body-cell write must remain inside the authored envelope");
+        requireBlockWithinTemplate(helper, templateBounds, position.above(), "the fixture headroom write must remain inside the authored envelope");
+        prepareFloor(level, position);
+    }
+    private static void requireBlockWithinTemplate(GameTestHelper helper, AABB templateBounds, BlockPos position, String message) {
+        helper.assertTrue(templateBounds.contains(Vec3.atCenterOf(position)), message);
+    }
+    private static void requireEntityWithinTemplate(GameTestHelper helper, AABB templateBounds, Entity entity, String message) {
+        AABB body = entity.getBoundingBox();
+        helper.assertTrue(templateBounds.contains(new Vec3(body.minX, body.minY, body.minZ))
+                        && templateBounds.contains(new Vec3(body.maxX, body.maxY, body.maxZ)), message);
     }
     private static BlockPos cargoPosition(BlockPos anchor, SceneLease lease) {
         int ordinal = lease.members().size();

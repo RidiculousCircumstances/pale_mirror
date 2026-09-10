@@ -91,7 +91,11 @@ function assertPersistentTopology(manifest, declaration) {
       || !manifest.actions.every((entry, index) => isDeepStrictEqual(entry?.action, declaration.actions[index]))) {
     throw new Error('F0.2C HOT carrier final manifest omits its persistent-run topology');
   }
-  const barriers = manifest.lifecycle.map(entry => entry?.barrier);
+  // The completed manifest retains lifecycle records rather than a copied summary.  Re-admit
+  // those records through the ordinary journal validator before binding the two durable action
+  // checkpoints below.
+  const records = validateLifecycleBarrierRecords(manifest.lifecycle, manifest.lifecycle[0]?.identity);
+  const barriers = records.map(entry => entry.barrier);
   const expected = ['server_run_ready', 'scenario_segment_complete', 'client_normally_disconnected', 'durable_server_save',
     'game_port_closed', 'recovery_server_ready', 'same_client_reconnected_state_cleared', 'terminal_assertion_complete'];
   let previous = -1;
@@ -100,6 +104,12 @@ function assertPersistentTopology(manifest, declaration) {
     if (current < 0 || current <= previous) throw new Error('F0.2C HOT carrier lifecycle is incomplete or misordered');
     previous = current;
   }
+  const checkpoints = records.filter(record => record.barrier === 'action_checkpoint_acknowledged');
+  if (checkpoints.length !== 2
+      || !oneCheckpoint(checkpoints, 2, 'before_restart')
+      || !oneCheckpoint(checkpoints, 6, 'after_restart')) {
+    throw new Error('F0.2C HOT carrier lifecycle does not bind its pre-restart action 2 and post-restart action 6 checkpoints');
+  }
 }
 
 function assertionObservation(manifest, declaration, phase) {
@@ -107,10 +117,15 @@ function assertionObservation(manifest, declaration, phase) {
     && entry.assertion?.view === declaration.view && entry.assertion?.id === declaration.id);
   if (records.length !== 1 || !isDeepStrictEqual(records[0].assertion, declaration)
       || records[0]?.observed?.actionStep !== declaration.after || !records[0]?.observed?.value
+      || records[0].observed.value.kind !== 'scene' || records[0].observed.value.id !== SCENE
       || !Object.entries(declaration.expect).every(([key, value]) => isDeepStrictEqual(records[0].observed.value[key], value))) {
     throw new Error(`F0.2C HOT carrier lacks one exact assertion-bound ${phase} observation`);
   }
   return records[0].observed.value;
+}
+
+function oneCheckpoint(records, actionStep, segment) {
+  return records.filter(record => record.detail?.actionStep === actionStep && record.detail?.segment === segment).length === 1;
 }
 
 function sceneExpectation(value, leaseStatus) {

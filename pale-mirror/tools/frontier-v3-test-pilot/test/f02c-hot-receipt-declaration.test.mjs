@@ -25,7 +25,8 @@ function envelope() {
   ];
   const lifecycle = barriers.map(([barrier, detail], index) => ({ schema: 1, sequence: index + 1, barrier, identity: structuredClone(identity), detail }));
   const semantic = current.assertions.filter(entry => [2, 3, 5].includes(entry.after));
-  const record = (entry) => ({ assertion: structuredClone(entry), observed: { actionStep: entry.after, value: structuredClone(entry.expect) } });
+  const record = (entry) => ({ assertion: structuredClone(entry), observed: { actionStep: entry.after,
+    value: { kind: 'scene', id: 'assault:development-settlement-assault', ...structuredClone(entry.expect) } } });
   const manifest = { schema: 2, status: 'ok', scenarioId: current.id, scenarioSha256: declarationSha256, scenarioDeclarationSha256: declarationSha256,
     runId: clientRunId, build: structuredClone(build), recovery: { mode: 'graceful', splitAfterAction: 2, clientSession: { runId: outerAttempt, reusedJvm: true } },
     actions: current.actions.map((action, index) => ({ correlation: `scenario:${clientRunId}:${index + 1}`, action: structuredClone(action) })), lifecycle,
@@ -56,12 +57,16 @@ test('HOT production-shaped preflight binds declaration bytes, persistent runner
 test('HOT consumer rejects observed receipt mutation, replay, old record, lifecycle misassociation, and duplicate declaration-bound slots', () => {
   for (const mutate of [
     value => { value.manifest.diagnostics[0].observed.value.strikeReceipt = 'observation:intent:foreign'; },
+    value => { value.manifest.diagnostics[0].observed.value.kind = 'trace'; },
+    value => { value.manifest.diagnostics[0].observed.value.id = 'assault:foreign'; },
     value => { value.manifest.diagnostics[1].observed.actionStep = 2; },
     value => { value.manifest.diagnostics[2].observed.value.strikeIntent = value.manifest.diagnostics[0].observed.value.strikeIntent.replace(/.$/, 'f'); },
     value => { value.manifest.lifecycle[5].identity.runId = clientRunId; },
     value => { value.manifest.diagnostics.splice(1, 0, structuredClone(value.manifest.diagnostics[1])); },
     value => { value.manifest.actions[3].correlation = `scenario:${clientRunId}:3`; },
-    value => { value.manifest.recovery.clientSession.runId = clientRunId; }
+    value => { value.manifest.recovery.clientSession.runId = clientRunId; },
+    value => { value.manifest.lifecycle[3].detail.actionStep = 3; },
+    value => { value.manifest.lifecycle[10].detail.segment = 'before_restart'; }
   ]) {
     const value = envelope(); mutate(value); value.manifestSource = Buffer.from(`${JSON.stringify(value.manifest)}\n`);
     assert.throws(() => preflightF02cHotReceiptCarrier(value), /F0\.2C HOT carrier|lifecycle barrier/);
