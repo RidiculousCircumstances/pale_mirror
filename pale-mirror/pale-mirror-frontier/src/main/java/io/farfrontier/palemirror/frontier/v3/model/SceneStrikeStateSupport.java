@@ -21,6 +21,7 @@ public final class SceneStrikeStateSupport {
         }
         validateMembers(state.actorLocations(), lease, intent);
         validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
+        validateSettlementLeaseBinding(state, lease, intent);
     }
 
     public static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
@@ -50,6 +51,7 @@ public final class SceneStrikeStateSupport {
         }
         validateMembers(intent, observation);
         validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
+        validateSettlementLeaseBinding(state, lease, intent);
     }
 
     static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
@@ -104,6 +106,13 @@ public final class SceneStrikeStateSupport {
         long next = SettlementAssaultCauseIdentity.hotEpoch(assault, intents);
         return intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                 ? epoch < next : epoch == next;
+    }
+
+    private static void validateSettlementLeaseBinding(FrontierWorldState state, SceneLease lease, PhysicalIntent intent) {
+        if (FrontierSceneBehaviors.isSettlementAssault(lease)
+                && !SettlementAssaultStrikeReceiptBinding.belongsToLease(state, lease, intent)) {
+            throw new IllegalArgumentException("settlement scene strike belongs to a foreign lease identity or revision");
+        }
     }
 
     private static void validateMembers(Map<SubjectId, ActorLocation> actors, SceneLease lease, PhysicalIntent intent) {

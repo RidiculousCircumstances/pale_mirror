@@ -533,7 +533,10 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void localSettlementAssaultStrikeRetainsAnIndependentExactReceipt(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(32, 8, 0));
+        // This component proof has no claim about natural player demand.  Its every write and
+        // body remains in the tiny bastion/mobs/empty template, rather than spilling into a
+        // neighbouring parallel GameTest cell.
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
         String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
@@ -554,6 +557,7 @@ public final class FrontierV3SceneGameTests {
                 helper.assertTrue(assault != null && local.members().stream().map(SceneMember::actorId).anyMatch(assault.combatantAttackerIds()::contains)
                                 && local.members().stream().map(SceneMember::actorId).anyMatch(assault.defenderIds()::contains),
                         "the local fixture must retain the exact live attacker and target populations selected by production");
+                rejectForeignCurrentCauseThroughProductionConsumer(helper, runtime, canonical, assault, origin);
                 for (int index = 0; index < local.members().size(); index++) {
                     Entity body = level.getEntity(local.members().get(index).entityId());
                     body.setPos(origin.getX() + 0.25D + (index % 3) * 0.4D, origin.getY(), origin.getZ() + 0.25D + (index / 3) * 0.4D);
@@ -584,6 +588,35 @@ public final class FrontierV3SceneGameTests {
                 runtime.shutdown();
             }
         });
+    }
+
+    /** Exercises the real physical command consumer before this fixture manufactures its expected receipt. */
+    private static void rejectForeignCurrentCauseThroughProductionConsumer(GameTestHelper helper,
+                                                                             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                             SceneLease canonical, SettlementAssault assault, BlockPos origin) {
+        FrontierWorldState current = state(runtime);
+        long epoch = SettlementAssaultCauseIdentity.hotEpoch(assault, current.physicalIntents().values());
+        boolean hiveTurn = (epoch & 1L) == 0L;
+        List<SubjectId> attackers = (hiveTurn ? assault.combatantAttackerIds() : assault.defenderIds()).stream()
+                .filter(actor -> current.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE).sorted().toList();
+        List<SubjectId> targets = (hiveTurn ? assault.defenderIds() : assault.combatantAttackerIds()).stream()
+                .filter(actor -> current.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE).sorted().toList();
+        SubjectId attacker = attackers.get(Math.floorMod(epoch, attackers.size()));
+        SubjectId target = targets.get(Math.floorMod(epoch, targets.size()));
+        SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
+        SceneLease foreign = receiptLease(canonical, new SceneLeaseId(canonical.id().value() + "-foreign"), canonical.revision());
+        PhysicalIntent foreignIntent = new PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), cause, foreign.id(), foreign.revision()),
+                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),
+                new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(FixedScalar.whole(origin.getX()), FixedScalar.whole(origin.getY()), FixedScalar.whole(origin.getZ())),
+                0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        int before = current.physicalIntents().size(); boolean rejected = false;
+        try {
+            FrontierV3CommandSubmission.submit(runtime, "foreign-assault-strike-prepare", foreign.id().value(),
+                    new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared(foreignIntent));
+        } catch (IllegalStateException expected) { rejected = true; }
+        helper.assertTrue(rejected, "a plausible current-cause strike from another lease must fail at the production physical consumer");
+        helper.assertValueEqual(state(runtime).physicalIntents().size(), before,
+                "the rejected foreign strike must not become pending, executable, or this lease's replay fence");
     }
 
     /** Builds the immutable canonical assault lease; only its observed bodies are projected into this template. */

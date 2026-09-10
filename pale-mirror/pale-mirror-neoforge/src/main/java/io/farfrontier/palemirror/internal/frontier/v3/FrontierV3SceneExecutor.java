@@ -506,7 +506,9 @@ final class FrontierV3SceneExecutor {
                 selectedAttacker == null ? null : selectedAttacker.member().actorId(), strikeEpoch);
         if (sceneCause == null) return;
         Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.causeSubjectId().equals(sceneCause) && intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
+                && intent.causeSubjectId().equals(sceneCause) && intent.status() != PhysicalIntentStatus.CONFIRMED)
+                .filter(intent -> !settlementAssault || FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
+                .min(Comparator.comparing(PhysicalIntent::id));
         if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
         if (pending.isEmpty()) {
             if (!settlementAssault) {
