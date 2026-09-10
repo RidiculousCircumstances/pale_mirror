@@ -1,6 +1,6 @@
 # PM-F02C-HOT-LEASE-LINEAGE-23: require exact canonical hand-off lineage
 
-Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 3. Status: `METHOD_ADMITTED_POST_GATE_AUTHORIZED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_lease_lineage23`, one fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -47,10 +47,74 @@ read-only review. No GameTest, full gate, package, native, CI, publish or deploy
 If rejected, terminate this proof branch and report the product code as
 unaccepted rather than opening order24.
 
-Only explicit acceptance may authorize one clean-HEAD critical gate and the
-unchanged private-Xvfb R14. Use branch `terra/f02c-hot-lease-lineage-23`,
-worktree `/home/rd/proj/pm-f02c-hot-lease-lineage-23` and task root
-`/home/rd/proj/pm-f02c-hot-lease-lineage-23-tmp`. Exact clean custody was
-verified and execution assigned at `2026-09-10T22:37:52Z`. First bounded
-liveness audit is due at `22:47:52Z` after silence; first economy audit is due
-at `23:37:52Z` if execution remains active.
+## Method admission decision
+
+The focused method is accepted at exact clean commit
+`90eafbb08de7ef3a0192ad3725601992e29d959c`, parent
+`65b1df90f277070f7980deda92aefb93612112cf`, tree
+`39224b9b4fd58168268e3777449bb286e9365922`. The retained receipt is
+`/home/rd/proj/pm-f02c-hot-lease-lineage-23-tmp/method-admission-gradle.md`,
+SHA-256 `a0aa537ead029fa8cd6d444c74253625931ff2640516ed5fa30e35f8b40f11c2`;
+its named JUnit XML is SHA-256
+`835d4f5c4ae0dacbf0f7a45e22de560d4d9cc39d1486e6d6ee91bd99b2100c2e`
+and records one test, zero failures/errors and 5.205 seconds.
+
+Fresh read-only challenge accepted the actual production executor -> hand-off
+-> policy composition: both DRAINING and CLOSED preserve every selected lease
+field except status; the positive callback performs the canonical transition
+and release from `selection.state()` before applying support loss; and a
+plausible revision-tamper result is rejected through production `decide`.
+The two-assault, independent provider/derivation-count, four fault-control,
+single-budget and 981-line-executor claims remain present. This decision admits
+only the method. It does not claim a full gate, package, physical, restart or
+product result.
+
+The focused receipt did not retain the complete Gradle console, class-output
+inventory or cleanup artifact. Do not rerun it merely to improve bookkeeping.
+The post-admission gate instead retains its own complete compact console,
+target/result counts, exact HEAD/tree and packaged-JAR identity.
+
+## Post-admission execution
+
+Return the same Terra executor to the exact clean accepted HEAD and make no
+source, test, script, build/CI or executable-configuration change. First prove
+create/write/fsync/atomic-rename/delete on each actual task-private filesystem.
+Then, from the worktree's `pale-mirror/` project directory, run exactly once:
+
+```text
+./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar --no-daemon
+```
+
+If that gate is red, return one terminal classified packet. Do not repair,
+rerun or start R14. If green, with no intervening source/test/config change,
+run exactly one native R14 using `scripts/with-private-xvfb.sh` as the direct
+parent of `node tools/frontier-v3-test-pilot/src/run-f02c-hot-receipt-carrier.mjs`.
+Use one verified-free loopback pilot port, one task-private process namespace
+and one new non-overwriting in-checkout receipt path. Preserve the unchanged
+scenario declaration and carrier. R14 must establish the canonical projector
+-> assault scene -> HOT strike -> graceful restart -> re-observation -> demand
+release -> next-COLD receipt with exact attempt/run/lifecycle and artifact
+identity. Retain the attributable GLX-admission result. A red R14 is terminal:
+no retry, timeout increase, display requalification or compensating full gate.
+
+Reuse order18's still-valid content-bound aggregate/package/303 receipts and
+R13 watchdog negative, plus the accepted COLD, constructive, identity and
+resource receipts, only for their stated immutable scopes. Do not rerun
+scene64, F0.VC, CI/provider or any confidence matrix. No perimeter, scenario,
+threshold, timeout, display, natural-terrain, navigation/tactics/formation,
+F0.3, publication, deployment or v2 work is authorized.
+
+Return one terminal packet with exact HEAD/parent/tree and clean state; full
+commands, durations, exits and first causal failure if any; target discovery
+and test counts; complete receipt/log/JAR hashes; claim-to-evidence mapping;
+resource-probe result; and zero task-owned JVM, server, client, port, display
+and background-process state. Preserve compact evidence and remove only exact
+task-owned disposable runtime data after its receipt is secured.
+
+Use branch `terra/f02c-hot-lease-lineage-23`, worktree
+`/home/rd/proj/pm-f02c-hot-lease-lineage-23` and task root
+`/home/rd/proj/pm-f02c-hot-lease-lineage-23-tmp`. Exact initial custody was
+verified and method execution assigned at `2026-09-10T22:37:52Z`. The
+post-admission liveness clock begins at the direct executor resume event; its
+first bounded audit is due only after ten complete minutes of silence and its
+economy audit after one hour.
