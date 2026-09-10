@@ -1,7 +1,7 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
-Specification revision: 4.
-Status: `NATIVE_EXECUTING`. Parent slice: F0.2C. Risk:
+Specification revision: 5.
+Status: `ACCEPTED_COLD_RECEIPT`. Parent slice: F0.2C. Risk:
 critical-code/native. Engineer: supervising root. Executors through
 `/root/terra_f02c_cold_identity11` are terminal. The sole successor is
 `/root/terra_f02c_cold_identity12`, one fresh `gpt-5.6-terra` with reasoning
@@ -217,12 +217,20 @@ clean-HEAD critical gate is required; a second confidence gate is not.
 CI-6 materially decides whether an ordinary scheduled COLD cause really
 survives graceful restart, remains unavailable before natural target
 availability, then materializes the exact owned aftermath once with the same
-cause/owner/revisions while unrelated progress remains live. It is also the
+cause/owner/revisions. It is also the
 only evidence tier joining the wrapper's precommitted attempt to the real child,
 lifecycle, completed final manifest, semantic assertions and terminal receipt.
 Pure/Node/GameTest evidence cannot observe that Minecraft/restart composition.
 A green result permits independent COLD-receipt acceptance; a negative changes
 the product/carrier disposition and returns immediately without retry.
+
+Unrelated-process liveness is deliberately not a fourth assertion in this
+COLD history. It belongs to the separately retained constructive-obstruction
+carrier: after blocking the Northwatch production route, that declaration
+requires an actual increase of settlement 2's `food.fulfilled` before accepting
+the value `8`. Requiring the mutually unrelated provision history to occur
+inside the restart-sensitive COLD strike would couple two product properties
+and recreate the all-in-one carrier rejected by the implementation plan.
 
 The same executor first revalidates bounded create/write/fsync/atomic-rename/
 delete on every actual heavy temp/evidence/runtime filesystem, then runs exactly
@@ -280,3 +288,54 @@ epoch for revision 4: `2026-09-10T13:45:58Z`; first economy-audit boundary:
 `2026-09-10T15:17:46Z` if still executing after replacement-native resumption
 at `2026-09-10T14:17:46Z`. Revision-4 specification review
 epoch: `2026-09-10T13:41:24Z`.
+
+## Terminal disposition — revision 5
+
+The immutable COLD receipt is independently accepted at commit
+`9c24f74ce2f34697ea9847902aa1bd6449d44057`, tree
+`521da2a83bcc94482d73c384f4d955fadd924e20`. This is scoped acceptance of
+the COLD alternative only; F0.2C remains incomplete until the separate HOT
+receipt and final composition are accepted.
+
+The exact evidence composition is:
+
+- CI-1--CI-4: the method-admitted focused 7/7 component receipt in 60.02ms;
+- CI-5: the sole 232-second critical gate, 304/304 GameTests, orderly saved
+  shutdown and packaged JAR SHA-256
+  `068611a438501714996bfcebfa240fc58ce36c283999897a779fbc3f6c04694a`;
+- CI-6: one replacement native execution after bounded display readiness,
+  with final-manifest SHA-256
+  `76e3f3056ebbe73d79dda5ecc00175abeec0f7b7f56fd91d44102cad29410bf2`,
+  terminal-receipt SHA-256
+  `c0507aaab4528b02c557df4d249f9969886142e1ac625e20b78be30c368c7534`
+  and lifecycle JSONL SHA-256
+  `d26bd76fe6fcab08a1eaf4d26c96f6051905bac0f427701953c095479c645ac9`.
+
+The native history used ordinary cause
+`cause:development-settlement-assault-epoch-4-attacker-bioform-west-19`,
+retained the same owner `structure:1-hall`, semantic part `FOUNDATION` and
+revision-4 `PENDING` consequence before restart and after recovery before any
+visit, then naturally loaded `(-360,65,-340)`. It observed AIR at
+`(-360,64,-340)` and exactly one revision-41 `REALIZED` terminal transition
+with cursor 1 and no next status. The outer attempt/recovery/lifecycle run ID
+`e77eb662-5697-4a71-9f03-bc4320069554` remained distinct from client/action
+run ID `bd1d6463-f46e-4e43-95fe-3fde3e3556cf`; all 17 lifecycle records were
+consecutive. The wrapper, Xvfb, server, client and task ports were terminal;
+the unrelated port-25565 service was untouched.
+
+The terminal challenger correctly found that the native summary's entity
+counts are presence, not unrelated progress. That finding narrows CI-6 rather
+than rejecting it: `PM-F02C-COLD-AFTERMATH-06` and the implementation plan
+already assign constructive obstruction/non-starvation to separate retained
+evidence and explicitly forbid rerunning it for confidence. The checked-in
+`disposable-materialized-production-route-blocked.json` declaration is byte-
+unchanged from checkpoint `3e82665b` through this candidate and contains the
+distinct `requireIncreaseAt: food.fulfilled` oracle plus terminal settlement-2
+assertion. Subsequent product commits changed aftermath ownership and assault
+cause/epoch handling, not that provision process or its scenario. Its earlier
+accepted narrow result therefore remains the non-starvation input for final
+F0.2C composition; it is not promoted into this COLD manifest.
+
+No additional COLD scenario, critical gate, confidence run or native rerun is
+authorized. The next product work is the separate ordinary HOT admission ->
+physical receipt -> drain/release -> next-COLD-epoch receipt.

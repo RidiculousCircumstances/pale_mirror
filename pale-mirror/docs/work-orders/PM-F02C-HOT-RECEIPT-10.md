@@ -1,0 +1,118 @@
+# PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
+
+Specification revision: 1. Status: `FRAMED`. Parent slice: F0.2C. Risk:
+critical-code/native. Engineer: supervising root. Builder: one fresh
+`gpt-5.6-terra` with reasoning `high`, not yet assigned. Baseline is the
+accepted COLD candidate
+`9c24f74ce2f34697ea9847902aa1bd6449d44057`, tree
+`521da2a83bcc94482d73c384f4d955fadd924e20`.
+
+This order inherits `docs/engineering-agent-operating-model-v4.md`. It owns one
+alternative HOT receipt and no COLD-aftermath reproof. Terra owns diagnosis,
+design, algorithms, paths, focused tests and the concrete carrier within these
+outcomes.
+
+## Product outcome
+
+One ordinary settlement assault admitted by natural player demand executes its
+next canonical strike in Minecraft exactly once. The registered HOT scene
+selects the exact retained attacker and target, creates the shared assault
+cause for the assault's current epoch, durably enters the physical intent,
+observes real health change, confirms the receipt, drains/releases without
+replay and returns the same assault to ordinary COLD continuation at the next
+epoch. Restart retains the confirmed history rather than repeating the hit.
+
+This is the HOT alternative to the already accepted COLD strike. No run must
+execute the same strike in both modes.
+
+## Required invariants
+
+1. **Ordinary admission.** Begin before a HOT lease or strike intent exists.
+   Natural player demand, the closed scene registry and the ordinary settlement
+   assault behavior acquire one exact lease with its real roster. A fixture may
+   supply an admitted assault precondition, but may not create the HOT lease,
+   intent, observation, confirmation, release or next epoch.
+2. **Shared cause and exact bodies.** The HOT intent cause is derived from the
+   retained assault, selected attacker and current `nextStrikeEpoch` by the same
+   semantic cause contract used by COLD. Its subject IDs are the exact live
+   lease members and its observation retains those same IDs. Mode is absent
+   from the cause identity.
+3. **Durable physical effect.** PREPARED and RUNNING remain distinct. Only the
+   registered HOT effect owner enters RUNNING immediately before real Minecraft
+   damage. Confirmation requires the exact intent and a real before/after
+   health observation; no diagnostic, fixture or elapsed wait manufactures it.
+4. **Exactly-once continuation.** Confirmation advances the assault epoch once.
+   Replay, duplicate receipt, wrong attacker, wrong target, stale epoch, foreign
+   lease or mode substitution fails closed. Demand loss drains/releases the
+   exact lease, and the ordinary COLD planner can continue only from the next
+   epoch; it cannot repeat the confirmed cause.
+5. **Recovery.** One authentic restart boundary after confirmed physical effect
+   and before completed COLD continuation retains the observation, advanced
+   epoch and non-replayable result. Recovery never attacks again, invents a
+   replacement body or returns to the old epoch. A cheaper codec/runtime
+   recovery case must discriminate this before native execution.
+6. **Bounded ownership.** No force-load, fixed sleep as success oracle, global
+   scan, second scene/combat authority, unbounded history, timeout inflation or
+   COLD aftermath modification is introduced. Wall-clock time may guard only
+   failure; declaration-bound semantic milestones own success.
+
+## Claim/evidence map
+
+| ID | Product claim | Cheapest faithful evidence |
+| --- | --- | --- |
+| HI-1 | Natural demand reaches the registered settlement-assault HOT behavior from a history without lease/intent | focused real owner-seam GameTest plus declarative carrier preflight |
+| HI-2 | Ordinary HOT selection creates the exact shared cause/current epoch and exact members | focused production-path positive with one-field actor/target/epoch/mode/lease negatives |
+| HI-3 | Real Minecraft damage produces the exact durable observation and advances the epoch once | smallest scene GameTest through the real executor and state reducer |
+| HI-4 | Drain/release hands the same assault to the next COLD epoch without replay | focused complete owner sequence including duplicate/stale receipt and release controls |
+| HI-5 | Confirmed strike plus next-epoch continuation survives restart | focused codec/runtime recovery plus one targeted native restart history after method admission |
+| HI-6 | Final immutable candidate remains bounded, package-clean and compatible | one clean-HEAD critical gate only if product/JAR inputs change after the accepted COLD gate |
+
+Evidence may compose across tiers, but no tier borrows another tier's claim.
+The accepted COLD receipts, constructive obstruction/non-starvation result and
+F0.VC infrastructure are reused unchanged. Static cause-string equality,
+direct helper calls, preinstalled lease/intent/receipt, raw diagnostics or the
+existing two-minute scale/JFR wait are not acceptance evidence for this order.
+
+## Method admission and economy
+
+The builder first implements or corrects only the smallest faithful owner seam,
+diagnostic/oracle and declarative scenario. It returns `HOT_METHOD_READY` with:
+
+- exact checkpoint/HEAD/parent/tree and changed paths;
+- the carrier's initial control history and every production owner it crosses;
+- the plausible defect and terminal semantic oracle for HI-1--HI-5;
+- focused commands, durations, results and exact receipts;
+- explicit confirmation that no complete gate, native run, CI matrix or
+  unrelated scenario ran.
+
+Because this is a new cross-owner proof boundary after repeated synthetic HOT
+evidence, one fresh read-only challenger must return `METHOD_ADMITTED` before
+any complete critical or native work. A rejection returns to the engineer; it
+does not authorize another proof framework or expensive run.
+
+After method admission, run a clean-HEAD critical gate only when final product
+or packaged-JAR inputs differ from the already accepted COLD candidate. If
+only pilot/test tooling changed and the exact packaged product identity remains
+applicable, compose the accepted CI-5 receipt and do not rebuild for confidence.
+Exactly one targeted native HOT/restart flow may then establish claims that
+cannot be observed below Minecraft/process-restart tier. No general matrix,
+provider campaign, benchmark, terrain, COLD rerun, constructive-carrier rerun
+or second confidence run belongs here.
+
+## Exclusions and stop conditions
+
+No new battle tactics, AI policy, damage balance, scene family, terrain work,
+F0.3 resource-lot work, deployment, publication, v2 change, M3/human claim or
+test-framework redesign. Preserve all prior worktrees/evidence and unrelated
+services. Stop for new public/persistent meaning, a second authority, inability
+to exercise the real owner sequence without manufacturing it, or any required
+unbounded/destructive action.
+
+The builder owns one task-private worktree/branch from exact `9c24f74c`, one
+task-private temp/evidence root, all task processes/displays/ports/worlds and
+their cleanup. Before JVM/native work it must prove bounded create/write/fsync/
+atomic-rename/delete on every actual heavy filesystem. No source commit is
+published or merged by this order.
+
+Observation epoch is recorded when the builder starts. Ten-minute liveness and
+hourly economy audits remain binding while it executes.
