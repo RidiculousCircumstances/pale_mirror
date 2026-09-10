@@ -214,10 +214,9 @@ neoForge {
         }
         frontierV3SceneGameTestServer {
             type = 'gameTestServer'
-            // The strike template is data/pale_mirror_visuals while its scene test is registered
-            // by pale_mirror. This dedicated run builds the visual resource source set and
-            // enables both namespaces; its opt-in mixin still filters only the final scene
-            // collection, leaving regular servers and the full GameTest gate unchanged.
+            // The scene test is registered by pale_mirror while its exact template is mounted
+            // by the focused test-only resource contributor. This opt-in run alone enables the
+            // Visuals namespace and scene slice; ordinary runs retain their baseline composition.
             gameDirectory = frontierV3SceneGameTestDirectory
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft,pale_mirror_visuals'
@@ -407,6 +406,7 @@ neoForge {
             sourceSet project(':pale-mirror-api').sourceSets.main
             sourceSet project(':pale-mirror-domain').sourceSets.main
             sourceSet project(':pale-mirror-frontier').sourceSets.main
+            sourceSet project(':pale-mirror-visuals').sourceSets.main
             sourceSet sourceSets.pilot
         }
         pale_mirror_scene_test {
@@ -573,18 +573,34 @@ def frontierV3SceneTemplateSource = project(':pale-mirror-visuals').file("src/ma
 def frontierV3SceneTemplateExpectedSha256 = 'dae2b25fc3ef1bbc32342be5a2dec114ad7e992555525c5b7ef43678eb2c75b3'
 def frontierV3SceneTemplateMetadataRelativePath = 'META-INF/neoforge.mods.toml'
 def frontierV3SceneTemplateResourcesDirectory = sourceSets.frontierV3SceneTemplate.output.resourcesDir
-def frontierV3SceneGameTestSource = file('src/pilot/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneGameTests.java')
 def frontierV3SceneRunLoadedMods = neoForge.runs.getByName('frontierV3SceneGameTestServer').loadedMods.get()*.name as Set<String>
 def frontierV3SceneExpectedLoadedMods = ['pale_mirror', 'pale_mirror_scene_test'] as Set<String>
+def frontierV3OrdinaryExpectedSourceSets = [
+        sourceSets.main,
+        project(':pale-mirror-api').sourceSets.main,
+        project(':pale-mirror-domain').sourceSets.main,
+        project(':pale-mirror-frontier').sourceSets.main,
+        project(':pale-mirror-visuals').sourceSets.main,
+        sourceSets.pilot
+]
+def frontierV3OrdinaryActualSourceSets = paleMirrorRuntimeMod.modSourceSets.get()
+def frontierV3OrdinaryCompositionMatchesBaseline = frontierV3OrdinaryActualSourceSets == frontierV3OrdinaryExpectedSourceSets
+def frontierV3SourceSetLabels = { sets -> sets.collect { sourceSet -> sourceSet.output.resourcesDir.absolutePath }.join(',') }
+def frontierV3OrdinaryExpectedSourceSetLabels = frontierV3SourceSetLabels(frontierV3OrdinaryExpectedSourceSets)
+def frontierV3OrdinaryActualSourceSetLabels = frontierV3SourceSetLabels(frontierV3OrdinaryActualSourceSets)
+def frontierV3NonSceneRunLoadedMods = neoForge.runs.findAll { it.name != 'frontierV3SceneGameTestServer' }
+        .collectEntries { run -> [(run.name): run.loadedMods.get()*.name as Set<String>] }
+def frontierV3NonSceneRunsMatchBaseline = frontierV3NonSceneRunLoadedMods.values().every { it == (['pale_mirror'] as Set<String>) }
 tasks.register('verifyFrontierV3SceneGameTestResources') {
     group = 'verification'
-    description = 'Rejects a scene run whose exact structure is not mounted by its dedicated ModDev contributor.'
+    description = 'Rejects a scene run whose exact structure or baseline ModDev composition is not mounted as declared.'
     dependsOn tasks.named(sourceSets.frontierV3SceneTemplate.processResourcesTaskName)
     inputs.file(frontierV3SceneTemplateSource)
     inputs.file(file("src/frontierV3SceneTemplate/resources/${frontierV3SceneTemplateMetadataRelativePath}"))
-    inputs.file(frontierV3SceneGameTestSource)
     inputs.property('templateSha256', frontierV3SceneTemplateExpectedSha256)
     inputs.property('sceneRunLoadedMods', frontierV3SceneRunLoadedMods.sort().join(','))
+    inputs.property('ordinarySourceSetBaseline', frontierV3OrdinaryActualSourceSetLabels)
+    inputs.property('nonSceneRunLoadedMods', frontierV3NonSceneRunLoadedMods.collect { name, mods -> "${name}=${mods.sort()}" }.sort().join(','))
     outputs.upToDateWhen { false }
     doLast {
         if (!frontierV3SceneTemplateSource.isFile()) {
@@ -598,12 +614,6 @@ tasks.register('verifyFrontierV3SceneGameTestResources') {
         if (!metadata.isFile() || !metadata.getText('UTF-8').contains('modId="pale_mirror_scene_test"')) {
             throw new GradleException("Focused scene runtime contributor must retain test-only NeoForge metadata: ${metadata}")
         }
-        String sceneTest = frontierV3SceneGameTestSource.getText('UTF-8')
-        if (!sceneTest.contains('int fixtureColumns = 6, fixtureRows = 6;')
-                || !sceneTest.contains('index % fixtureColumns, 0, index / fixtureColumns')
-                || !sceneTest.contains('new BlockPos(1, 2, 1)')) {
-            throw new GradleException("Focused scene test must retain its envelope-safe anchored 6 by 6 fixture grid: ${frontierV3SceneGameTestSource}")
-        }
         def sourceHash = java.security.MessageDigest.getInstance('SHA-256').digest(frontierV3SceneTemplateSource.bytes).encodeHex().toString()
         def copiedHash = java.security.MessageDigest.getInstance('SHA-256').digest(copied.bytes).encodeHex().toString()
         if (sourceHash != frontierV3SceneTemplateExpectedSha256 || copiedHash != frontierV3SceneTemplateExpectedSha256) {
@@ -612,7 +622,13 @@ tasks.register('verifyFrontierV3SceneGameTestResources') {
         if (frontierV3SceneRunLoadedMods != frontierV3SceneExpectedLoadedMods) {
             throw new GradleException("Focused scene run must load exactly ${frontierV3SceneExpectedLoadedMods}, found ${frontierV3SceneRunLoadedMods}")
         }
-        logger.lifecycle("Focused scene resource provenance PASS: ${frontierV3SceneTemplateRelativePath} sha256=${copiedHash} mods=${frontierV3SceneRunLoadedMods.sort()}")
+        if (!frontierV3OrdinaryCompositionMatchesBaseline) {
+            throw new GradleException("Ordinary pale_mirror source-set composition must remain ${frontierV3OrdinaryExpectedSourceSetLabels}, found ${frontierV3OrdinaryActualSourceSetLabels}")
+        }
+        if (!frontierV3NonSceneRunsMatchBaseline) {
+            throw new GradleException("Only the focused scene run may load the test resource contributor; found ${frontierV3NonSceneRunLoadedMods}")
+        }
+        logger.lifecycle("Focused scene resource provenance PASS: ${frontierV3SceneTemplateRelativePath} sha256=${copiedHash} sceneMods=${frontierV3SceneRunLoadedMods.sort()} ordinarySourceSets=${frontierV3OrdinaryActualSourceSetLabels}")
     }
 }
 
