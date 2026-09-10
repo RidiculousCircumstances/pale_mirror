@@ -475,6 +475,71 @@ class FrontierV3DiagnosticJsonTest {
                         && scene.contains("\"strikeAttacker\":\"\"") && scene.contains("\"strikeTarget\":\"\"")
                         && scene.contains("\"carrier\":\"NOT_APPLICABLE\"") == false,
                 "the pure formatter preserves typed scene facts without querying a cargo carrier");
+        assertTrue(scene.contains("\"strikeEpoch\":-1") && scene.contains("\"nextStrikeEpoch\":0")
+                        && scene.contains("\"strikeReceiptExact\":false") && scene.contains("\"strikeHealthChanged\":false"),
+                "an admitted lease without a real receipt must not be rendered as an old confirmed assault strike");
+        runtime.shutdown();
+    }
+
+    @Test
+    void rendersTheCurrentAssaultEpochInsteadOfAnOlderConfirmedReceipt(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:diagnostic-assault-current-epoch"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        var candidate = state.coldSettlementAssaultSceneCandidates().getFirst();
+        var assault = state.strategicPlans().settlementAssaults().get(candidate.assaultId());
+        var firstMembers = candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor,
+                SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
+        SceneLeaseId firstLeaseId = new SceneLeaseId("lease:diagnostic-assault-current-r0");
+        SceneLease firstLease = SceneLease.forCause(firstLeaseId, checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(candidate.assaultId(), candidate.settlementId()),
+                candidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, firstMembers,
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        state = state.prepareSceneLease(firstLease).transitionSceneLease(firstLeaseId, SceneLeaseStatus.HOT);
+        SubjectId firstAttacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
+        SubjectId firstTarget = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
+        SubjectId firstCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), firstAttacker, 0L);
+        var firstIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:diagnostic-assault-old"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
+                firstCause, List.of(firstAttacker, firstTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        state = state.preparePhysicalIntent(firstIntent).transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())
+                .transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:diagnostic-assault-old"),
+                                firstIntent.id(), firstAttacker, firstTarget, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(20),
+                                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18))));
+        FrontierWorldState draining = state.transitionSceneLease(firstLeaseId, SceneLeaseStatus.DRAINING);
+        state = draining.releaseSceneLease(firstLeaseId, firstMembers.stream()
+                .map(member -> new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
+                        draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        var secondCandidate = state.coldSettlementAssaultSceneCandidates().getFirst();
+        var secondMembers = secondCandidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor,
+                SceneLease.deterministicEntityId(checkpoint.worldId(), actor))).toList();
+        SceneLeaseId secondLeaseId = new SceneLeaseId("lease:diagnostic-assault-current-r1");
+        SceneLease secondLease = SceneLease.forCause(secondLeaseId, checkpoint.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause(secondCandidate.assaultId(), secondCandidate.settlementId()),
+                secondCandidate.handoffPosition(), checkpoint.instant(), checkpoint.revision().value() + 1L, SceneLeaseStatus.PREPARED, secondMembers,
+                SceneLease.bodiesAboveSupportCells(secondCandidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        state = state.prepareSceneLease(secondLease).transitionSceneLease(secondLeaseId, SceneLeaseStatus.HOT);
+        SubjectId secondAttacker = assault.defenderIds().stream().sorted().skip(1L % assault.defenderIds().size()).findFirst().orElseThrow();
+        SubjectId secondTarget = assault.combatantAttackerIds().stream().sorted().skip(1L % assault.combatantAttackerIds().size()).findFirst().orElseThrow();
+        SubjectId secondCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), secondAttacker, 1L);
+        var secondIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:diagnostic-assault-current"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
+                secondCause, List.of(secondAttacker, secondTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        state = state.preparePhysicalIntent(secondIntent);
+
+        String scene = FrontierV3DiagnosticJson.render("scene", assault.id().value(), checkpoint, state, Optional.empty());
+
+        assertTrue(scene.contains("\"strikeEpoch\":1") && scene.contains("\"strikeStatus\":\"PREPARED\"")
+                        && scene.contains("\"strikeCause\":\"" + secondCause.value() + "\"")
+                        && scene.contains("\"strikeReceiptExact\":false"),
+                "a newer in-flight assault epoch must eclipse an older retained confirmed receipt in the declaration oracle");
         runtime.shutdown();
     }
 

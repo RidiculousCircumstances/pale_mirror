@@ -3,12 +3,15 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
@@ -18,6 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared;
@@ -152,11 +156,29 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             return;
         }
         for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.mob(), target(state, actor, bodies));
+        if (confirmedStrikeForThisLease(state, lease)) {
+            // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
+            // across restart while ordinary demand loss decides when the completed lease drains;
+            // only the next COLD admission may select the following epoch.
+            rememberObserved(level, runtime, state, lease);
+            return;
+        }
         if (level.getGameTime() % 20L == 0L) {
             forgetObserved(runtime, lease.id());
             FrontierV3SceneExecutor.executeStrike(level, runtime, state, lease);
         }
         rememberObserved(level, runtime, state, lease);
+    }
+
+    /** The executor's durable ID binds a receipt to one lease revision without widening its shared cause. */
+    private static boolean confirmedStrikeForThisLease(FrontierWorldState state, SceneLease lease) {
+        SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
+        if (cause == null) return false;
+        String leaseSuffix = "-r" + lease.revision() + "-s";
+        return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                && intent.status() == PhysicalIntentStatus.CONFIRMED
+                && SettlementAssaultCauseIdentity.belongsTo(cause.assaultId(), intent.causeSubjectId())
+                && intent.id().value().contains(leaseSuffix));
     }
 
     private static void reclaim(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

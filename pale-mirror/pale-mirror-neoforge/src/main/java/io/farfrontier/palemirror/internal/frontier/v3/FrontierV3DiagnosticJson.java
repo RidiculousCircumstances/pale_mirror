@@ -38,6 +38,9 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
+import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
@@ -798,11 +801,17 @@ final class FrontierV3DiagnosticJson {
                 .filter(value -> engagement != null && value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
                 .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
         SubjectId strikeCause = logistics != null ? logistics.operationId() : assault != null ? assault.assaultId() : null;
-        PhysicalIntent strike = strikeCause == null ? null : state.physicalIntents().values().stream()
+        SettlementAssault assaultState = assault == null ? null : state.strategicPlans().settlementAssaults().get(assault.assaultId());
+        PhysicalIntent strike = strikeCause == null ? null : logistics != null ? state.physicalIntents().values().stream()
                 .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
-                .filter(value -> logistics != null ? value.causeSubjectId().equals(strikeCause)
-                        : io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.belongsTo(assault.assaultId(), value.causeSubjectId()))
-                .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
+                .filter(value -> value.causeSubjectId().equals(strikeCause)).sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null)
+                : currentAssaultStrike(state, assaultState);
+        long strikeEpoch = strike == null || assaultState == null ? -1L : SettlementAssaultCauseIdentity.epoch(assaultState.id(), strike.causeSubjectId());
+        SceneStrikeObservation receipt = strike == null ? null : strike.postconditionObservationId().map(state.physicalObservations()::get)
+                .filter(SceneStrikeObservation.class::isInstance).map(SceneStrikeObservation.class::cast).orElse(null);
+        boolean exactReceipt = receipt != null && receipt.intentId().equals(strike.id()) && receipt.attackerId().equals(strike.subjectIds().getFirst())
+                && receipt.targetId().equals(strike.subjectIds().getLast());
+        boolean healthChanged = exactReceipt && receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0;
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
@@ -824,6 +833,13 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"strikeAttacker\":\"" + quote(strike == null ? "" : strike.subjectIds().getFirst().value())
                 + "\",\"strikeTarget\":\"" + quote(strike == null ? "" : strike.subjectIds().getLast().value())
                 + "\",\"strikeReceipt\":\"" + quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
+                + ",\"strikeEpoch\":" + strikeEpoch + ",\"nextStrikeEpoch\":" + (assaultState == null ? -1 : assaultState.nextStrikeEpoch())
+                + ",\"assaultStatus\":\"" + (assaultState == null ? "" : assaultState.status()) + "\""
+                + ",\"strikeReceiptExact\":" + exactReceipt + ",\"strikeHealthChanged\":" + healthChanged
+                + ",\"strikeHealthBefore\":" + (receipt == null ? -1 : receipt.targetHealthBefore().raw())
+                + ",\"strikeHealthAfter\":" + (receipt == null ? -1 : receipt.targetHealthAfter().raw())
+                + ",\"coldContinuationAvailable\":" + (assaultState != null && assaultState.status() == io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus.COLD_COMBAT
+                        && state.coldSettlementAssaultSceneCandidates().stream().anyMatch(value -> value.assaultId().equals(assaultState.id())))
                 + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 
@@ -880,6 +896,16 @@ final class FrontierV3DiagnosticJson {
                         .thenComparingLong(io.farfrontier.palemirror.frontier.v3.model.SceneLease::revision)
                         .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::id))
                 .orElse(null);
+    }
+
+    /** Selects the in-flight epoch, or else the most recent retained confirmed assault receipt. */
+    private static PhysicalIntent currentAssaultStrike(FrontierWorldState state, SettlementAssault assault) {
+        if (assault == null) return null;
+        return state.physicalIntents().values().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
+                .filter(value -> SettlementAssaultCauseIdentity.belongsTo(assault.id(), value.causeSubjectId()))
+                .max(java.util.Comparator.comparingLong((PhysicalIntent value) -> SettlementAssaultCauseIdentity.epoch(assault.id(), value.causeSubjectId()))
+                        .thenComparing(PhysicalIntent::id)).orElse(null);
     }
 
     private static String sceneReadiness(FrontierV3SceneReadiness.Value value) {

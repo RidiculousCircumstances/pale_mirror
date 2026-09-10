@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
@@ -32,6 +33,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalKind;
@@ -526,69 +531,73 @@ public final class FrontierV3SceneGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void durableHotStrikeHurtsExactBodyAndNeverReplaysUnknownEffect(GameTestHelper helper) {
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 340)
+    public static void coldSettlementAssaultRegistryOwnsOneExactHotReceiptThenReleasesToNextColdEpoch(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4)); prepareFloor(level, origin); prepareFloor(level, origin.east());
-        prepareFloor(level, origin.east(8));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:scene-strike-game-test"), 91L), new EphemeralStore(), 20_000);
-        SceneEngagementCandidate candidate = state(runtime).coldEngagementSceneCandidates().getFirst();
-        SceneLeaseId leaseId = new SceneLeaseId("lease:scene-strike-game-test");
-        var checkpoint = runtime.checkpointImage().orElseThrow(() -> new IllegalStateException("the strike fixture runtime must remain active"));
-        SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
-        FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-prepare", leaseId.value(), new SceneLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "scene-strike-lease-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        for (int index = 0; index < lease.members().size(); index++) {
-            addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
+                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:settlement-assault-owner-game-test"), 91L), new EphemeralStore(), 20_000);
+        FrontierWorldState initial = state(runtime);
+        SettlementAssaultSceneCandidate candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
+        SettlementAssault assault = initial.strategicPlans().settlementAssaults().get(candidate.assaultId());
+        SubjectId expectedAttacker = assault.combatantAttackerIds().stream().filter(actor -> initial.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
+                .sorted().findFirst().orElseThrow(() -> new IllegalStateException("COLD assault fixture must retain one live attacker"));
+        SubjectId expectedTarget = assault.defenderIds().stream().filter(actor -> initial.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
+                .sorted().findFirst().orElseThrow(() -> new IllegalStateException("COLD assault fixture must retain one live defender"));
+        SubjectId expectedCause = SettlementAssaultCauseIdentity.strike(assault.id(), expectedAttacker, assault.nextStrikeEpoch());
+        helper.assertTrue(initial.sceneLeases().isEmpty() && initial.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE),
+                "the real settlement-assault registry seam must begin with only the declared COLD assault, no lease or strike intent");
+        // These are the COLD fixture's own canonical support cells, not a projected lease or an
+        // invented formation. The registered executor must materialize precisely these members.
+        candidate.memberPositions().values().forEach(position -> prepareFloor(level, new BlockPos(position.x(), position.y(), position.z())));
+        ServerPlayer observer = helper.makeMockServerPlayerInLevel();
+        observer.setPos(candidate.handoffPosition().x() + 0.5D, candidate.handoffPosition().y() + 1.0D, candidate.handoffPosition().z() + 0.5D);
+        helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause, expectedAttacker,
+                expectedTarget, null, 330));
+    }
+
+    /** Drives only the registered production owner until its exact receipt can drain normally. */
+    private static void driveSettlementAssaultReceipt(GameTestHelper helper, ServerLevel level,
+                                                       FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
+                                                       ServerPlayer observer, SettlementAssaultSceneCandidate candidate, SubjectId expectedCause,
+                                                       SubjectId expectedAttacker, SubjectId expectedTarget, PhysicalIntent confirmed, int remaining) {
+        if (remaining <= 0) throw new IllegalStateException("registered settlement assault did not reach its exact receipt and COLD hand-off");
+        FrontierV3SceneExecutor.tick(level, runtime);
+        FrontierWorldState current = state(runtime);
+        SceneLease lease = current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isSettlementAssault).findFirst()
+                .orElseThrow(() -> new IllegalStateException("registered settlement-assault owner did not create its typed lease"));
+        if (confirmed == null) {
+            PhysicalIntent receiptIntent = current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE)
+                    .filter(intent -> intent.status() == PhysicalIntentStatus.CONFIRMED).findFirst().orElse(null);
+            if (receiptIntent != null) {
+                SceneStrikeObservation receipt = (SceneStrikeObservation) current.physicalObservations().get(receiptIntent.postconditionObservationId()
+                        .orElseThrow(() -> new IllegalStateException("confirmed settlement strike must retain one receipt id")));
+                helper.assertValueEqual(receiptIntent.causeSubjectId(), expectedCause, "the real owner must retain only assault, live attacker, and epoch in the shared cause");
+                helper.assertValueEqual(receiptIntent.subjectIds(), List.of(expectedAttacker, expectedTarget), "the real owner must retain the separately exact live attacker and target");
+                helper.assertValueEqual(receipt.attackerId(), expectedAttacker, "the receipt must retain the exact live attacker");
+                helper.assertValueEqual(receipt.targetId(), expectedTarget, "the receipt must retain the exact live target");
+                helper.assertTrue(receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0,
+                        "the registered owner must confirm real Minecraft damage, not only a durable transition");
+                helper.assertValueEqual(current.strategicPlans().settlementAssaults().get(candidate.assaultId()).nextStrikeEpoch(), 1,
+                        "one confirmed receipt must advance the assault epoch exactly once");
+                observer.setPos(candidate.handoffPosition().x() + FrontierV3SceneDemand.RADIUS_BLOCKS + 80.5D,
+                        candidate.handoffPosition().y() + 1.0D, candidate.handoffPosition().z() + 0.5D);
+                confirmed = receiptIntent;
+            }
+        } else if (lease.status() == SceneLeaseStatus.CLOSED) {
+            SettlementAssault released = current.strategicPlans().settlementAssaults().get(candidate.assaultId());
+            helper.assertValueEqual(released.status(), SettlementAssaultStatus.COLD_COMBAT,
+                    "ordinary sustained demand loss must release the confirmed HOT assault to COLD");
+            helper.assertValueEqual(released.nextStrikeEpoch(), 1, "release may not replay or advance the confirmed receipt");
+            helper.assertValueEqual(current.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                    && intent.status() == PhysicalIntentStatus.CONFIRMED).count(), 1L, "release must retain one non-replayable confirmed receipt");
+            helper.assertTrue(current.coldSettlementAssaultSceneCandidates().stream().anyMatch(next -> next.assaultId().equals(candidate.assaultId())),
+                    "only the next epoch's COLD continuation may remain admissible after release");
+            lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
+            runtime.shutdown(); level.getServer().getPlayerList().remove(observer); helper.succeed(); return;
         }
-
-        Zombie attacker = lease.members().stream().map(member -> level.getEntity(member.entityId())).filter(Zombie.class::isInstance).map(Zombie.class::cast)
-                .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Zombie attacker"));
-        SubjectId guardId = state(runtime).bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
-                .filter(resident -> resident.role() == ResidentRole.GUARD).map(resident -> resident.id()).filter(actor -> lease.members().stream()
-                        .anyMatch(member -> member.actorId().equals(actor))).findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one resident guard"));
-        Villager target = lease.members().stream().filter(member -> !member.actorId().equals(guardId)).map(member -> level.getEntity(member.entityId())).filter(Villager.class::isInstance).map(Villager.class::cast)
-                .findFirst().orElseThrow(() -> new IllegalStateException("the exact scene fixture did not retain one Villager target"));
-        Villager guard = (Villager) level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(guardId)).findFirst().orElseThrow().entityId());
-        helper.assertTrue(guard != null, "the exact scene fixture must materialize its resident guard");
-        attacker.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D); target.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
-
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        PhysicalIntent first = onlyStrike(state(runtime));
-        helper.assertValueEqual(first.status(), PhysicalIntentStatus.PREPARED, "a scene strike must be durable before any Minecraft damage");
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.RUNNING, "the durable strike must enter RUNNING before its physical hit");
-        float healthBefore = target.getHealth();
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        PhysicalIntent confirmed = onlyStrike(state(runtime));
-        SceneStrikeObservation receipt = (SceneStrikeObservation) state(runtime).physicalObservations().get(confirmed.postconditionObservationId()
-                .orElseThrow(() -> new IllegalStateException("a confirmed physical scene strike must retain its receipt identity")));
-        helper.assertValueEqual(confirmed.status(), PhysicalIntentStatus.CONFIRMED, "the observed hit must durably confirm its exact intent");
-        helper.assertTrue(target.getHealth() < healthBefore, "only the real owned Villager must take the executor's Minecraft damage");
-        helper.assertValueEqual(receipt.targetHealthBefore(), new FixedScalar(Math.round(healthBefore * FixedScalar.SCALE)), "receipt must retain the exact physical pre-hit health");
-        helper.assertValueEqual(receipt.targetHealthAfter(), new FixedScalar(Math.round(target.getHealth() * FixedScalar.SCALE)), "receipt must retain the exact physical post-hit health");
-
-        target.setPos(origin.getX() + 8.5D, origin.getY(), origin.getZ() + 0.5D);
-        guard.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D);
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        PhysicalIntent counterStrike = pendingStrike(state(runtime), lease);
-        helper.assertTrue(counterStrike.subjectIds().getFirst().value().startsWith("resident:"),
-                "the exact resident guard must receive the alternating defensive HOT strike");
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        helper.assertValueEqual(FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime), 1,
-                "restart recovery must quarantine one unresolved physical strike");
-        int retainedIntentCount = state(runtime).physicalIntents().size();
-        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), lease);
-        helper.assertValueEqual(state(runtime).physicalIntents().size(), retainedIntentCount,
-                "an unknown strike must remain visible and prevent a new same-pair hit after restart");
-        helper.assertTrue(state(runtime).physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART), "recovery must retain the unresolved strike as explicit canonical evidence");
-        lease.members().forEach(member -> {
-            Entity body = level.getEntity(member.entityId());
-            if (body != null) body.discard();
-        });
-        runtime.shutdown(); helper.succeed();
+        PhysicalIntent next = confirmed;
+        helper.runAfterDelay(1L, () -> driveSettlementAssaultReceipt(helper, level, runtime, observer, candidate, expectedCause,
+                expectedAttacker, expectedTarget, next, remaining - 1));
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
