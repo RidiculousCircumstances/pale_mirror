@@ -70,6 +70,13 @@ final class FrontierV3DeferredAftermathExecutor {
             return;
         }
         FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
+        // Projection is the declared first-observation owner for a naturally loaded structural
+        // cell.  AIR without its claim is therefore not foreign evidence: the bounded graybox
+        // cursor may simply not have reached this exact masked baseline candidate yet.  Leave
+        // the consequence pending until that owner records either the exact tombstone or the
+        // real world evidence.  A non-air unclaimed block is already positive foreign evidence
+        // and remains an isolated conflict below.
+        if (claim == null && level.getBlockState(position).isAir()) return;
         if (claim != null && claim.conflicted() && exactClaim(claim, cell) && level.getBlockState(position).isAir()) {
             // Cause-time projection has already retained this exact loss; make that observed
             // completion durable without writing the world or reclassifying it as a conflict.

@@ -410,6 +410,14 @@ public final class StrategicPlanState {
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, next);
     }
 
+    /** Advances the retained assault namespace only after its exact HOT receipt confirms. */
+    public StrategicPlanState afterConfirmedHotStrike(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        SettlementAssault assault = settlementAssaults.values().stream().filter(value -> SettlementAssaultCauseIdentity.belongsTo(value.id(), intent.causeSubjectId())).findFirst().orElse(null);
+        if (assault == null) return this;
+        long epoch = SettlementAssaultCauseIdentity.epoch(assault.id(), intent.causeSubjectId());
+        return replaceSettlementAssault(assault.afterHotStrike(Math.toIntExact(epoch)));
+    }
+
     public StrategicPlanState transitionSettlementAssault(SubjectId assaultId, SettlementAssaultStatus nextStatus) {
         SettlementAssault current = settlementAssaults.get(Objects.requireNonNull(assaultId, "settlement assault id"));
         if (current == null || !allowed(current.status(), nextStatus)) {

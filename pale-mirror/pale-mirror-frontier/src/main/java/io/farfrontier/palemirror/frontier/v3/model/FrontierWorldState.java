@@ -841,8 +841,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             SceneStrikeStateSupport.validateObservation(this, current, strike);
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(strike.id())));
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(strike.id(), strike);
-            return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                    next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+            FrontierWorldState confirmed = next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+            return confirmed.withStrategicPlans(strategicPlans.afterConfirmedHotStrike(current));
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) {
             if (!(evidence instanceof ExplosionObservation explosion)) throw new IllegalArgumentException("explosion requires post-impact observation evidence");

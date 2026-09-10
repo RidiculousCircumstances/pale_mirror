@@ -28,19 +28,20 @@ public final class SettlementAssaultCauseIdentity {
     }
 
     /**
-     * A HOT lease consumes the same monotonically ordered strike namespace as COLD.  Confirmed
-     * physical receipts are the only additional HOT steps; an in-flight receipt deliberately
-     * retains its epoch until it is either confirmed or recovered.
+     * A HOT lease consumes the canonical assault epoch directly.  Confirmation advances that
+     * same retained history before a lease can release to COLD; an in-flight receipt therefore
+     * deliberately retains its epoch until it is either confirmed or recovered.
      */
     public static long hotEpoch(SettlementAssault assault, Iterable<PhysicalIntent> intents) {
         Objects.requireNonNull(assault, "settlement assault");
         Objects.requireNonNull(intents, "physical intents");
-        long confirmed = 0L;
         for (PhysicalIntent intent : intents) {
-            if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE && intent.status() == PhysicalIntentStatus.CONFIRMED
-                    && belongsTo(assault.id(), intent.causeSubjectId())) confirmed++;
+            if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE && intent.status() != PhysicalIntentStatus.CONFIRMED
+                    && belongsTo(assault.id(), intent.causeSubjectId()) && epoch(assault.id(), intent.causeSubjectId()) != assault.nextStrikeEpoch()) {
+                throw new IllegalArgumentException("in-flight settlement assault strike does not retain the current epoch");
+            }
         }
-        return Math.addExact(assault.nextStrikeEpoch(), confirmed);
+        return assault.nextStrikeEpoch();
     }
 
     public static boolean belongsTo(SubjectId assaultId, SubjectId causeId) {

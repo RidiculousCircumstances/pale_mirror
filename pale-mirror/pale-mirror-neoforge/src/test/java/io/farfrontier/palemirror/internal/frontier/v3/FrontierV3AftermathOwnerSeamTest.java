@@ -21,10 +21,13 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStrike;
+import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -85,5 +88,22 @@ class FrontierV3AftermathOwnerSeamTest {
                         FixedScalar.ONE, FixedScalar.ZERO)));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(intent.id()).status(),
                 "the exact shared HOT cause survives receipt and immutable-state validation");
+        assertEquals(epoch + 1L, confirmed.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
+                "HOT confirmation advances the canonical assault epoch itself rather than an executor-local offset");
+
+        FrontierWorldState released = confirmed.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(lease.id(), lease.members().stream().map(member -> {
+                    var actor = confirmed.actorLocations().get(member.actorId());
+                    return new SceneMemberPosition(member.actorId(), actor.body(), actor.condition().health());
+                }).toList());
+        SettlementAssault resumed = released.strategicPlans().settlementAssaults().get(assault.id());
+        SettlementAssaultStrike continuation = HiveSettlementAssaultProcess.planCombat(released,
+                        HiveSettlementAssaultProcess.combat(resumed, 600L)).stream()
+                .map(value -> value.payload()).filter(SettlementAssaultStrike.class::isInstance)
+                .map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
+        assertEquals(epoch + 1L, continuation.epoch(),
+                "ordinary COLD continuation consumes the epoch confirmed by HOT before the lease released");
+        assertNotEquals(published, SettlementAssaultCauseIdentity.strike(continuation.assaultId(), continuation.attackerId(), continuation.epoch()),
+                "release and COLD continuation cannot recreate the exact already-confirmed HOT cause");
     }
 }

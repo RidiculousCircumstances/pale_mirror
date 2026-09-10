@@ -93,6 +93,15 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
+    /** Records the same exact strike after its HOT physical receipt is confirmed. */
+    public SettlementAssault afterHotStrike(int expectedEpoch) {
+        if (status != SettlementAssaultStatus.HOT || nextStrikeEpoch != expectedEpoch) {
+            throw new IllegalArgumentException("HOT assault strike does not match its current epoch");
+        }
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, status,
+                Math.addExact(nextStrikeEpoch, 1), Optional.empty());
+    }
+
     public SettlementAssault resolve(SettlementAssaultOutcome result) {
         if (status == SettlementAssaultStatus.RESOLVED || status == SettlementAssaultStatus.HOT
                 || result != SettlementAssaultOutcome.ABORTED && status != SettlementAssaultStatus.COLD_COMBAT) {

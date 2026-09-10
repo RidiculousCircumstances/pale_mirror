@@ -73,6 +73,26 @@ public final class FrontierV3DeferredAftermathGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void naturallyLoadedAirWithoutProjectionClaimWaitsForItsDeclaredOwner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos first = helper.absolutePos(new BlockPos(0, 8, 0));
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(first, first.east());
+        DeferredAftermath aftermath = runtime.decodedState().orElseThrow().deferredAftermath().entries().values().iterator().next();
+
+        FrontierV3DeferredAftermathExecutor.tick(level, runtime);
+        DeferredAftermath pending = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
+        helper.assertValueEqual(pending.cellAt(0).status(), DeferredAftermathCellStatus.PENDING,
+                "AIR with no projection claim is pending observation, not foreign conflict authority");
+
+        level.setBlock(first, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        FrontierV3DeferredAftermathExecutor.tick(level, runtime);
+        DeferredAftermath conflicted = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
+        helper.assertValueEqual(conflicted.cellAt(0).status(), DeferredAftermathCellStatus.CONFLICTED,
+                "positive foreign material remains an isolated local conflict after pending observation");
+        helper.assertTrue(level.getBlockState(first).is(Blocks.DIAMOND_BLOCK), "aftermath never overwrites the foreign block");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void materializedAftermathRetainsOneExactPreclaimToDamageRevision(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos first = helper.absolutePos(new BlockPos(0, 8, 0));
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(first, first.east());
