@@ -3,14 +3,12 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.world.entity.Mob;
 
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Bounded, noncanonical caches keyed by a runtime checkpoint. They are only an observation and
@@ -19,7 +17,6 @@ import java.util.Set;
  */
 final class FrontierV3AmbientActorCaches {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Observed>> OBSERVATIONS = new IdentityHashMap<>();
-    private static final Map<FrontierV3ServerRuntime<?, ?>, ReservationCache> RESERVATIONS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, GenericAdmissionCache> GENERIC_ADMISSIONS = new IdentityHashMap<>();
 
     private FrontierV3AmbientActorCaches() { }
@@ -44,18 +41,6 @@ final class FrontierV3AmbientActorCaches {
         if (observations.isEmpty()) OBSERVATIONS.remove(runtime);
     }
 
-    static Set<SubjectId> reservedActors(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
-        return reservationAdmission(runtime, state).reservedActorIds();
-    }
-
-    static FrontierSceneAdmission.ReservationAdmission reservationAdmission(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
-        ReservationCache cached = RESERVATIONS.get(runtime);
-        if (cached != null && cached.state() == state) return cached.admission();
-        FrontierSceneAdmission.ReservationAdmission admission = FrontierSceneAdmission.reservationAdmission(state);
-        RESERVATIONS.put(runtime, new ReservationCache(state, admission));
-        return admission;
-    }
-
     static FrontierSceneAdmission.GenericAmbientAdmission genericAmbientAdmission(FrontierV3ServerRuntime<?, ?> runtime,
                                                                                    FrontierWorldState state) {
         GenericAdmissionCache cached = GENERIC_ADMISSIONS.get(runtime);
@@ -67,11 +52,9 @@ final class FrontierV3AmbientActorCaches {
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         OBSERVATIONS.remove(runtime);
-        RESERVATIONS.remove(runtime);
         GENERIC_ADMISSIONS.remove(runtime);
     }
 
     record Observed(BodyPosition body, FixedScalar health) { }
-    private record ReservationCache(FrontierWorldState state, FrontierSceneAdmission.ReservationAdmission admission) { }
     private record GenericAdmissionCache(FrontierWorldState state, FrontierSceneAdmission.GenericAmbientAdmission admission) { }
 }

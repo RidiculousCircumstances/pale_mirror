@@ -91,7 +91,6 @@ import java.util.UUID;
 final class FrontierV3AmbientActorExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_ambient_actor";
     static final String KIND_KEY = "pale_mirror_frontier_v3_ambient_kind";
-    private static final int MAX_ACTORS_PER_TICK = 16;
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int MAX_PENDING_ADMISSIONS = 4_096;
@@ -115,13 +114,14 @@ final class FrontierV3AmbientActorExecutor {
         cleanPending(level, runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        FrontierV3AmbientAdmissionPolicy.Session admissionPolicy = FrontierV3AmbientAdmissionPolicy.begin(state);
         // A successor scene cannot begin until the outgoing ambient authority has closed.  This
         // is a correctness hand-off, not ordinary ambient work: it must not be starved behind
         // a previously sorted resident pursuing a local goal.  Process every currently
         // reserved exact identity first, then let the bounded ambient pass handle voluntary
         // movement and new admissions.  Each transfer remains durable and independently
         // validates its exact body before discard.
-        FrontierV3AmbientActorReservationHandoff.run(level, runtime, state);
+        FrontierV3AmbientActorReservationHandoff.run(level, runtime, state, admissionPolicy);
         state = runtime.decodedState().orElse(null);
         if (state == null) return;
         int admitted = 0;
@@ -129,7 +129,7 @@ final class FrontierV3AmbientActorExecutor {
         // the deterministic actor order, but never let a later actor make another physical
         // decision from the predecessor's stale snapshot.
         for (SubjectId actorId : state.actorLocations().keySet().stream().sorted().toList()) {
-            if (admitted >= MAX_ACTORS_PER_TICK) return;
+            if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
             var location = state.actorLocations().get(actorId);
@@ -167,7 +167,7 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
-            if (reservedActors(runtime, state).contains(actorId)) {
+            if (admissionPolicy.reserves(state, actorId)) {
                 // Reservation alone is not a hand-off: the successor scene is forbidden to
                 // overlap this HOT authority.  Capture this exact observed body first, close
                 // the ambient lease durably, and only then let the next scene turn materialize
@@ -762,9 +762,6 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3AmbientActorCaches.forget(runtime);
     }
 
-    private static java.util.Set<SubjectId> reservedActors(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
-        return FrontierV3AmbientActorCaches.reservedActors(runtime, state);
-    }
     private static FrontierSceneAdmission.GenericAmbientAdmission genericAmbientAdmission(FrontierV3ServerRuntime<?, ?> runtime,
                                                                                            FrontierWorldState state) {
         return FrontierV3AmbientActorCaches.genericAmbientAdmission(runtime, state);
