@@ -1,6 +1,6 @@
 # PM-F02C-AFTERMATH-SEAM-03: reconcile the real aftermath owner seam
 
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `SUPERSEDED_NEGATIVE`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Builder: `/root/terra_f02c_aftermath_seam`, fresh
 `gpt-5.6-terra`, reasoning `high`, in isolated worktree
 `/home/rd/proj/pm-f02c-aftermath-seam-03/pale-mirror` on branch
@@ -159,3 +159,38 @@ the engineer independently confirmed those exact task-owned processes gone.
   cheap-test acceptance boundary and the independent challenger prevented its
   promotion. Current cost is proportionate; no builder contact is warranted.
   Next economy boundary is `2026-09-10T11:00:18Z` if still executing.
+
+## FINAL_REVIEW correction 2 — `2026-09-10T10:12Z`
+
+Candidate `fb48c27f7e77e7b9348ef17c12b93a243c50730c`, parent `ad22af0f`,
+tree `9ccea6a881ce178f210d1a1e3f5cacffc2ad1a89`, is a clean private WIP
+checkpoint, not accepted F0.2C. It usefully changes `AIR + no claim` from
+terminal conflict to pending and advances the canonical assault epoch after a
+confirmed HOT receipt. The engineer and a fresh read-only challenger both
+found the same remaining P0 method failure:
+
+- the seam JUnit still only checks static registry ordering, constructs a HOT
+  lease/intent manually and calls COLD planning directly;
+- the new GameTest calls deferred aftermath directly and then installs foreign
+  material; it never executes bounded graybox projection plus aftermath through
+  the actual physical registry from an untouched ledger;
+- retained restart tests manually submit aftermath states and do not restart
+  the delayed-projector seam or confirmed HOT -> release -> COLD path;
+- wrong actor/epoch/mode controls compare generated IDs but do not fail through
+  the ordinary HOT executor/receipt path.
+
+The candidate therefore proves two component rules, not the production owner
+composition required by this order. This is the builder's second terminal
+semantic return. Under operating model v4 the context ends here; it must not
+resume. `PM-F02C-AFTERMATH-SEAM-04` is the fresh successor.
+
+Existing automation is partial and exact-input only. Core GameTest log records
+303/303 in 1.155 minutes; packaged JAR is
+`0a3a9963cfec2590d3e7ff3c826f47396a514f19d47db386e3a4fa52eb1d74e8`.
+The composed critical command then failed ordinary JVM persistence tests with
+`java.io.IOException: Disk quota exceeded`; no semantic assertion identifies a
+product failure. `/tmp` is a 30GiB `tmpfs` mounted with `usrquota`, currently
+24GiB used with approximately 25.8GB of user-owned logical files, while the
+project filesystem has 690GiB free. Native did not run. The successor uses a
+task-private project-filesystem temp root and a real write/fsync/rename/delete
+probe; it does not delete unrelated `/tmp` content.

@@ -4,7 +4,7 @@ Specification revision: <N>. Parent slice: <F0...>. Risk: <docs/small-code/criti
 Engineer: supervising root. Executor: gpt-5.6-terra, high.
 Active phase and acceptance owner: `CONTINUITY.md`.
 
-This template inherits `docs/engineering-agent-operating-model-v3.md`. New
+This template inherits `docs/engineering-agent-operating-model-v4.md`. New
 product slices use a fresh Terra context and isolated executor branch/worktree.
 Keep the order below 2,500 tokens where practical; after three substantive
 revisions, close/supersede it instead of appending a troubleshooting history.
@@ -49,6 +49,18 @@ Native/destructive/external operations outside that envelope need their actual
 authority; identify any such unresolved boundary explicitly. Specify what evidence may be reused
 and what must be fresh, plus source/spec/build identity and artifact paths.
 
+For every multi-owner or newly changed proof boundary, also declare the exact
+production composition, untouched initial control history, plausible defect,
+terminal oracle and negative/recovery mutation. If the preceding review rejected
+this same carrier/oracle as synthetic or non-faithful, mark a one-time read-only
+`METHOD_ADMISSION` challenger before any full/native/CI gate.
+
+Declare one task-private temp/evidence root and require an actual bounded
+write/fsync/atomic-rename/delete probe on each filesystem used by the gate.
+Free-space reports alone are not admission. State which exact-identity receipts
+may be composed so an infrastructure failure does not cause unaffected green
+leaves to be repeated.
+
 ## Review and execution permissions
 
 This order inherits the protocol's exhaustive intervention taxonomy. It MUST
@@ -73,6 +85,11 @@ metadata. It is not an hourly code review or executor heartbeat.
 - Final review (Gate C): one completed result and criterion-to-evidence packet;
   explicit ACCEPTED or consolidated evidence-backed findings. Terra selects
   corrections and verifies them without separate permission for each step.
+- Exception and terminal packets contain full checkpoint/HEAD/parent/tree,
+  clean state, changed paths, commands/durations/exits, first causal failure,
+  full hashes, claim mapping, unexecuted claims, resource probe and exact
+  process/job/port/display/world cleanup. A prefix-only or narrative packet is
+  `DELIVERY_INCOMPLETE`, never implied acceptance.
 - Heavy-run owner, world/port/display scope and safe stop/recovery procedure.
 - Commit/push/deploy authority, if any; default none for this individual order.
 - Engineer reviews stable deliveries and risk-selected independent evidence;

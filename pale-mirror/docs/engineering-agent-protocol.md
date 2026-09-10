@@ -3,8 +3,9 @@
 Status: accepted by the user on 2026-09-05; applies to ongoing Frontier v3 work.
 
 The slice lifecycle, workspace isolation, fresh-builder, owner-seam admission,
-challenger, evidence-receipt and context-budget rules in
-`engineering-agent-operating-model-v3.md` are binding. It supersedes v2; this
+method-risk/terminal challenger, composable evidence-receipt, resource-probe
+and context-budget rules in `engineering-agent-operating-model-v4.md` are
+binding. It supersedes v3; this
 file continues to own detailed intervention, liveness, economy and safety
 behavior.
 

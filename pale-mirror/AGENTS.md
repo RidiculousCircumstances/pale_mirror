@@ -80,11 +80,11 @@ implementation; release verification follows it.
 
 ### Managed engineer / executor workflow
 
-- `docs/engineering-agent-operating-model-v3.md` is the binding slice lifecycle.
-  It supersedes v2 and adds fresh successor contexts, private WIP checkpoints,
-  owner-seam admission and an independent read-only challenger for stable
-  critical-code candidates. The current shared F0.2C worktree may only produce
-  its transition checkpoint; every successor uses an isolated branch/worktree.
+- `docs/engineering-agent-operating-model-v4.md` is the binding slice lifecycle.
+  It supersedes v3 and adds method-risk admission before expensive evidence,
+  exact partial-receipt composition, real same-filesystem resource probes and
+  complete exception packets while preserving fresh successor contexts,
+  private WIP checkpoints and independent terminal challenge.
 
 - Binding 2026-09-06 anti-micromanagement rules in the protocol take precedence
   over older permission-only Gate A/B wording. Delegate diagnosis through full
