@@ -1,18 +1,15 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath;
 import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCell;
 import io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
-import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
-import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
@@ -20,18 +17,16 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.OptionalLong;
 
 /**
- * Focused production-seam evidence: this calls the lifecycle's complete physical turn on the
- * actual GameTest ServerLevel.  It deliberately makes no claim about player demand or restart.
+ * Focused production-seam evidence: an ordinary scheduled COLD combat action creates its own
+ * aftermath, then the lifecycle calls the complete physical registry on the actual GameTest
+ * ServerLevel. It deliberately makes no claim about natural player demand or restart.
  */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -39,27 +34,39 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
     private FrontierV3ProductionPhysicalTurnGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
-    public static void lifecyclePhysicalTurnUsesSavedDataAndFileBackedRuntimeWithoutOverwritingForeignMaterial(GameTestHelper helper) {
+    public static void lifecyclePhysicalTurnLeavesAnOrdinaryUnavailableColdAftermathPending(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos target = helper.absolutePos(new BlockPos(0, 8, 0));
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level, target);
-        DeferredAftermath aftermath = runtime.decodedState().orElseThrow().deferredAftermath().entries().values().iterator().next();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
         try {
-            level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
-            FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
-            DeferredAftermath conflicted = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
-            helper.assertValueEqual(conflicted.cellAt(0).status(), DeferredAftermathCellStatus.CONFLICTED,
-                    "the exact complete production turn classifies foreign material locally");
-            helper.assertTrue(level.getBlockState(target).is(Blocks.DIAMOND_BLOCK),
-                    "the production turn preserves foreign material rather than rewriting it");
+            FrontierWorldState before = runtime.decodedState().orElseThrow();
+            helper.assertTrue(before.deferredAftermath().entries().isEmpty(),
+                    "the fixture retains only the exact COLD combat precondition, not an aftermath");
+            helper.assertTrue(before.physicalDeltas().isEmpty(),
+                    "the fixture retains no preinstalled physical loss");
+
+            runtime.tick(new WorkBudget(64, 512)).orElseThrow();
+            DeferredAftermath aftermath = runtime.decodedState().orElseThrow().deferredAftermath().entries().values().iterator().next();
+            DeferredAftermathCell cell = aftermath.cellAt(0);
+            BlockPos target = new BlockPos(cell.position().x(), cell.position().y(), cell.position().z());
+            helper.assertValueEqual(cell.status(), DeferredAftermathCellStatus.PENDING,
+                    "the ordinary due action creates one pending COLD aftermath before physical ownership runs");
+            helper.assertTrue(!level.getChunkSource().hasChunk(target.getX() >> 4, target.getZ() >> 4),
+                    "the COLD target remains naturally unavailable to this GameTest turn");
             helper.assertTrue(FrontierV3GrayboxLedger.get(level).claim(target) == null,
-                    "foreign material receives no manufactured SavedData tombstone or adoption claim");
+                    "the real SavedData ledger begins untouched at the unavailable target");
+
+            FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
+            DeferredAftermath pending = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
+            helper.assertValueEqual(pending.cellAt(0).status(), DeferredAftermathCellStatus.PENDING,
+                    "the complete production registry leaves unavailable work pending without force-loading or replay");
+            helper.assertTrue(FrontierV3GrayboxLedger.get(level).claim(target) == null,
+                    "the complete production registry does not manufacture a tombstone before natural availability");
             helper.assertTrue(hasWal(level.getServer().getWorldPath(LevelResource.ROOT)),
-                    "the physical-turn command is durably appended below the disposable GameTest world root");
+                    "the ordinary due action is durably appended below the disposable GameTest world root");
             long revision = runtime.canonicalState().orElseThrow().revision().value();
             FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
             helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revision,
-                    "a terminal aftermath is idempotent through the complete registry");
+                    "a repeated unavailable physical turn does not manufacture an aftermath revision");
         } finally {
             FrontierV3GrayboxExecutor.forget(runtime);
             runtime.shutdown();
@@ -67,19 +74,10 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         helper.succeed();
     }
 
-    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level, BlockPos target) {
-        WorldId world = new WorldId("frontier:production-physical-turn-" + target.asLong());
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        FrontierWorldState initial = base.initialState(); SubjectId owner = initial.bootstrap().hive().id();
-        DeferredAftermath aftermath = new DeferredAftermath(new SubjectId("aftermath:production-physical-turn-" + target.asLong()), owner,
-                new SubjectId("bioform:production-physical-turn"), 0L, OptionalLong.empty(), "test:complete-physical-turn",
-                io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathKnowledge.KNOWN_CLEAR, 0L,
-                List.of(new DeferredAftermathCell(new BlockPosition(target.getX(), target.getY(), target.getZ()), owner, GrayboxMaterial.HALL,
-                        GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
-        FrontierWorldState prepared = initial.withChanges(FrontierWorldStateUpdate.begin().deferredAftermath(initial.deferredAftermath().prepare(aftermath)));
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), prepared,
-                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
-                List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level) {
+        WorldId world = new WorldId("frontier:production-physical-turn-" + level.getSeed());
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =
+                FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(world, 91L);
         FrontierStore store = new FrontierFileStore(level.getServer().getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
         return FrontierV3ServerRuntime.start(configuration, store, 10_000);
     }

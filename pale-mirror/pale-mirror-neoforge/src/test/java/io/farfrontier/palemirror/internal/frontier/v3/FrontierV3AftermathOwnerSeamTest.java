@@ -2,8 +2,10 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
@@ -34,11 +36,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Exercises the registered production owner algorithms from an unclaimed COLD loss. */
+/** Narrow component evidence for the aftermath owners; the real-level GameTest owns registry-seam evidence. */
 class FrontierV3AftermathOwnerSeamTest {
     @Test
     void ordinaryColdDueActionWaitsForItsRealBoundedProjectorBeforeDeferredAftermathResolves() {
         var base = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:aftermath-owner-seam"), 41L);
+        assertTrue(base.initialState().deferredAftermath().entries().isEmpty(), "the scheduled fixture begins with no aftermath history");
+        assertTrue(base.initialState().physicalDeltas().isEmpty(), "the scheduled fixture begins with no semantic-loss mask");
         var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(base);
         long dueAt = base.initialSchedules().getFirst().dueAt().ticks();
         engine.advanceTo(new SimInstant(dueAt), new WorkBudget(64, 512));
@@ -78,6 +82,24 @@ class FrontierV3AftermathOwnerSeamTest {
             FrontierV3AftermathOwnerComposition.tick(world, runtime);
             assertEquals(revision, runtime.canonicalState().orElseThrow().revision().value(), "terminal aftermath cannot resolve twice");
         } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
+    @Test
+    void wrongScheduledCombatIdentityCannotManufactureTheColdAftermath() {
+        var base = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:aftermath-owner-stale-action"), 41L);
+        ScheduledAction due = base.initialSchedules().getFirst();
+        ScheduledAction wrong = new ScheduledAction(new ScheduleId("schedule:settlement-assault-combat-wrong-identity"), due.dueAt(), due.priority(), due.subject(), due.kind(), due.weight());
+        var configuration = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(wrong),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(configuration);
+
+        engine.advanceTo(due.dueAt(), new WorkBudget(64, 512));
+
+        assertTrue(engine.canonicalState().state().deferredAftermath().entries().isEmpty(),
+                "a stale/wrong scheduled identity cannot create the exact COLD bomber cause");
+        assertTrue(engine.canonicalState().state().physicalDeltas().isEmpty(),
+                "a rejected scheduled action cannot manufacture the semantic loss either");
     }
 
     @Test

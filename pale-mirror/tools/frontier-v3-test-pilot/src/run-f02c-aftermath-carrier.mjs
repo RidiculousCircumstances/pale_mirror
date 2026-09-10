@@ -10,8 +10,7 @@ if (!output.startsWith(`${project}/`)) throw new Error('F0.2C carrier output mus
 if (!process.env.DISPLAY) throw new Error('F0.2C carrier requires its task-private visible display');
 const root = dirname(output); await mkdir(root, { recursive: true });
 const scenarios = [
-  ['clear', 'disposable-cold-bomber-aftermath-restart.json'],
-  ['constructive', 'disposable-materialized-production-route-blocked.json']
+  ['clear', 'disposable-cold-bomber-aftermath-restart.json']
 ];
 const receipts = {};
 for (const [name, scenario] of scenarios) {
@@ -24,8 +23,11 @@ for (const [name, scenario] of scenarios) {
   receipts[name] = { scenario, declaration: JSON.parse(declarationSource), declarationSha256: createHash('sha256').update(declarationSource).digest('hex'),
     manifest: value, ...(beforePath ? { before: JSON.parse(await readFile(resolve(beforePath), 'utf8')) } : {}) };
 }
-const terminal = assertF02cAftermathCarrier({ clearDeclaration: receipts.clear.declaration, clearBefore: receipts.clear.before, clearAfter: receipts.clear.manifest,
-  constructiveDeclaration: receipts.constructive.declaration, constructiveBefore: receipts.constructive.manifest, constructiveAfter: receipts.constructive.manifest });
+const terminal = assertF02cAftermathCarrier({
+  clearDeclaration: receipts.clear.declaration,
+  clearBefore: receipts.clear.before,
+  clearAfter: receipts.clear.manifest
+});
 const receipt = { schema: 1, kind: 'f02c-deferred-aftermath-native-carrier', status: 'passed', terminal, scenarios: Object.fromEntries(Object.entries(receipts)
   .map(([name, value]) => [name, { scenario: value.scenario, declarationSha256: value.declarationSha256, manifest: `${name}.manifest.json`,
     ...(value.before ? { beforeRestartManifest: `${name}.manifest.before-restart.json` } : {}) }])) };

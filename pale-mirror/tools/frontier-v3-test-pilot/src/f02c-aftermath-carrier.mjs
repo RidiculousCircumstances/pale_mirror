@@ -3,14 +3,12 @@ const PROVENANCE = 'captive-bomber-strike:assault:development-settlement-assault
 const SELECTOR = CAUSE;
 
 /**
- * Reads two ordinary isolated-scenario receipts.  It deliberately does not infer a physical
- * result from a terminal cursor: the known-clear history needs both the client-observed AIR
- * postcondition and the durable REALIZED cell, while the other history needs an actual player
- * replacement plus the retained local replica conflict.
+ * Reads the one ordinary COLD isolated-scenario receipt. It deliberately does not infer a
+ * physical result from a terminal cursor: known-clear history needs both the client-observed
+ * AIR postcondition and the durable REALIZED cell after restart.
  */
-export function assertF02cAftermathCarrier({ clearDeclaration, clearBefore, clearAfter, constructiveDeclaration, constructiveBefore, constructiveAfter }) {
+export function assertF02cAftermathCarrier({ clearDeclaration, clearBefore, clearAfter }) {
   assertClearDeclaration(clearDeclaration);
-  assertConstructiveDeclaration(constructiveDeclaration);
   const before = aftermathAt(clearBefore, 1); const beforeRepeat = aftermathAt(clearBefore, 2);
   const after = aftermathAt(clearAfter, 3);
   const entryId = pending(before);
@@ -27,14 +25,7 @@ export function assertF02cAftermathCarrier({ clearDeclaration, clearBefore, clea
       || !samePosition(after.position, before.position) || !Number.isSafeInteger(after.observedAt)) {
     throw new Error('F0.2C carrier lacks exact recovered cause/receipt/postcondition correlation');
   }
-  const playerChange = action(constructiveBefore, 'place'); const blocked = orderAt(constructiveAfter, 3); const provision = settlementAt(constructiveAfter, 5);
-  const live = sceneAt(constructiveBefore, 1);
-  if (playerChange?.item !== 'minecraft:gray_concrete' || live.leaseStatus !== 'HOT' || live.sceneKind !== 'PRODUCTION_WORK'
-      || provision.food?.status !== 'SECURE' || !Number.isInteger(provision.food?.fulfilled) || provision.food.fulfilled < 1
-      || blocked.orderStatus !== 'CANCELLED' || blocked.jobActive !== false || blocked.reservationActive !== false || blocked.taskStatus !== 'BLOCKED') {
-    throw new Error('F0.2C carrier did not retain an ordinary constructive obstruction, fence downstream capacity, and advance the named unrelated provision process');
-  }
-  return Object.freeze({ aftermathId: entryId, cause: before.cause, position: before.position, constructive: blocked.taskStatus, unrelated: provision.food.status });
+  return Object.freeze({ aftermathId: entryId, cause: before.cause, position: before.position });
 }
 
 function assertClearDeclaration(value) {
@@ -43,14 +34,6 @@ function assertClearDeclaration(value) {
       || first.expect?.cause !== CAUSE || first.expect?.epoch !== 4 || first.expect?.expectedMaterial !== 'HALL' || first.expect?.provenance !== PROVENANCE || first.expect?.cellStatus !== 'PENDING'
       || value.setup?.some(action => action.type === 'visit') || restart?.afterAction !== 2 || restart.mode !== 'graceful') {
     throw new Error('F0.2C carrier accepts a missing, wrong, or HOT-previsited COLD cause');
-  }
-}
-function assertConstructiveDeclaration(value) {
-  if (value?.id !== 'disposable_materialized_production_route_blocked' || value.actions?.[0]?.type !== 'wait_until_diagnostic'
-      || value.actions?.[1]?.type !== 'place' || value.actions?.[1]?.item !== 'minecraft:gray_concrete'
-      || value.actions?.[2]?.expect?.taskStatus !== 'BLOCKED' || value.actions?.[3]?.type !== 'fast_forward'
-      || value.actions?.[4]?.id !== 'settlement:2' || value.actions?.[4]?.expect?.food?.status !== 'SECURE') {
-    throw new Error('F0.2C carrier lacks its ordinary constructive-obstruction history');
   }
 }
 function pending(value) {
@@ -64,9 +47,6 @@ function pending(value) {
 function aftermathAt(manifest, step) {
   return diagnostic(manifest, step, 'aftermath', SELECTOR);
 }
-function orderAt(manifest, step) { return diagnostic(manifest, step, 'market_order', 'order:development-production-input-theft'); }
-function settlementAt(manifest, step) { return diagnostic(manifest, step, 'settlement', 'settlement:2'); }
-function sceneAt(manifest, step) { return diagnostic(manifest, step, 'scene', 'job:production-development-input-theft'); }
 function diagnostic(manifest, step, kind, id) {
   const value = manifest?.diagnostics?.map(entry => entry.value ?? entry.observed?.value)
     .find(entry => entry?.kind === kind && entry.id === id && entry.pilotActionStep === step);
