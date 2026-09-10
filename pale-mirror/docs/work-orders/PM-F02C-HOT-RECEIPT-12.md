@@ -1,8 +1,9 @@
 # PM-F02C-HOT-RECEIPT-12: close the three remaining HOT receipt seams
 
-Specification revision: 1. Status: `READY_FOR_FRESH_EXECUTOR`.
+Specification revision: 1. Status: `EXECUTING_METHOD_ADMISSION`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/terra_f02c_hot_receipt12`, fresh `gpt-5.6-terra`, reasoning
+`high`.
 
 This shortened successor inherits
 `docs/engineering-agent-operating-model-v4.md`. It owns one bounded HOT receipt,
