@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
 
-Specification revision: 3. Status: `BUILDING_TO_HOT_METHOD_READY`. Parent
+Specification revision: 4. Status: `SEAM_READY_PENDING_METHOD_CHALLENGE`. Parent
 slice: F0.2C. Risk: critical-code/native. Engineer: supervising root. Builder:
 `/root/terra_f02c_hot_receipt10`, one fresh `gpt-5.6-terra` with reasoning
 `high`. Baseline is the
@@ -128,3 +128,29 @@ heavy filesystem. No source commit is published or merged by this order.
 
 Observation epoch is `2026-09-10T14:56:37Z`. Ten-minute liveness and hourly
 economy audits remain binding while it executes.
+
+## HOT_METHOD_READY packet
+
+Builder `/root/terra_f02c_hot_receipt10` stopped at the required method
+boundary on clean private commit
+`d380dc46622069285a05a2bc1c26f618cc32acc8`, parent `9c24f74c`, tree
+`c77347d6f56cc73845f5a773c56cb4a193a7fd86`. The five-path delta is limited to
+scene selection fencing, retained CLOSED-receipt coexistence, read-only scene
+diagnostics and focused tests. Main independently matched the clean identity,
+path set and receipt hashes.
+
+Reported cheap evidence is 3/3 focused assault tests in 5 seconds, focused
+frontier/diagnostic tests in 2 minutes 24 seconds, the dedicated 64-test scene
+GameTest slice in 2 minutes 5 seconds, and a dependency-free declaration
+preflight. No complete critical gate, native client/server run, COLD or
+constructive scenario, CI/provider matrix, benchmark, terrain, deployment,
+push or merge ran. The task filesystem probes passed and no task process or
+listener remains. These are candidate method facts, not accepted HI claims.
+
+A fresh read-only challenger now owns one question: can the stable carrier and
+focused owner sequence actually falsify wrong cause/attacker/target/epoch,
+duplicate physical effect, missing epoch advancement, failed drain/release and
+restart replay while beginning before lease/intent manufacture? It must return
+one `METHOD_ADMITTED` or the smallest invariant-level rejection before any
+complete/native expense. The stopped builder has no further authority until
+that decision.
