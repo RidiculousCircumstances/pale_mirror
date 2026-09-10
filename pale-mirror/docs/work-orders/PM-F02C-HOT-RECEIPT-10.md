@@ -1,8 +1,9 @@
 # PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
 
-Specification revision: 2. Status: `FRAMED`. Parent slice: F0.2C. Risk:
-critical-code/native. Engineer: supervising root. Builder: one fresh
-`gpt-5.6-terra` with reasoning `high`, not yet assigned. Baseline is the
+Specification revision: 3. Status: `BUILDING_TO_HOT_METHOD_READY`. Parent
+slice: F0.2C. Risk: critical-code/native. Engineer: supervising root. Builder:
+`/root/terra_f02c_hot_receipt10`, one fresh `gpt-5.6-terra` with reasoning
+`high`. Baseline is the
 accepted COLD candidate
 `9c24f74ce2f34697ea9847902aa1bd6449d44057`, tree
 `521da2a83bcc94482d73c384f4d955fadd924e20`.
@@ -97,6 +98,8 @@ Revision 1 was specification-rejected before builder assignment because HI-2
 could be read as placing the target inside shared cause identity. Revision 2
 retains the accepted COLD tuple unchanged and fences the target only through
 the intent and observation. No implementation or evidence was invalidated.
+The same independent read-only specification reviewer returned
+`SPEC_ADMITTED` on revision 2 at governance `d9e9b676`; no source or test ran.
 
 After method admission, run a clean-HEAD critical gate only when final product
 or packaged-JAR inputs differ from the already accepted COLD candidate. If
@@ -116,11 +119,12 @@ services. Stop for new public/persistent meaning, a second authority, inability
 to exercise the real owner sequence without manufacturing it, or any required
 unbounded/destructive action.
 
-The builder owns one task-private worktree/branch from exact `9c24f74c`, one
-task-private temp/evidence root, all task processes/displays/ports/worlds and
-their cleanup. Before JVM/native work it must prove bounded create/write/fsync/
-atomic-rename/delete on every actual heavy filesystem. No source commit is
-published or merged by this order.
+The builder owns branch `terra/f02c-hot-receipt-10`, task-private worktree
+`/home/rd/proj/pm-f02c-hot-receipt-10` from exact `9c24f74c`, task-private
+temp/evidence root `/home/rd/proj/pm-f02c-hot-receipt-10-tmp`, all task
+processes/displays/ports/worlds and their cleanup. Before JVM/native work it
+must prove bounded create/write/fsync/atomic-rename/delete on every actual
+heavy filesystem. No source commit is published or merged by this order.
 
-Observation epoch is recorded when the builder starts. Ten-minute liveness and
-hourly economy audits remain binding while it executes.
+Observation epoch is `2026-09-10T14:56:37Z`. Ten-minute liveness and hourly
+economy audits remain binding while it executes.
