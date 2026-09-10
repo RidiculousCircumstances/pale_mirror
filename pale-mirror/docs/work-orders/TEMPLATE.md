@@ -63,6 +63,9 @@ Declare required test outcomes and mandatory gates. Executor selects and records
 exact commands within the grant. Define the complete local verification
 envelope here, including mandatory full gates, sole heavy owner, permitted
 disposable paths and resource limits. Grant it once, not before each command.
+For every added or modified test, require an exact retained discovery/execution
+marker (test or unique batch identity and count); an aggregate green total alone
+is not evidence that the changed method executed.
 Native/destructive/external operations outside that envelope need their actual
 authority; identify any such unresolved boundary explicitly. Specify what evidence may be reused
 and what must be fresh, plus source/spec/build identity and artifact paths.

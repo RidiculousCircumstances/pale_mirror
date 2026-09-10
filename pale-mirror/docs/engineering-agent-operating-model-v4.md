@@ -144,6 +144,11 @@ Every receipt binds exact commit/tree, relevant content identity, command/task,
 start/end or elapsed time, exit, result counts, artifact hashes, evidence path
 and process cleanup. A green subtask remains valid for the same immutable
 candidate unless its inputs were changed or concrete evidence contradicts it.
+An aggregate green count does not prove a changed test ran. A receipt for a
+new or modified test must retain a target-specific discovery/execution marker
+(exact test or unique batch identity and count) and compare it with the prior
+selection when that selection can change. A missing target, reduced count or
+namespace/filter mismatch is a failed method, not a smaller green suite.
 
 When a composed gate fails after an earlier leaf completed, classify the first
 failure and retain the completed leaf. After an infrastructure correction on

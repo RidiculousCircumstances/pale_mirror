@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-12: close the three remaining HOT receipt seams
 
-Specification revision: 2. Status: `METHOD_CORRECTION_EXECUTING`.
+Specification revision: 3. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_receipt12`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -125,3 +125,29 @@ SHA-256; the R5 claimed GameTest log hash was not resolvable and the retained
 `latest.log` instead hashes to
 `28428550ce2281cb354b810a6db344c22709dfccd7d97a70f78def834a01f40c`.
 No full/native/CI work is authorized. A rejected R6 closes this builder context.
+
+## R6 terminal method decision
+
+R6 is `METHOD_REJECTED_CONTEXT_CLOSED` at clean private checkpoint
+`0b3f409efe3a9634027e9ce9fe9076181efe8952`, parent `1e856847`, tree
+`1d7586f36e89396e419c65be6398ddfdb1885509`. Exact observed `kind/id` ownership
+and its one-field negatives are accepted, as are compact receipt custody and the
+source-level `[10,7,9]` bounds assertions. Two proof failures remain:
+
+- the changed scene-strike GameTest did not execute. Its annotation changed to
+  template namespace `pale_mirror_visuals`, while the focused run enables only
+  `pale_mirror,minecraft`. Actual log SHA-256
+  `71a49ccb68f66b8906a7a3e1bb89a9c5738211d2f821fd231e459f0071a66769`
+  reports 63/63 and contains no `pm-frontier-v3-scene-strikes` batch; R5's
+  retained log had that one-test batch and 64/64. The green receipt therefore
+  cannot support its bounds/health execution claim.
+- lifecycle validation requires both checkpoint tuples somewhere in the
+  journal but does not bind them to opposite sides of restart. Swapping the
+  complete detail objects for the action-2 and action-6 checkpoint records
+  still passes; scenario-segment phase labels are also unchecked.
+
+No full/native/CI work ran and no task-owned process remains. Receipt hashes
+`b982622e09b5895f517fe902ae32b60426123526ecf48cec85e02dec0dc9475f`
+and `e7f6621b67374a8d6a4c7eaef329eb8a897df5bf5dd0689bded25ccf44522c53`
+resolve under the named task root. This builder may perform no further work;
+order 13 inherits its clean bytes and only the two open method outcomes.
