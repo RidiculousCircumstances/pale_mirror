@@ -1,7 +1,8 @@
 # PM-F02C-AFTERMATH-SEAM-04: prove the production aftermath owner composition
 
-Status: `FRAMED`. Parent slice: F0.2C. Risk: critical-code/native.
-Engineer: supervising root. Builder: fresh `gpt-5.6-terra`, reasoning `high`,
+Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Engineer: supervising root. Builder: `/root/terra_f02c_aftermath_seam2`, fresh
+`gpt-5.6-terra`, reasoning `high`,
 in isolated worktree `/home/rd/proj/pm-f02c-aftermath-seam-04/pale-mirror` on
 branch `work/f02c-aftermath-seam-04` from private WIP checkpoint
 `fb48c27f7e77e7b9348ef17c12b93a243c50730c`.
@@ -99,5 +100,5 @@ unbounded design, proof substitution or inability to exercise the real seam
 cheaply. A repeated proof-category failure returns an architecture/method
 boundary rather than another implementation loop.
 
-Observation epoch: assigned when the fresh builder starts. Ten-minute liveness
-and hourly economy rules remain binding while `EXECUTING`.
+Observation epoch: `2026-09-10T10:21:06Z`. First economy-audit boundary:
+`2026-09-10T11:21:06Z` if still executing. Ten-minute liveness remains binding.
