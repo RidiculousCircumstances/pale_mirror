@@ -1,7 +1,7 @@
 # PM-F02C-COLD-AFTERMATH-06: close the ordinary COLD destruction history
 
 Specification revision: 1.
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `METHOD_REJECTED`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Executor: `/root/terra_f02c_cold_aftermath07`, one
 fresh `gpt-5.6-terra` with reasoning `high`, in a fresh isolated worktree from
 private checkpoint `26dd00c78102f9db16cd5c93f68962d296e4ee64`, tree
@@ -122,3 +122,30 @@ permits intermediate source review or a heartbeat.
 
 Observation epoch: `2026-09-10T11:52:35Z`. First economy-audit boundary:
 `2026-09-10T12:52:35Z` if still executing.
+
+## Terminal method review
+
+The builder returned `COLD_PATH_READY` at clean private commit
+`4e4bafa7ef38520133221b1aa4cdf0f02921967c`, tree
+`e5314b7f14a0c3698738b78dbb8d1d09675ddd03`, parent `26dd00c7`.
+Focused execution remained proportionate: Node 2/2 in 0.2 seconds, the assault
+process 10/10 in 1.757 seconds, the owner seam 3/3 in 10 seconds and the scene
+GameTest slice 64/64 in 3 minutes 7 seconds. No complete critical, native or CI
+run occurred.
+
+Independent method challenge accepts CA-1 as ordinary scheduled-action
+component evidence and CA-2 as a faithful real-`ServerLevel` lifecycle/complete-
+registry seam. It rejects CA-3 and the native portion of CA-4. The native
+carrier correlates aftermath ID, cause, epoch, provenance, material, position,
+status and AIR, but ignores already emitted `expectedOwner`, `expectedPart`
+and checkpoint `revision` facts. It also has no separately observed recovered-
+PENDING receipt before natural availability. A replaced owner/semantic part or
+invalid pre-restart/recovered/terminal revision history can therefore pass with
+the same AIR endpoint. Manifest-shape mutations do not discriminate those
+missing causal fences.
+
+This rejection is terminal for `/root/terra_f02c_cold_aftermath07`. CA-1 and
+CA-2 receipts remain reusable on the immutable candidate. Do not rerun their
+focused JVM/GameTest evidence merely to obtain a new console. The successor
+order owns only the missing causal/revision oracle and the one still-unexecuted
+product-valued native history.
