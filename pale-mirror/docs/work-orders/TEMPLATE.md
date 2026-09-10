@@ -22,6 +22,10 @@ revisions, close/supersede it instead of appending a troubleshooting history.
 - List the exact files/sections the builder must read, the accepted facts and
   reusable receipt identities it must not rediscover, and only the remaining
   claims it owns.
+- Spell out every critical external-artifact fact and accepted reference
+  contract on which the outcome depends, with an exact evidence handle and
+  symbol/assertion shape. A commit or document pointer alone is insufficient
+  when missing one field, bound or dimension can reproduce the rejected class.
 - For a successor, name the clean inherited checkpoint, predecessor terminal
   state and process cleanup. Historical orders/logs remain references rather
   than startup context unless one unresolved fact explicitly requires them.

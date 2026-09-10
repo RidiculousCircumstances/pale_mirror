@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-12: close the three remaining HOT receipt seams
 
-Specification revision: 1. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 2. Status: `METHOD_CORRECTION_EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_receipt12`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -41,9 +41,10 @@ three gaps:
    current-cause intent through the real consumer and observe fail-closed,
    non-adoption behavior; comparing ID strings alone is insufficient.
 2. The component physical test keeps every block write, entity and observation
-   inside the actual tiny `bastion/mobs/empty` template interior. It retains the
-   independent real-health before/after oracle and its explicitly component-only
-   claim.
+   inside its authoritative owned template/envelope. The tiny
+   `bastion/mobs/empty` template may be used only if the entire fixture truly
+   fits its decoded bounds. The test retains the independent real-health
+   before/after oracle and its explicitly component-only claim.
 3. The native semantic consumer validates the actual persistent runner's final
    manifest: exact declaration/build/run/lifecycle identity and exactly one
    declaration-bound `{assertion, observed}` record for every pre-restart,
@@ -83,3 +84,44 @@ maximum; a second rejection closes this context.
 Observation epoch: `2026-09-10T17:07:21Z`; first economy audit is due at
 `2026-09-10T18:07:21Z` if execution remains active. Ten-minute liveness audits
 apply only during executor silence.
+
+## R5 method decision and sole correction
+
+`HOT_METHOD_READY_R5` is `METHOD_REJECTED` at clean private checkpoint
+`1e8568474167dd1e49c39b8de4c6657ff41d6143`, parent `2139f55c`, tree
+`b0c20f9734ca4fe94f1e4b3f1ab7765a7d438694`. The exact framed domain binding,
+real-consumer foreign-lease rejection, independent actual-health oracle and
+production final-manifest wrapper are reusable. No full critical, native or CI
+work ran.
+
+This is the one allowed consolidated semantic correction in this context:
+
+1. The authoritative Minecraft 1.21.1 asset
+   `data/minecraft/structure/bastion/mobs/empty.nbt` in the cached client JAR has
+   decoded `size=[1,1,1]`. R5 still places multiple bodies and writes at relative
+   Y 7/8/9, outside that cell. The corrected component proof must use an actually
+   owned template/envelope large enough for the whole fixture and demonstrate
+   that every entity, block write and observation is within its authoritative
+   bounds. Its claim remains component-only.
+2. Match the accepted COLD consumer's `sameIdentity` contract, specifically its
+   observed payload ownership check: every bound HOT scene observation must
+   itself have `kind=scene` and `id=assault:development-settlement-assault`.
+   Copying declaration expectation fields is not identity. One-field foreign
+   `kind` and foreign `id` mutations must fail the production-shaped consumer.
+3. Ordered barrier names are not sufficient lifecycle-slot association. The
+   retained final manifest must bind the pre-restart checkpoint/segment to
+   action 2 and the post-restart checkpoint/segment to action 6. A one-field
+   wrong action step or wrong before/after segment label must fail the same
+   consumer. Reuse the existing lifecycle validator; do not create a second
+   lifecycle schema or general identity framework.
+
+The existing manifest-build-to-lifecycle hash, distinct precommitted outer
+attempt/client run roles and final-manifest digest follow the already accepted
+COLD proof boundary and need no new external identity mechanism. Return
+`HOT_METHOD_READY_R6` after only the smallest changed Node/mutation and scene
+GameTest lanes. Retain each compact receipt at a literal path under the named
+task-private root and report that path plus its full independently resolvable
+SHA-256; the R5 claimed GameTest log hash was not resolvable and the retained
+`latest.log` instead hashes to
+`28428550ce2281cb354b810a6db344c22709dfccd7d97a70f78def834a01f40c`.
+No full/native/CI work is authorized. A rejected R6 closes this builder context.

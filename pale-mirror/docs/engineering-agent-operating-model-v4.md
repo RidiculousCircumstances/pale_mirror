@@ -72,6 +72,13 @@ mutate the candidate or make the engineer a hidden second coder.
   sections; reusable receipt identities; and the still-open outcomes,
   exclusions and stop conditions. Historical orders and raw logs are references
   to inspect only when the active order names an unresolved fact from them.
+- Do not make a critical inherited constraint depend on a vague pointer such as
+  "reuse the prior approach". When correctness depends on an authoritative
+  artifact property or an accepted reference contract, the packet records the
+  exact fact and its evidence handle (for example path/hash/dimensions), and
+  names the exact symbol or assertion shape that must remain equivalent. Keep
+  this to the minimum facts needed for the outcome; it is not permission to
+  copy predecessor reasoning or prescribe the implementation.
 - A successor inherits bytes and machine evidence through one clean private
   checkpoint, not the predecessor's reasoning. Its order states which facts are
   accepted and must not be rediscovered, which claims remain open, and which
