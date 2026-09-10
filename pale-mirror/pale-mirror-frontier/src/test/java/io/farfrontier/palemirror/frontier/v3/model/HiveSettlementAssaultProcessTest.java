@@ -318,6 +318,39 @@ class HiveSettlementAssaultProcessTest {
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
+    @Test void coldProgressUsesTheBoundedDurableAssaultOwnerSetBeforeTheSelectorCompilesItsProvider() {
+        Fixture fixture = fixture(true);
+        FrontierWorldState state = fixture.state();
+        for (Bioform bioform : state.bootstrap().hive().bioforms().stream()
+                .filter(value -> value.isDefender() || value.isExplosiveAssaulter()).toList()) {
+            state = FrontierTestPositions.deployBioform(state, bioform.id(),
+                    BodyPosition.above(new SurfaceAnchor(fixture.sighting().settlementAnchor().offset(-1, 0, 0))));
+        }
+        List<ProposedEvent> start = HiveSettlementAssaultProcess.planStart(state,
+                HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
+        state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
+        ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
+        ScheduledAction terminal = null;
+
+        for (int step = 0; step < 256; step++) {
+            List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
+            for (ProposedEvent event : events) {
+                if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
+                if (event.payload() instanceof SettlementAssaultTransition transition) state = HiveSettlementAssaultProcess.reduceTransition(state, fixture.hive(), transition);
+            }
+            terminal = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+            if (state.strategicPlans().settlementAssaults().get(next.subject()).status() == SettlementAssaultStatus.COLD_COMBAT) break;
+            next = terminal;
+        }
+
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        assertEquals(SettlementAssaultStatus.COLD_COMBAT, assault.status());
+        assertEquals(1, state.strategicPlans().settlementAssaults().size(), "the COLD driver reads its one bounded durable owner");
+        assertEquals("frontier.settlement_assault.combat", terminal.kind(), "COLD progress preserves the ordinary registered combat owner");
+    }
+
     @Test void hotAndColdAssaultViewsDeriveOneExactStrikeCauseWithoutModeSpecificAliases() {
         SubjectId assault = new SubjectId("assault:shared-cause");
         SubjectId attacker = new SubjectId("bioform:shared-bomber");

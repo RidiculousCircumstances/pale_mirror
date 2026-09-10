@@ -256,10 +256,28 @@ public final class FrontierSceneAdmission {
                 && operation.participantIds().contains(actorId))
                 || state.strategicPlans().routeEngagements().values().stream().anyMatch(engagement -> engagement.status() != RouteEngagementStatus.RESOLVED
                 && engagement.attackerIds().contains(actorId))
-                || state.strategicPlans().settlementAssaults().values().stream().anyMatch(assault -> !assault.id().equals(assaultId)
-                && assault.status() != SettlementAssaultStatus.RESOLVED && assault.attackerIds().contains(actorId))
-                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId))
-                || state.coldSettlementAssaultSceneCandidates().stream().anyMatch(candidate -> !candidate.assaultId().equals(assaultId)
-                && candidate.memberPositions().containsKey(actorId));
+                || otherActiveSettlementAssaultOwns(state, actorId, assaultId)
+                || state.coldEngagementSceneCandidates().stream().anyMatch(candidate -> candidate.actorIds().contains(actorId));
+    }
+
+    /**
+     * COLD progression reads the durable owner set, not a freshly compiled physical candidate.
+     * Every nonterminal assault retains its complete exact roster, and the strategic-plan map
+     * is bounded at construction.  Recompiling a loss-masked provider here would make each
+     * member's ordinary due-action eligibility pay an unbounded projection cost before the
+     * registered scene selector gets its one provider derivation.
+     */
+    private static boolean otherActiveSettlementAssaultOwns(FrontierWorldState state, SubjectId actorId, SubjectId assaultId) {
+        int inspected = 0;
+        for (SettlementAssault assault : state.strategicPlans().settlementAssaults().values()) {
+            if (++inspected > StrategicPlanState.MAX_SETTLEMENT_ASSAULTS) {
+                throw new IllegalStateException("settlement-assault ownership bound exhausted");
+            }
+            if (!assault.id().equals(assaultId) && assault.status() != SettlementAssaultStatus.RESOLVED
+                    && (assault.attackerIds().contains(actorId) || assault.defenderIds().contains(actorId))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
