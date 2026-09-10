@@ -1,8 +1,9 @@
 # PM-F02C-HOT-GATE-CORRECTION-16: restore the diagnostic structure ratchet
 
-Specification revision: 1. Status: `READY_ASSIGNMENT`.
+Specification revision: 2. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/terra_f02c_hot_gate16`, fresh `gpt-5.6-terra`, reasoning
+`high`.
 
 This successor inherits `docs/engineering-agent-operating-model-v4.md` and the
 accepted method/resource/component evidence named by order15. It receives a
@@ -60,3 +61,8 @@ Use branch `terra/f02c-hot-gate-correction-16`, worktree
 `/home/rd/proj/pm-f02c-hot-gate-correction-16-tmp`. Preserve order15's worktree
 and evidence. Own and stop only task-created processes; do not touch the live
 port25565 service or unrelated host state.
+
+Execution assigned at `2026-09-10T18:51:48Z` from the exact clean baseline and
+isolated custody paths above. The first ten-minute liveness audit is due at
+`2026-09-10T19:01:48Z` after silence; the first economy audit is due at
+`2026-09-10T19:51:48Z` if execution remains active.
