@@ -1,8 +1,9 @@
 # PM-F02C-HOT-FLOOR-CONTRACT-17: make every assault floor physically serviceable
 
-Specification revision: 1. Status: `READY_ASSIGNMENT`.
+Specification revision: 2. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/terra_f02c_hot_floor17`, fresh `gpt-5.6-terra`, reasoning
+`high`.
 
 This successor inherits `docs/engineering-agent-operating-model-v4.md`. Start
 from exact clean private checkpoint
@@ -74,3 +75,7 @@ deployment or v2 work. Preserve unrelated services and all predecessor evidence.
 Use branch `terra/f02c-hot-floor-contract-17`, worktree
 `/home/rd/proj/pm-f02c-hot-floor-contract-17` and task-private root
 `/home/rd/proj/pm-f02c-hot-floor-contract-17-tmp`.
+
+Execution assigned at `2026-09-10T19:35:01Z` from the exact clean baseline and
+isolated custody paths above. First liveness audit is due at `19:45:01Z` after
+silence; first economy audit is due at `20:35:01Z` if execution remains active.
