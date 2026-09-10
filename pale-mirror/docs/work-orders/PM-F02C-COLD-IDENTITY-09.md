@@ -1,11 +1,13 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
-Specification revision: 2.
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
-Engineer: supervising root. Executor: `/root/terra_f02c_cold_identity10`, one
-fresh `gpt-5.6-terra` with reasoning `high`, from checkpoint:
-`1c8bd3df6cb075f48341c780b9e900d7637905b5`, tree
-`32d0ea378f9a2bac9cea2e9627fe78fbc60b4152`, parent `bf6d01b3`.
+Specification revision: 3.
+Status: `CORRECTION_EXECUTING`. Parent slice: F0.2C. Risk:
+critical-code/native. Engineer: supervising root. Executors through
+`/root/terra_f02c_cold_identity10` are terminal. The sole successor is
+`/root/terra_f02c_cold_identity11`, one fresh `gpt-5.6-terra` with reasoning
+`high`, from private WIP checkpoint
+`9bbb6be41ef8ce0bc865e5ec92fece91f12dd791`, tree
+`4d41c76c3978fef55a95d2502cecb967851d2dc3`, parent `1c8bd3df`.
 
 This order inherits `docs/engineering-agent-operating-model-v4.md`. It fixes the
 remaining identity hole before another implementation context is allowed. It
@@ -107,28 +109,62 @@ the existing producer emits both role-labelled identities and every required
 source/build/assertion field, while the new precommitted outer attempt closes
 replay without a time assumption or Minecraft execution.
 
-The assigned fresh Terra then implements only CI-1--CI-4 and returns
-`COLD_IDENTITY_READY` with exact identity, changed paths, the production
-producer/consumer map, focused one-defect matrix, commands/durations/receipts,
-and unexecuted critical/native carrier. It must not run JVM/GameTest, critical,
-native or CI before a separate fresh read-only `METHOD_ADMISSION` event.
+Revision 2 implementation at `9bbb6be4` is `METHOD_REJECTED`, without rejecting
+its static identity design or any product behavior. The focused 4/4 receipt
+does not fail if the wrapper's real child-environment injection is removed,
+does not mutate the manifest's `scenarioDeclarationSha256`, and never invokes
+the production terminal-receipt construction. It therefore cannot yet prove
+CI-1, CI-2 or CI-4 even though CI-3 and the statically inspected role separation
+are sound. No JVM, GameTest, critical, native or CI work ran; all earlier
+receipts remain applicable.
+
+Revision 3 is the final bounded method correction. The successor must close
+only these three discriminators:
+
+- one otherwise-valid manifest changes only
+  `scenarioDeclarationSha256` and is rejected;
+- one no-Minecraft runner-shaped test crosses the actual production wrapper
+  child-environment seam and the isolated supervisor's attempt
+  validation/retention seam, so removing the wrapper injection fails;
+- that same bounded production path invokes the actual terminal-receipt
+  construction and verifies the final-manifest digest plus both role-labelled
+  run identities and lifecycle session/nonce.
+
+The builder chooses representation, helper boundaries and test mechanics. It
+must reuse the current identities, validation and receipts, and may refactor
+the production orchestration seam only as needed to make the real composition
+exercisable. It must not add an identity field, schema, semantic assertion,
+scenario action, Java/Minecraft behavior or broader framework. It must not run
+JVM, GameTest, critical, native, CI or a general Node suite. Existing focused
+evidence is reused; execute only the smallest changed focused Node lane plus
+syntax/diff checks. Attach the detached checkpoint to a private task branch as
+repository hygiene without re-running evidence solely for that attachment.
+
+Return `COLD_IDENTITY_READY_R3` with exact identity, changed paths, the three
+discriminators, command/duration/receipt and all heavier work explicitly
+unexecuted. One fresh read-only `METHOD_ADMISSION` then decides whether the
+existing carrier is fit for expense. A new conceptual proof category after
+this correction stops the carrier for engineer redesign or narrower claim; it
+does not authorize another automatic identity/oracle expansion.
 
 After method admission, exactly one clean-HEAD critical gate and one targeted
 native flow are permitted. Any negative returns to independent product review;
 no automatic rerun or further proof implementation begins.
 
-The executor uses fresh worktree `/home/rd/proj/pm-f02c-cold-identity-09` and
-only `/home/rd/proj/pm-f02c-cold-identity-09-tmp` for task-private evidence. It
+The successor uses fresh worktree
+`/home/rd/proj/pm-f02c-cold-identity-09-r3` and only
+`/home/rd/proj/pm-f02c-cold-identity-09-r3-tmp` for task-private evidence. It
 proves bounded create/write/fsync/atomic-rename/delete before work, owns every
 task process and leaves the unrelated listener on port 25565 and all
 predecessor roots untouched.
 
 ## Delivery and supervision
 
-The executor returns only `COLD_IDENTITY_READY`, a named exception or a complete
-terminal packet. Supervision remains event-driven: one liveness check after ten
-minutes of silence and one economy audit per full hour; neither inspects WIP.
+The executor returns only `COLD_IDENTITY_READY_R3`, a named exception or a
+complete terminal packet. Supervision remains event-driven: one liveness check
+after ten minutes of silence and one economy audit per full hour; neither
+inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
-epoch: `2026-09-10T13:08:10Z`; first economy-audit boundary:
-`2026-09-10T14:08:10Z` if still executing.
+epoch for revision 3: `2026-09-10T13:28:55Z`; first economy-audit boundary:
+`2026-09-10T14:28:55Z` if still executing.
