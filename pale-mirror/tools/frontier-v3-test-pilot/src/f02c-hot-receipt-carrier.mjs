@@ -104,11 +104,36 @@ function assertPersistentTopology(manifest, declaration) {
     if (current < 0 || current <= previous) throw new Error('F0.2C HOT carrier lifecycle is incomplete or misordered');
     previous = current;
   }
-  const checkpoints = records.filter(record => record.barrier === 'action_checkpoint_acknowledged');
-  if (checkpoints.length !== 2
-      || !oneCheckpoint(checkpoints, 2, 'before_restart')
-      || !oneCheckpoint(checkpoints, 6, 'after_restart')) {
-    throw new Error('F0.2C HOT carrier lifecycle does not bind its pre-restart action 2 and post-restart action 6 checkpoints');
+  assertHotRestartPhaseTrace(records);
+}
+
+// The shared journal validator deliberately owns generic identity, sequence and transition
+// validity.  This carrier alone owns which acknowledged actions and completed segments belong
+// on either side of its graceful restart; searching for matching tuples globally would permit
+// those phase details to be exchanged without changing the generic lifecycle shape.
+function assertHotRestartPhaseTrace(records) {
+  const checkpointBefore = exactlyOne(records, 'action_checkpoint_acknowledged', record => record.detail?.actionStep === 2 && record.detail?.segment === 'before_restart');
+  const completeBefore = exactlyOne(records, 'scenario_segment_complete', record => record.detail?.segment === 'before_restart');
+  const disconnected = exactlyOne(records, 'client_normally_disconnected', record => record.detail?.segment === 'before_restart');
+  const saved = exactlyOne(records, 'durable_server_save');
+  const portClosed = exactlyOne(records, 'game_port_closed');
+  const recoveryReady = exactlyOne(records, 'recovery_server_ready');
+  const reconnected = exactlyOne(records, 'same_client_reconnected_state_cleared');
+  const checkpointAfter = exactlyOne(records, 'action_checkpoint_acknowledged', record => record.detail?.actionStep === 6 && record.detail?.segment === 'after_restart');
+  const completeAfter = exactlyOne(records, 'scenario_segment_complete', record => record.detail?.segment === 'after_restart');
+  const terminal = exactlyOne(records, 'terminal_assertion_complete');
+  if (records.filter(record => record.barrier === 'action_checkpoint_acknowledged').length !== 2
+      || records.filter(record => record.barrier === 'scenario_segment_complete').length !== 2
+      || !(checkpointBefore.sequence < completeBefore.sequence
+        && completeBefore.sequence < disconnected.sequence
+        && disconnected.sequence < saved.sequence
+        && saved.sequence < portClosed.sequence
+        && portClosed.sequence < recoveryReady.sequence
+        && recoveryReady.sequence < reconnected.sequence
+        && reconnected.sequence < checkpointAfter.sequence
+        && checkpointAfter.sequence < completeAfter.sequence
+        && completeAfter.sequence < terminal.sequence)) {
+    throw new Error('F0.2C HOT carrier lifecycle does not bind one exact ordered before_restart/after_restart phase trace');
   }
 }
 
@@ -124,8 +149,10 @@ function assertionObservation(manifest, declaration, phase) {
   return records[0].observed.value;
 }
 
-function oneCheckpoint(records, actionStep, segment) {
-  return records.filter(record => record.detail?.actionStep === actionStep && record.detail?.segment === segment).length === 1;
+function exactlyOne(records, barrier, predicate = () => true) {
+  const matches = records.filter(record => record.barrier === barrier && predicate(record));
+  if (matches.length !== 1) throw new Error('F0.2C HOT carrier lifecycle does not bind one exact ordered before_restart/after_restart phase trace');
+  return matches[0];
 }
 
 function sceneExpectation(value, leaseStatus) {

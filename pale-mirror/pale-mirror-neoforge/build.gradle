@@ -205,13 +205,13 @@ neoForge {
         }
         frontierV3SceneGameTestServer {
             type = 'gameTestServer'
-            // The template stays in the minecraft namespace, so namespace filtering alone
-            // cannot select PM v3 tests. The opt-in mixin filters only the final GameTest
-            // collection passed to the dedicated test server; regular servers and the full
-            // GameTest gate keep the complete collection unchanged.
+            // The strike template is data/pale_mirror_visuals while its scene test is registered
+            // by pale_mirror. This dedicated run builds the visual resource source set and
+            // enables both namespaces; its opt-in mixin still filters only the final scene
+            // collection, leaving regular servers and the full GameTest gate unchanged.
             gameDirectory = frontierV3SceneGameTestDirectory
             systemProperty 'neoforge.enabledGameTestNamespaces',
-                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft'
+                    rootProject.providers.gradleProperty('mod_id').get() + ',minecraft,pale_mirror_visuals'
             systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'scene'
         }
         frontierV3EconomyGameTestServer {
@@ -537,6 +537,9 @@ tasks.named('runFrontierV3SceneGameTestServer') {
     // without this edge a source edit could leave native/GameTest v3 runs executing a stale
     // dependency artifact.
     dependsOn project(':pale-mirror-frontier').tasks.named('jar')
+    // ModDev receives the Visuals source set through pale_mirror; make its data namespace
+    // concrete before the scene server resolves pale_mirror_visuals:temperate/residence_1.
+    dependsOn project(':pale-mirror-visuals').tasks.named('processResources')
     doFirst {
         frontierV3SceneGameTestDirectory.deleteDir()
     }

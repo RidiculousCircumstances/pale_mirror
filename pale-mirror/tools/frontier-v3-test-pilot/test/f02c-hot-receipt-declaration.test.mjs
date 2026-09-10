@@ -66,7 +66,11 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.actions[3].correlation = `scenario:${clientRunId}:3`; },
     value => { value.manifest.recovery.clientSession.runId = clientRunId; },
     value => { value.manifest.lifecycle[3].detail.actionStep = 3; },
-    value => { value.manifest.lifecycle[10].detail.segment = 'before_restart'; }
+    value => { value.manifest.lifecycle[10].detail.segment = 'before_restart'; },
+    value => { [value.manifest.lifecycle[3].detail, value.manifest.lifecycle[10].detail] = [value.manifest.lifecycle[10].detail, value.manifest.lifecycle[3].detail]; },
+    value => { value.manifest.lifecycle[4].detail.segment = 'after_restart'; },
+    value => { value.manifest.lifecycle[11].detail.segment = 'before_restart'; },
+    value => { value.manifest.lifecycle.splice(12, 0, structuredClone(value.manifest.lifecycle[11])); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); }
   ]) {
     const value = envelope(); mutate(value); value.manifestSource = Buffer.from(`${JSON.stringify(value.manifest)}\n`);
     assert.throws(() => preflightF02cHotReceiptCarrier(value), /F0\.2C HOT carrier|lifecycle barrier/);
