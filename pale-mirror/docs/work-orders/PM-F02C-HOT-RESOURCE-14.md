@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RESOURCE-14: make the focused HOT structure effective
 
-Specification revision: 3. Status: `FINAL_REVIEW_CORRECTION`.
+Specification revision: 4. Status: `ACCEPTED_HOT_COMPONENT`.
 Parent slice: F0.2C. Risk: critical-code/GameTest harness. Engineer:
 supervising root. Executor: `/root/terra_f02c_hot_resource14`, fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -104,3 +104,34 @@ After this one bounded correction, rerun only the cheap provenance task and the
 focused scene GameTest because its effective input composition changed. Reuse
 Node and all other receipts; no full/native/CI. Return a clean
 `HOT_RESOURCE_READY_R9` or a genuine exception.
+
+## R9 acceptance
+
+R9 is independently accepted at clean private commit
+`a360d9b092b217334d9c589c6040e4ea355d8cd9`, parent `06aa49d8`, tree
+`2018399005ddb663c48b9d82fd11bfbb4050f6f9`. Its only correction path is
+`pale-mirror-neoforge/build.gradle`; the complete order14 delta is the declared
+three paths.
+
+The ordinary `pale_mirror` logical mod again retains the exact six pre-R8
+source sets including Visuals, every non-scene run loads only that logical mod,
+and only the focused scene run additionally loads `pale_mirror_scene_test`.
+The cheap gate now checks this composition and exact source/copied NBT
+provenance without parsing GameTest implementation text. Receipt
+`r9-resource-provenance.log` has SHA-256
+`afe42f5cbe478e99122ce1c784a2df9b7f5bb39406705387404620c46aa3c322`
+and passed in5.69s.
+
+The fresh focused log has SHA-256
+`b198ecebe0b5045225003fe5e028f0679e7d0a586a9a9d853c93469632bbc9be`:
+it registers the test-only mod, selects64 tests, runs
+`pm-frontier-v3-scene-strikes:0` as one test, passes64/64 and saves all
+dimensions before a successful49.18s exit. The runtime GameTest itself owns the
+`[10,7,9]` bounds and independent health observation assertions. No task-owned
+process remains.
+
+This accepts the effective-resource boundary and scoped HOT component receipt
+only. It does not prove natural player demand, a real restart/native carrier,
+full-gate compatibility, product comprehension or F0.2C completion. Node
+carrier evidence remains reused rather than re-executed. No full/native/CI,
+publication or deployment occurred.
