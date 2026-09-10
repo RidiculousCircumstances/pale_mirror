@@ -12,7 +12,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.HumanAssignmentProjection;
@@ -38,17 +37,10 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenance;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
-import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementProvision;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
-import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalEvacuationOperation;
-import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.process.EngineeringEquipmentProcess;
 
 import java.util.Objects;
@@ -145,7 +137,7 @@ final class FrontierV3DiagnosticJson {
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
             case "aftermath" -> aftermath(id, checkpoint, state);
             case "medical" -> medical(id, checkpoint, state);
-            case "scene" -> scene(id, checkpoint, state, sceneReadiness);
+            case "scene" -> FrontierV3SceneDiagnosticJson.render(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             case "transit" -> transit(id, checkpoint, state);
@@ -769,152 +761,6 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"expectedPart\":\"" + cell.expectedPart() + "\",\"authorityRevision\":" + cell.authorityRevision() + "}";
     }
 
-    /** One stable typed-scene view for player-piloted physical-scene evidence. */
-    private static String scene(String id, CheckpointImage checkpoint, FrontierWorldState state,
-                                Optional<FrontierV3SceneReadiness.Value> readiness) {
-        SubjectId sceneSubject = subject(id).orElse(null);
-        if (sceneSubject == null) return unavailable("scene", id, checkpoint, "not_found");
-        var lease = currentLease(state, sceneSubject);
-        if (lease == null) return unavailable("scene", id, checkpoint, "not_found");
-        LogisticsSceneCause logistics = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isLogistics(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease) : null;
-        SettlementAssaultSceneCause assault = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.settlementAssault(lease) : null;
-        EngineeringWorkSceneCause engineering = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isEngineeringWorksite(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.engineeringWorksite(lease) : null;
-        MedicalTreatmentSceneCause medical = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isMedicalTreatment(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.medicalTreatment(lease) : null;
-        var harvest = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isResourceSiteHarvest(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.resourceSiteHarvest(lease) : null;
-        var production = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isProductionWork(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.productionWork(lease) : null;
-        var service = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isServiceWork(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.serviceWork(lease) : null;
-        var routePatrol = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isRoutePatrol(lease)
-                ? io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.routePatrol(lease) : null;
-        ProductionJob productionJob = production == null ? null : state.productionJobs().get(production.jobId());
-        var serviceWork = service == null ? null : state.serviceWorks().get(service.workId());
-        var patrol = routePatrol == null ? null : state.strategicPlans().routePatrols().get(routePatrol.taskId());
-        SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
-        var primaryMember = lease.members().getFirst();
-        PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
-                .filter(value -> engagement != null && value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
-                .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
-        SubjectId strikeCause = logistics != null ? logistics.operationId() : assault != null ? assault.assaultId() : null;
-        SettlementAssault assaultState = assault == null ? null : state.strategicPlans().settlementAssaults().get(assault.assaultId());
-        PhysicalIntent strike = strikeCause == null ? null : logistics != null ? state.physicalIntents().values().stream()
-                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
-                .filter(value -> value.causeSubjectId().equals(strikeCause)).sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null)
-                : currentAssaultStrike(state, assaultState);
-        long strikeEpoch = strike == null || assaultState == null ? -1L : SettlementAssaultCauseIdentity.epoch(assaultState.id(), strike.causeSubjectId());
-        SceneStrikeObservation receipt = strike == null ? null : strike.postconditionObservationId().map(state.physicalObservations()::get)
-                .filter(SceneStrikeObservation.class::isInstance).map(SceneStrikeObservation.class::cast).orElse(null);
-        boolean exactReceipt = receipt != null && receipt.intentId().equals(strike.id()) && receipt.attackerId().equals(strike.subjectIds().getFirst())
-                && receipt.targetId().equals(strike.subjectIds().getLast());
-        boolean healthChanged = exactReceipt && receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0;
-        String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
-                + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
-        return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
-                + "\",\"leaseStatus\":\"" + lease.status() + "\",\"sceneKind\":\"" + (logistics != null ? "LOGISTICS" : assault != null ? "SETTLEMENT_ASSAULT"
-                : engineering != null ? "ENGINEERING_WORKSITE" : medical != null ? "MEDICAL_TREATMENT" : harvest != null ? "RESOURCE_SITE_HARVEST"
-                : production != null ? "PRODUCTION_WORK" : service != null ? "SETTLEMENT_SERVICE_WORK" : routePatrol != null ? "ROUTE_PATROL" : "UNKNOWN")
-                + "\",\"operation\":\"" + quote(logistics == null ? "" : logistics.operationId().value())
-                + "\",\"assault\":\"" + quote(assault == null ? "" : assault.assaultId().value())
-                + "\",\"project\":\"" + quote(engineering == null ? "" : engineering.projectId().value())
-                + "\",\"medical\":\"" + quote(medical == null ? "" : medical.operationId().value())
-                + "\",\"harvestJob\":\"" + quote(harvest == null ? "" : harvest.jobId().value())
-                + "\",\"productionJob\":\"" + quote(production == null ? "" : production.jobId().value())
-                + "\",\"patrolTask\":\"" + quote(routePatrol == null ? "" : routePatrol.taskId().value())
-                + "\"" + productionTraversal(productionJob) + serviceTraversal(serviceWork) + patrolTraversal(patrol)
-                + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
-                + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
-                + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
-                + ",\"strikeCause\":\"" + quote(strike == null ? "" : strike.causeSubjectId().value())
-                + "\",\"strikeAttacker\":\"" + quote(strike == null ? "" : strike.subjectIds().getFirst().value())
-                + "\",\"strikeTarget\":\"" + quote(strike == null ? "" : strike.subjectIds().getLast().value())
-                + "\",\"strikeIntent\":\"" + quote(strike == null ? "" : strike.id().value())
-                + "\",\"strikeReceipt\":\"" + quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
-                + ",\"strikeEpoch\":" + strikeEpoch + ",\"nextStrikeEpoch\":" + (assaultState == null ? -1 : assaultState.nextStrikeEpoch())
-                + ",\"assaultStatus\":\"" + (assaultState == null ? "" : assaultState.status()) + "\""
-                + ",\"strikeReceiptExact\":" + exactReceipt + ",\"strikeHealthChanged\":" + healthChanged
-                + ",\"strikeHealthBefore\":" + (receipt == null ? -1 : receipt.targetHealthBefore().raw())
-                + ",\"strikeHealthAfter\":" + (receipt == null ? -1 : receipt.targetHealthAfter().raw())
-                + ",\"coldContinuationAvailable\":" + (assaultState != null && assaultState.status() == io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus.COLD_COMBAT
-                        && state.coldSettlementAssaultSceneCandidates().stream().anyMatch(value -> value.assaultId().equals(assaultState.id())))
-                + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
-    }
-
-    /** The retained production edge and one future body make an obstruction reproducible without selecting an actor. */
-    private static String productionTraversal(ProductionJob job) {
-        if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null,\"productionNextBody\":null,\"productionFutureBody\":null";
-        var corridor = job.workTraversal().linearCorridorSurfaces();
-        String next = job.traversalCursor() + 1 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 1).support());
-        String nextBody = job.traversalCursor() + 1 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 1).standingBody());
-        String futureBody = job.traversalCursor() + 2 >= corridor.size() ? "null" : position(corridor.get(job.traversalCursor() + 2).standingBody());
-        return ",\"productionStage\":\"" + job.workProgress().stage() + "\",\"productionCursor\":" + job.traversalCursor()
-                + ",\"productionCurrent\":" + position(corridor.get(job.traversalCursor()).support()) + ",\"productionNext\":" + next
-                + ",\"productionNextBody\":" + nextBody + ",\"productionFutureBody\":" + futureBody;
-    }
-
-    /** The service cursor is diagnostic-only: it exposes the persisted station, never replans it. */
-    private static String serviceTraversal(io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWork work) {
-        if (work == null) return ",\"serviceWork\":\"\",\"servicePhase\":\"\",\"serviceCurrent\":null,\"serviceNext\":null,\"serviceInputCursor\":-1,\"serviceInputNodes\":0,\"serviceWorkCursor\":-1,\"serviceWorkNodes\":0,\"serviceTarget\":\"\"";
-        var current = io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
-        boolean input = work.phase() == io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWorkPhase.PREPARED
-                || work.phase() == io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWorkPhase.APPROACH_INPUT
-                || work.phase() == io.farfrontier.palemirror.frontier.v3.model.SettlementServiceWorkPhase.INPUT_ISSUE_PENDING;
-        var corridor = input ? work.inputTraversal().linearCorridorSurfaces() : work.workTraversal().linearCorridorSurfaces();
-        int cursor = input ? work.inputTraversalCursor() : work.workTraversalCursor();
-        String next = cursor + 1 >= corridor.size() ? "null" : position(corridor.get(cursor + 1).support());
-        return ",\"serviceWork\":\"" + quote(work.id().value()) + "\",\"servicePhase\":\"" + work.phase()
-                + "\",\"serviceCurrent\":" + position(current.support()) + ",\"serviceNext\":" + next
-                + ",\"serviceInputCursor\":" + work.inputTraversalCursor() + ",\"serviceInputNodes\":" + work.inputTraversal().linearCorridorSurfaces().size()
-                + ",\"serviceWorkCursor\":" + work.workTraversalCursor() + ",\"serviceWorkNodes\":" + work.workTraversal().linearCorridorSurfaces().size()
-                + ",\"serviceTarget\":\"" + quote(work.target().toString()) + "\"";
-    }
-
-    /** Read-only next-edge evidence for a class-D patrol; it never selects or moves a resident. */
-    private static String patrolTraversal(io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
-        if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
-        var bodies = io.farfrontier.palemirror.frontier.v3.model.FrontierRoutePatrolSceneSupport.bodies(patrol);
-        var leader = bodies.get(patrol.guardId());
-        java.util.List<io.farfrontier.palemirror.frontier.v3.api.SubjectId> safe = patrol.safeAdvances();
-        io.farfrontier.palemirror.frontier.v3.model.BodyPosition nextBody = safe.isEmpty() ? null
-                : io.farfrontier.palemirror.frontier.v3.model.FrontierRoutePatrolSceneSupport.bodies(patrol.advance(safe.getFirst())).get(safe.getFirst());
-        return ",\"patrolStatus\":\"" + patrol.status() + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
-                + ",\"patrolCurrent\":" + position(leader.supportingSurface().support())
-                + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : position(nextBody.supportingSurface().support()))
-                + ",\"patrolNextBody\":" + (nextBody == null ? "null" : position(nextBody));
-    }
-
-    /** Diagnostic selection is pure and cannot make the standalone formatter load Minecraft classes. */
-    private static io.farfrontier.palemirror.frontier.v3.model.SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {
-        return state.sceneLeases().values().stream()
-                .filter(lease -> io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.owns(lease, sceneSubject))
-                .max(java.util.Comparator.comparingInt((io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) ->
-                                lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? 0 : 1)
-                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::handoffInstant)
-                        .thenComparingLong(io.farfrontier.palemirror.frontier.v3.model.SceneLease::revision)
-                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::id))
-                .orElse(null);
-    }
-
-    /** Selects the in-flight epoch, or else the most recent retained confirmed assault receipt. */
-    private static PhysicalIntent currentAssaultStrike(FrontierWorldState state, SettlementAssault assault) {
-        if (assault == null) return null;
-        return state.physicalIntents().values().stream()
-                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
-                .filter(value -> SettlementAssaultCauseIdentity.belongsTo(assault.id(), value.causeSubjectId()))
-                .max(java.util.Comparator.comparingLong((PhysicalIntent value) -> SettlementAssaultCauseIdentity.epoch(assault.id(), value.causeSubjectId()))
-                        .thenComparing(PhysicalIntent::id)).orElse(null);
-    }
-
-    private static String sceneReadiness(FrontierV3SceneReadiness.Value value) {
-        return ",\"physicalReadiness\":{\"bodies\":\"" + quote(value.bodies()) + "\",\"carrier\":\"" + quote(value.carrier())
-                + "\",\"serviceDemand\":\"" + quote(value.serviceDemand()) + "\",\"serviceMotion\":\"" + quote(value.serviceMotion())
-                + "\",\"serviceInput\":\"" + quote(value.serviceInput()) + "\",\"members\":" + strings(value.members()) + "}";
-    }
-
     private static String intent(String id, CheckpointImage checkpoint, FrontierWorldState state,
                                  Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness,
                                  Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness,
@@ -958,6 +804,18 @@ final class FrontierV3DiagnosticJson {
                 + ",\"precondition\":\"" + value.precondition() + "\"}";
     }
 
+    /** Selects a current lease for every diagnostic view without granting any lease authority. */
+    private static io.farfrontier.palemirror.frontier.v3.model.SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {
+        return state.sceneLeases().values().stream()
+                .filter(lease -> io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.owns(lease, sceneSubject))
+                .max(java.util.Comparator.comparingInt((io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) ->
+                                lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? 0 : 1)
+                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::handoffInstant)
+                        .thenComparingLong(io.farfrontier.palemirror.frontier.v3.model.SceneLease::revision)
+                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::id))
+                .orElse(null);
+    }
+
     private static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
         if (trace.isEmpty()) return unavailable("trace", id, checkpoint, "not_found");
         FrontierV3DiagnosticTrace.Entry entry = trace.orElseThrow();
@@ -973,11 +831,11 @@ final class FrontierV3DiagnosticJson {
                 + quote(context.leaseId()) + "\",\"cargo\":\"" + quote(context.cargoId()) + "\",\"actors\":" + strings(context.actorIds()) + "}";
     }
 
-    private static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {
+    static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {
         return base(kind, id, checkpoint) + ",\"status\":\"" + quote(status) + "\"}";
     }
 
-    private static String base(String kind, String id, CheckpointImage checkpoint) {
+    static String base(String kind, String id, CheckpointImage checkpoint) {
         return "{\"schema\":1,\"kind\":\"" + quote(kind) + "\",\"id\":\"" + quote(id) + "\",\"world\":\""
                 + quote(checkpoint.worldId().value()) + "\",\"revision\":" + checkpoint.revision().value() + ",\"instant\":" + checkpoint.instant().ticks();
     }
@@ -996,13 +854,13 @@ final class FrontierV3DiagnosticJson {
     private static Optional<Bioform> bioform(FrontierWorldState state, SubjectId id) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream()).filter(value -> value.id().equals(id)).findFirst();
     }
-    private static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
-    private static String position(BodyPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    static String position(BlockPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
+    static String position(BodyPosition position) { return "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}"; }
     private static String nullablePosition(BlockPosition position) { return position == null ? "null" : position(position); }
     private static String nullablePosition(FrontierV3AmbientActorExecutor.ObservedPosition position) {
         return position == null ? "null" : "{\"x\":" + position.x() + ",\"y\":" + position.y() + ",\"z\":" + position.z() + "}";
     }
-    private static String strings(java.util.List<String> values) { return values.stream().map(value -> "\"" + quote(value) + "\"").reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]"); }
+    static String strings(java.util.List<String> values) { return values.stream().map(value -> "\"" + quote(value) + "\"").reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]"); }
     private static String custody(InventoryCustody custody) {
         return switch (custody) {
             case InventoryCustody.ContainerSlot slot -> "{\"kind\":\"CONTAINER_SLOT\",\"container\":\"" + quote(slot.containerId().value()) + "\",\"slot\":" + slot.slot() + "}";
@@ -1012,5 +870,5 @@ final class FrontierV3DiagnosticJson {
             case InventoryCustody.Actor actor -> "{\"kind\":\"ACTOR\",\"actor\":\"" + quote(actor.actorId().value()) + "\"}";
         };
     }
-    private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
+    static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
 }

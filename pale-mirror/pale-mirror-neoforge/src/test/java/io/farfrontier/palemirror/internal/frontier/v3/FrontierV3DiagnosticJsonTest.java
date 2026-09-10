@@ -501,7 +501,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId firstAttacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
         SubjectId firstTarget = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
         SubjectId firstCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), firstAttacker, 0L);
-        var firstIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:diagnostic-assault-old"),
+        var firstIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(state, firstLease, firstCause),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 firstCause, List.of(firstAttacker, firstTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
@@ -527,7 +527,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId secondAttacker = assault.defenderIds().stream().sorted().skip(1L % assault.defenderIds().size()).findFirst().orElseThrow();
         SubjectId secondTarget = assault.combatantAttackerIds().stream().sorted().skip(1L % assault.combatantAttackerIds().size()).findFirst().orElseThrow();
         SubjectId secondCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), secondAttacker, 1L);
-        var secondIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:diagnostic-assault-current"),
+        var secondIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(state, secondLease, secondCause),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 secondCause, List.of(secondAttacker, secondTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
@@ -538,8 +538,10 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(scene.contains("\"strikeEpoch\":1") && scene.contains("\"strikeStatus\":\"PREPARED\"")
                         && scene.contains("\"strikeCause\":\"" + secondCause.value() + "\"")
+                        && scene.contains("\"strikeIntent\":\"" + secondIntent.id().value() + "\"")
+                        && scene.contains("\"strikeReceipt\":\"\"")
                         && scene.contains("\"strikeReceiptExact\":false"),
-                "a newer in-flight assault epoch must eclipse an older retained confirmed receipt in the declaration oracle");
+                "a newer in-flight assault epoch must retain its own exact intent and empty receipt slot rather than borrowing an older receipt");
         runtime.shutdown();
     }
 

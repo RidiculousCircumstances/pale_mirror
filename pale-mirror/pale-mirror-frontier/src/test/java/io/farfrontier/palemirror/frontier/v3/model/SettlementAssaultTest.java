@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -85,14 +84,14 @@ class SettlementAssaultTest {
         List<SubjectId> targets = assault.defenderIds().stream().sorted().toList();
         SubjectId attacker = attackers.getFirst(), target = targets.getFirst();
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
-        PhysicalIntent intent = strike("correct", cause, attacker, target);
+        PhysicalIntent intent = strike(state, lease, cause, attacker, target);
         FrontierWorldState hot = state;
-        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike("wrong-attacker",
+        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike(hot, lease,
                 SettlementAssaultCauseIdentity.strike(assault.id(), attackers.getLast(), assault.nextStrikeEpoch()), attackers.getLast(), target)),
                 "a lease member who is not the COLD-selected attacker must not manufacture a HOT cause");
         if (targets.size() > 1) {
             SubjectId wrongTarget = targets.getLast();
-            assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike("wrong-target", cause, attacker, wrongTarget)),
+            assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike(hot, lease, cause, attacker, wrongTarget)),
                     "the shared cause must not make the target interchangeable inside the HOT lease");
         }
 
@@ -103,7 +102,7 @@ class SettlementAssaultTest {
         assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
                 "one exact confirmed HOT receipt advances the retained COLD epoch once");
         FrontierWorldState confirmed = state;
-        assertThrows(IllegalArgumentException.class, () -> confirmed.preparePhysicalIntent(strike("replay", cause, attacker, target)),
+        assertThrows(IllegalArgumentException.class, () -> confirmed.preparePhysicalIntent(strike(confirmed, lease, cause, attacker, target)),
                 "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
 
         FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
@@ -130,15 +129,15 @@ class SettlementAssaultTest {
         SubjectId nextAttacker = nextAttackers.get(Math.floorMod(1, nextAttackers.size()));
         SubjectId nextTarget = nextTargets.get(Math.floorMod(1, nextTargets.size()));
         SubjectId nextCause = SettlementAssaultCauseIdentity.strike(assault.id(), nextAttacker, 1);
-        assertThrows(IllegalArgumentException.class, () -> nextHot.preparePhysicalIntent(strike("released-replay", cause, attacker, target)),
+        assertThrows(IllegalArgumentException.class, () -> nextHot.preparePhysicalIntent(strike(nextHot, lease, cause, attacker, target)),
                 "release must not make the prior confirmed epoch replayable");
-        PhysicalIntent nextIntent = strike("next", nextCause, nextAttacker, nextTarget);
+        PhysicalIntent nextIntent = strike(nextHot, nextLease, nextCause, nextAttacker, nextTarget);
         assertEquals(PhysicalIntentStatus.PREPARED, nextHot.preparePhysicalIntent(nextIntent).physicalIntents().get(nextIntent.id()).status(),
                 "the released COLD assault admits only its next exact epoch");
     }
 
-    private static PhysicalIntent strike(String suffix, SubjectId cause, SubjectId attacker, SubjectId target) {
-        return new PhysicalIntent(new PhysicalIntentId("intent:hot-receipt-" + suffix), PhysicalIntentKind.SCENE_STRIKE,
+    private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {
+        return new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
     }
