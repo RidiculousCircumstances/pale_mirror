@@ -1,9 +1,9 @@
 # PM-F02C-HOT-PERIMETER-18: retain a serviceable assault perimeter
 
-Specification revision: 1. Status: `FRAMED`.
+Specification revision: 2. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: fresh `gpt-5.6-terra`, reasoning `high`, assigned only after custody
-is created.
+Executor: `/root/terra_f02c_hot_perimeter18`, fresh `gpt-5.6-terra`, reasoning
+`high`.
 
 This fresh successor inherits `docs/engineering-agent-operating-model-v4.md`.
 Start from exact clean private checkpoint
@@ -93,3 +93,7 @@ deployment or v2 work. Preserve unrelated services and predecessor evidence.
 Use branch `terra/f02c-hot-perimeter-18`, worktree
 `/home/rd/proj/pm-f02c-hot-perimeter-18` and task-private root
 `/home/rd/proj/pm-f02c-hot-perimeter-18-tmp`.
+
+Execution assigned at `2026-09-10T20:19:43Z` after exact clean custody was
+verified. First bounded liveness audit is due at `20:29:43Z` after silence;
+first economy audit is due at `21:19:43Z` if execution remains active.
