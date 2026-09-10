@@ -1,6 +1,6 @@
 # PM-F02C-SHARED-ASSAULT-STALL-24: bound the shared assault fixture path
 
-Specification revision: 1. Status: `CHECKPOINTED_READY`.
+Specification revision: 2. Status: `METHOD_REJECTED_CORRECTION_AUTHORIZED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`.
 
@@ -90,3 +90,49 @@ created from the baseline at `2026-09-10T23:17:20Z`. The liveness clock begins
 at the direct assignment event; inspect it only after ten complete minutes of
 silence. The first economy audit is due after one hour if execution remains
 active.
+
+## First method review and sole correction
+
+Candidate `e5284b782c68af29319e7c11ba75947421dc0254`, parent
+`90eafbb08de7ef3a0192ad3725601992e29d959c`, tree
+`24326cc32cf5d13068aa204898634b6fffe13339`, is clean. Its captured stacks
+faithfully establish the expensive chain from COLD defender eligibility through
+`coldSettlementAssaultSceneCandidates` and `FrontierGrayboxPlan.compile` into
+route-surface construction. The code change is useful and no semantic
+weakening, owner duplication or identity/cause/loss drift was found. All three
+current one-test XML hashes match and no task-owned process remains.
+
+The method is nevertheless rejected because the new regression is not
+defect-sensitive. It reaches COLD_COMBAT under a 256-step test loop but never
+observes provider derivations or a result that differs under candidate-derived
+ownership. Restoring the old per-member physical-candidate compilation can
+eventually produce the same assertions, so elapsed completion is still the
+effective oracle. The packet also omitted one successful catalog-only command
+from its chronological command list; the final packet must enumerate every
+attempt, including reused or superseded focused evidence.
+
+Return the same Terra for one final focused method correction only. Preserve
+the useful production result unless a faithful seam requires a smaller
+coherent adjustment. The corrected production-wiring discriminator must prove
+both of these observable facts without time:
+
+1. COLD ownership eligibility performs zero physical-provider/battlefield
+   candidate derivations before the registered selector boundary; a plausible
+   reintroduction of the old candidate-derived check must produce a nonzero
+   count or otherwise fail deterministically.
+2. An exact defender retained by another non-RESOLVED settlement assault is
+   unavailable to the current assault even when that other assault has no
+   currently admissible physical scene candidate. The canonical owner, not
+   contingent physical geometry, decides exclusivity.
+
+Exercise the real `HiveSettlementAssaultProcess` progression/eligibility call
+chain; a direct test-only helper, static source assertion, elapsed deadline or
+preinstalled answer is rejected. Terra owns the seam and test design. Retain
+the map's existing construction bound and exact roster/status semantics. Run
+only the corrected focused discriminator. Reuse the current catalog and
+foreign-material XML receipts if their relevant production inputs remain
+unchanged; rerun a named leaf once only if the correction invalidates it. No
+new reproduction, stack capture, aggregate/full test, GameTest, package,
+native, CI or publication. Commit the coherent correction, return one amended
+`METHOD_ADMISSION` packet and stop. A second method rejection closes this
+builder context.
