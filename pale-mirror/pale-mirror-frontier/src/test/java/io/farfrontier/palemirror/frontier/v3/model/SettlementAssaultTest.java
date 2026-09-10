@@ -1,8 +1,20 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -12,6 +24,7 @@ import java.io.DataOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -50,6 +63,84 @@ class SettlementAssaultTest {
                 new SubjectId("bioform:west-0"),
                 List.of(new SettlementAssaultAttacker(new SubjectId("bioform:west-0"), List.of(new BlockPosition(0, 64, 0), sighting().settlementAnchor()), 0)),
                 List.of(new SubjectId("resident:1-1")), SettlementAssaultStatus.RESOLVED, 0, Optional.empty()));
+    }
+
+    @Test void hotReceiptUsesTheColdSelectedBodiesAndSurvivesReleaseAndCodecRecovery() {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(
+                new WorldId("frontier:hot-receipt-selection"), 91L);
+        FrontierWorldState state = fixture.state();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        SettlementAssaultSceneCandidate candidate = state.coldSettlementAssaultSceneCandidates().stream()
+                .filter(value -> value.assaultId().equals(assault.id())).findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:hot-receipt-selection");
+        WorldId worldId = state.bootstrap().worldId();
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
+        SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(),
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 7L,
+                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+
+        List<SubjectId> attackers = assault.combatantAttackerIds().stream().sorted().toList();
+        List<SubjectId> targets = assault.defenderIds().stream().sorted().toList();
+        SubjectId attacker = attackers.getFirst(), target = targets.getFirst();
+        SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
+        PhysicalIntent intent = strike("correct", cause, attacker, target);
+        FrontierWorldState hot = state;
+        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike("wrong-attacker",
+                SettlementAssaultCauseIdentity.strike(assault.id(), attackers.getLast(), assault.nextStrikeEpoch()), attackers.getLast(), target)),
+                "a lease member who is not the COLD-selected attacker must not manufacture a HOT cause");
+        if (targets.size() > 1) {
+            SubjectId wrongTarget = targets.getLast();
+            assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike("wrong-target", cause, attacker, wrongTarget)),
+                    "the shared cause must not make the target interchangeable inside the HOT lease");
+        }
+
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-selection"), intent.id(), attacker, target,
+                FixedScalar.whole(20), FixedScalar.whole(18));
+        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
+                "one exact confirmed HOT receipt advances the retained COLD epoch once");
+        FrontierWorldState confirmed = state;
+        assertThrows(IllegalArgumentException.class, () -> confirmed.preparePhysicalIntent(strike("replay", cause, attacker, target)),
+                "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
+
+        FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        state = draining.releaseSceneLease(leaseId, members.stream()
+                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
+                        draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        FrontierWorldState restored = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
+        assertEquals(SettlementAssaultStatus.COLD_COMBAT, restored.strategicPlans().settlementAssaults().get(assault.id()).status());
+        assertEquals(1, restored.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch());
+        assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
+        assertEquals(observation, restored.physicalObservations().get(observation.id()));
+
+        SettlementAssaultSceneCandidate nextCandidate = restored.coldSettlementAssaultSceneCandidates().stream()
+                .filter(value -> value.assaultId().equals(assault.id())).findFirst().orElseThrow();
+        List<SceneMember> nextMembers = nextCandidate.memberPositions().keySet().stream().sorted()
+                .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
+        SceneLeaseId nextLeaseId = new SceneLeaseId("lease:hot-receipt-next");
+        SceneLease nextLease = SceneLease.forCause(nextLeaseId, worldId,
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), nextCandidate.handoffPosition(), fixture.instant(), 8L,
+                SceneLeaseStatus.PREPARED, nextMembers, SceneLease.bodiesAboveSupportCells(nextCandidate.memberPositions()), Set.of(), Optional.empty());
+        FrontierWorldState nextHot = restored.prepareSceneLease(nextLease).transitionSceneLease(nextLeaseId, SceneLeaseStatus.HOT);
+        List<SubjectId> nextAttackers = assault.defenderIds().stream().sorted().toList();
+        List<SubjectId> nextTargets = assault.combatantAttackerIds().stream().sorted().toList();
+        SubjectId nextAttacker = nextAttackers.get(Math.floorMod(1, nextAttackers.size()));
+        SubjectId nextTarget = nextTargets.get(Math.floorMod(1, nextTargets.size()));
+        SubjectId nextCause = SettlementAssaultCauseIdentity.strike(assault.id(), nextAttacker, 1);
+        assertThrows(IllegalArgumentException.class, () -> nextHot.preparePhysicalIntent(strike("released-replay", cause, attacker, target)),
+                "release must not make the prior confirmed epoch replayable");
+        PhysicalIntent nextIntent = strike("next", nextCause, nextAttacker, nextTarget);
+        assertEquals(PhysicalIntentStatus.PREPARED, nextHot.preparePhysicalIntent(nextIntent).physicalIntents().get(nextIntent.id()).status(),
+                "the released COLD assault admits only its next exact epoch");
+    }
+
+    private static PhysicalIntent strike(String suffix, SubjectId cause, SubjectId attacker, SubjectId target) {
+        return new PhysicalIntent(new PhysicalIntentId("intent:hot-receipt-" + suffix), PhysicalIntentKind.SCENE_STRIKE,
+                PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
     }
 
     private static SettlementAssault assault(StrategicTask task, List<SubjectId> attackers, List<SubjectId> defenders) {

@@ -471,7 +471,9 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(scene.contains("\"status\":\"ok\"") && scene.contains("\"sceneKind\":\"SETTLEMENT_ASSAULT\""));
         assertTrue(scene.contains("\"operation\":\"\"") && scene.contains("\"assault\":\"" + candidate.assaultId().value() + "\""));
-        assertTrue(scene.contains("\"strikeStatus\":\"NONE\"") && scene.contains("\"carrier\":\"NOT_APPLICABLE\"") == false,
+        assertTrue(scene.contains("\"strikeStatus\":\"NONE\"") && scene.contains("\"strikeCause\":\"\"")
+                        && scene.contains("\"strikeAttacker\":\"\"") && scene.contains("\"strikeTarget\":\"\"")
+                        && scene.contains("\"carrier\":\"NOT_APPLICABLE\"") == false,
                 "the pure formatter preserves typed scene facts without querying a cargo carrier");
         runtime.shutdown();
     }

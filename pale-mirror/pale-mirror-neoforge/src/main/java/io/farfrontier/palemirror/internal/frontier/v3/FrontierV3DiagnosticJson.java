@@ -800,7 +800,9 @@ final class FrontierV3DiagnosticJson {
         SubjectId strikeCause = logistics != null ? logistics.operationId() : assault != null ? assault.assaultId() : null;
         PhysicalIntent strike = strikeCause == null ? null : state.physicalIntents().values().stream()
                 .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
-                .filter(value -> value.causeSubjectId().equals(strikeCause)).sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
+                .filter(value -> logistics != null ? value.causeSubjectId().equals(strikeCause)
+                        : io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.belongsTo(assault.assaultId(), value.causeSubjectId()))
+                .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + quote(lease.id().value())
@@ -818,6 +820,10 @@ final class FrontierV3DiagnosticJson {
                 + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
+                + ",\"strikeCause\":\"" + quote(strike == null ? "" : strike.causeSubjectId().value())
+                + "\",\"strikeAttacker\":\"" + quote(strike == null ? "" : strike.subjectIds().getFirst().value())
+                + "\",\"strikeTarget\":\"" + quote(strike == null ? "" : strike.subjectIds().getLast().value())
+                + "\",\"strikeReceipt\":\"" + quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + recovery + readiness.map(FrontierV3DiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 

@@ -20,6 +20,7 @@ public final class SceneStrikeStateSupport {
             }
         }
         validateMembers(state.actorLocations(), lease, intent);
+        validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
     }
 
     public static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
@@ -48,6 +49,7 @@ public final class SceneStrikeStateSupport {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
         validateMembers(intent, observation);
+        validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
     }
 
     static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
@@ -118,5 +120,38 @@ public final class SceneStrikeStateSupport {
         if (!intent.subjectIds().getFirst().equals(observation.attackerId()) || !intent.subjectIds().getLast().equals(observation.targetId())) {
             throw new IllegalArgumentException("scene strike receipt differs from its exact prepared members");
         }
+    }
+
+    /**
+     * A HOT assault is the physical executor of the same deterministic COLD strike, not a
+     * second combat chooser.  The cause identifies only assault/attacker/epoch; this method
+     * fences the separately-bound target and rejects a live-but-wrong lease member.
+     */
+    private static void validateSettlementSelection(StrategicPlanState plans, Map<SubjectId, ActorLocation> actors,
+                                                    Iterable<PhysicalIntent> intents, SceneLease lease, PhysicalIntent intent) {
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) return;
+        SettlementAssault assault = plans.settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
+        if (assault == null) throw new IllegalArgumentException("settlement scene strike has no canonical assault");
+        long epoch = SettlementAssaultCauseIdentity.epoch(assault.id(), intent.causeSubjectId());
+        long currentEpoch = SettlementAssaultCauseIdentity.hotEpoch(assault, intents);
+        if ((intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED ? epoch >= currentEpoch : epoch != currentEpoch)) {
+            throw new IllegalArgumentException("settlement scene strike does not retain the current epoch");
+        }
+        boolean hiveTurn = (epoch & 1L) == 0L;
+        java.util.List<SubjectId> attackers = (hiveTurn ? assault.combatantAttackerIds() : assault.defenderIds()).stream()
+                .filter(id -> alive(actors, id)).sorted().toList();
+        java.util.List<SubjectId> targets = (hiveTurn ? assault.defenderIds() : assault.combatantAttackerIds()).stream()
+                .filter(id -> alive(actors, id)).sorted().toList();
+        if (attackers.isEmpty() || targets.isEmpty()) throw new IllegalArgumentException("settlement scene strike has no living exact combatants");
+        SubjectId expectedAttacker = attackers.get(Math.floorMod(epoch, attackers.size()));
+        SubjectId expectedTarget = targets.get(Math.floorMod(epoch, targets.size()));
+        if (!intent.subjectIds().equals(java.util.List.of(expectedAttacker, expectedTarget))) {
+            throw new IllegalArgumentException("settlement scene strike does not match the exact COLD attacker and target");
+        }
+    }
+
+    private static boolean alive(Map<SubjectId, ActorLocation> actors, SubjectId actorId) {
+        ActorLocation actor = actors.get(actorId);
+        return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE;
     }
 }
