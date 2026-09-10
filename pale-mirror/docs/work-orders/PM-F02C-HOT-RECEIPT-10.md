@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
 
-Specification revision: 4. Status: `SEAM_READY_PENDING_METHOD_CHALLENGE`. Parent
+Specification revision: 5. Status: `METHOD_CORRECTION_EXECUTING`. Parent
 slice: F0.2C. Risk: critical-code/native. Engineer: supervising root. Builder:
 `/root/terra_f02c_hot_receipt10`, one fresh `gpt-5.6-terra` with reasoning
 `high`. Baseline is the
@@ -154,3 +154,35 @@ restart replay while beginning before lease/intent manufacture? It must return
 one `METHOD_ADMITTED` or the smallest invariant-level rejection before any
 complete/native expense. The stopped builder has no further authority until
 that decision.
+
+## First method decision and bounded correction
+
+The fresh challenger returned `METHOD_REJECTED`. Main independently confirmed
+the finding. The native declaration begins with a player visit and observes
+only `HOT/CONFIRMED` before and after restart; it does not bind a lease/intent-
+free prehistory, exact cause/attacker/target/receipt/health transition, epoch
+advance, ordinary drain/release, next-COLD continuation or absence of a second
+hit. It can therefore pass on retained HOT or replayed/old receipt history.
+The current diagnostic can also select the first retained assault intent rather
+than the current exact epoch. The focused assault test manually constructs the
+lease, intent, observation, release, recovery and successor lease, while the
+real-damage GameTest exercises a generic route-engagement lease. Those are
+useful component facts but cannot be composed into HI-1--HI-5.
+
+The same builder receives its one ordinary semantic correction return. Preserve
+the useful exact cause/body fences, but make the cheapest focused method cross
+the real settlement-assault registry/executor composition from a history with
+no lease or strike intent. Its controls must discriminate wrong cause, living
+attacker, living target, epoch, lease and receipt through that real owner seam.
+The declaration-bound native history must be able to observe the exact receipt
+and health transition, single epoch advance, ordinary demand-loss drain/release,
+next-COLD continuation and no duplicate damage across the authentic restart;
+an old retained receipt must be unable to satisfy a current-epoch assertion.
+Elapsed time remains only a failure guard. Terra owns the concrete design,
+diagnostic fields, carrier actions and focused test structure.
+
+Terra returns `HOT_METHOD_READY_R2` after only the minimum focused/component,
+owner-seam and declaration/oracle preflight evidence. No complete gate, native,
+CI, COLD/constructive scenario or unrelated test is authorized. A second
+terminal semantic return ends this builder context under operating-model v4.
+Correction observation epoch is `2026-09-10T15:35:38Z`.
