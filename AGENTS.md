@@ -25,10 +25,11 @@
 - `pale-mirror/CONTINUITY.md` is the single continuity ledger for Pale Mirror
   source, packaging and disposable test-server work. Do not create a competing
   workspace-level copy.
-- Temporary migration rule: this candidate has not been adopted. Its imported
-  ledger is historical; additionally read the active ledger and work order at
-  `/home/rd/proj/minecraft/pale-mirror/CONTINUITY.md`. Only the engineer may
-  transfer ledger authority after the required migration/provider gates.
+- The monorepo has been adopted for continued Pale Mirror development.
+  `pale-mirror/CONTINUITY.md` is the sole active ledger. The original ledger at
+  `/home/rd/proj/minecraft/pale-mirror/CONTINUITY.md` is a preserved read-only
+  handoff record and must not be maintained as a competing source of current
+  authority.
 
 ## Ownership boundaries
 

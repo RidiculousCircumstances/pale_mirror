@@ -80,6 +80,12 @@ implementation; release verification follows it.
 
 ### Managed engineer / executor workflow
 
+- `docs/engineering-agent-operating-model-v3.md` is the binding slice lifecycle.
+  It supersedes v2 and adds fresh successor contexts, private WIP checkpoints,
+  owner-seam admission and an independent read-only challenger for stable
+  critical-code candidates. The current shared F0.2C worktree may only produce
+  its transition checkpoint; every successor uses an isolated branch/worktree.
+
 - Binding 2026-09-06 anti-micromanagement rules in the protocol take precedence
   over older permission-only Gate A/B wording. Delegate diagnosis through full
   authorized local verification as one outcome. Terra proceeds autonomously;
@@ -88,8 +94,9 @@ implementation; release verification follows it.
   between focused tests, full gates and ordinary fixes inside the granted
   environment. No duplicate investigation or preference-only rewrites.
 - The protocol's intervention reasons are exhaustive: `ARCHITECTURE`,
-  `AUTHORITY`, `RISK`, `IMPASSE`, `FINAL_REVIEW`, `USER_AUDIT` or genuine
-  `LIVENESS`. Name one before contacting Terra or inspecting intermediate work.
+  `AUTHORITY`, `RISK`, `IMPASSE`, `FINAL_REVIEW`, `USER_AUDIT`, genuine
+  `LIVENESS` or due `ECONOMY_AUDIT`. Name one before contacting Terra or
+  inspecting intermediate work.
   If none applies, do not act. An older work-order checkpoint cannot override
   this boundary; only a real outcome/safety/authority limit remains binding.
 - Binding user amendment 2026-09-07: while a Terra assignment is `EXECUTING`
@@ -105,6 +112,17 @@ implementation; release verification follows it.
   Count all routine status mechanisms together; do not bypass the polling limit
   with messages or intermediate process/diff inspection. Ordinary in-scope
   repairs remain autonomous, not permission-only terminal handoffs.
+- Binding user amendment 2026-09-08: while an order remains `EXECUTING`, the
+  engineer MUST perform one bounded `ECONOMY_AUDIT` after every complete hour
+  from the order's recorded observation epoch, including across turns. Review
+  only the work-order execution chronology, executor milestone/failure reports,
+  exact command/job metadata and retained receipt timing summaries; do not use
+  it as an hourly source/diff review. Record operation purpose, start/end or
+  elapsed time when known, outcome and evidence handle in the active work order.
+  Healthy review needs no Terra message. Contact Terra only for a concrete
+  avoidable cost pattern or methodology problem and state the evidence and
+  required outcome, leaving diagnosis and remedy to Terra. Existing milestone
+  reporting supplies the facts; no hourly executor heartbeat is required.
 - `docs/engineering-agent-protocol.md` is the accepted delivery protocol.
   The supervising engineer owns specifications, normative docs, the ledger
   and independent acceptance; it must not edit source, tests, scripts, build/CI
@@ -126,6 +144,94 @@ implementation; release verification follows it.
   do not routinely duplicate the executor's investigation or full test runs.
   Public/persistent meaning, owner boundaries, requirements and external or
   destructive authority still require explicit agreement.
+- Verification economy is an explicit supervising-engineer responsibility, not
+  a reason to inspect Terra's implementation more often. Once F0.VC or another
+  shared test capability is independently accepted, do not requalify it unless
+  its inputs/contract changed or concrete evidence contradicts that acceptance.
+  Before every expensive repeat, the engineer records the product claim or
+  decision it can materially change, why cheaper evidence is insufficient and
+  what result would alter acceptance or implementation. A repeat is allowed
+  without routine user permission when it proportionately confirms or falsifies
+  a material product invariant; it is deferred when it would only demonstrate
+  provider plumbing, infrastructure hygiene, confidence, timing, topology or
+  an already accepted claim. Before a new full native CI matrix, require a
+  faithful local preflight or regression to pass for every changed or previously
+  failing lane. One complete green terminal matrix is normally sufficient for
+  independent review. The engineer, not a mechanical run counter, decides and
+  records whether another heavy cycle has enough expected product value.
+- The proof campaign for one product candidate is a finite five-step budget:
+  smallest deterministic localization; faithful local regression for every
+  changed/failed lane; at most one fresh local physical preflight when runtime
+  or its observation boundary changed; one complete four-worker terminal
+  matrix; immediate independent review and stop. This is the default economical
+  path, not a categorical one-attempt prohibition. Skip an inapplicable step;
+  never add a confidence, benchmark or infrastructure-reproof step. A repeated
+  physical or matrix attempt requires a changed hypothesis/candidate, a cheap
+  passing discriminator and the recorded material product value described
+  above. If the same acceptance claim remains in heavy
+  proof work across two consecutive hourly economy audits, or accumulates four
+  execution hours after its first heavy attempt, the engineer MUST stop at the
+  nearest safe boundary, classify product/test/infrastructure value, and obtain
+  an explicit revised work-order decision before more heavy execution. Provider
+  queue time is recorded separately. Preventing this circuit-breaker is a
+  supervising-engineer duty; available compute is not an exception.
+- Do not turn that budget into a literal run counter. A CI invocation that
+  starts no Minecraft process and observes no product-semantic lane because of
+  a classified deterministic provider transport/admission defect has not
+  entered the semantic matrix evidence boundary. Terra corrects that seam
+  without special user permission after a cheap faithful pre-Minecraft
+  regression exercises the actual failed provider shape. That classification
+  does not automatically authorize or forbid another matrix: the engineer still
+  applies the expected-product-value decision above. Reuse every unaffected
+  accepted receipt. Unchanged blind retry remains forbidden; each recurrence
+  needs a concrete new cause, changed candidate and passing discriminator.
+  Semantic, Minecraft/runtime, flaky or unclassified failures follow their
+  ordinary product/test review under the same value test.
+- Raw native/CI proof storage is disposable working state, not a permanent
+  archive. After independent terminal review records exact identity, outcome
+  and a compact receipt/checksum, delete complete checkouts, Gradle caches,
+  runner distributions, prepared-runtime copies, disposable worlds and
+  unbounded logs. Retain source/history, normative summaries and only the
+  smallest artifact necessary for a specifically open disputed claim. At most
+  one current local-heavy root and one current provider root may survive per
+  order; project-wide raw proof storage must stay below 64GiB unless the user
+  approves a named temporary exception. A new heavy run is prohibited while
+  reviewed/stale roots remain or the cap would be exceeded. Storage accounting
+  and post-review reclamation are supervising-engineer duties.
+- Binding user decision 2026-09-08: follow the mandatory causal-evidence policy
+  in `docs/frontier-v3-accelerated-verification-loop.md`. Active F0.2B and later
+  changed scenarios use retained correlated facts and semantic milestones,
+  not timing luck or positional snapshot bindings. Wall-clock deadlines guard
+  failure; canonical time/due ordering remain exact domain assertions. Preserve
+  authentic restart coverage and the fast-test/native split. Repeated sequencing
+  failures require coherent scenario diagnosis, not symptom-only expensive
+  retries or a new infrastructure campaign.
+- Binding user decision 2026-09-08: methodological correctness of tests is an
+  explicit supervising-engineer responsibility. At work-order/specification and
+  FINAL_REVIEW boundaries, assess whether each test's subject, control history,
+  oracle, causal trace, negative/recovery case and execution tier can actually
+  establish the stated product claim. A green result, scenario name or fixture
+  setup never promotes evidence beyond that method's demonstrated scope. A
+  materially new proof carrier, oracle or claim mapping is a bounded `RISK`
+  review before expensive execution. This review evaluates proof validity and
+  cost, not Terra's implementation style, and does not create routine
+  intermediate code-review checkpoints.
+- The same responsibility includes a mandatory adequacy-of-test-framing check
+  before an expensive lane is authorized: the stated scenario must correspond
+  to the product claim, a plausible defect must make it fail, setup/fixtures
+  must not manufacture the claimed transition, and its evidence tier and cost
+  must be proportionate. If that framing is inadequate, correct the work order
+  or classify the intended claim more narrowly before execution; do not spend a
+  native/CI cycle first and discover the mismatch from a green or ambiguous
+  result. This is an order/method boundary, not routine review of Terra's local
+  test implementation.
+- Before a milestone full gate that is meant to precede native evidence, prove
+  cheaply that the final candidate already contains an admissible declarative
+  carrier, its read-only diagnostic facts and a discriminating semantic oracle
+  for every required native claim. A broad gate before carrier readiness is
+  premature. If the carrier must then change candidate identity, preserve the
+  useful prior receipt and apply the product-value rule to the required final-
+  candidate gate; do not treat the first gate as a categorical rerun ban.
 
 ### Canonical sources
 

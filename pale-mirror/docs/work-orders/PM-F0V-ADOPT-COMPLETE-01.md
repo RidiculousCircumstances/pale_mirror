@@ -1,6 +1,6 @@
 # PM-F0V-ADOPT-COMPLETE-01: adopt the monorepo and close original F0.V
 
-Specification revision: 10. Parent slice: F0.V. Risk: critical-code plus bounded
+Status: accepted. Specification revision: 11. Parent slice: F0.V. Risk: critical-code plus bounded
 Git operations. Engineer: supervising root. Executor:
 `/root/terra_f0va_unrestricted`, `gpt-5.6-terra`, reasoning `high`.
 Acceptance owner is this original `CONTINUITY.md` until the adoption checkpoint;
@@ -255,3 +255,27 @@ the HOT semantic traversal checkpoint with the false crop-effect capability,
 which would preserve intent neutrality by disabling required HOT traversal.
 Revision 6 establishes the separate traversal/effect and terminal/cleanup
 boundaries above. r70/r71 remain attributable negative evidence, not Gate C.
+
+Revision 11 records independent Gate C acceptance on 2026-09-07. Published
+remote `main` is `089495ed630f777f63e3b8952e500ea548bc814c`, parent
+`d1940c8dd33b52d904b6fde15c676033081147d1`, tree
+`4ca64f3e6abaadecfb1b5b57211ab435871394e8`. The clean published checkout
+reproduces prepared source
+`ef13bcb9875e2956079893f793557b26395a0909e654de9ffc4f3b0bfc18f9bb`
+over 1,896 files; the prepared JAR is
+`7442ac840e1976beab4163331def6a9aab9f3931e7ec198a0a0f98599431c0f2`.
+Fresh matrix `bb55f917-afd6-4fca-964c-92715bc8c1a5`, SHA-256
+`311453ee8633238b4406bdb88b694952932fca47871d7beddfc37a8bfa7c5911`,
+passes all 11 required native lanes, including graceful recovery, all three
+currently applicable abrupt boundaries and the exact neutral HOT/COLD pair.
+The pair retains the same actor/custody/conservation/continuation and
+`PREPARED` intent with zero crop/output effect. Core GameTests pass 292/292,
+Visuals 39/39, Node 197/197, 1,211 retained JUnit tests have zero failures,
+and the independently repeated guardrails/check/build/packaged-JAR gate passes.
+The accepted historical timing evidence remains three baseline plus three
+candidate samples on one host/seed/profile/view distance with 22.52-percent
+improvement; F0.VA feedback evidence remains 5.065026x. No task-owned native
+process or declared task port remained at review. This closes AC-1 through
+AC-6 for the traversal-only F0.V scope; it does not accept F0.1, F0.2 effects,
+natural terrain, deployment, v2 cutover or any human product gate. The next
+mandatory checkpoint is `PM-F0VB-PARALLEL-NATIVE-PIPELINE-01`.

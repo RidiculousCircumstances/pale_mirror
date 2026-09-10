@@ -106,6 +106,12 @@ neither the sample nor any numeric floor blocks product work.
   scenario-local memory or a mutable world.
 - A timeout is one attributable failure. Do not retry, lengthen it or convert
   it into a timing sample.
+- A diagnostic capability required to justify an expensive run must be proved
+  through the actual dispatcher/worker/child transport that will consume it;
+  a green helper/unit test alone is insufficient. The run admission fails
+  before Minecraft when its required observer, evidence root, identity binding
+  or declared capture slots are absent, and result validation rejects a missing
+  required artifact instead of reporting an unattributed product timeout.
 - Coordination uses exact bounded protocol events. A fixed sleep is allowed
   only when elapsed gameplay time is itself the subject of the assertion, and
   the scenario must name and justify it.
@@ -376,3 +382,221 @@ remaining original F0.V variants and crash windows. Historical
 invalidate a semantically complete sequential F0.V matrix that was already
 running when the acceleration amendment was adopted. F0.1 remains paused until
 the original F0.V exit gate, not merely F0.VA, is complete.
+
+## Pulled-forward checkpoint: F0.VC prepared native pipeline
+
+The original sequence activated this checkpoint after F0.2B acceptance. By
+explicit user authority on 2026-09-08, the shared mutable-run collision in the
+failed F0.2B native attempt pulls it forward at a safe incomplete F0.2B pause.
+The mandatory
+[`PM-F0VC-PREPARED-NATIVE-PIPELINE-01`](work-orders/PM-F0VC-PREPARED-NATIVE-PIPELINE-01.md)
+checkpoint extends the accepted loop without reopening F0.VA, F0.VB, F0.V or
+F0.1 and without accepting F0.2B. The required dependency order is:
+
+```text
+paused F0.2B lineage and preserved evidence
+  -> early deterministic semantic/preparation preflight
+  -> one exact immutable prepared runtime producer
+  -> content-addressed immutable inputs and private COW worker views
+  -> four simultaneous isolated consumers
+  -> checked compatible-case JVM reuse inside one shard/world
+  -> always-retained per-worker evidence and fail-closed aggregate
+  -> zero task-owned runner/process/credential state
+  -> engineer F0.VC acceptance
+  -> resume and complete the same F0.2B order
+```
+
+The producer binds source, production/test classpaths, packaged JAR, JDK,
+platform, dependencies, workflow/tool and selected scenario identities.
+Consumers verify that identity and must not compile, transform or package the
+candidate independently. Cache reuse covers immutable preparation only, never
+worlds, canonical runtime state, terminal assertions or fresh-evidence success.
+Every independent shard/lane still receives its own disposable world and
+mutable namespace. Only explicitly compatible non-restart test cases inside
+that one shard/world may share one living JVM after an exact reset
+acknowledgement. Bootstrap, graceful restart, abrupt crash and save-boundary
+claims retain their required process boundaries.
+
+Structural plan, identity, compatibility, namespace, capacity and expected-
+artifact failures must stop before a Minecraft launch. Success, failure and
+cancellation must each preserve uniquely scoped bounded evidence, and merge
+must always return a complete or explicit incomplete result. The existing four-
+slot topology and semantic coverage remain unchanged. Record phase timings from
+the ordinary qualification but do not create a numeric speed floor or repeat a
+product matrix only for benchmarking.
+
+## Post-acceptance verification-economy policy
+
+F0.VC is reusable accepted infrastructure, not a recurring proof campaign.
+Requalify its own build-once/run-many, isolation, reuse or merge mechanics only
+when their relevant inputs/contract change or retained evidence is concretely
+contradicted. Product work consumes the capability without reopening it.
+
+For every product candidate, all changed or previously failing native lanes
+must pass a faithful local preflight/regression before a complete four-worker
+dispatch. A matrix failure is retained once and diagnosed locally; do not send
+another complete matrix until the exact failure has a smallest reproducer, a
+new testable hypothesis and a passing candidate-specific regression. If the
+failure exists only in provider admission or identity, use the smallest bounded
+provider preflight that stops before Minecraft. Do not use a full product matrix
+as the probe.
+
+One complete green terminal matrix with coherent identity, evidence and cleanup
+proceeds immediately to independent review. A second green run for confidence,
+timing, worker topology or already-accepted infrastructure is prohibited. A new
+run is justified only by a review correction that changes the candidate or its
+applicable comparator/evidence, and then covers only the invalidated boundary.
+The supervising engineer enforces these dispatch rules and rejects redundant
+expense without selecting Terra's implementation or increasing polling.
+
+Raw evidence roots are garbage-collected after terminal review. Durable proof
+is the compact identity/outcome/checksum recorded in the work order and, when
+needed for an unresolved claim, one minimum bounded artifact—not every checkout,
+cache, runner installation, runtime copy, world and log that produced it. Keep
+at most one local-heavy and one provider root for the active order and keep all
+Pale Mirror raw proof roots below 64GiB absent a named user-approved exception.
+The supervisor must account and reclaim storage before authorizing another
+heavy lane; evidence retention may not become a hidden proof campaign.
+
+Every candidate therefore has exactly this maximum proof path: deterministic
+localization, changed/failed-lane local regression, at most one runtime-relevant
+physical preflight, one four-worker matrix, then review. The first terminal
+physical result and first terminal matrix result exhaust those grants for that
+candidate identity. A failed boundary may be repeated only for a changed
+candidate/hypothesis after its cheap faithful discriminator passes.
+
+Heavy proof of the same acceptance claim must not span two consecutive hourly
+economy audits or exceed four cumulative execution hours after the first heavy
+attempt without a safe-boundary stop and explicit work-order reset. Queue time
+is accounted separately. At that circuit-breaker the engineer must state what
+new product information another run can obtain; absent a discriminating answer,
+the run is prohibited. This is the categorical guard against turning evidence
+infrastructure into a multi-day product-development substitute.
+
+### Hourly execution-economy observation
+
+While a work order is `EXECUTING`, its bounded chronology records each stable
+milestone, material failure and heavy completed operation with purpose, known
+start/end or elapsed duration, outcome and evidence handle. The supervising
+engineer reviews that sequence after each complete hour from the recorded epoch.
+The review asks whether time advanced a product claim, whether the cheapest
+faithful discriminator preceded native/CI work, whether an equivalent failure or
+accepted capability was repeated, and whether applicable four-worker/prepared
+execution was used instead of avoidable serialization.
+
+This is cost-method supervision, not implementation supervision. It uses event
+metadata and retained receipt timing summaries, not WIP source/diffs, and creates
+no hourly executor heartbeat. A healthy review is recorded without contacting
+Terra. A concrete pattern of avoidable cost, repeated no-new-evidence work or an
+inadequate expensive test permits one consolidated `ECONOMY_AUDIT` correction
+that states the evidence, cost and required product/verification outcome while
+leaving diagnosis and remedy to Terra. It neither reruns accepted infrastructure
+nor changes the ten-minute liveness cadence.
+
+## Mandatory causal evidence instead of timing luck
+
+Binding user decision, 2026-09-08: apply now within the active F0.2B correction
+and to later changed causal scenarios. This is not a new infrastructure
+qualification or a blanket rewrite of unchanged accepted tests.
+
+1. **Facts, not timing luck.** Elapsed wall time, fixed sleeps, disappearing
+   transient status or cleared request fields cannot establish domain success.
+   Bounded wall-clock deadlines remain failure/liveness guards, never success
+   criteria; render settling is presentation-only. Exact canonical simulation
+   instants and engine-owned due ordering remain valid domain inputs/assertions.
+   An absolute-time request needs attributable admission and a confirmed reached
+   instant/result. Distinguish completion, rejection/cancellation and missing
+   acknowledgement; `target=null` or `remaining=0` alone is not completion.
+2. **Retained causal history.** Short-lived admission, reservation, effect and
+   custody transitions must remain provable after completion and across the
+   claimed restart. Reuse bounded correlated traces/events/receipts where
+   possible. Bind facts to the exact run, world, operation, object and applicable
+   epoch/revision. Missing, truncated, stale or wrong-subject evidence must not
+   pass. Do not require the polling client to catch a transient state to prove
+   that it occurred. Evidence remains read-only and bounded, never a second
+   schedule, resource/custody authority or production history store.
+3. **Semantic references.** Assertions use named causal milestones such as
+   admitted/reserved, effect-confirmed and released, with explicit subject
+   identity. Unrelated action insertion must not silently rebind an assertion.
+   Numeric indices may remain transport/diagnostic metadata, not the sole
+   semantic identity. Intermediate snapshots cannot stand in for terminal facts.
+4. **Authentic recovery boundary.** Declare the acquire/checkpoint/release/effect
+   boundary crossed by restart and the confirmed versus in-flight facts there.
+   Establish it by a correlated barrier, not a delay. Moving restart past
+   completion does not prove recovery of in-flight work. Explain any required
+   coverage change to the engineer; never weaken it silently. Test-only
+   synchronization cannot fabricate domain transitions or suppress ordinary
+   custody/progression needed by the flow under proof.
+5. **Cheap faithful tests first.** Verify transition details, protocol/comparator
+   negatives and observation sequencing at the smallest pure/component/runner
+   tier. Native Minecraft retains necessary real adapter, chunk/container and
+   physical-save/restart proof; synthetic traces alone cannot replace it.
+   Repeated sequencing failures require a coherent check of the affected
+   scenario's causal dependencies, including remaining steps, before another
+   expensive attempt. Add the smallest regression for the classified defect,
+   not a general framework or timing campaign.
+
+Acceptance at the changed boundary includes applicable deterministic negatives
+for missing, stale/wrong-subject and reordered evidence, discoverability of an
+already completed short-lived transition without timing-sensitive polling, and
+semantic-reference stability under unrelated action insertion. The real restart
+lane must retain its declared causal coverage. Reuse existing mechanisms; any
+extension is limited to missing evidence. Public/persistent meaning changes
+remain architecture decisions. Do not add unrelated exhaustive campaigns.
+Changed/failed lanes pass locally before the single complete four-worker matrix
+and independent review; accepted F0.VC is not reopened by this policy.
+
+## Mandatory methodological soundness review
+
+Binding user decision, 2026-09-08: the supervising engineer is accountable for
+whether the verification method can establish the claim, in addition to
+checking that commands passed. Apply the review when defining a work order and
+again to the terminal evidence. If the executor materially changes the proof
+carrier, oracle or claimed scope, treat that change as one bounded `RISK`
+boundary before its expensive execution; do not turn ordinary local iterations
+into recurring approval stops.
+
+The work-order review is a real pre-execution method gate, not a promise to
+inspect adequacy only after results exist. Before any expensive native/CI lane,
+state why its scenario represents the product claim, which plausible defect its
+oracle discriminates, why fixtures cannot create the claimed outcome, which
+evidence tier is required and why a cheaper faithful test cannot finish the
+claim. If those answers are missing or contradictory, repair the framing or
+narrow the claim before spending the run. Terra remains autonomous over the
+concrete test implementation inside an already sound framing.
+
+For every material acceptance claim, establish all of the following:
+
+1. **Construct validity.** The observed subject and terminal fact are the
+   promised product behavior, not a scenario label, setup state, proxy endpoint
+   or implementation detail. State explicitly when evidence supports only a
+   narrower claim.
+2. **Controlled comparison.** Histories being compared have equal relevant
+   canonical inputs, rules, due actions and intervention conditions. A fixture
+   may establish read-only preconditions but cannot create the transition or
+   outcome under proof. The oracle must not merely read back a value written by
+   the same test-only authority.
+3. **Causal discrimination.** Evidence binds the exact subject and candidate
+   through the relevant transitions, and the test has an applicable negative,
+   recovery case or seeded counterexample that would fail for the plausible
+   defect being excluded. Missing, stale, reordered or wrong-subject evidence
+   cannot accidentally satisfy the oracle.
+4. **Correct evidence tier.** Pure/component/runner tests prove rules and
+   protocol mechanics; GameTests prove their actual in-game boundary; native
+   lifecycle tests prove ordinary bootstrap, adapter, load/unload and restart;
+   manual gates prove player comprehension. No lower tier inherits a higher-
+   tier claim merely because it is deterministic or green.
+5. **Identity and independence.** The test, candidate, rules/schema, world,
+   operation and retained result have coherent identities. Comparison lanes and
+   the oracle do not share mutable state that can manufacture agreement, and
+   reused evidence remains limited to unchanged inputs and its original scope.
+6. **Reliability and proportional cost.** Success follows canonical/correlated
+   facts rather than wall-clock luck. Run the cheapest faithful discriminator
+   first and only the minimum native/CI boundary required for the remaining
+   claim. Redundant green runs do not improve methodological validity.
+
+At `FINAL_REVIEW`, report the method as sound for the stated claim, sound only
+for a named narrower claim, or insufficient. This classification is independent
+of pass/fail status: an unsound green test is not acceptance evidence, while a
+sound failing test may reveal a product or harness defect that still requires
+classification.

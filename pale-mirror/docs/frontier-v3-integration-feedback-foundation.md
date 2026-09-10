@@ -394,7 +394,8 @@ turns timing noise into a false product defect.
 - focused tests, `guardrails`, `check`, the applicable GameTest slice, full
   critical-code gate and packaged-JAR fixture-absence checks pass;
 - the architecture audit and Continuity Ledger record the evidence and name
-  `F0.1` as the resumed current slice.
+  the independently accepted four-worker F0.VB infrastructure checkpoint and
+  name `F0.1` as the next resumed semantic slice.
 
 Pure/fake observations provide only automated contract evidence. They never
 promote a process to M2 or replace its native player-height, intervention or

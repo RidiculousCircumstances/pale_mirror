@@ -43,6 +43,45 @@ not repeated merely to prove topology. A standalone provider-speed
 certification and any numeric speedup floor remain non-blocking; timing is
 collected from ordinary real work.
 
+Verification economy is binding across all later slices. Accepted F0.VC
+infrastructure is consumed without requalification unless its relevant
+contract/input changes or concrete evidence contradicts it. Before each new
+complete CI matrix, every changed or previously failing lane must pass a
+faithful local preflight/regression; a provider-only admission/identity defect
+uses a bounded pre-Minecraft provider preflight. A failed matrix is not
+redispatched until that exact failure has a smallest reproducer and a passing
+candidate correction. One complete green terminal run advances directly to
+independent review; confidence, timing, topology and already-proved-
+infrastructure reruns are forbidden. The supervising engineer owns enforcement
+of this economy at order/dispatch/review boundaries without taking Terra's
+local design freedom or increasing intermediate inspection.
+
+The user-approved 2026-09-08
+[`mandatory causal-evidence policy`](frontier-v3-accelerated-verification-loop.md#mandatory-causal-evidence-instead-of-timing-luck)
+is required now within F0.2B, before its next expensive native attempt, and
+governs later changed scenarios. Use bounded correlated history and semantic
+milestones rather than racing transient states or positional snapshots. Keep
+canonical time/due ordering exact, recovery boundaries authentic and protocol
+negatives in fast tests. This does not reopen F0.VC or authorize a new framework.
+Complete the correction in the same order, then continue the approved product
+sequence after independent acceptance.
+
+The supervising engineer must also apply the
+[`methodological soundness review`](frontier-v3-accelerated-verification-loop.md#mandatory-methodological-soundness-review)
+at work-order definition and terminal acceptance. Passing commands alone do not
+prove a slice: each product claim needs a valid subject/control/oracle/causal-
+negative mapping at the correct evidence tier and exact identity. A method that
+supports only a narrower claim is recorded at that narrower level. A material
+change of proof carrier, oracle or claimed scope triggers one bounded `RISK`
+review before expensive execution, without transferring implementation design
+from Terra or adding routine approval gates.
+Before each newly authorized expensive native/CI boundary, the work order must
+also establish that the scenario actually represents the product claim, would
+fail for a named plausible defect, cannot pass through fixture-created success,
+uses the required evidence tier and is proportionate to the cheapest faithful
+alternative. Correct an inadequate framing before execution rather than using
+the expensive run to discover that it tests the wrong thing.
+
 This is the implementation source of truth for Frontier v3. Delivery follows
 [`engineering-agent-protocol.md`](engineering-agent-protocol.md): the engineer
 owns requirements, normative documentation, the ledger and independent review;
@@ -64,16 +103,29 @@ must not become terminal permission-only handoffs. Neither a green test nor an
 executor report authorizes self-advancement, a commit or deployment. Later-wave
 code is not added speculatively.
 
-For avoidance of doubt, the protocol's seven intervention reasons are
+For avoidance of doubt, the protocol's eight intervention reasons are
 exhaustive. In the absence of `ARCHITECTURE`, `AUTHORITY`, `RISK`, `IMPASSE`,
-`FINAL_REVIEW`, an explicit `USER_AUDIT`, or a due `LIVENESS` check, the engineer
-does not contact Terra or inspect intermediate work. The due check reads only
-collaboration state and exact task-owned process/job liveness plus a bounded
-progress marker; a healthy result creates no executor message or design review.
+`FINAL_REVIEW`, an explicit `USER_AUDIT`, a due `LIVENESS` check, or a due
+`ECONOMY_AUDIT`, the engineer does not contact Terra or inspect intermediate
+work. The due liveness check reads only collaboration state and exact task-owned
+process/job liveness plus a bounded progress marker; a healthy result creates no
+executor message or design review. The hourly economy audit reads only the
+work-order chronology, milestone/failure metadata and bounded receipt timings;
+it records cost/progress history but never becomes an hourly source/diff review.
 Terra chooses the implementation and proceeds through ordinary failures and
 corrections to one coherent result. The engineer may require an
 observable invariant but may not turn a preferred algorithm, helper/file layout
 or command sequence into a blocking instruction.
+
+Every executing work order records one UTC observation epoch and a bounded
+execution-economy chronology: operation purpose, known start/end or elapsed
+duration, outcome/evidence handle and whether it advanced, invalidated or
+unnecessarily repeated a product claim. After each complete hour the engineer
+reviews the accumulated sequence for disproportionate cost, repeated equivalent
+attempts, test-tier inversion, avoidable serialization and redundant evidence.
+A healthy review produces no Terra contact. A concrete finding permits one
+consolidated conceptual `ECONOMY_AUDIT` correction; implementation remains
+Terra-owned and no extra heartbeat or intermediate approval is introduced.
 
 ## Execution rules
 
@@ -259,6 +311,33 @@ effect family, execute F0 from
 7. **F0.6 — observer-neutrality, first visibility and scale.** Prove calibrated
    HOT/COLD semantic equivalence, pre-visible graybox catch-up and concurrent
    twelve-settlement/hive-front performance.
+
+F0.2 is delivered through three independently reviewed cuts in this order:
+F0.2A owns the pure persisted replica/custody kernel; F0.2B consumes it for one
+settlement container and one hive store; F0.2C owns one shared bounded deferred-
+aftermath protocol and proves the destructive-effect/constructive-obstruction
+verticals. F0.2B local acceptance does not bypass F0.2C, and deferred physical
+evidence from an earlier cut is not silently promoted to a later identity.
+Provider reruns are neither categorically required nor forbidden: the engineer
+authorizes one only when its expected result can change a material product
+decision that cheaper evidence cannot answer.
+
+The original sequence placed this checkpoint after independent F0.2B
+acceptance. By explicit user authority on 2026-09-08, the failed F0.2B native
+attempt's shared-mutable-run collision pulls the checkpoint forward at a safe,
+incomplete F0.2B pause. Execute the mandatory
+[`PM-F0VC-PREPARED-NATIVE-PIPELINE-01`](work-orders/PM-F0VC-PREPARED-NATIVE-PIPELINE-01.md)
+infrastructure checkpoint. It must implement the approved prepare-once/run-many
+runtime, content-addressed isolated preparation, compatible-case JVM reuse
+inside one shard/world, early semantic preflight and failure-safe evidence
+transport. It preserves the
+four-worker rule and every fresh-world/restart/crash/semantic assertion. Timing
+is recorded from ordinary qualification work but remains advisory; the gate is
+closed by identity, invalidation, isolation, lifecycle and evidence correctness,
+not by a numeric speedup. This checkpoint adds no F0.2 aftermath or gameplay
+breadth and does not reopen F0.2B.
+After independent F0.VC acceptance, resume the same F0.2B revision and retained
+lineage/evidence; F0.VC neither satisfies nor weakens its product Gate C.
 
 F0 is an ordered correction, not a parallel feature list. The executor works
 only on the approved bounded order within the first incomplete slice recorded

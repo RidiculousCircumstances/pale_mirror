@@ -4,6 +4,11 @@ Specification revision: <N>. Parent slice: <F0...>. Risk: <docs/small-code/criti
 Engineer: supervising root. Executor: gpt-5.6-terra, high.
 Active phase and acceptance owner: `CONTINUITY.md`.
 
+This template inherits `docs/engineering-agent-operating-model-v3.md`. New
+product slices use a fresh Terra context and isolated executor branch/worktree.
+Keep the order below 2,500 tokens where practical; after three substantive
+revisions, close/supersede it instead of appending a troubleshooting history.
+
 ## Baseline and prerequisites
 
 - Exact repository/ref and dirty working-content identity; WIP to preserve.
@@ -54,6 +59,10 @@ complete outcome. While the order is `EXECUTING`, one bounded `LIVENESS` check
 is mandatory after each ten minutes without an executor event and never more
 frequently. It is limited to collaboration state, exact task-owned process/job
 liveness and a bounded progress marker; it never includes source/diff review.
+Record an execution-economy observation epoch below. After every complete hour
+from that epoch while the order remains `EXECUTING`, the engineer performs one
+bounded `ECONOMY_AUDIT` of accumulated operation-purpose/duration/outcome
+metadata. It is not an hourly code review or executor heartbeat.
 
 - Initial grant (Gate A): authorize diagnosis, implementation, local focused
   and full verification, and corrections together. Acknowledgement does not
@@ -78,6 +87,49 @@ liveness and a bounded progress marker; it never includes source/diff review.
 - Apply the protocol's supervisor self-check before every intervention. The
   limit covers status messages and process/diff queries together. No terminal
   progress-only handoff requesting ordinary in-scope continuation permission.
+- Declare the default economical proof path: localization; changed/failed-lane
+  local regression; at most one runtime-relevant local physical preflight; one
+  four-worker terminal matrix; immediate review. Record which steps are
+  inapplicable. This is not a categorical one-attempt rule. Before an expensive
+  repeat, record the material product claim/decision it can change, why cheaper
+  evidence is insufficient and what outcome would alter acceptance or
+  implementation. The same heavy proof claim crossing two
+  consecutive hourly audits or four cumulative execution hours triggers a
+  mandatory safe-boundary stop and explicit work-order reset; provider queue
+  time is separate. No confidence, benchmark or accepted-infrastructure reproof
+  can extend the budget.
+- Before a milestone full gate that precedes native work, require a cheap
+  carrier-readiness proof on that candidate: the declarative scenario,
+  read-only diagnostic facts, semantic oracle and required negative/recovery
+  discriminator must exist and be admissible. If missing carrier work changes
+  identity after an otherwise useful gate, retain its receipt and decide the
+  final-candidate gate by material product value rather than a run counter.
+- State the evidence-entry boundary for a terminal matrix. A classified
+  deterministic provider transport/admission failure before every Minecraft
+  process and product-semantic lane produces no semantic evidence. Correction
+  needs no special user permission. Redispatch additionally requires a changed
+  candidate, a cheap faithful pre-Minecraft regression through the actual
+  failed provider shape and the supervising engineer's finding of material
+  expected product value. If it would only prove plumbing or repeat an accepted
+  claim, defer it. Reuse all unaffected evidence; unchanged blind retry remains
+  forbidden. Apply the same product-value test to semantic/runtime/flaky and
+  unclassified failures.
+
+## Execution-economy chronology
+
+Observation epoch: `<UTC timestamp>`. Next audit boundary: `<UTC timestamp>`.
+The ledger remains the sole status authority; this table is bounded cost/evidence
+metadata. Populate it from ordinary milestone/failure reports and retained
+receipts, never by requiring an executor heartbeat. Use `unknown` for unavailable
+historical timing.
+
+| UTC start/end or elapsed | Operation and product purpose | Outcome/evidence handle | Economy classification |
+| --- | --- | --- | --- |
+| <time> | <bounded operation; claim advanced> | <result; artifact/run> | <advanced / invalidated / necessary repeat / avoidable repeat> |
+
+| Economy-audit UTC | Reviewed interval | Finding and action | Next boundary |
+| --- | --- | --- | --- |
+| <time> | <from--to> | <healthy, or concrete cost/method finding and conceptual correction> | <time> |
 
 ## Stop conditions
 

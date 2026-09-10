@@ -2,6 +2,12 @@
 
 Status: accepted by the user on 2026-09-05; applies to ongoing Frontier v3 work.
 
+The slice lifecycle, workspace isolation, fresh-builder, owner-seam admission,
+challenger, evidence-receipt and context-budget rules in
+`engineering-agent-operating-model-v3.md` are binding. It supersedes v2; this
+file continues to own detailed intervention, liveness, economy and safety
+behavior.
+
 Autonomy amendment accepted on 2026-09-05: delegate complete bounded engineering
 outcomes, not predesigned patches. This amendment governs future orders and
 explicitly amended active orders; historical evidence is unchanged.
@@ -16,6 +22,11 @@ Binding liveness-cadence amendment accepted on 2026-09-07. It requires one
 bounded check after every ten minutes of executor silence while an assignment
 is `EXECUTING`; it does not restore implementation supervision or executor
 heartbeats.
+
+Binding execution-economy amendment accepted on 2026-09-08. It requires one
+bounded historical cost review after each complete hour of an executing order,
+using a work-order-local operation chronology. It detects repeated or
+disproportionate work without restoring hourly implementation supervision.
 
 ### Normative force and precedence
 
@@ -42,6 +53,10 @@ of, or intermediate inspection of an executing Terra assignment:
 7. `LIVENESS`: the mandatory bounded ten-minute check of executor and exact
    task-owned process/job liveness, or resolution of concrete ownership/process
    uncertainty. It is not an implementation-progress inquiry.
+8. `ECONOMY_AUDIT`: the mandatory bounded hourly review of accumulated operation
+   purpose/duration/outcome metadata for avoidable cost, repeated failure or an
+   inadequate verification method. It is not a source/diff review or a routine
+   request for Terra to justify implementation choices.
 
 Before acting, the engineer MUST name exactly one of these reasons in its own
 working note and in any message to Terra. If none applies, contact,
@@ -56,6 +71,20 @@ MUST NOT inspect source, diffs, implementation choices or semantic intermediate
 results. A healthy check causes no message or direction to Terra and no ledger
 update merely to record a heartbeat.
 
+Independently of silence, one `ECONOMY_AUDIT` is due after every complete hour
+from the active order's recorded observation epoch while its status remains
+`EXECUTING`, including across turns. It reads only the work-order-local execution
+chronology, executor milestone/exception reports, exact command/job metadata and
+bounded timing/status summaries in retained receipts. It MUST NOT inspect WIP
+source/diffs or turn ordinary local design into an approval gate. A healthy
+audit records one concise work-order audit row and causes no Terra contact. A
+message is allowed only when the history supports a concrete actionable finding
+such as repeated equivalent attempts without new evidence, expensive-tier work
+before its faithful cheap discriminator, redundant accepted-infrastructure or
+confidence reruns, unexplained no-progress time, avoidable serialization, or a
+test whose cost is disproportionate to its product claim. State the evidence,
+cost and required observable correction; Terra owns diagnosis and remedy.
+
 ## Mandatory autonomy and intervention boundary
 
 - Delegate one complete, independently reviewable engineering result, including
@@ -69,7 +98,7 @@ update merely to record a heartbeat.
 - The engineer intervenes only for (1) architecture/product/invariant or genuine
   ownership/authority decisions, (2) an executor-reported impasse or an evidenced
   safety/correctness risk, (3) final review of a completed coherent result, or
-  the explicitly enumerated `USER_AUDIT`/`LIVENESS` cases above.
+  the explicitly enumerated `USER_AUDIT`/`LIVENESS`/`ECONOMY_AUDIT` cases above.
   Optional progress notifications never become mandatory approval checkpoints.
 - Every blocking review finding must state the violated outcome/invariant and
   concrete evidence or falsifiable failure sequence. Mark an untested risk as
@@ -98,7 +127,8 @@ fresh approval for each ordinary operation already covered by that envelope.
 Before contacting the executor or inspecting intermediate work, the engineer
 must identify one permitted reason: a user-requested audit, a concrete
 architecture/authority decision, an evidenced risk or reported impasse, final
-acceptance, or a permitted liveness check. If none applies, do not intervene.
+acceptance, a permitted liveness check, or a due economy audit. If none applies,
+do not intervene.
 Elapsed time below the required interval, an automatic continuation and
 curiosity about implementation are not reasons. The mandatory ten-minute
 `LIVENESS` check is itself an allowed reason once due. The interval covers all
@@ -107,8 +137,10 @@ process inspection; switching tools does not reset it. Source/diff inspection
 never becomes allowed merely because the liveness interval elapsed.
 
 An intervention names its reason in the message and states the outcome or
-decision needed, not a sequence of implementation commands. Do not create a
-separate supervision journal or require executor reporting just to fill one.
+decision needed, not a sequence of implementation commands. Keep the bounded
+operation chronology inside the active work order; do not create a competing
+global supervision/continuity journal or require extra executor heartbeats just
+to fill it.
 Even when a defect is proven, prescribe the violated invariant and observable
 acceptance result, not the helper, file layout, algorithm or command sequence.
 Any implementation idea from the engineer is explicitly non-binding unless it
@@ -242,8 +274,30 @@ scope mismatch or blocker. Routine focused failures remain local iterations
 unless they trigger the causal-review rule below. No unchanged heartbeat is
 required merely because time has elapsed.
 Use: order/revision, phase, completed change, test status, active command/run ID,
-next step and decision needed. Do not send entire logs, JSON fingerprints or
-unchanged status repeatedly; link exact artifacts and project only needed fields.
+operation start/end or elapsed duration when known, next step and decision
+needed. Do not send entire logs, JSON fingerprints or unchanged status
+repeatedly; link exact artifacts and project only needed fields.
+
+Each active work order contains a bounded execution-economy chronology. At a
+stable milestone, material failure, heavy command completion or terminal packet,
+the engineer records the operation class and purpose, known UTC start/end or
+elapsed duration, result, evidence handle and whether it advanced, invalidated
+or repeated a product claim. Unknown historical timing stays `unknown`; never
+invent it. This is cost/progress metadata, not a raw command log, dialogue
+transcript, second status authority or request for per-step reporting. Existing
+executor events and retained receipts are the source; Terra does not pause work
+to maintain the Markdown row.
+
+After each complete 60-minute interval from the order's recorded observation
+epoch, perform exactly one `ECONOMY_AUDIT` at the next available supervising
+turn. Review the chronology as a sequence, not one isolated long command: ask
+what product claim advanced, which tier consumed the time, whether the same
+failure or evidence was repeated, whether accepted acceleration was used where
+applicable, and whether the test method remains proportionate. Record a concise
+finding and next audit boundary. If healthy, do not message Terra. If a concrete
+problem exists, send one consolidated conceptual correction under
+`ECONOMY_AUDIT`; do not prescribe helpers, files or command order. The hourly
+audit does not reset or accelerate the ten-minute liveness cadence.
 
 The engineer reviews a completed result, not every internal milestone or method.
 During silence, perform exactly one bounded liveness check when each ten-minute
@@ -298,6 +352,133 @@ testable hypothesis. Do not lengthen timeouts, drop assertions, force-load or
 reseed merely to get a pass. This local review rule does not redefine the
 product's goal blocked/completion mechanism.
 
+The supervising engineer is accountable for verification economy. This does
+not authorize intermediate source review or implementation direction: it
+operates at work-order, dispatch and acceptance boundaries. An independently
+accepted shared test capability such as F0.VC is reused without requalification
+unless its contract/input changed or contradictory evidence appears. Every
+changed or previously failing native lane must first pass a faithful local
+preflight/regression on the candidate before a new complete CI matrix is
+dispatched. A provider-only admission or identity failure must be isolated by a
+bounded pre-Minecraft provider preflight rather than another full semantic
+matrix. Before every expensive repeat, the engineer records the product claim
+or decision it can materially change, why cheaper evidence cannot answer it and
+what outcome would alter acceptance or implementation. A repeat needs no
+routine user permission when it proportionately confirms or falsifies a
+material product invariant. It is deferred when it would only re-demonstrate
+provider plumbing, infrastructure hygiene, confidence, timing, topology or an
+already accepted claim. After one complete green terminal matrix, normally
+proceed directly to independent review. If review changes source, comparator or
+required evidence, the changed identity receives only the minimum newly
+applicable qualification. The engineer owns this value judgment; a fixed run
+count cannot substitute for it.
+
+The mandatory proof budget for one product candidate is ordered and finite:
+
+1. smallest deterministic localization of the changed or failing claim;
+2. faithful local regression for every changed or previously failing lane;
+3. at most one fresh local physical preflight, and only when runtime behavior or
+   its observation boundary changed;
+4. one complete terminal matrix on four simultaneous workers;
+5. immediate independent review and stop.
+
+An inapplicable step is skipped, not replaced by a broader run. Confidence,
+benchmark and accepted-infrastructure reproofs are outside this budget. This is
+the default economical path, not a categorical one-attempt prohibition. A
+failure can justify another after a changed hypothesis/candidate has a smallest
+cheap passing discriminator and the engineer records why the repeat has
+material expected product value.
+
+The budget is not a mechanical run counter. When a CI invocation launches no
+Minecraft process and observes no product-semantic lane because a classified
+deterministic provider transport or admission seam failed, it has produced no
+semantic evidence. Terra may correct that seam without special user permission,
+but redispatch still requires both a cheap faithful pre-Minecraft regression
+through the actual failed provider shape and the engineer's recorded finding
+that another matrix can materially advance a product claim or decision. All
+unaffected accepted evidence is reused. An unchanged blind retry is forbidden:
+every recurrence needs a concrete new cause, changed candidate and passing
+discriminator. Semantic, Minecraft/runtime, flaky or unclassified failures
+follow ordinary product/test review under the same value test. The hourly
+economy audit compares realized value with the recorded expectation and stops or
+replans work whose product value has not materialized.
+
+There is also a categorical circuit-breaker against multi-day proof drift. If
+the same acceptance claim remains in heavy proof work at two consecutive hourly
+economy audits, or records four cumulative execution hours after its first
+heavy attempt, stop at the nearest safe boundary. Separate provider queue time,
+preserve all evidence, classify the remaining work as product correction, test
+correction, infrastructure correction or no-new-value proof, and obtain an
+explicit revised work-order decision before another heavy run. The supervising
+engineer must trigger this boundary proactively; compute availability, sunk
+cost and an executor's willingness to continue are not reasons to defer it.
+
+The same circuit-breaker applies to disk retention. Raw native/CI workspaces
+are temporary execution custody, not durable evidence. Once the engineer has
+recorded terminal identity, result and a compact receipt/checksum, full clones,
+Gradle caches, runner binaries/update payloads, prepared-runtime copies,
+disposable worlds and verbose logs are reclaimed. Keep only source/Git history,
+normative summaries and a minimum artifact for a specifically open disputed
+claim. One local-heavy root and one provider root per active order are the
+default maximum, with a 64GiB project-wide raw-proof ceiling. Crossing that
+ceiling blocks another heavy launch until reclamation or an explicit named user
+exception; free disk capacity is not permission to accumulate archives.
+
+The binding 2026-09-08 causal-evidence policy in
+[`frontier-v3-accelerated-verification-loop.md`](frontier-v3-accelerated-verification-loop.md#mandatory-causal-evidence-instead-of-timing-luck)
+applies immediately: semantic correlated milestones and retained causal facts
+replace timing-sensitive polling and positional snapshot assertions. Canonical
+time remains part of exact domain verification; wall time only guards failure.
+Repeated proof-sequencing failures require coherent scenario-level diagnosis
+before another expensive run. Preserve recovery coverage and the test pyramid;
+do not create a new infrastructure programme or intermediate approval gate.
+
+### Mandatory methodological review
+
+The supervising engineer owns the methodological validity of acceptance tests,
+not merely their execution status. At specification/work-order definition and
+again at `FINAL_REVIEW`, map every material claim to its actual subject,
+preconditions and controls, causal observation, oracle, discriminating
+negative/recovery case, execution tier and exact candidate/evidence identity.
+Classify the result as: sound for the stated claim, sound only for an explicitly
+narrower claim, or insufficient/unsound. Green execution cannot upgrade that
+classification.
+
+Before authorizing an expensive native or CI lane, the engineer MUST also make
+an explicit adequacy-of-test-framing determination. The scenario must exercise
+the promised product behavior through the intended authority, preserve a fair
+control history, contain an oracle that would fail for a named plausible defect,
+avoid fixture-created success, use the required evidence tier and justify its
+cost relative to the cheapest faithful discriminator. An inadequate framing is
+corrected in the work order or narrowed before the expensive run. Waiting for a
+green, timeout or ambiguous result to discover that the test never addressed
+the claim is a supervision failure.
+
+When a milestone full gate is sequenced before native evidence, carrier
+readiness is itself a cheap admission precondition. The final candidate must
+already expose the required declarative scenario, read-only diagnostic facts,
+causal oracle and negative/recovery discriminator before the broad gate starts.
+Otherwise the gate is premature: adding the missing carrier changes the
+candidate and makes another final-candidate gate necessary. Preserve the first
+receipt, then authorize the replacement only through the ordinary material-
+product-value rule; never interpret a mechanical run count as a ban.
+
+The review must reject circular oracles, fixture-created outcomes, scenario
+names used as evidence, comparison histories with unequal relevant inputs,
+polling luck, stale/wrong-subject receipts, hidden normalization, and synthetic
+proof substituted for a required Minecraft/restart/player boundary. It must
+also ask whether the test would fail for the plausible defect it claims to
+exclude and whether the cheapest faithful tier precedes expensive native work.
+Code existence, automated semantics, physical-world integration and human
+comprehension remain separate claims.
+
+This responsibility does not transfer test implementation or routine local
+design from Terra. The engineer reviews the claim-to-evidence method, not helper
+names, algorithms or coding style. No new intermediate checkpoint is required
+for an already specified method. If Terra must materially change a proof
+carrier, oracle or claimed scope, it reports one bounded `RISK` boundary before
+the affected expensive run so the engineer can assess the new method once.
+
 ## Evidence and continuity
 
 For each acceptance criterion retain the code boundary, exact command/result,
@@ -317,6 +498,13 @@ uncertain. Automatic continuation alone does not reset or accelerate the
 interval. Resume the same executor if available. Replacing it
 requires releasing the previous write/run ownership first. Preserve all WIP
 and output; do not restart the project from an old plan paragraph.
+
+Also resume the active order's recorded hourly economy-audit boundary across
+turns. If it became due while no supervising turn was running, perform one
+catch-up audit at the next opportunity and advance the boundary to the next
+future hour; do not emit one audit per missed hour. If an identity-bound
+measurement forbids documentation writes, perform the read-only assessment on
+time and defer its single row until the nearest safe documentation boundary.
 
 Continue accepted in-scope work while the supervising goal/session is active.
 Do not claim invisible background supervision after termination. Human gates,
