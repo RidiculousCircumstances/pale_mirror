@@ -542,7 +542,7 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(templateBounds.getXsize() == 10.0D && templateBounds.getYsize() == 7.0D
                         && templateBounds.getZsize() == 9.0D,
                 "the authored settlement-assault component template must retain its [10, 7, 9] envelope");
-        BlockPos origin = helper.absolutePos(new BlockPos(1, 1, 1));
+        BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
         String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
@@ -551,9 +551,11 @@ public final class FrontierV3SceneGameTests {
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
         SceneLease local = FrontierV3GameTestSceneLeases.projectedIntoFixture(canonical, new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()));
-        helper.assertTrue(local.members().size() <= 24, "the authored template reserves a bounded 4 by 6 local body grid");
+        int fixtureColumns = 6, fixtureRows = 6;
+        helper.assertTrue(local.members().size() <= fixtureColumns * fixtureRows,
+                "the authored template reserves a bounded 6 by 6 local body grid");
         for (int index = 0; index < local.members().size(); index++) {
-            BlockPos position = origin.offset(index % 4, 0, index / 4); prepareFloorWithinTemplate(helper, level, templateBounds, position);
+            BlockPos position = origin.offset(index % fixtureColumns, 0, index / fixtureColumns); prepareFloorWithinTemplate(helper, level, templateBounds, position);
             Entity body = addOwnedBody(helper, level, state(runtime), local, local.members().get(index), position);
             requireEntityWithinTemplate(helper, templateBounds, body, "every owned fixture body must enter inside the authored envelope");
         }

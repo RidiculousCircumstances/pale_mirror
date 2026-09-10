@@ -1,0 +1,25 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="pale_mirror_scene_test"
+version="0.3.0-SNAPSHOT"
+displayName="Pale Mirror focused scene test resource"
+description='''
+Test-only resource contributor for the bounded Frontier v3 scene GameTest.
+'''
+
+[[dependencies.pale_mirror_scene_test]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.248,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.pale_mirror_scene_test]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"
