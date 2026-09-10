@@ -1,6 +1,6 @@
 # PM-F02C-HOT-FLOOR-CONTRACT-17: make every assault floor physically serviceable
 
-Specification revision: 2. Status: `EXECUTING`.
+Specification revision: 3. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_floor17`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -42,16 +42,27 @@ semantics. Do not change the native scenario, timeouts or evidence thresholds.
    every compiled assault support must map to exactly one declared provider
    surface with required headroom; it must fail for the retained four-unclaimed-
    attacker counterexample and include a negative unavailable/obstructed case.
-2. Run one focused real-`ServerLevel` production-seam GameTest that uses the
-   ordinary graybox projector and ordinary assault candidate/admission/body path;
-   a prefilled generic template floor or direct projector call is insufficient.
-3. On green, run one complete clean-HEAD critical-code gate for the changed
-   candidate. It must include the fixed pure-test correction retained by order16,
-   the ordinary aggregate, package boundary and saved-world shutdown.
+2. Do not manufacture a GameTest seam for the canonical assault's absolute
+   coordinates. The existing 64/64 scene aggregate is component-only evidence:
+   its carrier localizes or prefills fixture floors and therefore cannot prove
+   the canonical graybox-projector-to-scene seam. Retain its already completed
+   invocation transparently, make no acceptance claim from it and do not rerun
+   it. Do not build a new harness, relocate the canonical assault, prefill its
+   floors, force-load or teleport merely to satisfy this order.
+3. On the fixed-fixture contract green, run one complete clean-HEAD critical-
+   code gate for the changed candidate. It must include the fixed pure-test
+   correction retained by order16, the ordinary aggregate, package boundary and
+   saved-world shutdown.
 4. On green only, execute exactly one targeted native R12 through the unchanged
    `run-f02c-hot-receipt-carrier.mjs`. It must either return the complete HOT
    strike/restart/re-observation/release/next-COLD receipt or one exact terminal
    product failure.
+
+The pure compiler-to-declared-provider contract is the cheap pre-native
+discriminator. The unchanged native R12 is the sole authentic proof of the
+ordinary canonical projector -> candidate -> admission -> body seam, as well as
+the required HOT/restart flow. This evidence split is an architecture decision,
+not a request for a particular implementation.
 
 The same floor-category failure may not be retried. A distinct product failure
 may receive at most one ordinary in-scope correction after a cheaper changed-
@@ -79,3 +90,8 @@ Use branch `terra/f02c-hot-floor-contract-17`, worktree
 Execution assigned at `2026-09-10T19:35:01Z` from the exact clean baseline and
 isolated custody paths above. First liveness audit is due at `19:45:01Z` after
 silence; first economy audit is due at `20:35:01Z` if execution remains active.
+At the executor's method milestone, the engineer accepted its refusal to claim
+the 64/64 localized-floor carrier as the requested seam and amended the evidence
+split above. Observation epoch reset at `2026-09-10T19:56:48Z`; the next bounded
+liveness audit is due after ten minutes of silence, and the economy audit remains
+due at `20:35:01Z` if execution is still active.
