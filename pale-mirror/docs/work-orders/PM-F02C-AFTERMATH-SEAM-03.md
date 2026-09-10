@@ -87,3 +87,67 @@ component and cannot admit native execution.
 Observation epoch: `2026-09-10T09:00:18Z`. First economy-audit boundary:
 `2026-09-10T10:00:18Z` if still executing. Ten-minute liveness follows the
 binding protocol.
+
+## FINAL_REVIEW correction 1 — `2026-09-10T09:41Z`
+
+Candidate `ad22af0f96445c0d829d5e6d14bb08e86a6f24b7` is not accepted. The
+fresh read-only challenger and supervising engineer independently found the
+same two P0 invariant failures; this is the order's one ordinary consolidated
+return, not a new slice or implementation prescription.
+
+1. The real missing-owner seam remains unchanged. Production
+   `FrontierV3DeferredAftermathExecutor` still classifies `claim == null` as
+   terminal `CONFLICTED`. `FrontierV3AftermathOwnerSeamTest` advances the pure
+   COLD engine, checks static registry ordering and then manually constructs HOT
+   state; it never runs bounded graybox projection and aftermath through their
+   actual production composition from an untouched ledger. Therefore the exact
+   predecessor failure—aftermath outrunning a projector cursor that has not yet
+   visited a naturally loaded target—remains possible.
+2. HOT and COLD now derive the same textual namespace, but not one exactly-once
+   history. A confirmed HOT strike leaves `SettlementAssault.nextStrikeEpoch`
+   unchanged; after lease release the COLD planner can emit that same epoch and
+   cause again. One shared cause requires one shared canonical advancement or
+   exclusion boundary across HOT confirmation, release, COLD continuation and
+   restart.
+
+The focused proof must now exercise, rather than imitate, both production
+seams:
+
+- ordinary cause, naturally available target, untouched ledger and a bounded
+  projector cursor that has not reached the target; actual registry execution
+  must retain pending/unobserved absence, eventually establish the declared
+  owner classification and realize once;
+- the same composition must preserve a genuine foreign block as typed local
+  conflict, cover exact tombstone/owned-material interleavings and include the
+  applicable restart boundaries without preinstalling the success state;
+- actual HOT body/attacker/epoch selection and receipt reduction followed by
+  release/COLD continuation must advance to the next strike exactly once; wrong
+  actor/epoch/mode and replay after restart must fail.
+
+Direct helper calls, static ordering assertions and manual terminal receipts
+remain useful component tests but cannot discharge these seam claims. Do not
+run native while these focused controls are absent or failing. Once they are
+faithful and green, a changed final candidate may run one clean-HEAD critical
+gate whose retained receipt binds final commit/content and packaged JAR. The
+previous native attempt is pre-semantic infrastructure evidence only: server
+and prepared-client readiness occurred, but no PMV3 scenario state/action or
+semantic snapshot occurred. A subsequent native carrier is proportionate only
+after a cheap actual-client-path startup discriminator closes that exact
+failure and the final candidate is admitted.
+
+The next terminal packet must include exact cleanup evidence. The prior packet
+incorrectly claimed cleanup while watcher `490257`, Gradle daemon `493968` and
+prepared-client JVM `494761` remained; the builder subsequently terminated and
+the engineer independently confirmed those exact task-owned processes gone.
+
+### Execution-economy chronology
+
+- `09:00Z–09:41Z` — fresh isolated builder produced focused/unit work and one
+  claimed critical gate, then one 330.7s native attempt. The native executed no
+  scenario action and exposed a client-startup seam, while terminal review
+  showed the required product owner seam was represented only by static/manual
+  construction. Product value is limited but concrete: shared textual cause
+  wiring exists and the independent challenger prevented false acceptance.
+  Correction returns entirely to cheap production-seam controls; no CI,
+  terrain, benchmark or confidence work occurred. Next economy boundary remains
+  `2026-09-10T10:00:18Z` if executing.
