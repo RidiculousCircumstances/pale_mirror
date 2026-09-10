@@ -1,8 +1,9 @@
 # PM-F02C-HOT-LEASE-LINEAGE-23: require exact canonical hand-off lineage
 
-Specification revision: 1. Status: `FRAMED_AWAITING_EXECUTION`.
+Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`, after exact custody.
+Executor: `/root/terra_f02c_hot_lease_lineage23`, one fresh
+`gpt-5.6-terra`, reasoning `high`.
 
 Start from clean private WIP
 `65b1df90f277070f7980deda92aefb93612112cf`, parent `7274b6ea`, tree
@@ -49,4 +50,7 @@ unaccepted rather than opening order24.
 Only explicit acceptance may authorize one clean-HEAD critical gate and the
 unchanged private-Xvfb R14. Use branch `terra/f02c-hot-lease-lineage-23`,
 worktree `/home/rd/proj/pm-f02c-hot-lease-lineage-23` and task root
-`/home/rd/proj/pm-f02c-hot-lease-lineage-23-tmp`.
+`/home/rd/proj/pm-f02c-hot-lease-lineage-23-tmp`. Exact clean custody was
+verified and execution assigned at `2026-09-10T22:37:52Z`. First bounded
+liveness audit is due at `22:47:52Z` after silence; first economy audit is due
+at `23:37:52Z` if execution remains active.
