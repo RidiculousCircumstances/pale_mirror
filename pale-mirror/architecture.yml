@@ -374,7 +374,7 @@ critical_flows:
     lifecycle: "active-development"
     path: "canonical cause at SimInstant T -> known semantic consequences commit atomically -> if HOT, durable effect receipt before Vanilla physics and exact observed aftermath; if COLD, bounded chunk-indexed deferred aftermath -> natural later chunk availability -> current aftermath materialized idempotently without replay -> physical contradictions become typed local evidence -> compact only after every spatial unit is resolved"
     owner: "pure Frontier v3 consequence/outbox aggregate plus registered NeoForge effect and aftermath providers; docs/frontier-v3-seamless-foundation.md F0.2"
-    verification: "critical-code plus off-screen explosion, constructive obstruction and crash-window scenarios"
+    verification: "critical-code plus off-screen explosion, constructive obstruction and crash-window scenarios; owner-seam acceptance invokes the same complete closed physical registry as server lifecycle against a real loaded ServerLevel/SavedData ledger, while direct sub-owner, paired-helper and synthetic-adapter checks remain component evidence only"
   - id: "frontier-v3-fungible-resource-flow"
     lifecycle: "active-development"
     path: "exact resource lot and claim allocation -> custody account -> temporary HOT slot/entity binding -> ordinary Vanilla split/merge/partial transfer/hopper/consume/drop/pickup -> typed zero-sum observation -> exact quantity/claim/custody transaction -> allocation completion, interruption or local ambiguity"

@@ -322,6 +322,15 @@ Provider reruns are neither categorically required nor forbidden: the engineer
 authorizes one only when its expected result can change a material product
 decision that cheaper evidence cannot answer.
 
+F0.2C owner-seam evidence must enter through the same complete closed physical
+registry invoked by server lifecycle and use its real loaded-world SavedData
+ledger from an untouched initial history. Direct projector/aftermath calls,
+test-only paired compositions and in-memory physical adapters remain useful
+component tests but cannot close F0.2C. The shared HOT/COLD cause is proved by a
+separate ordinary scene-execution→receipt→release→next-COLD-epoch carrier,
+including restart/replay and wrong-identity controls; helper-level cause-ID
+equality cannot substitute for that history.
+
 The original sequence placed this checkpoint after independent F0.2B
 acceptance. By explicit user authority on 2026-09-08, the failed F0.2B native
 attempt's shared-mutable-run collision pulls the checkpoint forward at a safe,

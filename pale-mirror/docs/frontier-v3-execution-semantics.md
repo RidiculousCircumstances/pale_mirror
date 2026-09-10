@@ -136,6 +136,17 @@ history or silently overwrite the player's construction. First-visibility work
 is bounded; unresolved evidence blocks only its affected managed interaction,
 not all world progress or all player movement.
 
+Production-seam acceptance begins before either physical owner has manufactured
+the expected claim. It advances the complete closed physical registry used by
+server lifecycle against the real loaded-world ledger. Calling projection and
+aftermath directly, pairing them in a test-only helper or substituting an
+in-memory physical adapter can prove their local algorithms, but cannot prove
+registry ordering, intervening-owner safety or SavedData recovery. The HOT side
+is a separate required carrier through ordinary scene admission, body
+selection, durable intent, physical observation, confirmation, drain/release
+and the next COLD epoch; comparing generated IDs or manually installing any of
+those intermediate states is insufficient.
+
 ## 5. Scene boundaries are not gameplay boundaries
 
 Scenes are bounded execution leases, not isolated arenas. Projectile flight,
