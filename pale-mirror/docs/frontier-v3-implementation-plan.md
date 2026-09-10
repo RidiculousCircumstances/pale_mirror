@@ -339,6 +339,17 @@ world-root persistence and actual restart. GameTest template loading is not
 natural demand, and the native run may not compensate for a synthetic registry
 or manually installed causal transition.
 
+Do not turn partial-receipt composition into one impossible native history.
+The ordinary COLD destructive strike and the alternative HOT physical strike
+are mutually exclusive executions of one canonical combat step. Close them as
+two bounded product receipts: first COLD cause -> deferred aftermath -> natural
+availability/restart, then ordinary HOT admission -> exact physical receipt ->
+drain/release -> the next COLD epoch. Compose their shared cause/epoch rules at
+final F0.2C review; never require one strike to execute in both modes or let one
+fixture manufacture the other mode's result. Each receipt gets at most its one
+product-valued targeted native flow after cheap method admission; existing
+constructive-obstruction evidence is reused rather than rerun for confidence.
+
 The original sequence placed this checkpoint after independent F0.2B
 acceptance. By explicit user authority on 2026-09-08, the failed F0.2B native
 attempt's shared-mutable-run collision pulls the checkpoint forward at a safe,

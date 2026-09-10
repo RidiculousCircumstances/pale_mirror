@@ -1,7 +1,7 @@
 # PM-F02C-PRODUCTION-CARRIER-05: expose and prove the real physical turn
 
 Specification revision: 2.
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `METHOD_REJECTED`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Executor: `/root/terra_f02c_physical_turn06`,
 one fresh `gpt-5.6-terra` with reasoning `high`, in a new isolated
 branch/worktree from private WIP checkpoint
@@ -148,3 +148,27 @@ not authorized until method admission.
 
 Observation epoch: `2026-09-10T11:24:34Z`. First economy-audit boundary:
 `2026-09-10T12:24:34Z` if still executing.
+
+## Terminal method decision
+
+Candidate `26dd00c78102f9db16cd5c93f68962d296e4ee64`, tree
+`f671dafc84ecef902b19d29d8a45caedf38e837b`, is retained as a clean private
+checkpoint and is not accepted as F0.2C evidence. The focused run completed in
+48 seconds with 64 GameTests, and no complete/native/CI gate ran.
+
+Independent read-only method review rejected the carrier before expensive
+execution. Its lifecycle entrypoint delegates correctly to the complete
+registry, and its focused foreign-material result is useful only as a narrow
+registry/conflict receipt. The test directly prepares an already-PENDING
+`DeferredAftermath`, proves `PENDING -> CONFLICTED`, and has no unrelated
+process; it therefore does not establish the ordinary COLD cause,
+`PENDING -> REALIZED` or non-starvation. The declarative native carrier is
+unreachable because the selected `settlement-assault` profile deliberately has
+no due COLD combat action before demand, while its scene diagnostic does not
+publish the asserted cause/epoch fields. It also lacks recovered identity,
+no-replay and ordinary wrong-identity controls.
+
+This is a proof-boundary failure, not authority for another carrier correction
+in the same executor context. Revision 2 is terminal. The successor splits the
+mutually exclusive COLD-aftermath and HOT-scene histories instead of attempting
+another all-in-one declaration.
