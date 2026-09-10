@@ -151,3 +151,11 @@ the engineer independently confirmed those exact task-owned processes gone.
   Correction returns entirely to cheap production-seam controls; no CI,
   terrain, benchmark or confidence work occurred. Next economy boundary remains
   `2026-09-10T10:00:18Z` if executing.
+- `10:00Z` — the first complete-hour audit finds no continuing proof drift.
+  After correction1, execution returned to focused local/scene seam work; no
+  second critical/native/CI attempt or accepted-capability reproof occurred.
+  The earlier 330.7s pre-semantic native cost was avoidable because the claimed
+  seam test was static/manual, but that exact methodology defect is now the
+  cheap-test acceptance boundary and the independent challenger prevented its
+  promotion. Current cost is proportionate; no builder contact is warranted.
+  Next economy boundary is `2026-09-10T11:00:18Z` if still executing.
