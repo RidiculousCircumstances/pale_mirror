@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertF02cAftermathCarrier } from '../src/f02c-aftermath-carrier.mjs';
-import { resolveIsolatedScenarioOuterAttempt } from '../src/isolated-scenario-attempt.mjs';
-import { buildF02cAftermathCarrierReceipt, preflightF02cAftermathCarrier, runIsolatedScenario } from '../src/run-f02c-aftermath-carrier.mjs';
+import { isolatedScenarioOuterAttemptEnvironment, persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from '../src/isolated-scenario-attempt.mjs';
+import { buildF02cAftermathCarrierReceipt, isolatedScenarioSupervisorInvocation, preflightF02cAftermathCarrier } from '../src/run-f02c-aftermath-carrier.mjs';
 
 const selector = 'cause:development-settlement-assault-epoch-4-attacker-bioform-west-19';
 const position = { x: -360, y: 64, z: -340 };
@@ -67,15 +67,37 @@ test('F0.2C identity preflight binds production declaration bytes, distinct run 
   assert.equal(receipt.terminal.revision, 45);
 });
 
-test('F0.2C wrapper crosses the production child environment seam and constructs its terminal receipt', async () => {
+test('F0.2C ordinary wrapper input and supervisor recovery metadata retain the precommitted attempt as component contracts', () => {
+  const invocation = isolatedScenarioSupervisorInvocation({ scenarioPath: '/scenario.json', manifestPath: '/manifest.json', root: '/task-root', outerAttempt });
+  assert.deepEqual(invocation.args, ['tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', '/scenario.json', '/manifest.json']);
+  assert.equal(invocation.options.env.FRONTIER_V3_NATIVE_PROCESS_ROOT, '/task-root/process');
+  assert.deepEqual(isolatedScenarioOuterAttemptEnvironment(outerAttempt), { FRONTIER_V3_ISOLATED_OUTER_ATTEMPT: outerAttempt });
+  assert.equal(invocation.options.env.FRONTIER_V3_ISOLATED_OUTER_ATTEMPT, outerAttempt);
+  assert.deepEqual(persistentRecoveryMetadata({ mode: 'graceful', world: 'world', splitAfterAction: 2, runId: outerAttempt, controlDirectory: '/session' }), {
+    mode: 'graceful', world: 'world', splitAfterAction: 2, clientSession: { runId: outerAttempt, reusedJvm: true, controlDirectory: '/session' }
+  });
+  for (const malformed of ['', 'not-a-uuid', '0000000A-0000-0000-0000-000000000012']) {
+    assert.throws(() => isolatedScenarioOuterAttemptEnvironment(malformed), /FRONTIER_V3_ISOLATED_OUTER_ATTEMPT/);
+  }
+});
+
+test('F0.2C wrapper strips the ambient F0.2B admission-only early-exit control', () => {
+  const name = 'FRONTIER_V3_TEST_SAVE_OWNER_OBSERVER_ADMISSION_ONLY';
+  const prior = process.env[name];
+  process.env[name] = 'true';
+  try {
+    const invocation = isolatedScenarioSupervisorInvocation({ scenarioPath: '/scenario.json', manifestPath: '/manifest.json', root: '/task-root', outerAttempt });
+    assert.equal(Object.hasOwn(invocation.options.env, name), false);
+  } finally {
+    if (prior === undefined) delete process.env[name];
+    else process.env[name] = prior;
+  }
+});
+
+test('F0.2C parser and receipt consumer construct from an already completed manifest without claiming execution', () => {
   const value = envelope();
-  const output = await runIsolatedScenario({ scenarioPath: new URL('../scenarios/disposable-cold-bomber-aftermath-restart.json', import.meta.url).pathname,
-    manifestPath: 'unused-admission-manifest.json', root: new URL('../', import.meta.url).pathname, outerAttempt, attemptAdmissionOnly: true });
-  const admission = JSON.parse(output.trim());
-  assert.deepEqual(admission, { status: 'admitted', outerAttempt, recoveryClientSession: { runId: outerAttempt, reusedJvm: true } });
   const receipt = buildF02cAftermathCarrierReceipt(preflightF02cAftermathCarrier(value));
   assert.equal(receipt.finalManifest.sha256, hash(value.manifestSource));
-  assert.equal(receipt.identity.precommittedOuterAttempt, admission.recoveryClientSession.runId);
   assert.deepEqual(receipt.identity, { precommittedOuterAttempt: outerAttempt, clientRunner: { runId: clientRunId },
     lifecycle: { runId: outerAttempt, sessionId, nonce } });
 });

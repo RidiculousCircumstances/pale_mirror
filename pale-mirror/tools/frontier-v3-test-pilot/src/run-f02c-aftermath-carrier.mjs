@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertF02cAftermathCarrier, assertF02cAftermathDeclaration, assertF02cAftermathIdentity } from './f02c-aftermath-carrier.mjs';
-import { ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV, ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV } from './isolated-scenario-attempt.mjs';
+import { isolatedScenarioOuterAttemptEnvironment } from './isolated-scenario-attempt.mjs';
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -40,20 +40,24 @@ export function buildF02cAftermathCarrierReceipt(validated, manifestFile = 'clea
     scenarios: { clear: { scenario: 'disposable-cold-bomber-aftermath-restart.json', declarationSha256: validated.declarationSha256, manifest: manifestFile } } });
 }
 
-/** Real wrapper-child composition, with a bounded no-Minecraft admission mode for Node evidence. */
-export async function runIsolatedScenario({ scenarioPath, manifestPath, root, outerAttempt, attemptAdmissionOnly = false }) {
+/** The production wrapper's one ordinary child invocation; the child owns its lifecycle and final manifest. */
+export function isolatedScenarioSupervisorInvocation({ scenarioPath, manifestPath, root, outerAttempt }) {
   if (typeof scenarioPath !== 'string' || typeof manifestPath !== 'string' || typeof root !== 'string' || typeof outerAttempt !== 'string'
-      || typeof attemptAdmissionOnly !== 'boolean') throw new Error('F0.2C carrier isolated scenario invocation is malformed');
-  const child = spawn(process.execPath, ['tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', scenarioPath, manifestPath], {
-    cwd: project, env: { ...process.env, FRONTIER_V3_NATIVE_PROCESS_ROOT: resolve(root, 'process'), [ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV]: outerAttempt,
-      ...(attemptAdmissionOnly ? { [ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV]: 'true' } : {}) }, stdio: ['ignore', 'pipe', 'pipe']
-  });
-  let stdout = ''; let stderr = '';
-  child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; process.stdout.write(chunk); });
-  child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; process.stderr.write(chunk); });
+  ) throw new Error('F0.2C carrier isolated scenario invocation is malformed');
+  // F0.2B's scoped Node harness may return before lifecycle/manifest work.
+  // Its ambient control is never authority for this dedicated COLD carrier.
+  const environment = { ...process.env };
+  delete environment.FRONTIER_V3_TEST_SAVE_OWNER_OBSERVER_ADMISSION_ONLY;
+  return Object.freeze({ args: Object.freeze(['tools/frontier-v3-test-pilot/src/run-isolated-scenario.mjs', scenarioPath, manifestPath]),
+    options: Object.freeze({ cwd: project, env: Object.freeze({ ...environment, FRONTIER_V3_NATIVE_PROCESS_ROOT: resolve(root, 'process'),
+      ...isolatedScenarioOuterAttemptEnvironment(outerAttempt) }), stdio: 'inherit' }) });
+}
+
+export async function runIsolatedScenario(invocation) {
+  const { args, options } = isolatedScenarioSupervisorInvocation(invocation);
+  const child = spawn(process.execPath, args, options);
   const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
-  if (code !== 0) throw new Error(`F0.2C native carrier scenario failed (${code}): ${stderr.trim()}`);
-  return stdout;
+  if (code !== 0) throw new Error(`F0.2C native carrier scenario failed (${code})`);
 }
 
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) await main();

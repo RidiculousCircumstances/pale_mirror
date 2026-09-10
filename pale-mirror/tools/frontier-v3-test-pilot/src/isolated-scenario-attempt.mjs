@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
  * scenario declaration, fixture selection, or Minecraft launch arguments.
  */
 export const ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV = 'FRONTIER_V3_ISOLATED_OUTER_ATTEMPT';
-export const ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV = 'FRONTIER_V3_ISOLATED_OUTER_ATTEMPT_ADMISSION_ONLY';
 
 export function resolveIsolatedScenarioOuterAttempt(value) {
   if (value === undefined) return randomUUID();
@@ -18,6 +17,17 @@ export function resolveIsolatedScenarioOuterAttempt(value) {
 /** The persistent restart receipt retains the supervisor's outer attempt, never the client action run. */
 export function persistentRecoveryClientSession(runId) {
   return Object.freeze({ runId: resolveIsolatedScenarioOuterAttempt(runId), reusedJvm: true });
+}
+
+/** The ordinary wrapper may pass only the validated correlation attempt to its supervisor. */
+export function isolatedScenarioOuterAttemptEnvironment(runId) {
+  return Object.freeze({ [ISOLATED_SCENARIO_OUTER_ATTEMPT_ENV]: resolveIsolatedScenarioOuterAttempt(runId) });
+}
+
+/** The ordinary persistent-restart path retains the same supervisor attempt in its final manifest metadata. */
+export function persistentRecoveryMetadata({ mode, world, splitAfterAction, runId, controlDirectory }) {
+  return Object.freeze({ mode, world, splitAfterAction,
+    clientSession: Object.freeze({ ...persistentRecoveryClientSession(runId), controlDirectory }) });
 }
 
 function uuid(value) {

@@ -22,7 +22,7 @@ import { withGracefulSaveGate } from './graceful-save-gate.mjs';
 import { prearmSaveOwnerObserver, startSaveOwnerObservation } from './save-owner-observer.mjs';
 import { admitSaveOwnerObserverContract, requireSaveOwnerObserverEvidence } from './f02b-save-owner-observer-contract.mjs';
 import { assertRecoveryCarrierManifest } from './f02b-native-semantic.mjs';
-import { ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV, persistentRecoveryClientSession, resolveIsolatedScenarioOuterAttempt } from './isolated-scenario-attempt.mjs';
+import { persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from './isolated-scenario-attempt.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -37,18 +37,6 @@ const recoveryCarrier = scenario.id === 'disposable_f02b_normal_product_recovery
 // instead of replaying ordinary player actions after a killed JVM and manufacturing evidence.
 if (scenario.crash?.phase === 'after_restart') {
   throw new Error('F0.V crash scenarios currently require phase=before_restart with one non-replayed recovery half');
-}
-const outerAttemptAdmissionOnly = process.env[ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV];
-if (outerAttemptAdmissionOnly !== undefined && outerAttemptAdmissionOnly !== 'true') {
-  throw new Error(`${ISOLATED_SCENARIO_OUTER_ATTEMPT_ADMISSION_ONLY_ENV} must be true when declared`);
-}
-// This narrow Node-only branch proves the production wrapper-to-supervisor
-// correlation seam before any display, Gradle, server, or Minecraft work.
-// It retains no scenario authority beyond the already-loaded declaration.
-if (outerAttemptAdmissionOnly === 'true') {
-  const runId = resolveIsolatedScenarioOuterAttempt(process.env.FRONTIER_V3_ISOLATED_OUTER_ATTEMPT);
-  console.log(JSON.stringify({ status: 'admitted', outerAttempt: runId, recoveryClientSession: persistentRecoveryClientSession(runId) }));
-  process.exit(0);
 }
 if (!process.env.DISPLAY) throw new Error('a native visible pilot requires DISPLAY=:0');
 const initialCanonicalHold = process.env.FRONTIER_V3_PILOT_INITIAL_CANONICAL_HOLD === 'true';
@@ -240,8 +228,8 @@ try {
       (entry) => entry.detail.clientPid === preparedClient.detail.clientPid);
     await finishPersistentPilot(persistentPilot, clientSegments);
     console.log('PMV3_ISOLATED recovery=after-complete client=persistent');
-    recoveryMetadata = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction,
-      clientSession: { ...persistentRecoveryClientSession(runId), controlDirectory: sessionDirectory } };
+    recoveryMetadata = persistentRecoveryMetadata({ mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction,
+      runId, controlDirectory: sessionDirectory });
   }
   if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;
