@@ -29,7 +29,9 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -45,6 +47,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void exposesTheExactPendingAftermathOwnerPartAndAuthorityRevisionWithoutMutatingIt() {
+        var configuration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:diagnostic-cold-aftermath"), 41L);
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>) FrontierEngines.createCanonicalStateAccess(configuration);
+        long dueAt = configuration.initialSchedules().getFirst().dueAt().ticks();
+        engine.advanceTo(new SimInstant(dueAt), new WorkBudget(64, 512));
+        FrontierWorldState state = engine.canonicalState().state();
+        var aftermath = state.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), engine.canonicalState().revision(), new SimInstant(dueAt), new byte[]{1}, List.of(), List.of());
+
+        String json = FrontierV3DiagnosticJson.render("aftermath", aftermath.causeId().value(), checkpoint, state, Optional.empty());
+
+        assertTrue(json.contains("\"status\":\"ok\"") && json.contains("\"aftermathId\":\"" + aftermath.id().value() + "\""));
+        assertTrue(json.contains("\"expectedOwner\":\"" + aftermath.cells().getFirst().expectedOwner().value() + "\"")
+                        && json.contains("\"expectedPart\":\"" + aftermath.cells().getFirst().expectedPart() + "\"")
+                        && json.contains("\"authorityRevision\":-1"),
+                "the read-only COLD diagnostic retains the pending owner, semantic part and pre-effect revision");
+        assertEquals(state, engine.canonicalState().state(), "diagnostic exposure cannot manufacture an aftermath transition");
+    }
+
     @Test
     void derivesTypedProductionWorkTraceInsteadOfFallingBackToLogistics() {
         SubjectId worker = new SubjectId("resident:1-15");

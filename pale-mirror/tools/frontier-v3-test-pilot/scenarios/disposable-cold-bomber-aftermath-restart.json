@@ -11,23 +11,23 @@
     ] }
   ],
   "actions": [
-    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedMaterial": "HALL", "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false }, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "authorityRevision": -1, "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false }, "timeoutMs": 120000 },
     { "type": "inspect", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19" },
+    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "authorityRevision": -1, "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false }, "timeoutMs": 120000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 },
     { "type": "wait_until_block", "position": { "x": -360, "y": 64, "z": -340 }, "block": "minecraft:air", "timeoutMs": 90000 },
-    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" }, "timeoutMs": 90000 }
+    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" }, "timeoutMs": 90000 }
   ],
   "restart": {
     "mode": "graceful",
     "afterAction": 2,
-    "resumeSetup": [
-      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 }
-    ]
+    "resumeSetup": []
   },
   "assertions": [
-    { "after": 1, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedMaterial": "HALL", "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false } },
-    { "after": 2, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "terminal": false, "nextStatus": "PENDING", "cellStatus": "PENDING" } },
-    { "after": 5, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" } }
+    { "after": 1, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "authorityRevision": -1, "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false } },
+    { "after": 2, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "authorityRevision": -1, "terminal": false, "nextStatus": "PENDING", "cellStatus": "PENDING" } },
+    { "after": 3, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "authorityRevision": -1, "terminal": false, "nextStatus": "PENDING", "cellStatus": "PENDING" } },
+    { "after": 6, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "expectedOwner": "structure:1-hall", "expectedPart": "FOUNDATION", "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" } }
   ],
   "frames": []
 }

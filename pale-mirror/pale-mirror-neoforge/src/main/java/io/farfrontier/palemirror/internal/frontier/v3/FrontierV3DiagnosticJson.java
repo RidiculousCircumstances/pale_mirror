@@ -763,7 +763,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"cells\":" + value.cells().size() + ",\"terminal\":" + value.terminal() + ",\"expectedMaterial\":\"" + cell.expectedMaterial() + "\",\"nextStatus\":\""
                 + (value.terminal() ? "NONE" : cell.status()) + "\",\"cellStatus\":\"" + cell.status()
                 + "\",\"position\":" + position(cell.position()) + ",\"expectedOwner\":\"" + quote(cell.expectedOwner().value())
-                + "\",\"expectedPart\":\"" + cell.expectedPart() + "\"}";
+                + "\",\"expectedPart\":\"" + cell.expectedPart() + "\",\"authorityRevision\":" + cell.authorityRevision() + "}";
     }
 
     /** One stable typed-scene view for player-piloted physical-scene evidence. */
