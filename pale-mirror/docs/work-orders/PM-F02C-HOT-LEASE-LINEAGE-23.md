@@ -1,6 +1,6 @@
 # PM-F02C-HOT-LEASE-LINEAGE-23: require exact canonical hand-off lineage
 
-Specification revision: 3. Status: `METHOD_ADMITTED_POST_GATE_AUTHORIZED`.
+Specification revision: 4. Status: `TERMINAL_GATE_INCONCLUSIVE`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_lease_lineage23`, one fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -118,3 +118,29 @@ verified and method execution assigned at `2026-09-10T22:37:52Z`. The
 post-admission liveness clock begins at the direct executor resume event; its
 first bounded audit is due only after ten complete minutes of silence and its
 economy audit after one hour.
+
+## Terminal post-admission review
+
+The one critical gate ran at exact clean `90eafbb0` from
+`2026-09-10T22:56:27Z` to `23:08:02Z` and was interrupted with exit130 after
+695.08 seconds. R14 did not start. Exact retained packet/log/timing/resource
+hashes and JAR SHA-256
+`283e672536b180d7689270b99e2df333118153b9a5fd16cdc6120afa2e99df88`
+match; the worktree is clean and no task-owned process, port or display remains.
+
+Fresh terminal challenge rejects the packet's causal classification and test
+counts. The last GameTest marker was the five-test
+`pm-frontier-v3-scene-aftermath:0` batch with 123 successful markers, but two
+ordinary Gradle workers were also still executing: NeoForge
+`positiveForeignMaterialSurvivesAndBecomesOneLocalConflict` and Frontier
+`everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract`.
+Both traverse the COLD-bomber fixture boundary. Current XML contains two
+termination-wrapper failures and two interrupted/skipped tests; cached
+September 7 results cannot be counted as current green evidence.
+
+No thread, CPU, I/O, GC, watchdog, OOM or quota evidence survived. The
+discretionary SIGINT bounded cost but was not an existing declared watchdog or
+protocol circuit-breaker event, so it cannot prove a GameTest, HOT-policy or
+product failure. This order is terminal with the full gate unestablished and
+R14 unexecuted. Successor order24 owns only a bounded ordinary-JVM localization
+of the shared fixture/assault progression before any further Minecraft gate.
