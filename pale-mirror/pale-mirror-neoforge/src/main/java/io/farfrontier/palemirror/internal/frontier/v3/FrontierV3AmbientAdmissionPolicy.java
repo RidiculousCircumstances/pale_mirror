@@ -136,9 +136,8 @@ final class FrontierV3AmbientAdmissionPolicy {
             var releasedActor = result.resultingState().actorLocations().get(selection.actorId());
             if (initialLease == null || initialActor == null || drainingLease == null || drainingActor == null
                     || releasedLease == null || releasedActor == null
-                    || drainingLease.status() != AmbientLeaseStatus.DRAINING || releasedLease.status() != AmbientLeaseStatus.CLOSED
-                    || !initialLease.actorId().equals(selection.actorId()) || !drainingLease.actorId().equals(selection.actorId())
-                    || !releasedLease.actorId().equals(selection.actorId())) return false;
+                    || !hasLeaseLineage(initialLease, selection.actorId(), drainingLease, AmbientLeaseStatus.DRAINING)
+                    || !hasLeaseLineage(initialLease, selection.actorId(), releasedLease, AmbientLeaseStatus.CLOSED)) return false;
             return switch (selection.effect()) {
                 case ABANDON_PREPARED -> initialLease.status() == AmbientLeaseStatus.PREPARED
                         && drainingActor.equals(initialActor)
@@ -147,6 +146,18 @@ final class FrontierV3AmbientAdmissionPolicy {
                 case DRAIN_HOT -> initialLease.status() == AmbientLeaseStatus.HOT
                         && releasedActor.condition().status() == ActorLifeStatus.ALIVE;
             };
+        }
+
+        private static boolean hasLeaseLineage(AmbientActorLease initial, SubjectId actorId,
+                                               AmbientActorLease candidate, AmbientLeaseStatus expectedStatus) {
+            return candidate.status() == expectedStatus
+                    && initial.actorId().equals(actorId)
+                    && candidate.actorId().equals(actorId)
+                    && candidate.handoffBody().equals(initial.handoffBody())
+                    && candidate.handoffInstant().equals(initial.handoffInstant())
+                    && candidate.revision() == initial.revision()
+                    && candidate.goal() == initial.goal()
+                    && candidate.goalBody().equals(initial.goalBody());
         }
 
         private static Optional<Effect> selectedEffect(SubjectId actorId, FrontierWorldState state, boolean reserved) {
