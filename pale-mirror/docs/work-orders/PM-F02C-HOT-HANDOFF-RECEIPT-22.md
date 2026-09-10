@@ -1,6 +1,6 @@
 # PM-F02C-HOT-HANDOFF-RECEIPT-22: bind admission to a valid hand-off result
 
-Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 3. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_handoff_receipt22`, one fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -91,3 +91,28 @@ Use branch `terra/f02c-hot-handoff-receipt-22`, worktree
 verified and execution assigned at `2026-09-10T22:19:06Z`. First bounded
 liveness audit is due at `22:29:06Z` after silence; first economy audit is due
 at `23:19:06Z` if execution remains active.
+
+## Terminal method review
+
+Terra returned clean private `65b1df90f277070f7980deda92aefb93612112cf`,
+parent `7274b6ea`, tree `9373fdee59c9e68132c1feac7c59fa9f46ebde0f`.
+Its real Gradle focused run executed 18 tasks and the named test 1/1 in 3.781
+seconds. The machine-readable receipt is authentic and binds 1,718 source
+hashes, seven current output-directory digests, logs and XML; Java 17 is the
+Gradle launcher while current changed classes are Java 21 bytecode. The test
+now uses a candidate-dependent defender and the production policy rejects an
+unchanged PREPARED result.
+
+Fresh challenge rejects one substantive product invariant. The production
+postcondition checks statuses, actor/body and condition, but does not require
+the DRAINING and CLOSED leases to preserve the selected initial lease's exact
+revision, hand-off instant, goal and goal body. A fabricated revision-2
+DRAINING/revision-3 CLOSED pair passes for an initial revision-1 lease, although
+the canonical transition/release uses `withStatus` and preserves every other
+field. The positive effect test also prebuilds its released/loss result before
+the callback instead of deriving it from the callback's `selection.state()`.
+
+The order and context are closed. This is not another missing proof: it is a
+real fail-closed contract defect. Product decision order23 owns only exact
+lease-lineage validation and an in-callback canonical transition/release
+counterexample. All other order21/order22 facts and receipts are reused.
