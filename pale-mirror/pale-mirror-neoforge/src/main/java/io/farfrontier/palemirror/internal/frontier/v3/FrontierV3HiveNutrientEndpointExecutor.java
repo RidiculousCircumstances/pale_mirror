@@ -63,7 +63,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (!precondition(intent, target, chest)) { unknown(runtime, intent.id(), "stack-precondition-conflict"); return; }
         if (!(transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running") instanceof CommandResult.Accepted)) return;
         if (!effect(intent, target, chest)) { unknown(runtime, intent.id(), "physical-effect-conflict"); return; }
-        confirm(level, runtime, intent, target);
+        confirm(level, runtime, intent, target, chest);
     }
 
     private static Endpoint endpoint(FrontierWorldState state, PhysicalIntent intent) {
@@ -99,7 +99,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
                                        Endpoint target, ChestBlockEntity chest) {
         boolean observed = intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE ? chest.getItem(target.slot()).isEmpty()
                 : FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.slot()), target.item());
-        if (observed) confirm(level, runtime, intent, target); else unknown(runtime, intent.id(), "restart-postcondition-conflict");
+        if (observed) confirm(level, runtime, intent, target, chest); else unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
     static boolean matchesDeparture(ChestBlockEntity chest, int slot, ExactItemStack item) {
@@ -116,7 +116,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         return FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), item);
     }
 
-    private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Endpoint target) {
+    private static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Endpoint target, ChestBlockEntity chest) {
         PhysicalObservationId observationId = new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-'));
         PhysicalEffectObservation observation = intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
                 ? new HiveNutrientDepartureObservation(observationId, intent.id(), target.transfer().id(), target.transfer().cargoId(), target.item().id(), target.item().count())
@@ -124,6 +124,10 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         CommandResult result = transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
         if (!(result instanceof CommandResult.Accepted)) {
             throw new IllegalStateException("hive nutrient endpoint confirmation was rejected");
+        }
+        if (ReferenceContainerCustody.isReferenceContainer(runtime.decodedState().orElseThrow(), target.containerId())
+                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, target.containerId(), chest)) {
+            throw new IllegalStateException("confirmed hive nutrient endpoint did not establish its next replica boundary");
         }
         String kind = intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE ? "hive_nutrient_departed" : "hive_nutrient_arrived";
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.hiveNutrientCorrelation(target.transfer().id()), kind, target.transfer().id(), result);

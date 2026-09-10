@@ -45,6 +45,7 @@ public final class PopulationBirthProcess {
         // for the chest.  Once it is safely released, COLD planning remains
         // eligible even if its presentation surface is UNMATERIALIZED.
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return List.copyOf(events);
         if (ReferenceContainerCustody.isReferenceContainer(state, depot)
                 && ReferenceContainerCustody.hasLiveCustody(state, depot)) return List.copyOf(events);
         Optional<ExactItemStack> food = food(state, settlement.id());
@@ -141,6 +142,7 @@ public final class PopulationBirthProcess {
     private static Optional<ExactItemStack> food(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         boolean referenceDepot = ReferenceContainerCustody.isReferenceContainer(state, depot);
+        if (referenceDepot && ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
                 && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                 && (referenceDepot || state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE)).findFirst();

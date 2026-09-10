@@ -57,7 +57,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
         }
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!consume(chest, target)) { unknown(runtime, intent.id(), "precondition-conflict"); return; }
-        confirm(runtime, intent, target);
+        confirm(runtime, intent, target, chest);
     }
 
     static boolean consume(ChestBlockEntity chest, Target target) {
@@ -74,14 +74,18 @@ final class FrontierV3ExactItemConsumptionExecutor {
     }
 
     private static void inspectRunning(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target, ChestBlockEntity chest) {
-        if (consumed(chest, target)) confirm(runtime, intent, target);
+        if (consumed(chest, target)) confirm(runtime, intent, target, chest);
         else unknown(runtime, intent.id(), "restart-postcondition-conflict");
     }
 
-    private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
+    private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target, ChestBlockEntity chest) {
         ExactItemConsumedObservation observation = new ExactItemConsumedObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.item().id(), target.item().count(), target.item().count() - target.count());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) throw new IllegalStateException("exact consumption confirmation was rejected");
+        if (ReferenceContainerCustody.isReferenceContainer(runtime.decodedState().orElseThrow(), target.containerId())
+                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, target.containerId(), chest)) {
+            throw new IllegalStateException("confirmed reference consumption did not establish its next replica boundary");
+        }
     }
 
     static Target target(FrontierWorldState state, PhysicalIntent intent) {

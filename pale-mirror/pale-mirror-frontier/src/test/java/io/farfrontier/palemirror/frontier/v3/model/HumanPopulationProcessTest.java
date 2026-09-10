@@ -148,6 +148,24 @@ class HumanPopulationProcessTest {
     }
 
     @Test
+    void conflictedReferenceDepotRejectsOnlyItsBirthFoodWhileHiveScopeRemainsEligible() {
+        FrontierWorldState stocked = stateWithBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-conflicted-reference"), 91L)),
+                new SubjectId("settlement:1"));
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(stocked, depot), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(stocked, depot), ReferenceContainerCustody.provenance(depot));
+        FrontierWorldState conflicted = stocked.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(PhysicalReplicaCustodyState.empty().declare(expected)
+                .observe(depot, 0L, 1L, "sha256:player-changed", "foreign:player", 0L)));
+
+        var proposed = PopulationBirthProcess.planReview(conflicted, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
+        assertEquals(1, proposed.size(), "a changed depot cannot mint a birth permit from retained canonical bread");
+        assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(conflicted, new SubjectId("container:hive-east-store")),
+                "the depot fence is not a hive-wide admission stop");
+        assertTrue(conflicted.inventory().items().containsKey(new SubjectId("item:birth-test-bread")),
+                "conflict leaves the exact food claim intact for explicit reconciliation");
+    }
+
+    @Test
     void schedulerAndPhysicalTransitionAdmitExactlyOneResidentOnlyAfterTheConfirmedStackReceipt() {
         WorldId world = new WorldId("frontier:birth-scheduled");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);

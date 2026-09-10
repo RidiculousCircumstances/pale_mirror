@@ -26,6 +26,10 @@ public final class HiveNutrientTransferProcess {
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, action.subject());
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.sourceStoreId())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) {
+            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST)));
+        }
         try {
             HiveNutrientTransferStateSupport.validateTransit(state, transfer);
         } catch (IllegalArgumentException blocked) {
@@ -53,6 +57,8 @@ public final class HiveNutrientTransferProcess {
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, HiveNutrientTransfer transfer) {
         if (!subject.equals(transfer.hiveId())) throw new IllegalArgumentException("hive nutrient transfer departure lacks hive ownership");
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.sourceStoreId())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) throw new IllegalArgumentException("hive nutrient transfer cannot start across conflicted store evidence");
         return HiveNutrientTransferStateSupport.start(state, transfer);
     }
 
@@ -65,6 +71,7 @@ public final class HiveNutrientTransferProcess {
     public static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, HiveNutrientTransferCompleted completed) {
         HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, completed.receipt().transferId());
         if (!subject.equals(transfer.hiveId())) throw new IllegalArgumentException("hive nutrient receipt lacks hive ownership");
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) throw new IllegalArgumentException("hive nutrient receipt cannot use conflicted target store evidence");
         return HiveNutrientTransferStateSupport.complete(state, completed.receipt());
     }
 
@@ -77,6 +84,9 @@ public final class HiveNutrientTransferProcess {
     public static HiveNutrientTransfer create(FrontierWorldState state, StrategicTask task, ExactItemStack item,
                                        SubjectId targetStore, int targetSlot) {
         if (!(item.custody() instanceof InventoryCustody.ContainerSlot sourceSlot)) throw new IllegalArgumentException("hive nutrient source must be one store slot");
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, sourceSlot.containerId()) || ReferenceContainerCustody.blocksCanonicalUse(state, targetStore)) {
+            throw new IllegalArgumentException("hive nutrient transfer cannot use conflicted store evidence");
+        }
         List<BlockPosition> corridor = corridor(state.inventory().surfaces().get(sourceSlot.containerId()).position(), state.inventory().surfaces().get(targetStore).position());
         String idSuffix = task.id().value().replace(':', '-');
         SubjectId transferId = new SubjectId("transfer:hive-nutrient-" + idSuffix);

@@ -85,6 +85,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
     }
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(job.settlementId()))) { drain(runtime, lease); return; }
         if (job.workProgress().terminalEffectEligible()) { drain(runtime, lease); return; }
         SettlementStructure workshop = state.bootstrap().settlements().stream().filter(s -> s.id().equals(job.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(s -> s.id().equals(job.facilityId())).findFirst().orElseThrow();

@@ -121,6 +121,29 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void conflictedDepotFencesOnlyItsOwnProvisionStockWhileOtherReferenceScopesRemainUsable() {
+        WorldId world = new WorldId("frontier:provision-conflicted-reference");
+        FrontierWorldState stocked = withBread(base(world).initialState(), false);
+        SubjectId depot = FrontierWorldState.depotId(stocked.bootstrap().settlements().getFirst().id());
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(stocked, depot), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(stocked, depot), ReferenceContainerCustody.provenance(depot));
+        PhysicalReplicaCustodyState conflicted = PhysicalReplicaCustodyState.empty().declare(expected)
+                .observe(depot, 0L, 1L, "sha256:changed-by-player", "foreign:player", 0L);
+        FrontierWorldState localConflict = stocked.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(conflicted));
+
+        assertEquals(0, SettlementProvisionProcess.availableFood(localConflict, stocked.bootstrap().settlements().getFirst().id()),
+                "a conflicted depot cannot contribute canonical provision stock");
+        SubjectId hiveStore = stocked.bootstrap().hive().organs().stream().flatMap(organ -> organ.containerId().stream()).findFirst().orElseThrow();
+        assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(localConflict, hiveStore),
+                "the changed depot must not stall an unrelated hive store");
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = SettlementProvisionProcess.planReview(localConflict,
+                SettlementProvisionProcess.review(stocked.bootstrap().settlements().getFirst().id(), 1, 100L));
+        SettlementProvisionStarted started = (SettlementProvisionStarted) planned.get(1).payload();
+        assertEquals(SettlementProvisionStatus.SHORTAGE, started.provision().status(),
+                "conflicted evidence produces a local visible shortage instead of consuming the retained bread");
+    }
+
+    @Test
     void activeDepotConsumesTheObservedExactAmountAndKeepsTheStackIdentity() {
         WorldId world = new WorldId("frontier:provision-confirmed"); FrontierWorldState initial = withBread(base(world).initialState(), true);
         var engine = FrontierEngines.create(configuration(world, initial)); advance(engine, 101L);

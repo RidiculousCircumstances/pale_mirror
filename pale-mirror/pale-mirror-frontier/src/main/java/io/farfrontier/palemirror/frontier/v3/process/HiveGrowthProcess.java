@@ -40,6 +40,7 @@ public final class HiveGrowthProcess {
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         HiveNest nest = targetNest(state, ordinal);
         SubjectId targetStore = storeForNest(state, nest);
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, targetStore)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         Optional<ExactItemStack> biomass = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
                 .filter(item -> BIOMASS.equals(item.itemKind()) && item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && slot.containerId().equals(targetStore)).findFirst();
@@ -48,17 +49,19 @@ public final class HiveGrowthProcess {
             if (state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> transfer.requesterTaskId().equals(task.id()))) return List.of();
             Optional<ExactItemStack> remote = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
                     .filter(item -> BIOMASS.equals(item.itemKind()) && item.count() == 64 && item.custody() instanceof InventoryCustody.ContainerSlot slot
-                            && state.isHiveStore(slot.containerId()) && !slot.containerId().equals(targetStore)).findFirst();
+                            && state.isHiveStore(slot.containerId()) && !slot.containerId().equals(targetStore)
+                            && !ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())).findFirst();
             if (remote.isEmpty() || state.inventory().firstFreeSlot(targetStore).isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
             HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task, remote.orElseThrow(), targetStore,
                     state.inventory().firstFreeSlot(targetStore).getAsInt());
-            if (state.inventory().surfaces().get(transfer.sourceStoreId()).status() == ContainerSurfaceStatus.CONFLICT
-                    || state.inventory().surfaces().get(transfer.targetStoreId()).status() == ContainerSurfaceStatus.CONFLICT) {
+            if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.sourceStoreId())
+                    || ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) {
                 return List.of(transition(task, StrategicTaskStatus.BLOCKED));
             }
             return HiveNutrientTransferProcess.startEvents(state, transfer, action.dueAt().ticks());
         }
         SubjectId sourceStore = ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId();
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, sourceStore)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         HiveGrowthJob job = growthJob(hive, nest, biomass.orElseThrow(), ordinal);
         // A serialized surface is only prior projection evidence.  COLD remains eligible until
         // the exact currently observed store has a live custody epoch.
@@ -96,6 +99,7 @@ public final class HiveGrowthProcess {
                 || !HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("hive growth start crosses nest-local biomass custody");
         }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("hive growth start cannot use conflicted store evidence");
         activeTask(state, job.hiveId()); return state.startHiveGrowth(job);
     }
 
@@ -109,6 +113,7 @@ public final class HiveGrowthProcess {
                 || !state.isHiveStore(slot.containerId()) || ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())) {
             throw new IllegalArgumentException("cold hive growth consumption bypasses its exact inactive store");
         }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("cold hive growth consumption cannot use conflicted store evidence");
         if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("cold hive growth consumption crosses nest-local biomass custody");
         }
@@ -140,6 +145,7 @@ public final class HiveGrowthProcess {
         if (!ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())) {
             throw new IllegalArgumentException("hive growth physical consumption requires current local store custody");
         }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("hive growth physical consumption cannot use conflicted store evidence");
         if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("hive growth consumption intent crosses nest-local biomass custody");
         }

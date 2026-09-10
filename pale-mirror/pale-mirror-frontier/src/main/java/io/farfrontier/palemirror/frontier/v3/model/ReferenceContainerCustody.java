@@ -59,6 +59,16 @@ public final class ReferenceContainerCustody {
         return replica != null && replica.state() == PhysicalReplicaState.CONFLICT;
     }
 
+    /**
+     * A retained changed/foreign/missing observation is local evidence that this exact
+     * container's canonical stock and capacity are unavailable.  It is deliberately not a
+     * world, settlement, or hive-wide pause: an unobserved or safely released replica remains
+     * eligible for ordinary COLD work.
+     */
+    public static boolean blocksCanonicalUse(FrontierWorldState state, SubjectId containerId) {
+        return isReferenceContainer(state, containerId) && hasConflict(state, containerId);
+    }
+
     /** Deterministic canonical fingerprint of the exact slots represented by one chest. */
     public static String canonicalFingerprint(FrontierWorldState state, SubjectId containerId) {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));

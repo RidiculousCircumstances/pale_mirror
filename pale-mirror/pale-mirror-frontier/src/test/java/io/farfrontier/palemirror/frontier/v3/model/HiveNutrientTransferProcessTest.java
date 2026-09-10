@@ -130,6 +130,40 @@ class HiveNutrientTransferProcessTest {
         assertEquals(consumedGrowth, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(consumedGrowth)));
     }
 
+    @Test
+    void conflictedWestStoreBlocksOnlyItsGrowthAndInboundTransfer() {
+        FrontierWorldState baseline = growthTaskState();
+        StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+        SubjectId west = new SubjectId("container:hive-west-store"); SubjectId east = new SubjectId("container:hive-east-store");
+        FrontierWorldState conflicted = withReplicaConflict(baseline, west);
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> growth = HiveGrowthProcess.planStart(conflicted, HiveGrowthProcess.start(task, 100L));
+        StrategicTaskTransition blockedGrowth = (StrategicTaskTransition) growth.getFirst().payload();
+        assertEquals(StrategicTaskStatus.BLOCKED, blockedGrowth.status(),
+                "the exact conflicted target store cannot borrow remote biomass or its own capacity");
+        assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(conflicted, east),
+                "one nest store conflict must not fence the independent east source store");
+
+        ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
+        HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(baseline, task, biomass, west, 0);
+        FrontierWorldState inTransit = HiveNutrientTransferProcess.reduceStarted(baseline, transfer.hiveId(), transfer);
+        FrontierWorldState targetConflict = withReplicaConflict(inTransit, west);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> advance = HiveNutrientTransferProcess.plan(targetConflict,
+                HiveNutrientTransferProcess.advance(transfer, 120L));
+        assertTrue(advance.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                        .anyMatch(HiveNutrientTransferBlocked.class::isInstance),
+                "an already admitted transfer visibly stops at its exact conflicted endpoint");
+        assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(targetConflict, east),
+                "the endpoint fence remains local while another store stays eligible");
+    }
+
+    private static FrontierWorldState withReplicaConflict(FrontierWorldState state, SubjectId store) {
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(store, ReferenceContainerCustody.semanticKind(state, store), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(state, store), ReferenceContainerCustody.provenance(store));
+        return state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(PhysicalReplicaCustodyState.empty().declare(expected)
+                .observe(store, 0L, 1L, "sha256:player-changed", "foreign:player", 0L)));
+    }
+
     private static FrontierWorldState growthTaskState() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-nutrient"), 93L));
         SubjectId hive = state.bootstrap().hive().id();

@@ -67,6 +67,9 @@ public final class ProductionProcess {
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionBlockReason.INPUT_UNAVAILABLE);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
+            return blocked(task, settlement, workshop, depot, ProductionBlockReason.INPUT_UNAVAILABLE);
+        }
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         ProductionJob job = job(state, settlement, workshop, input.orElseThrow(), ordinal, !physicalCustody);
@@ -86,6 +89,9 @@ public final class ProductionProcess {
         if (job == null) return List.of();
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.FACILITY_UNAVAILABLE);
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))) {
+            return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.INPUT_UNAVAILABLE);
+        }
         boolean marketBacked = state.companies().market().acceptedForJob(job.id()).isPresent();
         if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
                 || (marketBacked && CompanyWorkPaymentProcess.contractFor(state, job).isEmpty())) {
@@ -170,6 +176,7 @@ public final class ProductionProcess {
         ExactItemStack input = state.inventory().items().get(started.inputItemId());
         if (input == null || !WHEAT.equals(input.itemKind()) || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) throw new IllegalArgumentException("production start input is unavailable or not in its depot");
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("production start cannot use conflicted depot evidence");
         if (input.count() != job.outputCount() || !BREAD.equals(job.outputItemKind())) throw new IllegalArgumentException("production output is not a verified wheat conversion");
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()));
         if (physicalCustody != (job.inputHold() instanceof ProductionInputHold.Materialized)) {
@@ -192,6 +199,7 @@ public final class ProductionProcess {
         if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
             throw new IllegalArgumentException("production output is not stored in its settlement depot");
         }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("production completion cannot use conflicted depot evidence");
         if (!completed.output().economicOwnerId().equals(settlement.id())) throw new IllegalArgumentException("production output claim does not belong to its settlement");
         if (!(job.inputHold() instanceof ProductionInputHold.Cold) || state.inventory().items().containsKey(job.consumedItemId())) {
             throw new IllegalArgumentException("materialized production output requires a physical transformation receipt");
@@ -214,6 +222,9 @@ public final class ProductionProcess {
         if (!job.facilityId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("production work progress has unavailable worker or facility");
+        }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(job.settlementId()))) {
+            throw new IllegalArgumentException("production work progress cannot use conflicted depot evidence");
         }
         ProductionWorkProgress current = job.workProgress(), next = progressed.next();
         int inputCursor = job.workTraversal().linearCorridorSurfaces().size() - 2;
@@ -242,6 +253,9 @@ public final class ProductionProcess {
         if (job == null || !subject.equals(job.settlementId()) || job.workProgress().stage() == ProductionWorkProgress.Stage.OUTPUT_READY
                 || advanced.nextCursor() != job.traversalCursor() + 1 || advanced.nextCursor() >= job.workTraversal().linearCorridorSurfaces().size()) {
             throw new IllegalArgumentException("production work traversal advance is not one retained open edge");
+        }
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(job.settlementId()))) {
+            throw new IllegalArgumentException("production traversal cannot use conflicted depot evidence");
         }
         FrontierProductionWorkSceneSupport.requireHotLease(state, job, advanced.leaseId());
         if (!advanced.observedWorker().equals(job.workTraversal().linearCorridorSurfaces().get(advanced.nextCursor()).standingBody())) {
@@ -333,7 +347,15 @@ public final class ProductionProcess {
                     }
                     break;
                 }
-                if (!blocked.workId().equals(workshop.id()) || wheatPresent || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production input block precondition does not hold");
+                // A changed/foreign/missing depot replica is a distinct, local input
+                // unavailability: canonical wheat is deliberately retained, but this exact
+                // depot must not admit it until its evidence is reconciled.  Bind that form to
+                // the depot identity so it cannot be forged as an ordinary no-input block.
+                boolean conflictedDepot = blocked.workId().equals(depot) && ReferenceContainerCustody.blocksCanonicalUse(state, depot);
+                if (!conflictedDepot && (!blocked.workId().equals(workshop.id()) || wheatPresent
+                        || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT)) {
+                    throw new IllegalArgumentException("production input block precondition does not hold");
+                }
             }
             case OUTPUT_STORAGE_UNAVAILABLE -> {
                 boolean pending = blocked.workId().equals(workshop.id()) && state.productionJobs().isEmpty();

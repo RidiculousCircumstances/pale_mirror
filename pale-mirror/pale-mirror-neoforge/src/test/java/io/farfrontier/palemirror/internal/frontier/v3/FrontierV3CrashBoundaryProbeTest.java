@@ -56,7 +56,9 @@ class FrontierV3CrashBoundaryProbeTest {
             List<String> mixins = new ArrayList<>();
             resource.getAsJsonArray("mixins").forEach(mixin -> mixins.add(mixin.getAsString()));
             assertEquals(List.of("FrontierV3DurableServerSaveMixin", "FrontierV3DurableCrashWindowMixin",
-                    "FrontierV3HarvestCrashWindowMixin"), mixins);
+                    "FrontierV3HarvestCrashWindowMixin", "FrontierV3PilotChunkMapAccessor",
+                    "FrontierV3PilotDistanceManagerAccessor"), mixins,
+                    "the pilot crash resource owns exactly its durable-window mixins and mapped pilot accessors");
         }
     }
 

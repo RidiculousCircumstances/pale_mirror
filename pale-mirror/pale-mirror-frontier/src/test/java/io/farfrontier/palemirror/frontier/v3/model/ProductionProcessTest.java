@@ -775,6 +775,33 @@ class ProductionProcessTest {
     }
 
     @Test
+    void conflictedReferenceDepotBlocksItsOwnProductionRoundTripWhileOtherStoreRemainsUsable() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-conflicted-reference"), 91L));
+        FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
+        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(state, depot), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.provenance(depot));
+        FrontierWorldState conflicted = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(PhysicalReplicaCustodyState.empty().declare(expected)
+                .observe(depot, 0L, 1L, "sha256:player-changed", "foreign:player", 0L)));
+        StrategicTask task = conflicted.strategicPlans().tasks().values().iterator().next();
+
+        List<ProposedEvent> planned = ProductionProcess.planStart(conflicted, ProductionProcess.start(task, 200L));
+        ProductionBlocked blocked = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
+        assertEquals(ProductionBlockReason.INPUT_UNAVAILABLE, blocked.reason());
+        assertEquals(depot, blocked.workId(), "the local replica fence names the exact unavailable depot");
+        FrontierWorldState reduced = ProductionProcess.reduceBlocked(conflicted, settlement.id(), blocked);
+        reduced = StrategicObjectiveProcess.reduceTaskTransition(reduced, settlement.id(),
+                assertInstanceOf(StrategicTaskTransition.class, planned.get(1).payload()));
+        assertEquals(StrategicTaskStatus.BLOCKED, reduced.strategicPlans().tasks().get(task.id()).status(),
+                "ordinary planning and reduction must accept the local conflict transition");
+        SubjectId unrelatedStore = new SubjectId("container:hive-east-store");
+        assertFalse(ReferenceContainerCustody.blocksCanonicalUse(reduced, unrelatedStore),
+                "a depot conflict must not consume or fence an unrelated hive store");
+        assertTrue(reduced.inventory().items().containsKey(new SubjectId("item:bootstrap-1-wheat")),
+                "the canonical wheat remains exact retained evidence rather than being silently consumed");
+    }
+
+    @Test
     void productionRefusesToStartWhenEveryCrafterIsStarvingAndRecoversAfterOneExactRation() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:starving-crafter"), 91L));
         Settlement settlement = initial.bootstrap().settlements().getFirst(); HumanPopulation population = initial.humanPopulation();

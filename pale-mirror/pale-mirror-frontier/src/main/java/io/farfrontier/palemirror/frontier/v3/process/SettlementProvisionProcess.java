@@ -42,8 +42,9 @@ public final class SettlementProvisionProcess {
                 Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().provisionReviewInterval()))));
         if (current.status() == SettlementProvisionStatus.IN_PROGRESS) return List.copyOf(events);
         List<SubjectId> recipients = recipients(state, settlement.id(), nextOrdinal);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SettlementProvision provision = SettlementProvision.started(settlement.id(), nextOrdinal, action.dueAt().ticks(), recipients.size(), recipients,
-                allocations(state, settlement.id(), recipients));
+                ReferenceContainerCustody.blocksCanonicalUse(state, depot) ? List.of() : allocations(state, settlement.id(), recipients));
         events.add(new ProposedEvent(settlement.id(), new SettlementProvisionStarted(provision)));
         if (provision.status() == SettlementProvisionStatus.IN_PROGRESS) events.add(schedule(progress(provision, action.dueAt().ticks() + 1L)));
         return List.copyOf(events);
@@ -61,6 +62,7 @@ public final class SettlementProvisionProcess {
 
     public static int availableFood(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
         return state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
@@ -79,6 +81,9 @@ public final class SettlementProvisionProcess {
                 || !action.id().equals(progress(provision, action.dueAt().ticks()).id())) return List.of();
         SettlementRationAllocation allocation = provision.currentAllocation(); ExactItemStack item = state.inventory().items().get(allocation.itemId());
         SubjectId depot = FrontierWorldState.depotId(provision.settlementId());
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
+            return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+        }
         if (item == null || !BREAD.equals(item.itemKind()) || item.count() < allocation.count()
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(depot)) {
             return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
@@ -190,6 +195,7 @@ public final class SettlementProvisionProcess {
             throw new IllegalArgumentException("settlement provision consumption does not match its exact food allocation");
         }
         ContainerSurfaceStatus surface = state.inventory().surfaces().get(depot).status();
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) throw new IllegalArgumentException("settlement provision cannot use conflicted depot evidence");
         boolean physicalBoundary = ReferenceContainerCustody.isReferenceContainer(state, depot)
                 ? ReferenceContainerCustody.hasLiveCustody(state, depot)
                 : surface == ContainerSurfaceStatus.ACTIVE;
