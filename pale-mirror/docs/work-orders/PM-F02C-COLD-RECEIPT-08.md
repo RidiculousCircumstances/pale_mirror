@@ -1,7 +1,7 @@
 # PM-F02C-COLD-RECEIPT-08: make the runner receipt the COLD oracle authority
 
 Specification revision: 1.
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `METHOD_REJECTED`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Executor: `/root/terra_f02c_cold_receipt09`, one
 fresh `gpt-5.6-terra` with reasoning `high`, in a fresh isolated worktree from
 private checkpoint `bf6d01b3fa47dab6088e3d879994432a49536788`, tree
@@ -121,3 +121,29 @@ permits intermediate source review or a heartbeat.
 
 Observation epoch: `2026-09-10T12:42:27Z`. First economy-audit boundary:
 `2026-09-10T13:42:27Z` if still executing.
+
+## Terminal method review
+
+The builder returned `COLD_RECEIPT_READY` at clean private commit
+`1c8bd3df6cb075f48341c780b9e900d7637905b5`, tree
+`32d0ea378f9a2bac9cea2e9627fe78fbc60b4152`, parent `bf6d01b3`.
+Focused carrier tests passed 3/3 in 45.454498 milliseconds. The broader
+`npm test` failed in 6.6 seconds on host write quota, absent `mineflayer` and
+pre-existing harness failures; it supplies no full-suite claim. No JVM,
+GameTest, critical, native or CI run occurred.
+
+Independent method review accepts the redesigned source topology: the default
+persistent runner does retain the full global recovery history in one final
+manifest; the consumer now selects unique `{assertion, observed}` records and
+correctly treats repeated raw poll responses as trace. It nevertheless rejects
+CR-1--CR-3 jointly because that receipt is not identity-bound. The wrapper
+accepts any syntactically valid hash without matching the declaration bytes or
+`manifest.scenarioDeclarationSha256`; it does not bind or retain manifest/run/
+lifecycle identity. The assertion selector trusts copied assertion metadata
+without requiring the observed payload's own `kind` and `id`. Foreign/replayed
+source, payload and manifest identities therefore remain plausible green
+histories.
+
+This rejection is terminal for `/root/terra_f02c_cold_receipt09`. Preserve its
+accepted topology insight and fast receipt, but no heavy work follows. The next
+identity-envelope specification is reviewed before assigning another writer.

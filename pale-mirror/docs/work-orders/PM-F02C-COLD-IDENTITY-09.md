@@ -1,0 +1,134 @@
+# PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
+
+Specification revision: 2.
+Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Engineer: supervising root. Executor: `/root/terra_f02c_cold_identity10`, one
+fresh `gpt-5.6-terra` with reasoning `high`, from checkpoint:
+`1c8bd3df6cb075f48341c780b9e900d7637905b5`, tree
+`32d0ea378f9a2bac9cea2e9627fe78fbc60b4152`, parent `bf6d01b3`.
+
+This order inherits `docs/engineering-agent-operating-model-v4.md`. It fixes the
+remaining identity hole before another implementation context is allowed. It
+does not reopen the already corrected manifest topology or any product logic.
+
+## Preserved evidence and sole outcome
+
+Preserve unchanged and do not rerun:
+
+- CA-1 ordinary scheduled COLD cause and CA-2 real lifecycle/complete-registry
+  unavailable-PENDING seam at `4e4bafa7`;
+- the read-only aftermath authority diagnostic and focused 25/25 receipt at
+  `bf6d01b3`;
+- the persistent final-manifest/assertion-bound topology and raw-poll exclusion
+  established by the 3/3 focused receipt at `1c8bd3df`.
+
+The sole outcome is an exact byte/run/lifecycle/payload identity envelope around
+that existing semantic history. No canonical Java, diagnostic meaning,
+scenario semantics, runner lifecycle, HOT path, gameplay, terrain, provider,
+CI, deployment, publication or v2 work belongs here.
+
+## Admitted identity envelope
+
+The dedicated wrapper first creates one fresh unpredictable outer attempt ID,
+then passes it to the existing isolated-scenario supervisor through one narrow
+validated orchestration input. The supervisor must reject a malformed value,
+use the supplied value instead of generating its own outer run ID, and retain
+it through its existing lifecycle identity and
+`recovery.clientSession.runId`. This input is correlation only: it cannot
+select a fixture, alter scenario actions, grant Minecraft authority or change
+any canonical behavior. Other callers may retain the existing generated-ID
+default.
+
+The wrapper then reads the exact checked-in declaration bytes and exact
+completed final-manifest bytes. Before accepting semantic evidence it proves:
+
+- the recomputed declaration SHA-256 equals both the wrapper envelope value and
+  the final manifest's declaration identity; the manifest scenario ID and
+  contract-source identity name those same bytes;
+- the final manifest has the production schema/status and explicitly distinct
+  identity roles: its client-runner `runId` owns the six global action
+  correlations and matches the one persistent `clientSegments` entry, while
+  `recovery.clientSession.runId` equals the wrapper's precommitted outer attempt
+  ID;
+- every lifecycle record has one common immutable identity and consecutive
+  sequence; its outer run ID equals the precommitted attempt and
+  `recovery.clientSession.runId`, while its scenario ID and build identity
+  match the manifest. It is not required or permitted to equal the distinct
+  client-runner/action ID. Required restart barriers occur in valid order;
+- each of the three unique assertion-bound records matches its declaration
+  assertion and global step, and its observed payload independently declares
+  `kind=aftermath` plus the exact causal selector before any semantic fields are
+  read;
+- the wrapper's terminal receipt retains the final-manifest byte digest, both
+  role-labelled run IDs, precommitted attempt, and lifecycle session/nonce
+  identity alongside the already required COLD cause/owner/revision result.
+
+The exact representation and helper boundaries remain the builder's choice.
+Do not introduce a second lifecycle validator or a second manifest schema;
+reuse the production runner's existing identities and validation rules.
+
+Manifest byte hashing is performed before parsing and reported after successful
+validation. A foreign declaration hash, mismatched manifest source identity,
+wrong or absent precommitted attempt, conflated or mixed outer/client identity,
+broken lifecycle sequence, foreign observed `kind`/`id`, stale action
+correlation or replayed terminal manifest must fail even when all aftermath
+semantic fields and AIR happen to look correct. An internally self-consistent
+old manifest fails because its retained outer run ID cannot equal the fresh
+attempt chosen before the child starts. Raw polling duplicates remain
+legitimate trace and are ignored, not prohibited.
+
+## Acceptance map
+
+| ID | Required outcome | Cheapest faithful evidence |
+| --- | --- | --- |
+| CI-1 | Exact declaration bytes, wrapper hash and manifest source identity form one chain | focused production-envelope positive plus one-field hash/source mutations |
+| CI-2 | Precommitted outer attempt, client action run and lifecycle identity remain distinct, joined and non-replayable | focused runner-shaped attempt, both run roles, correlation, lifecycle identity/sequence/build mutations |
+| CI-3 | Assertion metadata cannot lend authority to a foreign observed payload | focused `kind`, `id`, global-step and duplicate-bound-record mutations |
+| CI-4 | The wrapper records the validated final-manifest digest and identity in its terminal receipt | pure wrapper preflight/receipt contract without Minecraft |
+| CI-5 | The unchanged product candidate plus admitted receipt are bounded and packaged | one clean-HEAD critical gate after method admission |
+| CI-6 | Real graceful restart/natural availability realizes the exact COLD consequence once | one targeted native COLD flow after CI-1--CI-4 admission |
+
+Focused fixtures must use the production final-manifest schema, existing
+`recovery.clientSession.runId`/`clientSegments` fields and complete lifecycle
+identity shape, not a reduced list of barrier names. Every negative changes
+exactly one otherwise-valid field. Include an internally consistent old
+manifest under a different precommitted attempt. It is unnecessary to
+enumerate every semantic field again: the preserved `1c8bd3df` receipt already
+owns that boundary, and only identity-sensitive mutations are new here.
+
+## Specification and method admission
+
+Before assigning a writer, one fresh read-only challenger reviews this
+specification for a satisfiable producer/consumer chain, missing identity edge
+or accidental need for Minecraft. Revision 1 was rejected because it conflated
+the isolated supervisor/lifecycle run ID with the distinct client manifest/
+action run ID and had no current-attempt edge. Revision 2 is `SPEC_ADMITTED`:
+the existing producer emits both role-labelled identities and every required
+source/build/assertion field, while the new precommitted outer attempt closes
+replay without a time assumption or Minecraft execution.
+
+The assigned fresh Terra then implements only CI-1--CI-4 and returns
+`COLD_IDENTITY_READY` with exact identity, changed paths, the production
+producer/consumer map, focused one-defect matrix, commands/durations/receipts,
+and unexecuted critical/native carrier. It must not run JVM/GameTest, critical,
+native or CI before a separate fresh read-only `METHOD_ADMISSION` event.
+
+After method admission, exactly one clean-HEAD critical gate and one targeted
+native flow are permitted. Any negative returns to independent product review;
+no automatic rerun or further proof implementation begins.
+
+The executor uses fresh worktree `/home/rd/proj/pm-f02c-cold-identity-09` and
+only `/home/rd/proj/pm-f02c-cold-identity-09-tmp` for task-private evidence. It
+proves bounded create/write/fsync/atomic-rename/delete before work, owns every
+task process and leaves the unrelated listener on port 25565 and all
+predecessor roots untouched.
+
+## Delivery and supervision
+
+The executor returns only `COLD_IDENTITY_READY`, a named exception or a complete
+terminal packet. Supervision remains event-driven: one liveness check after ten
+minutes of silence and one economy audit per full hour; neither inspects WIP.
+
+Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
+epoch: `2026-09-10T13:08:10Z`; first economy-audit boundary:
+`2026-09-10T14:08:10Z` if still executing.
