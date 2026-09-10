@@ -1,7 +1,7 @@
 # PM-F02C-COLD-IDENTITY-09: identity-bind the final COLD native receipt
 
 Specification revision: 4.
-Status: `CORRECTION_EXECUTING`. Parent slice: F0.2C. Risk:
+Status: `EXPENSIVE_EXECUTING`. Parent slice: F0.2C. Risk:
 critical-code/native. Engineer: supervising root. Executors through
 `/root/terra_f02c_cold_identity11` are terminal. The sole successor is
 `/root/terra_f02c_cold_identity12`, one fresh `gpt-5.6-terra` with reasoning
@@ -199,6 +199,38 @@ Do not delete or redesign the other harness's scoped mode, add a general
 environment framework or broaden evidence. All other revision-4 component
 claims were methodologically accepted and are reused.
 
+The corrected revision-4 candidate is `METHOD_ADMITTED` at clean private
+commit `9c24f74ce2f34697ea9847902aa1bd6449d44057`, tree
+`521da2a83bcc94482d73c384f4d955fadd924e20`. Fresh read-only review confirms
+the dedicated wrapper strips the inherited F0.2B early-exit control, ordinary
+production paths call the component-tested attempt/recovery constructors, and
+synthetic manifest bytes make only parser/consumer claims. The focused 7/7
+receipt took 60.02ms; no JVM, GameTest, native or CI work has run.
+
+## Expensive-evidence value decision
+
+CI-5 materially decides whether the final immutable candidate remains bounded,
+buildable, package-clean and compatible with the complete local critical-code
+contract. Its inputs changed after all retained broad receipts, so one
+clean-HEAD critical gate is required; a second confidence gate is not.
+
+CI-6 materially decides whether an ordinary scheduled COLD cause really
+survives graceful restart, remains unavailable before natural target
+availability, then materializes the exact owned aftermath once with the same
+cause/owner/revisions while unrelated progress remains live. It is also the
+only evidence tier joining the wrapper's precommitted attempt to the real child,
+lifecycle, completed final manifest, semantic assertions and terminal receipt.
+Pure/Node/GameTest evidence cannot observe that Minecraft/restart composition.
+A green result permits independent COLD-receipt acceptance; a negative changes
+the product/carrier disposition and returns immediately without retry.
+
+The same executor first revalidates bounded create/write/fsync/atomic-rename/
+delete on every actual heavy temp/evidence/runtime filesystem, then runs exactly
+one clean-HEAD critical gate and, only if it passes, exactly one targeted native
+COLD flow. No CI/provider matrix, benchmark, general native matrix, confidence
+rerun or unrelated leaf is authorized. Applicable earlier receipts are
+composed rather than repeated.
+
 After specification admission, one fresh Terra-high successor may make only
 the revision-4 correction and return `COLD_IDENTITY_READY_R4`. One bounded
 method review then permits exactly one clean-HEAD critical gate and one targeted
@@ -222,6 +254,6 @@ full hour; neither inspects WIP.
 
 Specification-review epoch: `2026-09-10T13:01:18Z`. Execution observation
 epoch for revision 4: `2026-09-10T13:45:58Z`; first economy-audit boundary:
-`2026-09-10T14:55:40Z` if still executing after correction resumption at
-`2026-09-10T13:55:40Z`. Revision-4 specification review
+`2026-09-10T15:02:14Z` if still executing after expensive resumption at
+`2026-09-10T14:02:14Z`. Revision-4 specification review
 epoch: `2026-09-10T13:41:24Z`.
