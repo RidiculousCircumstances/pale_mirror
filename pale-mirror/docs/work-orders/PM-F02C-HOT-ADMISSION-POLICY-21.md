@@ -1,9 +1,9 @@
 # PM-F02C-HOT-ADMISSION-POLICY-21: expose one bounded production admission policy
 
-Specification revision: 1. Status: `FRAMED_AWAITING_EXECUTION`.
+Specification revision: 2. Status: `EXECUTING_METHOD_ADMISSION`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`, to be assigned after
-governance commit and exact worktree custody.
+Executor: `/root/terra_f02c_hot_admission_policy21`, one fresh
+`gpt-5.6-terra`, reasoning `high`.
 
 This is a method-boundary successor, not another test repair. Start from exact
 clean private WIP `665e6277bce36991c7db26d7f5a4b219d0a3b688`, parent
@@ -112,6 +112,7 @@ navigation, F0.3, CI/provider, publication, deployment or v2 work.
 
 Use branch `terra/f02c-hot-admission-policy-21`, worktree
 `/home/rd/proj/pm-f02c-hot-admission-policy-21` and task-private root
-`/home/rd/proj/pm-f02c-hot-admission-policy-21-tmp`. The engineer records the
-assignment timestamp and audit schedule only after verifying exact clean
-custody.
+`/home/rd/proj/pm-f02c-hot-admission-policy-21-tmp`. Exact clean custody was
+verified and execution assigned at `2026-09-10T21:28:05Z`. First bounded
+liveness audit is due at `21:38:05Z` after silence; first economy audit is due
+at `22:28:05Z` if execution remains active.
