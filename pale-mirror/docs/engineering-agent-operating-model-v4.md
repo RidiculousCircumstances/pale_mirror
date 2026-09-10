@@ -61,6 +61,34 @@ mutate the candidate or make the engineer a hidden second coder.
 - Governance is committed before a builder starts. Accepted builder commits
   retain authorship when integrated.
 
+## Builder context discipline
+
+- Start every new builder and successor with a fresh agent context. Do not fork
+  the full engineer conversation or replay predecessor debugging transcripts.
+  The spawn message is only a routing note to the active work order.
+- The builder context packet is bounded to: the scoped `AGENTS.md` and current
+  `CONTINUITY.md`; one active work order; the exact baseline commit/tree and
+  worktree/resource custody; the specifically named contract/architecture
+  sections; reusable receipt identities; and the still-open outcomes,
+  exclusions and stop conditions. Historical orders and raw logs are references
+  to inspect only when the active order names an unresolved fact from them.
+- A successor inherits bytes and machine evidence through one clean private
+  checkpoint, not the predecessor's reasoning. Its order states which facts are
+  accepted and must not be rediscovered, which claims remain open, and which
+  prior executions must not be repeated. It owns the new diagnosis and design.
+- One consolidated semantic correction is the maximum for one builder context.
+  A second rejected method or terminal semantic return closes that context even
+  when the remaining code change appears small. Preserve a clean WIP checkpoint,
+  verify task-process cleanup and start a fresh successor with a shortened order.
+- Treat context accumulation as engineering debt when the next instruction
+  needs a history lesson to be understood, the builder confuses evidence tiers
+  or environments, or accepted facts are repeatedly re-proved. Resolve it by
+  shortening the order and replacing the context, not by adding more narrative.
+- Context replacement is not micromanagement: the fresh builder retains full
+  freedom over implementation, helpers and focused verification inside the
+  bounded outcome. Do not add heartbeats or intermediate design approvals to
+  compensate for context risk.
+
 ## Bounded product order
 
 A work order contains exactly one product outcome, its canonical/physical

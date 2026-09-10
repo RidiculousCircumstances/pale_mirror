@@ -15,6 +15,20 @@ revisions, close/supersede it instead of appending a troubleshooting history.
 - Previous writer handoff and active command/resource ownership.
 - Required contracts, skills, previous accepted order and unresolved facts.
 
+## Bounded builder context packet
+
+- Spawn with a fresh context and a routing note to this order; never fork the
+  full engineer conversation or predecessor transcript.
+- List the exact files/sections the builder must read, the accepted facts and
+  reusable receipt identities it must not rediscover, and only the remaining
+  claims it owns.
+- For a successor, name the clean inherited checkpoint, predecessor terminal
+  state and process cleanup. Historical orders/logs remain references rather
+  than startup context unless one unresolved fact explicitly requires them.
+- State the terminal context boundary. One consolidated semantic correction is
+  the maximum; a second rejected method/terminal semantic return requires a
+  clean WIP checkpoint and a fresh shortened successor order.
+
 ## Outcome and exclusions
 
 - One observable deliverable; why it is needed by the parent slice.

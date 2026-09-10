@@ -1,6 +1,6 @@
 # PM-F02C-HOT-RECEIPT-10: close the alternative HOT assault receipt
 
-Specification revision: 5. Status: `METHOD_CORRECTION_EXECUTING`. Parent
+Specification revision: 6. Status: `METHOD_R2_REJECTED_TERMINAL`. Parent
 slice: F0.2C. Risk: critical-code/native. Engineer: supervising root. Builder:
 `/root/terra_f02c_hot_receipt10`, one fresh `gpt-5.6-terra` with reasoning
 `high`. Baseline is the
@@ -186,3 +186,30 @@ owner-seam and declaration/oracle preflight evidence. No complete gate, native,
 CI, COLD/constructive scenario or unrelated test is authorized. A second
 terminal semantic return ends this builder context under operating-model v4.
 Correction observation epoch is `2026-09-10T15:35:38Z`.
+
+## R2 final method decision and terminal handoff
+
+Builder returned clean private checkpoint
+`1e0c227c2c4861426970bd96f81b6a0806ce39a2`, parent `d380dc46`, tree
+`43c1e3d1c0579a8be736dfbd552258f1d0f6b1c6`. Main matched the clean identity,
+eight-path cumulative baseline delta and compact receipt hashes. Focused
+component work took 12 seconds plus a 7-second final compile/test preflight;
+the declaration parser took less than one second. No complete, native or CI
+execution occurred.
+
+A fresh read-only challenger returned `METHOD_REJECTED`, and main independently
+confirmed three method failures. The owner-seam GameTest trusts decreasing
+numbers in the produced receipt without independently sampling the target
+Minecraft entity's health. The restart declaration leaves emitted exact cause,
+attacker, target, receipt ID and raw health values unasserted, so an internally
+consistent replaced/old receipt can pass. The `bastion/mobs/empty` GameTest also
+mutates absolute canonical Northwatch coordinates near `(-360, -340)` outside
+its template interior, violating the parallel-cell isolation rule. Main also
+rejects substring inspection of a physical-intent ID as an exact per-lease
+replay fence; a plausible token collision must not suppress a valid strike.
+
+This is the second terminal semantic return for the builder. Its context is
+closed and must not resume. The useful checkpoint and receipts are preserved;
+`PM-F02C-HOT-RECEIPT-11` is the shortened fresh-successor order. No expensive
+run, implementation correction or acceptance claim belongs to this terminal
+order.
