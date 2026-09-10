@@ -1,6 +1,6 @@
 # PM-F02C-HOT-PERIMETER-18: retain a serviceable assault perimeter
 
-Specification revision: 2. Status: `EXECUTING`.
+Specification revision: 3. Status: `FINAL_REVIEW_PARTIAL`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_perimeter18`, fresh `gpt-5.6-terra`, reasoning
 `high`.
@@ -97,3 +97,45 @@ Use branch `terra/f02c-hot-perimeter-18`, worktree
 Execution assigned at `2026-09-10T20:19:43Z` after exact clean custody was
 verified. First bounded liveness audit is due at `20:29:43Z` after silence;
 first economy audit is due at `21:19:43Z` if execution remains active.
+
+## Terminal review
+
+Private commit `cb4429176c0befaf66d54695b810cab9605a6647`, parent
+`219e27ec48207852f4d5b6661edbbe5a1d1acd11`, tree
+`44e823a910837ec97002f4ca3f2d62e2dca9fc7c` is clean. Independent review
+accepts the narrow perimeter representation and selector provisionally: the
+three-path delta exposes the existing bounded residential-apron ring and no
+longer treats its Hall connector, ingress ramp or an arbitrary route surface as
+an attacker destination. The named final test ran in a twelve-test class; the
+critical gate reported 1,270 JUnit tests with zero failures/errors/skips,
+303/303 GameTests, package verification and all-dimensions saved shutdown.
+
+Whole-order completion is rejected. Gate and native evidence were produced
+before the final commit: their prepared inventory matches all 2,010 final tree
+content entries, including the three changed paths, but explicitly records
+`sourceCommit=219e27ec` and `sourceDirty=true`; it is useful content-bound
+evidence, not the required clean-HEAD evidence. Do not repeat it solely to
+repair that label because the successor changes the candidate and must run one
+new clean-HEAD gate.
+
+Native R13 ran once through the accepted direct-child private-Xvfb boundary;
+GLX admitted Mesa 4.5 on `:5118` and the client reached `Connecting`. Before
+connection or any scenario action, the server watchdog sampled
+`Map.copyOf -> FrontierGrayboxPlan.compile ->
+FrontierSettlementAssaultBattlefield.candidate -> reservedActors ->
+FrontierV3AmbientActorExecutor.handOffReservedActors` during one 60-second
+server tick. The manifest has no setup, action, diagnostic, frame or product
+semantic receipt. Failure bundle SHA-256 is
+`ab46c07a2c38379fe8e9e474970c3b87f10f627cc88a0e6dbf9a1c4b56d3f8f3`;
+watchdog report SHA-256 is
+`9e7d7a6633744dcba5d19f8b1bd69d4a6ecad6ec26868cb70ffcaaa1c0e2bf26`.
+This is a new product-runtime boundedness defect, not a display failure and not
+permission for an unchanged retry.
+
+The inherited physical-loss test's direct `serviceableFloor` negative is valid,
+but its final empty-candidates assertion is vacuous because it never reduces
+the proposed `SettlementAssaultStarted` into the queried state. Successor
+order19 owns a non-vacuous active-assault loss oracle together with the bounded
+admission correction. Cleanup independently found no task process, port
+30118/30119 listener or display socket. The retained task root is about 2.1GiB
+and remains the sole current reviewed evidence root until successor review.
