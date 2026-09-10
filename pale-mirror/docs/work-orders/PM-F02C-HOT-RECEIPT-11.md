@@ -1,6 +1,7 @@
 # PM-F02C-HOT-RECEIPT-11: admit and deliver the exact HOT assault receipt
 
-Specification revision: 1. Status: `EXECUTING`. Parent slice: F0.2C.
+Specification revision: 2. Status: `METHOD_BOUNDARY_CORRECTION_EXECUTING`.
+Parent slice: F0.2C.
 Risk: critical-code/native. Engineer: supervising root. Intended sole builder:
 `/root/terra_f02c_hot_receipt11`, fresh `gpt-5.6-terra` with reasoning `high`.
 
@@ -38,23 +39,27 @@ and the same assault resumes as a next-epoch COLD candidate. No COLD rerun,
 aftermath change, tactics, terrain, F0.3, framework redesign, deployment,
 publication or human/M3 claim.
 
-Only these gaps remain:
+Only these gaps remain after the R3 method boundary below:
 
-1. The focused owner-seam carrier begins with no lease/strike intent, crosses
-   the registered production tick, and confines every block, entity and mock
-   observer operation to its own GameTest template interior. Canonical absolute
-   coordinates may not be written into the shared GameTest level.
-2. The physical oracle independently samples the exact target entity before
-   and after execution, matches those samples to the exact receipt and intent,
-   and would fail if `hurt` were omitted while a decreasing receipt were forged.
+1. The production exactly-once fence binds a strike unambiguously to its exact
+   world, cause and lease identity/revision. Delimiter replacement, substring
+   inspection or another non-injective textual encoding is insufficient;
+   collision, stale-lease and foreign-revision controls must fail cheaply.
+2. One template-local physical GameTest independently samples the exact target
+   entity before and after the production strike effect, matches those samples
+   to the exact receipt and intent, and fails if `hurt` is omitted while a
+   decreasing receipt is forged. This is component physical evidence only: it
+   must not claim ordinary scene admission or restart.
 3. Declaration-bound retained assertion records bind the exact cause, attacker,
    target, receipt identity and raw health transition before and after the
    authentic restart, plus epoch 0→1, no replay, ordinary CLOSED/COLD release
    and next-COLD availability. A replaced, old, reordered or self-consistent
    foreign receipt fails a cheap mutation before native work.
-4. The per-lease exactly-once fence uses an unambiguous exact association. A
-   substring match against an intent ID is insufficient; a collision/foreign-
-   revision negative must fail without widening shared cause identity.
+4. The single targeted native carrier, not a GameTest template, begins with no
+   lease/strike intent and joins ordinary player demand at the immutable
+   canonical settlement coordinates to the registered lifecycle tick, exact
+   bodies, real hit, restart, no replay, demand-loss release and next COLD
+   epoch. No lower evidence tier may claim that complete owner seam.
 
 Terra owns the concrete correction, fixture design, helper choices and focused
 commands. Preserve all useful inherited behavior and do not repeat unchanged
@@ -62,12 +67,14 @@ component evidence merely for a fresh console.
 
 ## Method and verification boundary
 
-First return `HOT_METHOD_READY_R3` on one clean private checkpoint after
-actually executing the smallest focused owner-seam GameTest (compilation alone
-is not evidence), the independent-health control and the cheap restart-oracle
-mutations. Include exact identity, changed paths, commands/durations/results,
-receipt hashes and cleanup. No complete critical gate, native client/server or
-CI/provider work may run before the one fresh read-only method decision.
+First return `HOT_METHOD_READY_R4` on one clean private checkpoint after
+actually executing the smallest template-local physical GameTest, the exact-
+binding controls and the cheap declaration/retained-assertion mutations.
+Compilation alone is not physical evidence. Keep test-only health-oracle logic
+out of production sources. Include exact identity, changed paths, all attempted
+commands/durations/results, receipt hashes and cleanup. No complete critical
+gate, native client/server or CI/provider work may run before the one fresh
+read-only method decision.
 
 After `METHOD_ADMITTED`, the same builder may resume autonomously. Because
 product Java changes from the accepted COLD candidate, run one clean-HEAD
@@ -92,5 +99,34 @@ the real owner seam without manufacturing it, or any unbounded/destructive
 action. One consolidated semantic correction is the maximum for this fresh
 context; a second rejected method/terminal semantic return closes it.
 
-Observation epoch: `2026-09-10T16:19:02Z`. Ten-minute liveness and hourly
-economy audits apply while execution is active.
+## R3 method-boundary decision
+
+Terra returned `HOT_METHOD_EXCEPTION_R3` at clean private WIP
+`ecfdc46f4e4403db54ccff982ec623f4847e51e3`, parent `1e0c227c`, tree
+`347ab4499b052a8f28ab7f77a8fdbae2d2b1b37c`. Two compile attempts failed in
+14 and 6 seconds before the corrected focused scene task executed for 49
+seconds. Its exact log SHA-256 is
+`77a5e6662bc29651183e3baa5adadda7eb6f38177f36566e1e43e7409db0fa9c`;
+64 scene tests ran and the new carrier plus one other required test failed. No
+complete, native or CI work ran, and no task process survived.
+
+The new carrier correctly exposed an impossible proof conjunction. The
+standard GameTest cell was placed near `(-10147872, 5056714)`, while the
+immutable 1024×1024 bootstrap and its Northwatch assault live near
+`(-360, -340)`. Production reached `PREPARED`, but physical materialization
+could not occur inside the unrelated template cell. Moving the observer or
+writing blocks at the canonical coordinates violates GameTest isolation;
+relocating the canonical settlement would cease to prove this production
+fixture. This is a test-tier boundary, not a HOT product failure.
+
+Revision 2 restores the already-normative evidence composition in
+`frontier-v3-execution-semantics.md`: cheap exact identity/oracle controls,
+template-local real-effect evidence scoped to that component, and one native
+carrier as the sole proof of full canonical admission plus restart. The R3 WIP
+is not accepted as code: its textual ID construction remains collision-prone
+and its test-only health validator sits in production source. Terra owns one
+coherent method correction from the preserved checkpoint; the next semantic
+rejection closes this context.
+
+Correction observation epoch: `2026-09-10T16:35:29Z`. Ten-minute liveness and
+hourly economy audits apply while execution is active.
