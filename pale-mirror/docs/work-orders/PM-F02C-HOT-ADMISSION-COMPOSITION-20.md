@@ -1,6 +1,6 @@
 # PM-F02C-HOT-ADMISSION-COMPOSITION-20: complete bounded assault admission composition
 
-Specification revision: 1. Status: `EXECUTING_METHOD_ADMISSION`.
+Specification revision: 2. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
 Executor: `/root/terra_f02c_hot_admission_composition20`, fresh
 `gpt-5.6-terra`, reasoning `high`.
@@ -112,3 +112,30 @@ Use branch `terra/f02c-hot-admission-composition-20`, worktree
 Execution assigned at `2026-09-10T21:09:15Z` after exact clean custody was
 verified. First bounded liveness audit is due at `21:19:15Z` after silence;
 first economy audit is due at `22:09:15Z` if execution remains active.
+
+## Terminal method review
+
+Terra stopped at clean private commit
+`665e6277bce36991c7db26d7f5a4b219d0a3b688`, parent `1ff8835e`, tree
+`271c243f41d170f815a8f54f34400ec53746b342`. Compilation passed in 14.6
+seconds. The focused test produced no semantic result during 3 minutes 31
+seconds of NeoForge setup and was terminated; retained XML records one skipped
+target and executor exit 143. No full gate, GameTest, package or native work
+ran, and no task-owned process survived.
+
+Independent method challenge rejects the proof while preserving the useful
+WIP. Production now plausibly shares one immutable provider view across the
+assaults of a reservation derivation, refreshes the cached result on source
+state identity change, introduces no persisted authority and reduces the
+executor to 972 lines. However, the test calls only the cache wrapper rather
+than the actual production hand-off scan, constructs one assault, has no
+provider/derivation count oracle, proves only replacement object identity and
+selects an arbitrary member floor rather than an attacker perimeter support.
+The extracted helper also duplicates the actor budget literal `16` instead of
+retaining one owner.
+
+This is the successor's repetition of the same non-faithful proof category.
+The operating-model circuit breaker closes this context and forbids another
+test patch or expensive run on order20. Successor order21 retains the useful
+bytes but redesigns the production method boundary so the real orchestration is
+cheaply observable without a Minecraft runtime.
