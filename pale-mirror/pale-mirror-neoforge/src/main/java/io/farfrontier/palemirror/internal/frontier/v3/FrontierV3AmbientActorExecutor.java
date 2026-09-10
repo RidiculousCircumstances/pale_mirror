@@ -294,10 +294,17 @@ final class FrontierV3AmbientActorExecutor {
     private static void handOffReservedActors(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                               FrontierWorldState initialState) {
         int transferred = 0;
+        FrontierWorldState reservationState = initialState;
+        java.util.Set<SubjectId> reservedActors = reservedActors(runtime, reservationState);
         for (SubjectId actorId : initialState.actorLocations().keySet().stream().sorted().toList()) {
             if (transferred >= MAX_ACTORS_PER_TICK) return;
             FrontierWorldState state = runtime.decodedState().orElse(null);
-            if (state == null || !FrontierSceneAdmission.reserved(state, actorId)) continue;
+            if (state == null) return;
+            if (state != reservationState) {
+                reservationState = state;
+                reservedActors = reservedActors(runtime, reservationState);
+            }
+            if (!reservedActors.contains(actorId)) continue;
             var location = state.actorLocations().get(actorId);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
                     || !HivePhysiologySupport.permitsAmbientLease(state, actorId)) continue;
