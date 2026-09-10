@@ -1,8 +1,9 @@
 # PM-F02C-HOT-NATIVE-15: execute the authentic HOT restart history
 
-Specification revision: 1. Status: `READY_ASSIGNMENT`.
+Specification revision: 2. Status: `EXECUTING`.
 Parent slice: F0.2C. Risk: critical-code/native. Engineer: supervising root.
-Executor: fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/terra_f02c_hot_native15`, fresh `gpt-5.6-terra`, reasoning
+`high`.
 
 This execution-only successor inherits
 `docs/engineering-agent-operating-model-v4.md`. The HOT method is admitted; do
@@ -79,6 +80,7 @@ port25565 service or unrelated listener on127.0.0.1:45621. Preserve all earlier
 worktrees and evidence. Commit coherent private WIP only; no merge, push,
 publication, deployment or cleanup of predecessor artifacts.
 
-Observation epoch: `2026-09-10T18:38:40Z`; first economy audit is due at
-`2026-09-10T19:38:40Z` if execution remains active. Ten-minute liveness audits
-apply only during executor silence.
+Execution assigned at `2026-09-10T18:41:55Z` from the exact clean baseline and
+isolated custody paths above. Observation epoch: `2026-09-10T18:41:55Z`; first
+economy audit is due at `2026-09-10T19:41:55Z` if execution remains active.
+Ten-minute liveness audits apply only during executor silence.
