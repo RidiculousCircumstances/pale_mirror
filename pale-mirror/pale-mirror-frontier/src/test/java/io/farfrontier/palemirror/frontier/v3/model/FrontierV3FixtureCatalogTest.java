@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.EngineStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
@@ -13,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveMobilizationProcess;
+import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,10 +26,53 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3FixtureCatalogTest {
+    @Test void coldBomberProfileRetainsAnOrdinaryDueActionThatEmitsTheExactUnvisitedCause() {
+        var configuration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:cold-bomber-profile"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        var due = configuration.initialSchedules().stream().filter(action -> action.kind().equals("frontier.settlement_assault.combat")).findFirst().orElseThrow();
+        var aftermath = HiveSettlementAssaultProcess.planCombat(state, due).stream().map(ProposedEvent::payload)
+                .filter(DeferredAftermathPrepared.class::isInstance).map(DeferredAftermathPrepared.class::cast).findFirst().orElseThrow().aftermath();
+        assertEquals("cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", aftermath.causeId().value());
+        assertTrue(state.deferredAftermath().entries().isEmpty(), "the fixture retains only the ordinary due action, never an injected aftermath");
+    }
+    @Test void coldBomberDueActionCommitsItsSemanticLossWithTheExactCause() {
+        var configuration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:cold-bomber-cause"), 41L);
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>)
+                FrontierEngines.createCanonicalStateAccess(configuration);
+        long due = configuration.initialSchedules().getFirst().dueAt().ticks();
+        var result = engine.advanceTo(new SimInstant(due), new WorkBudget(64, 512));
+        assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        FrontierWorldState committed = engine.canonicalState().state();
+        DeferredAftermath aftermath = committed.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
+        assertEquals(PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, committed.physicalDeltas().get(aftermath.cells().getFirst().position()).kind());
+        assertEquals(aftermath.causeId().value(), committed.physicalDeltas().get(aftermath.cells().getFirst().position()).cause());
+    }
+    @Test void obstructionLivenessProfileRetainsASeparateDueProvisionWithoutAnInjectedOutcome() {
+        var configuration = FrontierV3FixtureCatalog.productionObstructionLivenessConfiguration(
+                new WorldId("frontier:obstruction-liveness-profile"), 41L);
+        FrontierWorldState state = configuration.initialState(); SubjectId settlement = new SubjectId("settlement:2");
+        assertEquals(SettlementProvisionStatus.IDLE, state.humanPopulation().provision(settlement).status());
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.subject().equals(settlement)
+                && action.kind().equals("frontier.settlement.provision.review") && action.dueAt().ticks() == 1_000L));
+        assertTrue(state.inventory().items().containsKey(new SubjectId("item:development-unrelated-provision-bread")));
+    }
+    @Test void obstructionLivenessProvisionAdvancesThroughTheOrdinaryScheduledConsumer() {
+        var configuration = FrontierV3FixtureCatalog.productionObstructionLivenessConfiguration(
+                new WorldId("frontier:obstruction-liveness-consumer"), 41L);
+        var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>)
+                FrontierEngines.createCanonicalStateAccess(configuration);
+        engine.advanceTo(new SimInstant(1_000L), new WorkBudget(64, 512));
+        var result = engine.advanceTo(new SimInstant(1_001L), new WorkBudget(64, 512));
+        assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+        SettlementProvision provision = engine.canonicalState().state().humanPopulation().provision(new SubjectId("settlement:2"));
+        assertEquals(SettlementProvisionStatus.SECURE, provision.status(),
+                "revision=" + engine.canonicalState().revision().value() + " schedules=" + engine.checkpoint().schedules());
+        assertEquals(provision.requiredRations(), provision.fulfilledRations());
+    }
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(28, profiles.size());
+        assertEquals(30, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);

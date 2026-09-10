@@ -140,6 +140,7 @@ final class FrontierV3DiagnosticJson {
             case "route_construction" -> routeConstruction(id, checkpoint, state);
             case "route_maintenance" -> routeMaintenance(id, checkpoint, state);
             case "physical_delta" -> physicalDelta(id, checkpoint, state);
+            case "aftermath" -> aftermath(id, checkpoint, state);
             case "medical" -> medical(id, checkpoint, state);
             case "scene" -> scene(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
@@ -743,6 +744,26 @@ final class FrontierV3DiagnosticJson {
                 + state.humanPopulation().health(operation.patientId()).status() + "\",\"team\":[" + team + "]"
                 + ",\"medicalStatus\":\"" + operation.status() + "\",\"intent\":\"" + quote(operation.consumptionIntentId().value())
                 + "\",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status()) + "\"}";
+    }
+
+    /** One bounded, read-only COLD aftermath receipt selected by exact id or exact causal selector. */
+    private static String aftermath(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        var value = id.startsWith("cause:") ? state.deferredAftermath().entries().values().stream()
+                .filter(entry -> entry.causeId().value().equals(id))
+                .sorted(java.util.Comparator.comparing(entry -> entry.id())).findFirst().orElse(null)
+                : state.deferredAftermath().entries().get(subject(id).orElse(null));
+        if (value == null) return unavailable("aftermath", id, checkpoint, "not_found");
+        // The completed cell remains visible after the cursor has reached its terminal state.
+        // A terminal cursor alone is not evidence that the declared physical consequence happened.
+        var cell = value.terminal() ? value.cells().getLast() : value.nextPending();
+        return base("aftermath", id, checkpoint) + ",\"status\":\"ok\",\"aftermathId\":\"" + quote(value.id().value())
+                + "\",\"cause\":\"" + quote(value.causeId().value()) + "\",\"provenance\":\"" + quote(value.provenance())
+                + "\",\"knowledge\":\"" + value.knowledge() + "\",\"epoch\":" + value.expectedEpoch() + ",\"eventAt\":" + value.eventAt() + ",\"observedAt\":"
+                + (value.observedAt().isPresent() ? value.observedAt().getAsLong() : "null") + ",\"cursor\":" + value.resolutionCursor()
+                + ",\"cells\":" + value.cells().size() + ",\"terminal\":" + value.terminal() + ",\"expectedMaterial\":\"" + cell.expectedMaterial() + "\",\"nextStatus\":\""
+                + (value.terminal() ? "NONE" : cell.status()) + "\",\"cellStatus\":\"" + cell.status()
+                + "\",\"position\":" + position(cell.position()) + ",\"expectedOwner\":\"" + quote(cell.expectedOwner().value())
+                + "\",\"expectedPart\":\"" + cell.expectedPart() + "\"}";
     }
 
     /** One stable typed-scene view for player-piloted physical-scene evidence. */

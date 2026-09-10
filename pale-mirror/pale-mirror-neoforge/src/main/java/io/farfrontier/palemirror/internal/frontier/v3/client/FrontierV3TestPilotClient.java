@@ -190,6 +190,7 @@ public final class FrontierV3TestPilotClient {
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
         Minecraft minecraft = Minecraft.getInstance();
+        if (FrontierV3PilotGlfwAdmission.publishIfRequested(minecraft)) return;
         // `disconnect` clears the transport before every presentation reference is necessarily
         // retired.  Test the authoritative transport boundary first, so a stale LocalPlayer
         // cannot suppress the one authenticated reconnection after a normal server handoff.
@@ -285,6 +286,7 @@ public final class FrontierV3TestPilotClient {
             reset();
         }
     }
+
     private static void walk(Minecraft minecraft, BlockPos target, double radius) {
         Vec3 current = minecraft.player.position();
         double dx = target.getX() + 0.5D - current.x, dz = target.getZ() + 0.5D - current.z;

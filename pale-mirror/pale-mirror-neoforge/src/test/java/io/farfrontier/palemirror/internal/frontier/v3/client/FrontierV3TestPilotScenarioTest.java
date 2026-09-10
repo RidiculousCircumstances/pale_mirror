@@ -61,6 +61,17 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void admitsOneExactReadOnlyAftermathDiagnosticToTheVisibleClient() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"aftermath",
+                "id":"cause:development-settlement-assault-epoch-3-attacker-bioform-east-3",
+                "expect":{"status":"ok","terminal":false},"timeoutMs":120000}]}""");
+        assertEquals(1, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"inspect","view":"aftermath","id":""}]}"""));
+    }
+
+    @Test
     void permitsOnlyUniqueBoundedCausalMilestoneLabelsOnReadOnlyEvidenceActions() {
         assertEquals(2, FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[

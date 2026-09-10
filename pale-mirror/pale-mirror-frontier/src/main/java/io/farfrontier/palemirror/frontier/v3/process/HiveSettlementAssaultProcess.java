@@ -139,6 +139,8 @@ public final class HiveSettlementAssaultProcess {
         SettlementAssaultStrike strike = new SettlementAssaultStrike(assault.id(), attacker, target, assault.nextStrikeEpoch(), damage(state, attacker));
         FixedScalar after = state.actorLocations().get(target).condition().health().minus(strike.damage());
         List<ProposedEvent> events = new ArrayList<>(List.of(new ProposedEvent(assault.hiveId(), strike)));
+        deferredBomberAftermath(state, assault, attacker, action.dueAt().ticks()).ifPresent(aftermath ->
+                events.add(new ProposedEvent(assault.hiveId(), new DeferredAftermathPrepared(aftermath))));
         if (after.compareTo(FixedScalar.ZERO) <= 0 && ((hiveTurn && defenders.size() == 1) || (!hiveTurn && attackers.size() == 1))) {
             events.add(new ProposedEvent(assault.hiveId(), new SettlementAssaultResolved(assault.id(),
                     hiveTurn ? SettlementAssaultOutcome.HIVE_VICTORY : SettlementAssaultOutcome.SETTLEMENT_VICTORY)));
@@ -340,6 +342,28 @@ public final class HiveSettlementAssaultProcess {
     private static List<SubjectId> livingCombatantAttackers(FrontierWorldState state, SettlementAssault assault) { return assault.combatantAttackerIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
     private static List<SubjectId> livingDefenders(FrontierWorldState state, SettlementAssault assault) { return assault.defenderIds().stream().filter(id -> alive(state, id)).sorted().toList(); }
     private static boolean alive(FrontierWorldState state, SubjectId actor) { return state.actorLocations().get(actor) != null && state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE; }
+    /**
+     * COLD combat commits its exact causal result now.  A bomber's later visible rubble is only
+     * one declared Hall foundation cell, not a delayed bomb or a claim that unloaded shielding
+     * was observed.  The loaded executor will inspect this exact owned cell before it writes.
+     */
+    private static Optional<DeferredAftermath> deferredBomberAftermath(FrontierWorldState state, SettlementAssault assault, SubjectId attacker, long now) {
+        Bioform bioform = allBioforms(state).get(attacker);
+        if (bioform == null || !bioform.isExplosiveAssaulter()) return Optional.empty();
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
+        SettlementStructure hall = settlement.structures().stream().filter(value -> value.kind() == StructureKind.HALL)
+                .min(Comparator.comparing(SettlementStructure::id)).orElse(null);
+        if (hall == null || state.structureConditions().get(hall.id()) == StructureCondition.DESTROYED) return Optional.empty();
+        BlockPosition position = hall.anchor();
+        GrayboxCell cell = FrontierGrayboxPlan.intactStructureCell(state.bootstrap().terrain(), hall, position);
+        if (cell == null || state.physicalDeltas().containsKey(position)) return Optional.empty();
+        SubjectId id = new SubjectId("aftermath:" + assault.id().value().substring("assault:".length()) + "-bomber-" + assault.nextStrikeEpoch());
+        // The cause is the exact semantic strike, not merely the bioform that happened to make it.
+        SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
+        return Optional.of(new DeferredAftermath(id, assault.hiveId(), cause, now, java.util.OptionalLong.empty(), "captive-bomber-strike:" + assault.id().value(),
+                DeferredAftermathKnowledge.KNOWN_CLEAR, assault.nextStrikeEpoch(), List.of(new DeferredAftermathCell(position, cell.ownerId(), cell.material(), cell.semanticPart(),
+                -1L, DeferredAftermathCellStatus.PENDING)), 0));
+    }
     private static SubjectId choose(List<SubjectId> values, int epoch) { return values.get(Math.floorMod(epoch, values.size())); }
     private static SettlementAssaultOutcome outcome(FrontierWorldState state, SettlementAssault assault) {
         boolean attackers = !livingCombatantAttackers(state, assault).isEmpty(), defenders = !livingDefenders(state, assault).isEmpty();

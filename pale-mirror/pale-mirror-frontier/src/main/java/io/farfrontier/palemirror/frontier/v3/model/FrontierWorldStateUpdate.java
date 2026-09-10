@@ -46,7 +46,8 @@ public final class FrontierWorldStateUpdate {
         HUMAN_POPULATION,
         COMPANIES,
         RESOURCE_SITES,
-        REPLICA_CUSTODY
+        REPLICA_CUSTODY,
+        DEFERRED_AFTERMATH
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -74,6 +75,7 @@ public final class FrontierWorldStateUpdate {
     private CompanyRegistry companies;
     private ResourceSiteState resourceSites;
     private PhysicalReplicaCustodyState replicaCustody;
+    private DeferredAftermathState deferredAftermath;
 
     private FrontierWorldStateUpdate() { }
 
@@ -153,6 +155,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate replicaCustody(PhysicalReplicaCustodyState next) {
         mark(Component.REPLICA_CUSTODY); replicaCustody = require(next, "replica custody"); return this;
     }
+    public FrontierWorldStateUpdate deferredAftermath(DeferredAftermathState next) {
+        mark(Component.DEFERRED_AFTERMATH); deferredAftermath = require(next, "deferred aftermath"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -178,6 +183,7 @@ public final class FrontierWorldStateUpdate {
     CompanyRegistry companies(FrontierWorldState state) { return changed(Component.COMPANIES, companies, state.companies()); }
     ResourceSiteState resourceSites(FrontierWorldState state) { return changed(Component.RESOURCE_SITES, resourceSites, state.resourceSites()); }
     PhysicalReplicaCustodyState replicaCustody(FrontierWorldState state) { return changed(Component.REPLICA_CUSTODY, replicaCustody, state.replicaCustody()); }
+    DeferredAftermathState deferredAftermath(FrontierWorldState state) { return changed(Component.DEFERRED_AFTERMATH, deferredAftermath, state.deferredAftermath()); }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

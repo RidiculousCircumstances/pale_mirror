@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "disposable_cold_bomber_aftermath_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "cold-bomber-aftermath" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedMaterial": "HALL", "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false }, "timeoutMs": 120000 },
+    { "type": "inspect", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 },
+    { "type": "wait_until_block", "position": { "x": -360, "y": 64, "z": -340 }, "block": "minecraft:air", "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" }, "timeoutMs": 90000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1500 }
+    ]
+  },
+  "assertions": [
+    { "after": 1, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "provenance": "captive-bomber-strike:assault:development-settlement-assault", "knowledge": "KNOWN_CLEAR", "expectedMaterial": "HALL", "nextStatus": "PENDING", "cellStatus": "PENDING", "terminal": false } },
+    { "after": 2, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "terminal": false, "nextStatus": "PENDING", "cellStatus": "PENDING" } },
+    { "after": 5, "view": "aftermath", "id": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "expect": { "status": "ok", "cause": "cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", "epoch": 4, "expectedMaterial": "HALL", "terminal": true, "nextStatus": "NONE", "cellStatus": "REALIZED" } }
+  ],
+  "frames": []
+}

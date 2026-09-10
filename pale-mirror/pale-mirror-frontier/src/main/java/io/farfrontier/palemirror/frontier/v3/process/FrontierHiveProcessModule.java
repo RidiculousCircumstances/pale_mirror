@@ -63,6 +63,15 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), conflicted)));
         }
+        if (command.payload() instanceof DeferredAftermathResolved resolved) {
+            DeferredAftermath aftermath = state.deferredAftermath().entries().get(resolved.aftermathId());
+            if (aftermath == null || !aftermath.ownerId().equals(state.bootstrap().hive().id())) {
+                return FrontierWorldCommandPlanner.rejected("deferred aftermath has no exact hive owner");
+            }
+            try { state.deferredAftermath().resolve(resolved.aftermathId(), resolved.expectedEpoch(), resolved.observationAt(), resolved.expectedCursor(), resolved.authorityRevision(), resolved.result()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(aftermath.ownerId(), resolved)));
+        }
         return FrontierWorldCommandPlanner.rejected("hive process does not admit command: " + command.payload().type());
     }
 
@@ -102,7 +111,49 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case SettlementAssaultTransition transition -> HiveSettlementAssaultProcess.reduceTransition(state, event.subject(), transition);
             case SettlementAssaultStrike strike -> HiveSettlementAssaultProcess.reduceStrike(state, event.subject(), strike);
             case SettlementAssaultResolved resolved -> HiveSettlementAssaultProcess.reduceResolved(state, event.subject(), resolved);
+            case DeferredAftermathPrepared prepared -> reduceAftermathPrepared(state, event.subject(), prepared);
+            case DeferredAftermathResolved resolved -> reduceAftermathResolved(state, event.subject(), resolved);
             default -> throw new IllegalArgumentException("hive process does not own event: " + event.payload().type());
         };
+    }
+
+    private static FrontierWorldState reduceAftermathPrepared(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                               DeferredAftermathPrepared prepared) {
+        if (!subject.equals(state.bootstrap().hive().id()) || !prepared.aftermath().ownerId().equals(subject)) {
+            throw new IllegalArgumentException("deferred aftermath preparation lacks hive ownership");
+        }
+        DeferredAftermath aftermath = prepared.aftermath();
+        String assaultId = aftermath.provenance().startsWith("captive-bomber-strike:")
+                ? aftermath.provenance().substring("captive-bomber-strike:".length()) : "";
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(assaultId));
+        // The preparation event follows the exact strike in the same canonical transaction.
+        // A same-actor or same-provenance substitute cannot cross this epoch/cause fence.
+        if (assault == null || assault.nextStrikeEpoch() != aftermath.expectedEpoch() + 1L
+                || aftermath.causeId().value().isBlank()
+                || aftermath.cells().stream().anyMatch(cell -> cell.expectedMaterial() == null)) {
+            throw new IllegalArgumentException("deferred aftermath preparation has stale or substituted causal authority");
+        }
+        boolean exactCause = assault.combatantAttackerIds().stream()
+                .anyMatch(attacker -> aftermath.causeId().equals(SettlementAssaultCauseIdentity.strike(assault.id(), attacker, aftermath.expectedEpoch())));
+        if (!exactCause) throw new IllegalArgumentException("deferred aftermath preparation has stale or substituted causal authority");
+        FrontierWorldState preparedState = state.withChanges(FrontierWorldStateUpdate.begin()
+                .deferredAftermath(state.deferredAftermath().prepare(aftermath)));
+        // The COLD strike's semantic loss is committed with its exact cause.  Later natural
+        // loading only reconciles the retained physical footprint; it must never decide whether
+        // the causal consequence happened.
+        return FrontierWorldPhysicalDeltaSupport.recordAll(preparedState, aftermath.cells().stream().map(cell ->
+                new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                        java.util.Optional.of(cell.expectedOwner()), java.util.Optional.of(cell.expectedPart()), aftermath.causeId().value())).toList());
+    }
+    private static FrontierWorldState reduceAftermathResolved(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                               DeferredAftermathResolved resolved) {
+        DeferredAftermath current = state.deferredAftermath().entries().get(resolved.aftermathId());
+        if (current == null || !subject.equals(current.ownerId())) throw new IllegalArgumentException("deferred aftermath resolution lacks exact owner");
+        DeferredAftermathState next = state.deferredAftermath().resolve(resolved.aftermathId(), resolved.expectedEpoch(), resolved.observationAt(), resolved.expectedCursor(), resolved.authorityRevision(), resolved.result());
+        DeferredAftermathCell cell = current.cellAt(resolved.expectedCursor());
+        if (resolved.result() == DeferredAftermathCellStatus.REALIZED && (cell == null || cell.status() != DeferredAftermathCellStatus.RUNNING)) {
+            throw new IllegalArgumentException("realized aftermath has no running exact cell");
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().deferredAftermath(next));
     }
 }

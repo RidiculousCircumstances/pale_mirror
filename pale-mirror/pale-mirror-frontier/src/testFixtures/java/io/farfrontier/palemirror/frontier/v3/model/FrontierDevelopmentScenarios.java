@@ -143,6 +143,36 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Keeps one genuine COLD combat action due after bootstrap.  Unlike the HOT-scene carrier,
+     * this fixture does not suppress combat for a visitor: the ordinary duration driver owns
+     * the exact bomber strike and its aftermath before any player loads the target chunk.
+     */
+    static SettlementAssaultFixture coldBomberAftermathFixture(WorldId worldId, long seed) {
+        SettlementAssaultFixture boundary = settlementAssaultFixture(worldId, seed);
+        FrontierWorldState state = boundary.state(); long dueAt = boundary.instant().ticks() + 20L;
+        SubjectId hive = state.bootstrap().hive().id();
+        for (int turn = 0; turn < 8; turn++) {
+            SettlementAssault assault = state.strategicPlans().settlementAssaults().get(boundary.assaultId());
+            if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT) throw new IllegalStateException("cold bomber fixture lost its COLD assault");
+            ScheduledAction combat = HiveSettlementAssaultProcess.combat(assault, dueAt);
+            List<ProposedEvent> events = HiveSettlementAssaultProcess.planCombat(state, combat);
+            DeferredAftermathPrepared prepared = events.stream().map(ProposedEvent::payload).filter(DeferredAftermathPrepared.class::isInstance)
+                    .map(DeferredAftermathPrepared.class::cast).findFirst().orElse(null);
+            if (prepared != null) {
+                if (!prepared.aftermath().causeId().value().equals("cause:development-settlement-assault-epoch-4-attacker-bioform-west-19")) {
+                    throw new IllegalStateException("cold bomber fixture selected a substituted bomber cause: " + prepared.aftermath().causeId());
+                }
+                return new SettlementAssaultFixture(state, new SimInstant(dueAt - 1L), List.of(combat), boundary.assaultId());
+            }
+            SettlementAssaultStrike strike = events.stream().map(ProposedEvent::payload).filter(SettlementAssaultStrike.class::isInstance)
+                    .map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow(() -> new IllegalStateException("cold bomber fixture stalled before due combat"));
+            state = HiveSettlementAssaultProcess.reduceStrike(state, hive, strike);
+            dueAt += state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval();
+        }
+        throw new IllegalStateException("cold bomber fixture could not retain its exact ordinary due cause");
+    }
+
+    /**
      * Read-only equipment hand-off boundary. It retains an approaching assault and one exact
      * depot sword, but neither an intent nor an active surface/body: the native visit must make
      * the ordinary container, resident and issue schedulers produce the hand-off.
@@ -724,6 +754,27 @@ final class FrontierDevelopmentScenarios {
         // on a test-only direct transformation once OUTPUT_READY is observed.
         return new MaterializedProductionFixture(isolated, base.instant(),
                 List.of(ProductionProcess.complete(jobs.get(jobId), 100L)), base.orderId());
+    }
+
+    /**
+     * The production obstruction remains local to Northwatch. A second, unvisited settlement
+     * retains an ordinary provision review at a later canonical instant, proving that the
+     * obstruction neither stalls nor borrows capacity from an unrelated COLD process.
+     */
+    static MaterializedProductionFixture materializedProductionObstructionLivenessFixture(WorldId worldId, long seed) {
+        MaterializedProductionFixture base = materializedProductionWorkFixture(worldId, seed);
+        FrontierWorldState state = base.state(); Settlement settlement = state.bootstrap().settlements().get(1);
+        SubjectId depot = FrontierWorldState.depotId(settlement.id()); SubjectId bread = new SubjectId("item:development-unrelated-provision-bread");
+        List<SubjectId> recipients = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
+                .map(ResidentProfile::id).sorted().toList();
+        HumanPopulation population = state.humanPopulation();
+        for (SubjectId recipient : recipients) population = population.resolveNutrition(recipient, 1, false);
+        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64,
+                new InventoryCustody.ContainerSlot(depot, 1));
+        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(population);
+        List<ScheduledAction> schedules = new java.util.ArrayList<>();
+        schedules.add(SettlementProvisionProcess.review(settlement.id(), 1, 1_000L));
+        return new MaterializedProductionFixture(state, base.instant(), schedules, base.orderId());
     }
 
     /** Worker-death uses the normal production-work fixture; only the pilot action is fatal. */

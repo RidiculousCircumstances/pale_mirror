@@ -13,6 +13,7 @@ import java.util.Arrays;
 public enum FrontierV3DiagnosticView {
     SUMMARY("summary", false),
     PERFORMANCE("performance", false),
+    AFTERMATH("aftermath", true),
     PROCESS("process", true),
     SITE("site", true),
     SETTLEMENT("settlement", true),

@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "disposable_materialized_production_route_blocked",
   "isolation": { "mode": "disposable_lite", "seed": 41 },
-  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-work" },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-obstruction-liveness" },
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "command", "command": "/clear PMTestPilot" },
@@ -16,10 +16,13 @@
   "actions": [
     { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft", "expect": { "status": "ok", "sceneKind": "PRODUCTION_WORK", "leaseStatus": "HOT", "primaryActor": "resident:1-15" }, "timeoutMs": 60000 },
     { "type": "place", "position": { "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionFutureBody" } }, "item": "minecraft:gray_concrete", "timeoutMs": 15000 },
-    { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 }
+    { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 },
+    { "type": "fast_forward", "ticks": 1100, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "settlement", "id": "settlement:2", "expect": { "status": "ok", "food": { "status": "SECURE", "fulfilled": 8 } }, "requireIncreaseAt": "food.fulfilled", "timeoutMs": 30000 }
   ],
   "assertions": [
-    { "after": 3, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } }
+    { "after": 3, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } },
+    { "after": 5, "view": "settlement", "id": "settlement:2", "expect": { "status": "ok", "food": { "status": "SECURE", "fulfilled": 8 } } }
   ],
   "frames": [
     { "after": 2, "name": "player-blocked-industrial-worker-route" }

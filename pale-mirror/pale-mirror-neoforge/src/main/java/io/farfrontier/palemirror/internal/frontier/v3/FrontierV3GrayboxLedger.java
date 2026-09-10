@@ -19,7 +19,7 @@ import java.util.TreeSet;
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_graybox";
-    private static final int FORMAT = 2;
+    private static final int FORMAT = 3;
     private static final int MAX_CELLS = 65_536;
     private final Map<Long, Claim> claims;
     /**
@@ -50,7 +50,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     }
     void applied(BlockPos position, String owner, String material, String semanticPart) {
         ensureCapacityFor(position);
-        Claim replacement = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), false);
+        Claim replacement = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, false);
         Claim prior = claims.putIfAbsent(position.asLong(), replacement);
         if (prior != null && !prior.equals(replacement)) {
             throw new IllegalStateException("v3 graybox claim already belongs to another semantic cell");
@@ -63,7 +63,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     /** Records a foreign obstruction before any v3 block is placed, so a later pass cannot adopt it. */
     void obstructed(BlockPos position, String owner, String material, String semanticPart) {
         ensureCapacityFor(position);
-        Claim blocked = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), true);
+        Claim blocked = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, true);
         Claim prior = claims.putIfAbsent(position.asLong(), blocked);
         if (prior != null && !prior.equals(blocked)) {
             throw new IllegalStateException("v3 graybox obstruction collides with another semantic cell");
@@ -76,7 +76,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     void conflict(BlockPos position) {
         Claim prior = claims.get(position.asLong());
         if (prior == null || prior.conflicted()) return;
-        claims.put(position.asLong(), new Claim(prior.owner(), prior.material(), prior.semanticPart(), true)); setDirty();
+        claims.put(position.asLong(), new Claim(prior.owner(), prior.material(), prior.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
     }
     /**
      * Records a canonical PM-owned loss that predates this chunk's first physical visit.
@@ -88,7 +88,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
      */
     void damaged(BlockPos position, String owner, String material, String semanticPart) {
         ensureCapacityFor(position);
-        Claim tombstone = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), true);
+        Claim tombstone = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, true);
         Claim prior = claims.putIfAbsent(position.asLong(), tombstone);
         if (prior != null && (!prior.owner().equals(tombstone.owner()) || !prior.material().equals(tombstone.material())
                 || !prior.semanticPart().equals(tombstone.semanticPart()))) {
@@ -97,7 +97,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (prior == null) {
             index(tombstone, position.asLong()); setDirty();
         } else if (!prior.conflicted()) {
-            claims.put(position.asLong(), tombstone); setDirty();
+            claims.put(position.asLong(), new Claim(tombstone.owner(), tombstone.material(), tombstone.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
         }
     }
     /**
@@ -126,7 +126,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     /** Restores an exact previously claimed semantic cell after its separately durable repair receipt. */
     void repaired(BlockPos position, String owner, String material, String semanticPart) {
         Claim prior = claims.get(position.asLong());
-        Claim restored = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), false);
+        Claim restored = new Claim(requireText(owner, "owner"), requireText(material, "material"), requireText(semanticPart, "semantic part"), Math.addExact(prior.revision(), 1L), false);
         if (prior == null || !prior.owner().equals(restored.owner()) || !prior.material().equals(restored.material())
                 || !prior.semanticPart().equals(restored.semanticPart())) {
             throw new IllegalStateException("v3 repair does not match its original graybox claim");
@@ -134,12 +134,12 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (!prior.equals(restored)) { claims.put(position.asLong(), restored); setDirty(); }
     }
     static FrontierV3GrayboxLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (tag.getInt("format") != FORMAT) throw new IllegalStateException("incompatible v3 graybox ledger");
+        int format = tag.getInt("format"); if (format != 2 && format != FORMAT) throw new IllegalStateException("incompatible v3 graybox ledger");
         Map<Long, Claim> claims = new HashMap<>(); ListTag entries = tag.getList("claims", Tag.TAG_COMPOUND);
         if (entries.size() > MAX_CELLS) throw new IllegalStateException("v3 graybox claim limit exceeded");
         for (Tag value : entries) { CompoundTag entry = (CompoundTag) value; long position = entry.getLong("pos");
             Claim claim = new Claim(requireText(entry.getString("owner"), "owner"), requireText(entry.getString("material"), "material"),
-                    requireText(entry.getString("part"), "semantic part"), entry.getBoolean("conflict"));
+                    requireText(entry.getString("part"), "semantic part"), format == FORMAT ? entry.getLong("revision") : 0L, entry.getBoolean("conflict"));
             if (claims.put(position, claim) != null) throw new IllegalStateException("duplicate v3 graybox claim"); }
         return new FrontierV3GrayboxLedger(claims);
     }
@@ -155,6 +155,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
             value.putString("owner", entry.getValue().owner());
             value.putString("material", entry.getValue().material());
             value.putString("part", entry.getValue().semanticPart());
+            value.putLong("revision", entry.getValue().revision());
             value.putBoolean("conflict", entry.getValue().conflicted());
             entries.add(value);
         });
@@ -164,6 +165,10 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (value == null || value.isBlank()) throw new IllegalStateException("v3 graybox claim " + field + " is blank");
         return value;
     }
-    record Claim(String owner, String material, String semanticPart, boolean conflicted) { }
+    record Claim(String owner, String material, String semanticPart, long revision, boolean conflicted) {
+        Claim(String owner, String material, String semanticPart, boolean conflicted) {
+            this(owner, material, semanticPart, 0L, conflicted);
+        }
+    }
     record ClaimAt(BlockPos position, Claim claim) { }
 }

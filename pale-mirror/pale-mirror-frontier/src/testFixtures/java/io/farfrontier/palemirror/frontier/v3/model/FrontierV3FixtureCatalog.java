@@ -46,6 +46,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("autonomousSupplyInterception", FrontierV3FixtureCatalog::autonomousSupplyInterceptionConfiguration),
             Map.entry("hotSceneStrike", FrontierV3FixtureCatalog::hotSceneStrikeConfiguration),
             Map.entry("settlementAssault", FrontierV3FixtureCatalog::settlementAssaultConfiguration),
+            Map.entry("coldBomberAftermath", FrontierV3FixtureCatalog::coldBomberAftermathConfiguration),
             Map.entry("defenderEquipment", FrontierV3FixtureCatalog::defenderEquipmentConfiguration),
             Map.entry("defenderEquipmentReturn", FrontierV3FixtureCatalog::defenderEquipmentReturnConfiguration),
             Map.entry("engineeringEquipment", FrontierV3FixtureCatalog::engineeringEquipmentConfiguration),
@@ -65,6 +66,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionWork", FrontierV3FixtureCatalog::productionWorkConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
+            Map.entry("productionObstructionLiveness", FrontierV3FixtureCatalog::productionObstructionLivenessConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
             Map.entry("routeMaintenanceColdSourceFairness", FrontierV3FixtureCatalog::routeMaintenanceColdSourceFairnessConfiguration),
             Map.entry("routePatrol", FrontierV3FixtureCatalog::routePatrolConfiguration),
@@ -111,6 +113,11 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldBomberAftermathConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.coldBomberAftermathFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
     }
 
@@ -232,6 +239,11 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkerDeathConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkerDeathFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionObstructionLivenessConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionObstructionLivenessFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

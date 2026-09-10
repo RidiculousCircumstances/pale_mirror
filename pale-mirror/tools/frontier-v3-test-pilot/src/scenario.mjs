@@ -253,8 +253,8 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
-        || typeof assertion.id !== 'string' || (!['summary', 'performance'].includes(assertion.view) && !assertion.id)
+        || !['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
+        || typeof assertion.id !== 'string' || (!['summary', 'performance', 'aftermath'].includes(assertion.view) && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
     }
@@ -355,8 +355,8 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
-    && typeof value.id === 'string' && (['summary', 'performance'].includes(value.view) || Boolean(value.id));
+  return ['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
+    && typeof value.id === 'string' && (['summary', 'performance', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 
 function validDiagnosticPath(value) { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*){0,7}$/.test(value); }

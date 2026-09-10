@@ -140,6 +140,24 @@ class HiveSettlementAssaultProcessTest {
         FrontierWorldState afterStrike = state;
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> HiveSettlementAssaultProcess.reduceStrike(afterStrike, fixture.hive(), strike));
+        // The first deterministic attacker need not be the bomber. Advance the same ordinary
+        // COLD cadence until its exact turn; no fixture inserts the aftermath itself.
+        DeferredAftermathPrepared aftermath = null;
+        ScheduledAction bomberTurn = replacement;
+        for (int turn = 0; turn < 8 && aftermath == null; turn++) {
+            List<ProposedEvent> candidate = HiveSettlementAssaultProcess.planCombat(state, bomberTurn);
+            aftermath = candidate.stream().map(ProposedEvent::payload).filter(DeferredAftermathPrepared.class::isInstance)
+                    .map(DeferredAftermathPrepared.class::cast).findFirst().orElse(null);
+            SettlementAssaultStrike candidateStrike = candidate.stream().map(ProposedEvent::payload).filter(SettlementAssaultStrike.class::isInstance)
+                    .map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
+            state = HiveSettlementAssaultProcess.reduceStrike(state, fixture.hive(), candidateStrike);
+            bomberTurn = candidate.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                    .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+        }
+        assertTrue(aftermath != null, "the real COLD bomber turn must commit one deferred aftermath without a visit");
+        assertEquals(DeferredAftermathKnowledge.KNOWN_CLEAR, aftermath.aftermath().knowledge());
+        assertEquals(DeferredAftermathCellStatus.PENDING, aftermath.aftermath().nextPending().status());
+        assertEquals(aftermath, FrontierWorldRuntimeDefinition.payloadCodecs().decode(aftermath.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(aftermath)));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
@@ -245,6 +263,18 @@ class HiveSettlementAssaultProcessTest {
         state = state.releaseSceneLease(lease.id(), captured);
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, state.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test void hotAndColdAssaultViewsDeriveOneExactStrikeCauseWithoutModeSpecificAliases() {
+        SubjectId assault = new SubjectId("assault:shared-cause");
+        SubjectId attacker = new SubjectId("bioform:shared-bomber");
+        SettlementAssaultSceneCause hot = new SettlementAssaultSceneCause(assault, new SubjectId("settlement:northwatch"));
+
+        SubjectId coldCause = SettlementAssaultCauseIdentity.strike(assault, attacker, 4L);
+        assertEquals(coldCause, SettlementAssaultCauseIdentity.strike(hot, attacker, 4L),
+                "HOT presentation and COLD scheduling must correlate the same semantic strike");
+        assertTrue(!coldCause.equals(SettlementAssaultCauseIdentity.strike(hot, new SubjectId("bioform:other-bomber"), 4L)));
+        assertTrue(!coldCause.equals(SettlementAssaultCauseIdentity.strike(hot, attacker, 5L)));
     }
 
     private static Fixture fixture(boolean territory) {

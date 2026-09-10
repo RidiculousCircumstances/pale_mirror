@@ -377,6 +377,49 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void deferredColdAftermathRecoversItsRunningBoundaryWithoutMintingASecondCanonicalLoss(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:deferred-aftermath-restart");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierWorldState initial = base.initialState();
+        io.farfrontier.palemirror.frontier.v3.model.Settlement settlement = initial.bootstrap().settlements().getFirst();
+        io.farfrontier.palemirror.frontier.v3.model.SettlementStructure hall = settlement.structures().stream()
+                .filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst().orElseThrow();
+        io.farfrontier.palemirror.frontier.v3.model.GrayboxCell cell = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan
+                .intactStructureCell(initial.bootstrap().terrain(), hall, hall.anchor());
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId aftermathId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("aftermath:runtime-recovery");
+        io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath aftermath = new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath(
+                aftermathId, initial.bootstrap().hive().id(), new SubjectId("bioform:east-2"), 0L, java.util.OptionalLong.empty(),
+                "test:runtime-recovery", io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathKnowledge.KNOWN_CLEAR, 0L,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCell(hall.anchor(), cell.ownerId(), cell.material(), cell.semanticPart(),
+                        io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.PENDING)), 0);
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(),
+                initial.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()
+                        .deferredAftermath(initial.deferredAftermath().prepare(aftermath))), base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        submitWorld(runtime, "deferred-aftermath-running", new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathResolved(aftermathId, 0L, 1L, 0,
+                io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.RUNNING));
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.RUNNING,
+                worldState(recovered).deferredAftermath().entries().get(aftermathId).nextPending().status(),
+                "recovery retains the durable before-effect boundary rather than replaying the COLD cause");
+        submitWorld(recovered, "deferred-aftermath-realized", new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathResolved(aftermathId, 0L, 2L, 0,
+                io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.REALIZED));
+        FrontierWorldState realized = worldState(recovered);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.REALIZED,
+                realized.deferredAftermath().entries().get(aftermathId).cells().getFirst().status());
+        assertFalse(realized.physicalDeltas().containsKey(hall.anchor()),
+                "a recovered physical receipt cannot mint a second semantic consequence without its exact causal preparation");
+        recovered.shutdown();
+    }
+
+    @Test
     void restartSafetyLeavesRunningHarvestForItsLoadedFieldAndDepotInspector() {
         PhysicalIntent harvest = new PhysicalIntent(new PhysicalIntentId("intent:restart-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.RUNNING, new SubjectId("site:1-wheat-field"),
