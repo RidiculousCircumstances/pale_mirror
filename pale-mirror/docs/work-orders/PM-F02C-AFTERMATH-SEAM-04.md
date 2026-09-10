@@ -1,11 +1,16 @@
 # PM-F02C-AFTERMATH-SEAM-04: prove the production aftermath owner composition
 
-Status: `EXECUTING`. Parent slice: F0.2C. Risk: critical-code/native.
+Status: `METHOD_REJECTED`. Parent slice: F0.2C. Risk: critical-code/native.
 Engineer: supervising root. Builder: `/root/terra_f02c_aftermath_seam2`, fresh
 `gpt-5.6-terra`, reasoning `high`,
 in isolated worktree `/home/rd/proj/pm-f02c-aftermath-seam-04/pale-mirror` on
 branch `work/f02c-aftermath-seam-04` from private WIP checkpoint
 `fb48c27f7e77e7b9348ef17c12b93a243c50730c`.
+
+The builder stopped at clean candidate
+`f5eea75b085bba1a3d62e38ea9368e1f0c66d8e3` (tree
+`1960f5c83790f05b124fef979711f02c16768a47`). No complete critical gate,
+GameTest/native carrier or CI run was authorized from this candidate.
 
 This order inherits `docs/engineering-agent-operating-model-v4.md`. The builder
 owns diagnosis, design, algorithms, files and commands. The order defines
@@ -71,6 +76,27 @@ critical/native gate. The packet must identify the real production entrypoint,
 untouched initial history, plausible defect, oracle and negative/restart
 mutations. This is the sole intermediate semantic review; otherwise the builder
 works autonomously.
+
+## Method-admission result
+
+The required fresh challenger rejected admission on 2026-09-10. The focused
+two-test seam passed in 7 seconds and provides useful narrow evidence for
+bounded COLD due-action creation, delayed projection, pending absence,
+tombstone realization, duplicate suppression, codec reconstruction and foreign
+material preservation under the introduced physical-world test adapter.
+
+It does not establish this order's production claim. The oracle calls the
+paired `FrontierV3AftermathOwnerComposition.tick` helper directly rather than
+the lifecycle's complete physical registry, where projection and aftermath
+are separated by intervening owners. Its ledger is fixture-local rather than
+the loaded `ServerLevel` SavedData boundary. The separate required ordinary
+HOT selection/execution/confirmation→release→next-epoch COLD path, restart,
+replay and wrong actor/epoch/mode/lease controls are absent.
+
+This repeats the preceding proof-category failure. Per operating model v4,
+implementation stops at an architecture/method boundary: preserve the useful
+WIP, simplify/expose an admissible production carrier, and do not spend a
+complete gate or native run on the current method.
 
 ## Resource and verification envelope
 
