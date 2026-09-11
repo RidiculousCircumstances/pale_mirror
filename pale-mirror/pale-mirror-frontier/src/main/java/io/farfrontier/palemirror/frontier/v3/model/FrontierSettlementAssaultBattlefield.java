@@ -23,12 +23,12 @@ public final class FrontierSettlementAssaultBattlefield {
         }
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
-        Map<BlockPosition, GrayboxCell> providerCells = FrontierGrayboxPlan.compile(state).cells();
+        Provider provider = providerView(state);
         Set<BlockPosition> occupied = new LinkedHashSet<>();
         for (SubjectId defender : defenderIds) {
             ActorLocation location = state.actorLocations().get(defender);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !serviceableFloor(providerCells, location.supportingSurface().support())
+                    || !serviceableFloor(provider, location.supportingSurface().support())
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
                     location.supportingSurface().support()) || !occupied.add(location.supportingSurface().support())) {
                 return Optional.empty();
@@ -44,12 +44,12 @@ public final class FrontierSettlementAssaultBattlefield {
         return candidate(state, assault, providerView(state));
     }
 
-    static ProviderView providerView(FrontierWorldState state) {
+    static Provider providerView(FrontierWorldState state) {
         return new ProviderView(FrontierGrayboxPlan.compile(state).cells());
     }
 
     static Optional<SettlementAssaultSceneCandidate> candidate(FrontierWorldState state, SettlementAssault assault,
-                                                                ProviderView providerView) {
+                                                                Provider provider) {
         if ((assault.status() != SettlementAssaultStatus.WAITING_FOR_BATTLE && assault.status() != SettlementAssaultStatus.COLD_COMBAT)
                 || !FrontierSettlementAssaultSceneSupport.targetIntact(state, assault)) {
             return Optional.empty();
@@ -57,14 +57,13 @@ public final class FrontierSettlementAssaultBattlefield {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId());
         Set<BlockPosition> structureCells = FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures());
         long settlementEnvelopeSquared = residentEnvelopeSquared(state, settlement);
-        Map<BlockPosition, GrayboxCell> providerCells = providerView.cells();
         Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
         List<SubjectId> members = new ArrayList<>(assault.attackerIds()); members.addAll(assault.defenderIds());
         members.sort(Comparator.naturalOrder());
         for (SubjectId member : members) {
             ActorLocation location = state.actorLocations().get(member);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                    || !serviceableFloor(providerCells, location.supportingSurface().support())
+                    || !serviceableFloor(provider, location.supportingSurface().support())
                     || !localClearFloor(state.bootstrap().bounds(), settlement.anchor(), settlementEnvelopeSquared, structureCells,
                     location.supportingSurface().support()) || positions.put(member, location.supportingSurface().support()) != null) {
                 return Optional.empty();
@@ -85,38 +84,46 @@ public final class FrontierSettlementAssaultBattlefield {
      * terrain is not a provider and cannot become one when the scene is visited.
      */
     static boolean serviceableFloor(FrontierWorldState state, BlockPosition position) {
-        return serviceableFloor(FrontierGrayboxPlan.compile(state).cells(), position);
+        return serviceableFloor(providerView(state), position);
     }
 
-    /** One disposable loss-masked physical-provider observation for one admission derivation. */
-    /** Immutable current physical-provider observation used by one admission derivation. */
-    public static final class ProviderView {
+    /**
+     * Bounded read-only structural observation for one exact admission derivation.  Admission
+     * can ask only for a named cell; it cannot enumerate geometry, compile a plan, or retain a
+     * second grammar.  The NeoForge projector supplies its already-compiled snapshot here.
+     */
+    @FunctionalInterface
+    public interface Provider {
+        Optional<GrayboxCell> cellAt(BlockPosition position);
+    }
+
+    /** Default pure-model provider used outside the NeoForge projection-to-admission seam. */
+    private static final class ProviderView implements Provider {
         private final Map<BlockPosition, GrayboxCell> cells;
 
         private ProviderView(Map<BlockPosition, GrayboxCell> cells) {
             this.cells = cells;
         }
 
-        private Map<BlockPosition, GrayboxCell> cells() {
-            return cells;
-        }
+        @Override public Optional<GrayboxCell> cellAt(BlockPosition position) { return Optional.ofNullable(cells.get(position)); }
     }
 
-    private static boolean serviceableFloor(Map<BlockPosition, GrayboxCell> cells, BlockPosition position) {
-        GrayboxCell support = cells.get(position);
-        return support != null && isDeclaredBodySurface(support)
-                && !cells.containsKey(position.offset(0, 1, 0))
-                && !cells.containsKey(position.offset(0, 2, 0));
+    private static boolean serviceableFloor(Provider provider, BlockPosition position) {
+        Optional<GrayboxCell> support = provider.cellAt(position);
+        Optional<GrayboxCell> head = provider.cellAt(position.offset(0, 1, 0));
+        Optional<GrayboxCell> headroom = provider.cellAt(position.offset(0, 2, 0));
+        return support.filter(FrontierSettlementAssaultBattlefield::isDeclaredBodySurface).isPresent()
+                && head.isEmpty() && headroom.isEmpty();
     }
 
     private static List<BlockPosition> declaredProviderFloors(FrontierWorldState state, Settlement settlement) {
-        Map<BlockPosition, GrayboxCell> cells = FrontierGrayboxPlan.compile(state).cells();
+        Provider provider = providerView(state);
         return SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
                 state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).perimeterSurfaces().stream()
                 .map(SurfaceAnchor::support).sorted(Comparator.comparingLong((BlockPosition position) -> distanceSquared(settlement.anchor(), position))
                         .thenComparingInt(BlockPosition::x)
                         .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z))
-                .filter(position -> serviceableFloor(cells, position)).toList();
+                .filter(position -> serviceableFloor(provider, position)).toList();
     }
 
     private static boolean isDeclaredBodySurface(GrayboxCell cell) {

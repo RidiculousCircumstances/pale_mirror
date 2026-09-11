@@ -114,7 +114,7 @@ final class FrontierV3AmbientActorExecutor {
         cleanPending(level, runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        FrontierV3AmbientAdmissionPolicy.Session admissionPolicy = FrontierV3AmbientAdmissionPolicy.begin(state);
+        FrontierV3AmbientAdmissionPolicy.Session admissionPolicy = admissionPolicy(runtime, state);
         // A successor scene cannot begin until the outgoing ambient authority has closed.  This
         // is a correctness hand-off, not ordinary ambient work: it must not be starved behind
         // a previously sorted resident pursuing a local goal.  Process every currently
@@ -772,6 +772,17 @@ final class FrontierV3AmbientActorExecutor {
         PENDING_ADMISSIONS.remove(runtime);
         COLD_DEMAND_SINCE.remove(runtime);
         FrontierV3AmbientActorCaches.forget(runtime);
+    }
+
+    /**
+     * Ambient admission may consume only the compatible provider retained by the earlier
+     * projection stage.  A missing or stale snapshot deliberately produces no assault
+     * candidates; it never compiles graybox geometry on the actor path.
+     */
+    static FrontierV3AmbientAdmissionPolicy.Session admissionPolicy(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                     FrontierWorldState state) {
+        return FrontierV3AmbientAdmissionPolicy.begin(state, current -> FrontierSceneAdmission.reservationAdmission(current,
+                ignored -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current)));
     }
 
     private static FrontierSceneAdmission.GenericAmbientAdmission genericAmbientAdmission(FrontierV3ServerRuntime<?, ?> runtime,

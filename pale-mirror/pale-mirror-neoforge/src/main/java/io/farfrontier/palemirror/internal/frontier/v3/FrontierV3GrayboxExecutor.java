@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
@@ -99,6 +100,19 @@ final class FrontierV3GrayboxExecutor {
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+
+    /**
+     * Returns the exact immutable baseline retained by an earlier projection turn as a bounded
+     * point-query provider for ambient admission.  There is intentionally no synchronous
+     * compiler fallback: an absent or structurally stale cursor leaves assault admission empty
+     * until the registered projection stage refreshes it.
+     */
+    static Optional<FrontierSettlementAssaultBattlefield.Provider> admissionProvider(
+            FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
+        Cursor cursor = CURSORS.get(runtime);
+        if (cursor == null || !FrontierGrayboxPlan.structuralInput(state).equals(cursor.input())) return Optional.empty();
+        return Optional.of(cursor.providerSnapshot(state));
+    }
 
     /**
      * Observes a real player break of a still-owned semantic cell before Minecraft removes it.
@@ -329,12 +343,14 @@ final class FrontierV3GrayboxExecutor {
      */
     static final class Cursor {
         private final FrontierGrayboxPlan.StructuralInput input;
+        private final FrontierGrayboxPlan structuralBaseline;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
-        private Cursor(FrontierGrayboxPlan.StructuralInput input, List<ChunkCells> chunks, int nextChunkIndex,
+        private Cursor(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, List<ChunkCells> chunks, int nextChunkIndex,
                        java.util.Set<BlockPos> activeWorksiteStaging) {
             this.input = input;
+            this.structuralBaseline = structuralBaseline;
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
             this.activeWorksiteStaging = activeWorksiteStaging;
@@ -344,14 +360,15 @@ final class FrontierV3GrayboxExecutor {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            return fromCells(input, cells, prior, plan.cells().values().stream()
+            return fromCells(input, plan, cells, prior, plan.cells().values().stream()
                     .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.WORKSITE_STAGING)
                     .map(FrontierV3GrayboxExecutor::toMinecraft).collect(java.util.stream.Collectors.toUnmodifiableSet()));
         }
         static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior) {
-            return fromCells(input, cells, prior, java.util.Set.of());
+            return fromCells(input, null, cells, prior, java.util.Set.of());
         }
-        private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior,
+        private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline,
+                                        List<GrayboxCell> cells, Cursor prior,
                                         java.util.Set<BlockPos> activeWorksiteStaging) {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
             cells.forEach(cell -> grouped.computeIfAbsent(ChunkKey.of(cell), ignored -> new ArrayList<>()).add(cell));
@@ -360,13 +377,17 @@ final class FrontierV3GrayboxExecutor {
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
-            return new Cursor(input, chunks, next, activeWorksiteStaging);
+            return new Cursor(input, structuralBaseline, chunks, next, activeWorksiteStaging);
         }
         /** Test-only cell ordering probe; production cursors always retain an exact structural input. */
         static Cursor fromCells(List<GrayboxCell> cells, Cursor prior) {
             return fromCells(null, cells, prior);
         }
         FrontierGrayboxPlan.StructuralInput input() { return input; }
+        FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state) {
+            if (structuralBaseline == null) throw new IllegalStateException("test-only cursor has no structural provider baseline");
+            return new ProjectionProviderSnapshot(structuralBaseline, state.physicalDeltas());
+        }
         boolean retainsWorksiteStaging(BlockPos position) { return activeWorksiteStaging.contains(position); }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
@@ -412,6 +433,16 @@ final class FrontierV3GrayboxExecutor {
                 int xComparison = Integer.compare(x, other.x);
                 return xComparison != 0 ? xComparison : Integer.compare(z, other.z);
             }
+        }
+    }
+
+    /** One immutable, non-enumerable admission view over the projection cursor's retained plan. */
+    private record ProjectionProviderSnapshot(FrontierGrayboxPlan structuralBaseline,
+                                              Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, PhysicalDelta> physicalDeltas)
+            implements FrontierSettlementAssaultBattlefield.Provider {
+        @Override public Optional<GrayboxCell> cellAt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+            if (physicalDeltas.containsKey(position)) return Optional.empty();
+            return Optional.ofNullable(structuralBaseline.cells().get(position));
         }
     }
 }

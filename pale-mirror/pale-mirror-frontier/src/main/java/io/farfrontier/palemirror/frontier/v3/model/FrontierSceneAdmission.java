@@ -173,12 +173,12 @@ public final class FrontierSceneAdmission {
      * state, so neither reservations nor provider observations become canonical state.
      */
     public static ReservationAdmission reservationAdmission(FrontierWorldState state) {
-        return reservationAdmission(state, providerCompiler());
+        return reservationAdmission(state, providerSource());
     }
 
-    /** Returns the real loss-masked physical-provider compiler used by reservation admission. */
-    public static ProviderCompiler providerCompiler() {
-        return FrontierSettlementAssaultBattlefield::providerView;
+    /** Returns the pure-model provider source used when no projection-owned runtime is involved. */
+    public static ProviderSource providerSource() {
+        return state -> java.util.Optional.of(FrontierSettlementAssaultBattlefield.providerView(state));
     }
 
     /**
@@ -186,9 +186,9 @@ public final class FrontierSceneAdmission {
      * narrow observation boundary: callers may count or adapt the real compiler, but cannot
      * replace candidate composition or the canonical reservation rules.
      */
-    public static ReservationAdmission reservationAdmission(FrontierWorldState state, ProviderCompiler providerCompiler) {
+    public static ReservationAdmission reservationAdmission(FrontierWorldState state, ProviderSource providerSource) {
         Objects.requireNonNull(state, "state");
-        Objects.requireNonNull(providerCompiler, "provider compiler");
+        Objects.requireNonNull(providerSource, "provider source");
         Set<SubjectId> reserved = new LinkedHashSet<>();
         state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .forEach(lease -> lease.members().forEach(member -> reserved.add(member.actorId())));
@@ -204,8 +204,8 @@ public final class FrontierSceneAdmission {
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> reserved.addAll(assault.attackerIds()));
         java.util.List<SceneEngagementCandidate> engagementCandidates = state.coldEngagementSceneCandidates();
-        FrontierSettlementAssaultBattlefield.ProviderView providerView = Objects.requireNonNull(providerCompiler.compile(state), "provider view");
-        java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = FrontierSettlementAssaultSceneSupport.candidates(state, providerView);
+        java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = providerSource.provider(state)
+                .map(provider -> FrontierSettlementAssaultSceneSupport.candidates(state, provider)).orElseGet(java.util.List::of);
         engagementCandidates.forEach(candidate -> reserved.addAll(candidate.actorIds()));
         assaultCandidates.forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A completed engineering assembly is the next exclusive physical owner, even before
@@ -225,10 +225,10 @@ public final class FrontierSceneAdmission {
         return new ReservationAdmission(reserved, engagementCandidates, assaultCandidates);
     }
 
-    /** The sole loss-masked battlefield-provider boundary used by reservation admission. */
+    /** The sole bounded physical-provider boundary used by reservation admission. */
     @FunctionalInterface
-    public interface ProviderCompiler {
-        FrontierSettlementAssaultBattlefield.ProviderView compile(FrontierWorldState state);
+    public interface ProviderSource {
+        java.util.Optional<FrontierSettlementAssaultBattlefield.Provider> provider(FrontierWorldState state);
     }
 
     /** Immutable read-only output of the production ambient-to-scene hand-off policy. */

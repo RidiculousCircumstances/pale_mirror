@@ -16,6 +16,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
@@ -34,8 +36,18 @@ import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskRequirement;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.model.StructureCondition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
+import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
+import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -43,6 +55,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -53,6 +66,92 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3AmbientAdmissionPolicyTest {
+    @Test
+    void projectionOwnedSnapshotIsTheOnlyBoundedProviderForProductionAssaultAdmission() {
+        FrontierWorldState state = twoEligibleAssaults();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        try {
+            assertTrue(FrontierV3AmbientActorExecutor.admissionPolicy(runtime, state).admissionFor(state)
+                            .settlementAssaultCandidates().isEmpty(),
+                    "without an earlier compatible projection, assault admission must defer instead of compiling graybox");
+
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            FrontierSceneAdmission.ReservationAdmission initial = FrontierV3AmbientActorExecutor.admissionPolicy(runtime, state).admissionFor(state);
+            assertEquals(2, initial.settlementAssaultCandidates().size(),
+                    "the actor path must receive the snapshot produced by the preceding projector");
+
+            FrontierSettlementAssaultBattlefield.Provider snapshot = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElseThrow();
+            AtomicInteger queries = new AtomicInteger();
+            FrontierSceneAdmission.ReservationAdmission counted = FrontierSceneAdmission.reservationAdmission(state, ignored -> Optional.of(position -> {
+                queries.incrementAndGet();
+                return snapshot.cellAt(position);
+            }));
+            int members = state.strategicPlans().settlementAssaults().values().stream()
+                    .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
+                    .mapToInt(assault -> assault.attackerIds().size() + assault.defenderIds().size()).sum();
+            assertEquals(members * 3, queries.get(),
+                    "admission may query only each named support and its two headroom cells through the projection provider");
+            assertEquals(initial.settlementAssaultCandidates(), counted.settlementAssaultCandidates(),
+                    "the counted production provider must preserve exact candidate identities and floors");
+
+            SubjectId leasedCandidate = firstCandidateActor(initial);
+            FrontierWorldState leaseOnly = withPreparedLease(state, leasedCandidate);
+            assertEquals(initial.settlementAssaultCandidates(), FrontierV3AmbientActorExecutor.admissionPolicy(runtime, leaseOnly)
+                    .admissionFor(leaseOnly).settlementAssaultCandidates(),
+                    "a lease-only replacement must reuse the compatible structural snapshot");
+
+            SubjectId unrelated = state.actorLocations().keySet().stream()
+                    .filter(actor -> !state.hiveColony().bioformLifecycles().containsKey(actor))
+                    .filter(actor -> state.strategicPlans().settlementAssaults().values().stream()
+                            .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor))).findFirst().orElseThrow();
+            FrontierWorldState unrelatedReplacement = withPreparedLease(state, unrelated);
+            assertEquals(initial.settlementAssaultCandidates(), FrontierV3AmbientActorExecutor.admissionPolicy(runtime, unrelatedReplacement)
+                    .admissionFor(unrelatedReplacement).settlementAssaultCandidates(),
+                    "an unrelated canonical replacement must not invalidate compatible structural provider truth");
+
+            var firstCandidate = initial.settlementAssaultCandidates().getFirst();
+            var lostSupport = firstCandidate.memberPositions().values().iterator().next();
+            GrayboxCell lostCell = snapshot.cellAt(lostSupport).orElseThrow();
+            FrontierWorldState withLoss = withExactSupportLoss(state, lostSupport, lostCell);
+            assertFalse(FrontierV3AmbientActorExecutor.admissionPolicy(runtime, withLoss).admissionFor(withLoss)
+                            .settlementAssaultCandidates().stream().anyMatch(candidate -> candidate.assaultId().equals(firstCandidate.assaultId())),
+                    "one current physical loss must be masked by its exact provider position lookup");
+
+            Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> requested = initial.settlementAssaultCandidates().stream()
+                    .flatMap(candidate -> candidate.memberPositions().values().stream())
+                    .flatMap(position -> java.util.stream.Stream.of(position, position.offset(0, 1, 0), position.offset(0, 2, 0)))
+                    .collect(java.util.stream.Collectors.toSet());
+            var unrelatedCell = FrontierGrayboxPlan.compile(state).cells().entrySet().stream()
+                    .filter(entry -> !requested.contains(entry.getKey())).findFirst().orElseThrow();
+            FrontierWorldState unrelatedLoss = withExactSupportLoss(state, unrelatedCell.getKey(), unrelatedCell.getValue());
+            AtomicInteger unrelatedQueries = new AtomicInteger();
+            FrontierSceneAdmission.ReservationAdmission afterUnrelatedLoss = FrontierSceneAdmission.reservationAdmission(unrelatedLoss,
+                    ignored -> FrontierV3GrayboxExecutor.admissionProvider(runtime, unrelatedLoss).map(provider -> position -> {
+                        unrelatedQueries.incrementAndGet(); return provider.cellAt(position);
+                    }));
+            assertEquals(initial.settlementAssaultCandidates(), afterUnrelatedLoss.settlementAssaultCandidates(),
+                    "an unrelated physical loss must not alter exact assault admission");
+            assertEquals(members * 3, unrelatedQueries.get(),
+                    "unrelated physical geometry cannot add provider work beyond named support/headroom lookups");
+
+            Settlement firstSettlement = state.bootstrap().settlements().getFirst();
+            Map<SubjectId, StructureCondition> changedConditions = new LinkedHashMap<>(state.structureConditions());
+            changedConditions.put(firstSettlement.structures().getFirst().id(), StructureCondition.DESTROYED);
+            FrontierWorldState structurallyChanged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(changedConditions));
+            assertTrue(FrontierV3AmbientActorExecutor.admissionPolicy(runtime, structurallyChanged).admissionFor(structurallyChanged)
+                            .settlementAssaultCandidates().isEmpty(),
+                    "a structural-input replacement must fail closed until a projection refreshes its snapshot");
+
+            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> refreshed = runtime(structurallyChanged);
+            try {
+                FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), refreshed);
+                assertFalse(FrontierV3AmbientActorExecutor.admissionPolicy(refreshed, structurallyChanged).admissionFor(structurallyChanged)
+                                .settlementAssaultCandidates().isEmpty(),
+                        "only a new projection turn may refresh structural admission authority");
+            } finally { FrontierV3GrayboxExecutor.forget(refreshed); refreshed.shutdown(); }
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
     @Test
     void productionAdmissionPolicyOwnsSelectionAndOneProviderViewPerStateSegment() {
             FrontierWorldState base = twoEligibleAssaults();
@@ -93,7 +192,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
             AtomicInteger replacementDerivations = new AtomicInteger();
             AtomicInteger beforeProviders = new AtomicInteger();
             AtomicInteger replacementProviders = new AtomicInteger();
-            FrontierSceneAdmission.ProviderCompiler realProvider = FrontierSceneAdmission.providerCompiler();
+            FrontierSceneAdmission.ProviderSource realProvider = FrontierSceneAdmission.providerSource();
             FrontierV3AmbientAdmissionPolicy.AdmissionDeriver countedDeriver = state -> {
                 derivations.incrementAndGet();
                 if (state == originalState) beforeDerivations.incrementAndGet();
@@ -102,7 +201,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     providers.incrementAndGet();
                     if (providerState == originalState) beforeProviders.incrementAndGet();
                     if (providerState == replacementState.get()) replacementProviders.incrementAndGet();
-                    return realProvider.compile(providerState);
+                    return realProvider.provider(providerState);
                 });
             };
             FrontierV3AmbientAdmissionPolicy.Session policy = FrontierV3AmbientAdmissionPolicy.begin(originalState, countedDeriver);
@@ -175,17 +274,17 @@ class FrontierV3AmbientAdmissionPolicyTest {
                 "fault control: deriving inside the actor loop must violate the state-segment count"));
     }
 
-    private static void assertProviderPerAssaultIsDetected(FrontierWorldState state, FrontierSceneAdmission.ProviderCompiler realProvider) {
+    private static void assertProviderPerAssaultIsDetected(FrontierWorldState state, FrontierSceneAdmission.ProviderSource realProvider) {
         AtomicInteger providers = new AtomicInteger();
         FrontierSceneAdmission.reservationAdmission(state, providerState -> {
             int activeAssaults = (int) providerState.strategicPlans().settlementAssaults().values().stream()
                     .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT).count();
-            FrontierSettlementAssaultBattlefield.ProviderView view = null;
+            FrontierSettlementAssaultBattlefield.Provider provider = null;
             for (int index = 0; index < activeAssaults; index++) {
                 providers.incrementAndGet();
-                view = realProvider.compile(providerState);
+                provider = realProvider.provider(providerState).orElseThrow();
             }
-            return view;
+            return Optional.ofNullable(provider);
         });
         assertThrows(AssertionError.class, () -> assertEquals(1, providers.get(),
                 "fault control: compiling the real provider once per assault must violate the segment count"));
@@ -220,6 +319,40 @@ class FrontierV3AmbientAdmissionPolicyTest {
         leases.put(actorId, new AmbientActorLease(actorId, body, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO,
                 1L, AmbientLeaseStatus.PREPARED, AmbientGoalKind.GUARD, body));
         return state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases));
+    }
+
+    private static SubjectId firstCandidateActor(FrontierSceneAdmission.ReservationAdmission admission) {
+        return admission.settlementAssaultCandidates().getFirst().memberPositions().keySet().stream().sorted().findFirst().orElseThrow();
+    }
+
+    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(FrontierWorldState state) {
+        var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
+                base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
+    }
+
+    private static final class FullyLoadedPhysicalWorld implements FrontierV3AftermathPhysicalWorld {
+        private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
+        @Override public boolean naturallyLoaded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
+        @Override public boolean isAir(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
+        @Override public boolean hasMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial material) { return false; }
+        @Override public boolean placeMaterial(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position, io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial material) { return true; }
+        @Override public boolean clear(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
+        @Override public FrontierV3GrayboxLedger ledger() { return ledger; }
+    }
+
+    private static final class EphemeralStore implements FrontierStore {
+        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
+        }
+        @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("admission test does not compact"); }
+        @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) {
+            throw new UnsupportedOperationException("admission test does not compact");
+        }
     }
 
     private static FrontierWorldState withExactSupportLoss(FrontierWorldState state,
