@@ -101,6 +101,14 @@ class SettlementAssaultTest {
         state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-selection"), intent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.whole(18));
+        SubjectId hive = state.bootstrap().hive().id();
+        List<SubjectId> currentCommitments = state.strategicPlans().objectives().values().stream()
+                .filter(objective -> objective.ownerId().equals(hive) && objective.status() == StrategicObjectiveStatus.ACTIVE)
+                .map(StrategicObjective::id).toList();
+        FrontierWorldState reconsidered = state.withStrategicPlans(state.strategicPlans().reconsider(hive, currentCommitments, List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> reconsidered.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)),
+                "a superseded expedition authority must not commit its stale child-front receipt");
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
                 "one exact confirmed HOT receipt advances the retained COLD epoch once");
