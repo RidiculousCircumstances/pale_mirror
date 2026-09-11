@@ -225,6 +225,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         throw new IllegalArgumentException("materialized production job input must remain in its exact settlement depot slot");
                     }
                 }
+                case ProductionInputHold.FungibleCold held -> validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
+                        held.claimId(), false, 0L);
+                case ProductionInputHold.FungibleBound held -> validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
+                        held.claimId(), true, held.authorityEpoch());
             }
         }
         SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, serviceWorks, physicalIntents);
@@ -617,6 +621,44 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
+    /** Commits a COLD recipe by replacing its reserved fungible lot inside the same account. */
+    public FrontierWorldState completeFungibleProductionJob(SubjectId jobId, ResourceLot output) {
+        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "fungible production job id"));
+        if (job == null || !(job.inputHold() instanceof ProductionInputHold.FungibleCold cold)
+                || !job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind())
+                || job.outputCount() != output.quantity() || !job.settlementId().equals(output.economicOwnerId())) {
+            throw new IllegalArgumentException("fungible production output does not match durable job result");
+        }
+        FungibleResourceLedger resources = inventory.fungibleResources().transformCold(cold.accountId(),
+                Map.of(cold.itemId(), job.outputCount()), Map.of(cold.claimId(), job.outputCount()), output);
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(jobId);
+        return next(actorLocations, structureConditions, infection, inventory.withFungibleResources(resources), next, contracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    /** Starts a fungible COLD/HOT job by recording only its allocation, never removing a stack identity. */
+    public FrontierWorldState startFungibleProductionJob(ProductionJob job) {
+        Objects.requireNonNull(job, "fungible production job");
+        ProductionInputHold hold = job.inputHold();
+        FungibleResourceLedger resources = inventory.fungibleResources();
+        ClaimAllocation claim;
+        FungibleResourceLedger reserved;
+        if (hold instanceof ProductionInputHold.FungibleCold cold) {
+            claim = new ClaimAllocation(cold.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
+            reserved = resources.reserve(claim, cold.accountId());
+        } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
+            claim = new ClaimAllocation(bound.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
+            reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
+        } else {
+            throw new IllegalArgumentException("fungible production job has no fungible input hold");
+        }
+        if (!resources.lots().containsKey(job.consumedItemId()) || productionJobs.containsKey(job.id())
+                || productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
+            throw new IllegalArgumentException("fungible production job is unavailable or duplicates its facility");
+        }
+        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.put(job.id(), job);
+        return next(actorLocations, structureConditions(), infection, inventory.withFungibleResources(reserved), next, contracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
     public FrontierWorldState cancelProductionJob(SubjectId jobId) {
         ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
@@ -631,6 +673,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
             // The real stack remains under observed custody; cancellation neither restores nor deletes it.
             case ProductionInputHold.Materialized ignored -> inventory;
+            case ProductionInputHold.FungibleCold cold -> inventory.withFungibleResources(inventory.fungibleResources()
+                    .releaseClaim(cold.accountId(), cold.claimId()));
+            case ProductionInputHold.FungibleBound ignored -> throw new IllegalArgumentException("bound fungible production must await physical recovery");
         };
         Map<PhysicalIntentId, PhysicalIntent> nextIntents = new LinkedHashMap<>(physicalIntents);
         for (PhysicalIntent intent : physicalIntents.values()) if (intent.causeSubjectId().equals(job.id())) {
@@ -952,6 +997,25 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); } public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
     public FrontierWorldState consumeHiveGrowthBiomass(SubjectId jobId, SubjectId itemId) { return HiveGrowthStateSupport.consume(this, jobId, itemId); }
     public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
+    private static void validateFungibleProductionHold(ProductionJob job, Settlement settlement, FungibleResourceLedger resources,
+                                                       SubjectId accountId, SubjectId claimId, boolean bound, long epoch) {
+        CustodyAccount account = resources.accounts().get(accountId); ResourceLot lot = resources.lots().get(job.consumedItemId());
+        ClaimAllocation claim = resources.claims().get(claimId);
+        if (account == null || lot == null || claim == null || !(account.custody() instanceof ResourceCustody.Container container)
+                || !container.containerId().equals(depotId(settlement.id())) || !lot.economicOwnerId().equals(settlement.id())
+                || !"minecraft:wheat".equals(lot.itemKind()) || account.lotQuantities().getOrDefault(lot.id(), 0) < job.outputCount()
+                || !claim.claimantId().equals(job.id()) || !claim.economicOwnerId().equals(settlement.id())
+                || !"minecraft:wheat".equals(claim.itemKind()) || claim.quantity() != job.outputCount()
+                || account.claimQuantities().getOrDefault(claim.id(), 0) != claim.quantity()) {
+            throw new IllegalArgumentException("fungible production job must retain one exact depot lot allocation");
+        }
+        java.util.List<PhysicalStackBinding> bindings = resources.bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(accountId)).toList();
+        boolean hasEpoch = !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch);
+        if (bound && !hasEpoch) {
+            throw new IllegalArgumentException("fungible production job does not match its current physical custody epoch");
+        }
+    }
     public boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
     public static SubjectId depotId(SubjectId settlementId) {
         Objects.requireNonNull(settlementId, "settlement id"); if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");

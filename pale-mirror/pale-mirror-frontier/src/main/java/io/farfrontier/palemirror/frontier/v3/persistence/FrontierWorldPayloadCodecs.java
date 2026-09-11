@@ -36,7 +36,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             MedicalTreatmentPayloadCodecs.started(), MedicalTreatmentPayloadCodecs.transition())),
             MedicalTreatmentScenePayloadCodecs.codecs()); }
     static PayloadCodecs economyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
-            new ProductionStartedCodec(), new ProductionCompletedCodec(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
+            new ProductionStartedCodec(), new ProductionCompletedCodec(), new FungibleProductionCompletedCodec(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
             new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
             MarketPayloadCodecs.cancelled())), ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
@@ -159,6 +159,20 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), owner.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
+    } private static final class FungibleProductionCompletedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_production_completed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleProductionCompleted completed = (FungibleProductionCompleted) payload; ResourceLot lot = completed.output();
+            writeSubject(output, completed.jobId()); writeSubject(output, lot.id()); writeSubject(output, lot.economicOwnerId()); writeString(output, lot.itemKind());
+            output.writeShort(lot.quantity()); writeString(output, lot.provenance()); output.writeByte(lot.lineage().size());
+            for (SubjectId lineage : lot.lineage()) writeSubject(output, lineage);
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId jobId = readSubject(input).value(); SubjectId id = readSubject(input).value(); SubjectId owner = readSubject(input).value();
+            String kind = readString(input); int quantity = input.readUnsignedShort(); String provenance = readString(input); int count = input.readUnsignedByte();
+            java.util.ArrayList<SubjectId> lineage = new java.util.ArrayList<>(); for (int index = 0; index < count; index++) lineage.add(readSubject(input).value());
+            return new FungibleProductionCompleted(jobId, new ResourceLot(id, owner, kind, quantity, provenance, lineage));
+        }); }
     } private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
@@ -584,16 +598,24 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
-        ExactItemStack item = ((ProductionInputHold.Cold) hold).item();
-        output.writeByte(1); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
-        if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
-        writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+        if (hold instanceof ProductionInputHold.Cold cold) {
+            ExactItemStack item = cold.item();
+            output.writeByte(1); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
+            if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
+            writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+        } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
+            output.writeByte(2); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
+        } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
+            output.writeByte(3); writeSubject(output, bound.accountId()); writeSubject(output, bound.claimId()); output.writeLong(bound.authorityEpoch());
+        } else throw new IllegalArgumentException("unknown production input hold");
     }
     private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ProductionInputHold.Materialized(itemId);
             case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, readSubject(input).value(), readString(input), input.readUnsignedByte(),
                     new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte())));
+            case 2 -> new ProductionInputHold.FungibleCold(itemId, readSubject(input).value(), readSubject(input).value());
+            case 3 -> new ProductionInputHold.FungibleBound(itemId, readSubject(input).value(), readSubject(input).value(), input.readLong());
             default -> throw new IllegalArgumentException("unknown production input hold");
         };
     }

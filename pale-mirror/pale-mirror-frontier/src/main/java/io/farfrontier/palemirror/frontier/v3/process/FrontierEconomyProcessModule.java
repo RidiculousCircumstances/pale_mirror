@@ -38,6 +38,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case MarketDemandCancelled cancelled -> MarketClearingProcess.reduceCancelled(state, event.subject(), cancelled);
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
             case ProductionCompleted completed -> ProductionProcess.reduceCompleted(state, event.subject(), completed);
+            case FungibleProductionCompleted completed -> ProductionProcess.reduceFungibleCompleted(state, event.subject(), completed);
             case ProductionWorkProgressed progressed -> ProductionProcess.reduceWorkProgressed(state, event.subject(), progressed);
             case ProductionWorkTraversalAdvanced advanced -> ProductionProcess.reduceWorkTraversalAdvanced(state, event.subject(), advanced);
             case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);

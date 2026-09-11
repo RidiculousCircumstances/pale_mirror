@@ -699,13 +699,21 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     }
     private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
-        ExactItemStack item = ((ProductionInputHold.Cold) hold).item();
-        output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
+        if (hold instanceof ProductionInputHold.Cold cold) {
+            ExactItemStack item = cold.item();
+            output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
+        } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
+            output.writeByte(2); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
+        } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
+            output.writeByte(3); writeString(output, bound.accountId().value()); writeString(output, bound.claimId().value()); output.writeLong(bound.authorityEpoch());
+        } else throw new IllegalArgumentException("unknown production input hold");
     }
     private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ProductionInputHold.Materialized(itemId);
             case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input)));
+            case 2 -> new ProductionInputHold.FungibleCold(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)));
+            case 3 -> new ProductionInputHold.FungibleBound(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)), input.readLong());
             default -> throw new IllegalArgumentException("unknown production input hold");
         };
     }

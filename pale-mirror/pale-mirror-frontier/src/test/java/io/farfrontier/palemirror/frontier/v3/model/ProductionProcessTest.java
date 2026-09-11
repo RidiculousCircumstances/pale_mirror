@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +40,40 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessTest {
+    @Test
+    void coldFungibleProductionKeepsOneReservedLotUntilItTransformsIntoOneOutputLot() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fungible-production"), 91L));
+        SubjectId settlement = new SubjectId("settlement:1"), depot = FrontierWorldState.depotId(settlement);
+        SubjectId lotId = new SubjectId("lot:bootstrap-1-wheat"), accountId = new SubjectId("custody:bootstrap-1-depot");
+        ResourceLot wheat = new ResourceLot(lotId, settlement, "minecraft:wheat", 64, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of());
+        ExactInventory inventory = initial.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat"))
+                .withFungibleResources(FungibleResourceLedger.empty().issue(wheat, account));
+        FrontierWorldState pending = productionTask(initial.withInventory(inventory), StrategicTaskStatus.PENDING);
+        StrategicTask task = pending.strategicPlans().tasks().values().iterator().next();
+
+        List<ProposedEvent> planned = ProductionProcess.planStart(pending, ProductionProcess.start(task, 100L));
+        ProductionStarted started = planned.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        ProductionInputHold.FungibleCold hold = assertInstanceOf(ProductionInputHold.FungibleCold.class, started.job().inputHold());
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(pending, settlement,
+                assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
+        FrontierWorldState reserved = ProductionProcess.reduceStarted(active, settlement, started);
+
+        assertEquals(64, reserved.inventory().fungibleResources().accounts().get(accountId).claimQuantities().get(hold.claimId()));
+        List<ProposedEvent> completion = ProductionProcess.planCompletion(reserved, ProductionProcess.complete(started.job(), 200L));
+        FungibleProductionCompleted completed = assertInstanceOf(FungibleProductionCompleted.class, completion.getFirst().payload());
+        FrontierWorldState transformed = ProductionProcess.reduceFungibleCompleted(reserved, settlement, completed);
+
+        assertTrue(transformed.productionJobs().isEmpty());
+        assertFalse(transformed.inventory().items().containsKey(completed.output().id()));
+        assertEquals(64, transformed.inventory().fungibleResources().totalQuantity(settlement, "minecraft:bread"));
+        assertFalse(transformed.inventory().fungibleResources().claims().containsKey(hold.claimId()));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceFungibleCompleted(reserved, settlement,
+                new FungibleProductionCompleted(started.job().id(), new ResourceLot(new SubjectId("lot:forged-bread"), settlement,
+                        "minecraft:bread", 63, "recipe:bread", List.of(lotId)))));
+    }
+
     @Test
     void workProgressSurvivesSnapshotAndStartedPayloadWithoutUsingEnumOrder() {
         MaterializedProduction prepared = activeMaterializedProduction();

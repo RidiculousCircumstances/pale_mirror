@@ -65,7 +65,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
             "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
-            "frontier.production_started", "frontier.production_completed", "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
+            "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed", "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
             "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
@@ -418,7 +418,7 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
-                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed",
+                    "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",

@@ -16,6 +16,8 @@ public final class ContainerSurfaceActivationStateSupport {
             case ProductionInputHold.Cold held -> held.item().custody() instanceof InventoryCustody.ContainerSlot slot
                     && slot.containerId().equals(containerId);
             case ProductionInputHold.Materialized ignored -> false;
+            case ProductionInputHold.FungibleCold ignored -> false;
+            case ProductionInputHold.FungibleBound ignored -> false;
         });
     }
 }
