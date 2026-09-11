@@ -23,6 +23,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveNutrientTransferProcessTest {
     @Test
+    void coldFungibleNutrientCargoMovesOneLotAcrossNestsWithoutStackIdentity() {
+        FrontierWorldState baseline = growthTaskState();
+        SubjectId hive = baseline.bootstrap().hive().id(), east = new SubjectId("container:hive-east-store"), west = new SubjectId("container:hive-west-store");
+        SubjectId lotId = new SubjectId("lot:hive-east-biomass"), accountId = new SubjectId("custody:hive-east-biomass");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of());
+        FrontierWorldState pending = baseline.withInventory(baseline.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass"))
+                .withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account)));
+        StrategicTask task = pending.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> departure = HiveGrowthProcess.planStart(pending, HiveGrowthProcess.start(task, 100L));
+        HiveNutrientTransfer transfer = ((HiveNutrientTransferStarted) departure.getFirst().payload()).transfer();
+
+        assertTrue(transfer.fungibleContents());
+        FrontierWorldState inTransit = HiveNutrientTransferProcess.reduceStarted(pending, hive, transfer);
+        assertEquals(64, inTransit.inventory().fungibleResources().totalQuantity(hive, "minecraft:rotten_flesh"));
+        assertTrue(inTransit.inventory().cargo().get(transfer.cargoId()).fungibleContents());
+        for (int cursor = 1; cursor < transfer.corridor().size(); cursor++) {
+            inTransit = HiveNutrientTransferProcess.reduceAdvanced(inTransit, hive, new HiveNutrientTransferAdvanced(transfer.id(), cursor));
+        }
+        HiveNutrientReceipt receipt = new HiveNutrientReceipt(transfer.id(), hive, transfer.cargoId(), transfer.itemId(), transfer.sourceSlot(), transfer.targetSlot());
+        FrontierWorldState delivered = HiveNutrientTransferProcess.reduceCompleted(inTransit, hive, new HiveNutrientTransferCompleted(receipt));
+
+        assertTrue(delivered.inventory().cargo().isEmpty());
+        assertEquals(64, delivered.inventory().fungibleResources().totalQuantity(hive, "minecraft:rotten_flesh"));
+        assertEquals(west, ((ResourceCustody.Container) delivered.inventory().fungibleResources().accounts().values().stream()
+                .filter(value -> value.lotQuantities().containsKey(lotId)).findFirst().orElseThrow().custody()).containerId());
+        assertEquals(delivered, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(delivered)));
+    }
+
+    @Test
     void coldFungibleBiomassIsClaimedAndConsumedWithoutAStableStackIdentity() {
         FrontierWorldState baseline = growthTaskState();
         SubjectId hive = baseline.bootstrap().hive().id(), west = new SubjectId("container:hive-west-store");

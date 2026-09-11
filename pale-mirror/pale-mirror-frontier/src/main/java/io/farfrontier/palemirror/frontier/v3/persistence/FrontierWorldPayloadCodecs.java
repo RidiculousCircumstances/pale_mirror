@@ -648,7 +648,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static void writeHiveNutrientTransfer(DataOutputStream output, HiveNutrientTransfer transfer) throws IOException {
         writeSubject(output, transfer.id()); writeSubject(output, transfer.hiveId()); writeSubject(output, transfer.requesterTaskId());
         writeSubject(output, transfer.sourceStoreId()); output.writeByte(transfer.sourceSlot().slot()); writeSubject(output, transfer.targetStoreId()); output.writeByte(transfer.targetSlot().slot());
-        writeSubject(output, transfer.cargoId()); writeSubject(output, transfer.itemId()); output.writeShort(transfer.corridor().size());
+        writeSubject(output, transfer.cargoId()); writeSubject(output, transfer.itemId()); output.writeBoolean(transfer.fungibleContents()); output.writeShort(transfer.corridor().size());
         for (BlockPosition node : transfer.corridor()) writePosition(output, node);
         output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().wireTag()); output.writeBoolean(transfer.blockReason().isPresent());
         if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().wireTag());
@@ -657,13 +657,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     private static HiveNutrientTransfer readHiveNutrientTransfer(DataInputStream input) throws IOException {
         SubjectId id = readSubject(input).value(), hive = readSubject(input).value(), task = readSubject(input).value();
         SubjectId source = readSubject(input).value(); int sourceSlot = input.readUnsignedByte(); SubjectId target = readSubject(input).value(); int targetSlot = input.readUnsignedByte();
-        SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
+        SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); boolean fungible = input.readBoolean(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(readPosition(input));
         int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
         var endpoint = input.available() == 0 || !input.readBoolean() ? java.util.Optional.<PhysicalIntentId>empty() : java.util.Optional.of(new PhysicalIntentId(readString(input)));
         if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.wireTag())
                 || blocked && reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("invalid hive nutrient transfer payload");
-        return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, corridor, cursor,
+        return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, fungible, corridor, cursor,
                 FrontierWireTags.require(HiveNutrientTransferPhase.class, phase), endpoint,
                 blocked ? java.util.Optional.of(FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)) : java.util.Optional.empty());
     }

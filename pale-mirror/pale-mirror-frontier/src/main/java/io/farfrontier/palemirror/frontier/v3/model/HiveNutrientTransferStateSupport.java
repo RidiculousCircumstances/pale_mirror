@@ -20,6 +20,10 @@ public final class HiveNutrientTransferStateSupport {
         Map<SubjectId, HiveNutrientTransfer> transfers = colony.nutrientTransfers();
         for (HiveNutrientTransfer transfer : transfers.values()) {
             validateTopology(bootstrap, inventory, colony, strategicPlans, transfer);
+            if (transfer.fungibleContents()) {
+                validateFungibleTransfer(inventory, transfer);
+                continue;
+            }
             ExactItemStack item = inventory.items().get(transfer.itemId()); CargoBatch cargo = inventory.cargo().get(transfer.cargoId());
             boolean cargoPhase = transfer.phase() == HiveNutrientTransferPhase.IN_TRANSIT || transfer.phase() == HiveNutrientTransferPhase.ARRIVAL_PENDING || transfer.phase() == HiveNutrientTransferPhase.BLOCKED;
             if (transfer.phase() == HiveNutrientTransferPhase.DEPARTURE_PENDING) {
@@ -36,11 +40,12 @@ public final class HiveNutrientTransferStateSupport {
                 throw new IllegalArgumentException("hive nutrient receipt has a foreign or still-active transfer");
             }
             ExactItemStack item = inventory.items().get(receipt.itemId());
+            ResourceLot resource = inventory.fungibleResources().lots().get(receipt.itemId());
             if (receipt.status() == HiveNutrientReceiptStatus.STORED
-                    && (item == null || !item.economicOwnerId().equals(receipt.hiveId()) || !item.custody().equals(receipt.targetSlot()))) {
+                    && (item == null && (resource == null || !resource.economicOwnerId().equals(receipt.hiveId())))) {
                 throw new IllegalArgumentException("stored hive nutrient receipt must retain its exact delivered item once");
             }
-            if (receipt.status() == HiveNutrientReceiptStatus.CONSUMED && item != null) {
+            if (receipt.status() == HiveNutrientReceiptStatus.CONSUMED && (item != null || resource != null)) {
                 throw new IllegalArgumentException("consumed hive nutrient receipt must retain its exact local growth provenance");
             }
             if (inventory.cargo().containsKey(receipt.cargoId())) throw new IllegalArgumentException("hive nutrient receipt cargo must be terminal");
@@ -49,6 +54,7 @@ public final class HiveNutrientTransferStateSupport {
 
     public static FrontierWorldState start(FrontierWorldState state, HiveNutrientTransfer transfer) {
         validateTopology(state.bootstrap(), state.inventory(), state.hiveColony(), state.strategicPlans(), transfer);
+        if (transfer.fungibleContents()) return startFungible(state, transfer);
         ExactItemStack item = state.inventory().items().get(transfer.itemId());
         if (item == null || !item.custody().equals(transfer.sourceSlot()) || !item.economicOwnerId().equals(transfer.hiveId())) {
             throw new IllegalArgumentException("hive nutrient departure has no exact source item");
@@ -70,7 +76,9 @@ public final class HiveNutrientTransferStateSupport {
         if (!receipt.matches(transfer) || transfer.cursor() != transfer.corridor().size() - 1 || state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) {
             throw new IllegalArgumentException("hive nutrient arrival does not match its retained corridor or target slot");
         }
-        ExactInventory inventory = state.inventory().completeCargoHandoff(transfer.cargoId(), List.of(new CargoHandoffPlacement(transfer.itemId(), transfer.targetSlot())));
+        ExactInventory inventory = transfer.fungibleContents()
+                ? state.inventory().completeFungibleCargoHandoff(transfer.cargoId(), transfer.targetStoreId())
+                : state.inventory().completeCargoHandoff(transfer.cargoId(), List.of(new CargoHandoffPlacement(transfer.itemId(), transfer.targetSlot())));
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
@@ -107,6 +115,19 @@ public final class HiveNutrientTransferStateSupport {
         if (state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) {
             throw new IllegalArgumentException("hive nutrient transfer target slot is no longer available");
         }
+    }
+
+    private static FrontierWorldState startFungible(FrontierWorldState state, HiveNutrientTransfer transfer) {
+        CustodyAccount source = state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Container container
+                && container.containerId().equals(transfer.sourceStoreId())).findFirst().orElseThrow(() -> new IllegalArgumentException("fungible hive nutrient source account is absent"));
+        if (ReferenceContainerCustody.hasLiveCustody(state, transfer.sourceStoreId()) || source.lotQuantities().getOrDefault(transfer.itemId(), 0) < 64
+                || state.inventory().fungibleResources().lots().get(transfer.itemId()) == null) {
+            throw new IllegalArgumentException("fungible hive nutrient departure has no COLD source lot");
+        }
+        ExactInventory inventory = state.inventory().loadFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(),
+                Map.of(transfer.itemId(), 64), Map.of());
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
+                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
     public static PhysicalIntent departureIntent(FrontierWorldState state, HiveNutrientTransfer transfer) {
@@ -200,6 +221,19 @@ public final class HiveNutrientTransferStateSupport {
                 || !inventory.surfaces().get(transfer.targetStoreId()).position().equals(transfer.corridor().getLast())) {
             throw new IllegalArgumentException("hive nutrient transfer must cross one exact inter-nest corridor");
         }
+    }
+
+    private static void validateFungibleTransfer(ExactInventory inventory, HiveNutrientTransfer transfer) {
+        boolean cargoPhase = transfer.phase() == HiveNutrientTransferPhase.IN_TRANSIT || transfer.phase() == HiveNutrientTransferPhase.ARRIVAL_PENDING
+                || transfer.phase() == HiveNutrientTransferPhase.BLOCKED;
+        CargoBatch batch = inventory.cargo().get(transfer.cargoId());
+        if (cargoPhase) {
+            CustodyAccount account = inventory.fungibleResources().accounts().values().stream().filter(value -> value.custody() instanceof ResourceCustody.Cargo cargo
+                    && cargo.cargoId().equals(transfer.cargoId())).findFirst().orElse(null);
+            if (batch == null || !batch.fungibleContents() || account == null || account.lotQuantities().getOrDefault(transfer.itemId(), 0) != 64) {
+                throw new IllegalArgumentException("fungible hive nutrient transfer must retain one exact cargo account portion");
+            }
+        } else if (batch != null) throw new IllegalArgumentException("pending fungible nutrient departure already created cargo");
     }
 
 }

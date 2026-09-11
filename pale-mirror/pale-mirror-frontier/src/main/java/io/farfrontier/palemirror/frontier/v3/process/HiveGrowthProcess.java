@@ -18,7 +18,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /** Executes exact-biomass growth only as the durable task of the one hive economy. */
@@ -49,13 +48,21 @@ public final class HiveGrowthProcess {
         if (!capacity) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         if (fungibleBiomass.isEmpty() && biomass.isEmpty()) {
             if (state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> transfer.requesterTaskId().equals(task.id()))) return List.of();
+            Optional<FungibleResourceCustodySupport.LotAtContainer> remoteFungible = state.inventory().fungibleResources().accounts().values().stream()
+                    .filter(account -> account.custody() instanceof ResourceCustody.Container container && state.isHiveStore(container.containerId())
+                            && !container.containerId().equals(targetStore) && !ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())
+                            && !ReferenceContainerCustody.hasLiveCustody(state, container.containerId()))
+                    .flatMap(account -> account.lotQuantities().entrySet().stream().map(entry -> new FungibleResourceCustodySupport.LotAtContainer(account.id(),
+                            state.inventory().fungibleResources().lots().get(entry.getKey()), entry.getValue())))
+                    .filter(value -> BIOMASS.equals(value.lot().itemKind()) && value.quantity() >= 64).sorted(Comparator.comparing(value -> value.lot().id())).findFirst();
             Optional<ExactItemStack> remote = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
                     .filter(item -> BIOMASS.equals(item.itemKind()) && item.count() == 64 && item.custody() instanceof InventoryCustody.ContainerSlot slot
                             && state.isHiveStore(slot.containerId()) && !slot.containerId().equals(targetStore)
                             && !ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())).findFirst();
-            if (remote.isEmpty() || state.inventory().firstFreeSlot(targetStore).isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-            HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task, remote.orElseThrow(), targetStore,
-                    state.inventory().firstFreeSlot(targetStore).getAsInt());
+            if (remoteFungible.isEmpty() && remote.isEmpty() || state.inventory().firstFreeSlot(targetStore).isEmpty()) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
+            HiveNutrientTransfer transfer = remoteFungible.map(value -> HiveNutrientTransferProcess.create(state, task, value, targetStore,
+                    state.inventory().firstFreeSlot(targetStore).getAsInt())).orElseGet(() -> HiveNutrientTransferProcess.create(state, task, remote.orElseThrow(), targetStore,
+                    state.inventory().firstFreeSlot(targetStore).getAsInt()));
             if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.sourceStoreId())
                     || ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) {
                 return List.of(transition(task, StrategicTaskStatus.BLOCKED));

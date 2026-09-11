@@ -14,7 +14,7 @@ import java.util.Optional;
 public record HiveNutrientTransfer(SubjectId id, SubjectId hiveId, SubjectId requesterTaskId,
                                   SubjectId sourceStoreId, InventoryCustody.ContainerSlot sourceSlot,
                                   SubjectId targetStoreId, InventoryCustody.ContainerSlot targetSlot,
-                                  SubjectId cargoId, SubjectId itemId, List<BlockPosition> corridor,
+                                  SubjectId cargoId, SubjectId itemId, boolean fungibleContents, List<BlockPosition> corridor,
                                   int cursor, HiveNutrientTransferPhase phase,
                                   Optional<PhysicalIntentId> endpointIntentId,
                                   Optional<HiveNutrientTransferBlockReason> blockReason) {
@@ -38,29 +38,38 @@ public record HiveNutrientTransfer(SubjectId id, SubjectId hiveId, SubjectId req
         }
     }
 
+    public HiveNutrientTransfer(SubjectId id, SubjectId hiveId, SubjectId requesterTaskId, SubjectId sourceStoreId,
+                                InventoryCustody.ContainerSlot sourceSlot, SubjectId targetStoreId, InventoryCustody.ContainerSlot targetSlot,
+                                SubjectId cargoId, SubjectId itemId, List<BlockPosition> corridor, int cursor,
+                                HiveNutrientTransferPhase phase, Optional<PhysicalIntentId> endpointIntentId,
+                                Optional<HiveNutrientTransferBlockReason> blockReason) {
+        this(id, hiveId, requesterTaskId, sourceStoreId, sourceSlot, targetStoreId, targetSlot, cargoId, itemId, false, corridor, cursor,
+                phase, endpointIntentId, blockReason);
+    }
+
     public HiveNutrientTransfer advanceTo(int nextCursor) {
         if (phase != HiveNutrientTransferPhase.IN_TRANSIT || nextCursor <= cursor || nextCursor >= corridor.size()) {
             throw new IllegalArgumentException("hive nutrient transfer cannot advance to that cursor");
         }
         return new HiveNutrientTransfer(id, hiveId, requesterTaskId, sourceStoreId, sourceSlot, targetStoreId, targetSlot,
-                cargoId, itemId, corridor, nextCursor, phase, endpointIntentId, blockReason);
+                cargoId, itemId, fungibleContents, corridor, nextCursor, phase, endpointIntentId, blockReason);
     }
 
     public HiveNutrientTransfer departed() {
         if (phase != HiveNutrientTransferPhase.DEPARTURE_PENDING) throw new IllegalArgumentException("hive nutrient departure is not pending");
         return new HiveNutrientTransfer(id, hiveId, requesterTaskId, sourceStoreId, sourceSlot, targetStoreId, targetSlot,
-                cargoId, itemId, corridor, cursor, HiveNutrientTransferPhase.IN_TRANSIT, Optional.empty(), Optional.empty());
+                cargoId, itemId, fungibleContents, corridor, cursor, HiveNutrientTransferPhase.IN_TRANSIT, Optional.empty(), Optional.empty());
     }
 
     public HiveNutrientTransfer awaitArrival(PhysicalIntentId intentId) {
         if (phase != HiveNutrientTransferPhase.IN_TRANSIT || cursor != corridor.size() - 1) throw new IllegalArgumentException("hive nutrient has not reached its target");
         return new HiveNutrientTransfer(id, hiveId, requesterTaskId, sourceStoreId, sourceSlot, targetStoreId, targetSlot,
-                cargoId, itemId, corridor, cursor, HiveNutrientTransferPhase.ARRIVAL_PENDING, Optional.of(intentId), Optional.empty());
+                cargoId, itemId, fungibleContents, corridor, cursor, HiveNutrientTransferPhase.ARRIVAL_PENDING, Optional.of(intentId), Optional.empty());
     }
 
     public HiveNutrientTransfer block(HiveNutrientTransferBlockReason reason) {
         if (phase == HiveNutrientTransferPhase.BLOCKED) throw new IllegalArgumentException("hive nutrient transfer is already terminal");
         return new HiveNutrientTransfer(id, hiveId, requesterTaskId, sourceStoreId, sourceSlot, targetStoreId, targetSlot,
-                cargoId, itemId, corridor, cursor, HiveNutrientTransferPhase.BLOCKED, Optional.empty(), Optional.of(Objects.requireNonNull(reason, "block reason")));
+                cargoId, itemId, fungibleContents, corridor, cursor, HiveNutrientTransferPhase.BLOCKED, Optional.empty(), Optional.of(Objects.requireNonNull(reason, "block reason")));
     }
 }

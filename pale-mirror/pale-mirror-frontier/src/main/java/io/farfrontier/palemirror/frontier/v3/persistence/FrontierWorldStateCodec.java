@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 136; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 137; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -297,7 +297,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (HiveNutrientTransfer transfer : colony.nutrientTransfers().values().stream().sorted(Comparator.comparing(HiveNutrientTransfer::id)).toList()) {
             writeString(output, transfer.id().value()); writeString(output, transfer.hiveId().value()); writeString(output, transfer.requesterTaskId().value());
             writeString(output, transfer.sourceStoreId().value()); output.writeByte(transfer.sourceSlot().slot()); writeString(output, transfer.targetStoreId().value()); output.writeByte(transfer.targetSlot().slot());
-            writeString(output, transfer.cargoId().value()); writeString(output, transfer.itemId().value()); writeCount(output, transfer.corridor().size());
+            writeString(output, transfer.cargoId().value()); writeString(output, transfer.itemId().value()); output.writeBoolean(transfer.fungibleContents()); writeCount(output, transfer.corridor().size());
             for (BlockPosition node : transfer.corridor()) writePosition(output, node);
             output.writeShort(transfer.cursor()); output.writeByte(transfer.phase().wireTag()); output.writeBoolean(transfer.blockReason().isPresent());
             if (transfer.blockReason().isPresent()) output.writeByte(transfer.blockReason().orElseThrow().wireTag());
@@ -344,14 +344,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input));
             SubjectId source = new SubjectId(readString(input)); int sourceSlot = input.readUnsignedByte(); SubjectId target = new SubjectId(readString(input)); int targetSlot = input.readUnsignedByte();
-            SubjectId cargo = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
+            SubjectId cargo = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); boolean fungible = input.readBoolean(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
             for (int node = 0, nodes = readCount(input); node < nodes; node++) corridor.add(readPosition(input));
             int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> endpoint = hasEndpointIntent && input.readBoolean()
                     ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input))) : java.util.Optional.empty();
             if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.wireTag())
                     || blocked && reason >= HiveNutrientTransferBlockReason.values().length || transfers.put(id, new HiveNutrientTransfer(id, hive, task,
-                    source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, corridor, cursor,
+                    source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, fungible, corridor, cursor,
                     FrontierWireTags.require(HiveNutrientTransferPhase.class, phase), endpoint, blocked ? java.util.Optional.of(FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)) : java.util.Optional.empty())) != null) {
                 throw new IllegalArgumentException("invalid or duplicate hive nutrient transfer");
             }
@@ -513,7 +513,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, inventory.cargo().size());
         for (CargoBatch value : inventory.cargo().values().stream().sorted(java.util.Comparator.comparing(CargoBatch::id)).toList()) {
-            writeString(output, value.id().value()); writeString(output, value.ownerId().value()); writeCount(output, value.itemIds().size());
+            writeString(output, value.id().value()); writeString(output, value.ownerId().value()); output.writeBoolean(value.fungibleContents()); writeCount(output, value.itemIds().size());
             for (SubjectId item : value.itemIds()) writeString(output, item.value());
         }
         writeCount(output, inventory.playerItems().size());
@@ -554,10 +554,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, CargoBatch> cargo = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId owner = new SubjectId(readString(input));
+            SubjectId id = new SubjectId(readString(input)); SubjectId owner = new SubjectId(readString(input)); boolean fungible = input.readBoolean();
             java.util.ArrayList<SubjectId> itemIds = new java.util.ArrayList<>();
             for (int item = 0, itemCount = readCount(input); item < itemCount; item++) itemIds.add(new SubjectId(readString(input)));
-            if (cargo.put(id, new CargoBatch(id, owner, itemIds)) != null) throw new IllegalArgumentException("duplicate cargo id");
+            if (cargo.put(id, new CargoBatch(id, owner, itemIds, fungible)) != null) throw new IllegalArgumentException("duplicate cargo id");
         }
         Map<UUID, List<SubjectId>> players = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
