@@ -546,6 +546,7 @@ final class FrontierDevelopmentScenarios {
         // executor complete PREPARED -> ACTIVE before exact consumption can run.
         FrontierWorldState initial = ReferenceContainerCustodyFixtures.observedAndHeld(base.initialState().withInventory(base.initialState().inventory()
                 .withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)), store);
+        initial = withHeldFungibleBiomass(initial, store);
         var engine = FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter()));
@@ -576,6 +577,7 @@ final class FrontierDevelopmentScenarios {
                 StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(state.inventory()
                 .withSurfaceStatus(eastStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED)), eastStore);
+        state = withHeldFungibleBiomass(state, eastStore);
         return new HiveNutrientTransferFixture(state, SimInstant.ZERO, List.of(HiveGrowthProcess.start(task, 1L)),
                 new SubjectId("transfer:hive-nutrient-task-development-hive-nutrient-transfer"));
     }
@@ -590,7 +592,9 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = FrontierWorldState.initial(bootstrap);
         // This fixture isolates ordinary infection/quarantine causality; food production has its
         // own native profile and must not win the settlement's first review here.
-        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat")));
+        SubjectId wheatAccount = new SubjectId("custody:container-1-depot"); SubjectId wheatLot = new SubjectId("lot:bootstrap-1-wheat");
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
+                .destroy(wheatAccount, Map.of(wheatLot, 64), Map.of())));
         Settlement settlement = bootstrap.settlements().getFirst();
         SettlementStructure infirmary = settlement.structures().stream().filter(value -> value.kind() == StructureKind.INFIRMARY)
                 .findFirst().orElseThrow(() -> new IllegalStateException("health fixture needs one infirmary"));
@@ -599,6 +603,16 @@ final class FrontierDevelopmentScenarios {
         InfectionCell contact = InfectionCell.at(infirmary.anchor());
         state = state.withInfection(contact, new FixedRatio(new FixedScalar(FixedScalar.SCALE)));
         return new HealthQuarantineFixture(state, SimInstant.ZERO, List.of(StrategicObjectiveProcess.review(settlement.id(), 1, 1L)), settlement.id(), contact);
+    }
+
+    private static FrontierWorldState withHeldFungibleBiomass(FrontierWorldState state, SubjectId store) {
+        CustodyAccount account = FungibleResourceCustodySupport.accountAtContainer(state, store).orElseThrow();
+        SubjectId biomass = new SubjectId("lot:bootstrap-hive-biomass");
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        FungiblePhysicalObservation.Stack stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(store, 0)), resources.lots().get(biomass).itemKind(), 64);
+        resources = resources.rebind(account.id(), 1L, FungiblePhysicalObservation.bind(resources, account.id(), 1L, List.of(stack)));
+        return state.withInventory(state.inventory().withFungibleResources(resources));
     }
 
     /**

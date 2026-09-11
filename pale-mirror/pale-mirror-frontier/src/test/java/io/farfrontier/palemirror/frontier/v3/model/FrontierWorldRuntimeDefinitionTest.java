@@ -46,7 +46,8 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(12, projection.settlementCount());
         assertEquals(48, projection.bioformCount());
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
-        assertEquals(2 + projection.settlementCount() * EngineeringRecoveryTeam.MAX_MEMBERS, projection.itemStackCount());
+        assertEquals(projection.settlementCount() * EngineeringRecoveryTeam.MAX_MEMBERS, projection.itemStackCount(),
+                "ordinary bootstrap wheat and hive biomass are fungible lots, not permanent exact stacks");
         assertEquals(0, projection.activeProductionJobCount());
         assertEquals(18, projection.infectedCellCount());
     }
@@ -248,7 +249,7 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
-    void developmentHiveNutrientProfileKeepsOneExactBiomassAtItsPreparedSourceUntilObservedDeparture() {
+    void developmentHiveNutrientProfileKeepsOneFungibleBiomassBindingAtItsPreparedSourceUntilObservedDeparture() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.hiveNutrientTransferConfiguration(
                 new WorldId("frontier:hive-nutrient-profile"), 91L));
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -256,15 +257,18 @@ class FrontierWorldRuntimeDefinitionTest {
 
         assertEquals(ContainerSurfaceStatus.PREPARED, initial.inventory().surfaces().get(new SubjectId("container:hive-east-store")).status());
         assertEquals(ContainerSurfaceStatus.PREPARED, initial.inventory().surfaces().get(new SubjectId("container:hive-west-store")).status());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0),
-                initial.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass")).custody());
+        SubjectId biomass = new SubjectId("lot:bootstrap-hive-biomass");
+        SubjectId sourceAccount = new SubjectId("custody:container-hive-east-store");
+        assertEquals(64, initial.inventory().fungibleResources().accounts().get(sourceAccount).lotQuantities().get(biomass));
         engine.advanceTo(new SimInstant(1L), new WorkBudget(32, 256));
         FrontierWorldState pending = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         HiveNutrientTransfer transfer = pending.hiveColony().nutrientTransfers().get(transferId);
         assertEquals(HiveNutrientTransferPhase.DEPARTURE_PENDING, transfer.phase());
         assertEquals(PhysicalIntentStatus.PREPARED, pending.physicalIntents().get(transfer.endpointIntentId().orElseThrow()).status());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0),
-                pending.inventory().items().get(transfer.itemId()).custody(), "fixture must not fabricate COLD cargo before a loaded exact departure");
+        assertEquals(64, pending.inventory().fungibleResources().accounts().get(sourceAccount).lotQuantities().get(transfer.itemId()),
+                "fixture must not fabricate COLD cargo before a loaded fungible departure");
+        assertTrue(pending.inventory().fungibleResources().bindings().values().stream()
+                .anyMatch(binding -> binding.accountId().equals(sourceAccount)), "the physical source remains fenced until its receipt");
     }
 
     @Test
@@ -329,7 +333,7 @@ class FrontierWorldRuntimeDefinitionTest {
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000023");
         ExactItemCustodyChanged changed = new ExactItemCustodyChanged(itemId, source, new InventoryCustody.Player(player));
@@ -349,7 +353,7 @@ class FrontierWorldRuntimeDefinitionTest {
         WorldId worldId = new WorldId("frontier:actor-custody");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         SubjectId resident = before.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow().id();
@@ -371,9 +375,10 @@ class FrontierWorldRuntimeDefinitionTest {
         WorldId worldId = new WorldId("frontier:inventory-conflict");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
-        SubjectId containerId = ((InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody()).containerId();
-        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bootstrap-wheat"), itemId, containerId, 0, InventoryConflictKind.MISSING);
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
+        SubjectId containerId = source.containerId();
+        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bootstrap-tool"), itemId, containerId, source.slot(), InventoryConflictKind.MISSING);
         var checkpoint = engine.checkpoint();
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:inventory-conflict");
 
@@ -383,7 +388,7 @@ class FrontierWorldRuntimeDefinitionTest {
                         new InventoryConflictObserved(conflict))));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(conflict, after.inventory().conflicts().get(conflict.id()));
-        assertEquals(new InventoryCustody.ContainerSlot(containerId, 0), after.inventory().items().get(itemId).custody());
+        assertEquals(source, after.inventory().items().get(itemId).custody());
         assertEquals(1, engine.projection(ProjectionQuery.summary()).inventoryConflictCount());
 
         InventoryConflict foreign = new InventoryConflict(new SubjectId("conflict:foreign"), new SubjectId("item:untracked"), containerId, 1,
@@ -511,8 +516,10 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(ContractStatus.LOADED, contract.status());
         assertEquals(64, contract.itemCount(), "a supply obligation must retain the exact produced stack count, not its one-item template");
         CargoBatch cargo = state.inventory().cargo().get(contract.cargoId());
-        assertEquals(List.of(new SubjectId("item:production-1-1-bread")), cargo.itemIds());
-        assertEquals(new InventoryCustody.Cargo(cargo.id()), state.inventory().items().get(cargo.itemIds().getFirst()).custody());
+        assertTrue(cargo.fungibleContents());
+        CustodyAccount cargoAccount = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Cargo held && held.cargoId().equals(cargo.id())).findFirst().orElseThrow();
+        assertEquals(64, cargoAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
     }
 
     @Test
@@ -535,8 +542,9 @@ class FrontierWorldRuntimeDefinitionTest {
         PhysicalIntent handoff = state.physicalIntents().get(new PhysicalIntentId("intent:cargo-handoff-supply-1-2"));
         assertEquals(null, handoff, "an unloaded receiver completes the exact COLD delivery without a materialization-only intent");
         assertEquals(ContractStatus.DELIVERED, state.contracts().get(new SubjectId("contract:supply-1-2")).status());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0),
-                state.inventory().items().get(new SubjectId("item:production-1-1-bread")).custody());
+        CustodyAccount delivered = state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody()
+                instanceof ResourceCustody.Container container && container.containerId().equals(new SubjectId("container:hive-west-store"))).findFirst().orElseThrow();
+        assertEquals(64, delivered.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(StrategicTaskStatus.COMPLETED, supplyTask(state).status());
         assertEquals(List.of(preparationTask(state).id()), supplyTask(state).dependencies());
         assertEquals(List.of(productionTask(state).id()), preparationTask(state).dependencies());

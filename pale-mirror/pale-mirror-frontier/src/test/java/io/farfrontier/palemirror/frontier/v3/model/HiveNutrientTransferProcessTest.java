@@ -29,7 +29,7 @@ class HiveNutrientTransferProcessTest {
         SubjectId lotId = new SubjectId("lot:hive-east-biomass"), accountId = new SubjectId("custody:hive-east-biomass");
         ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
         CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of());
-        FrontierWorldState pending = baseline.withInventory(baseline.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass"))
+        FrontierWorldState pending = baseline.withInventory(baseline.inventory()
                 .withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account)));
         StrategicTask task = pending.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> departure = HiveGrowthProcess.planStart(pending, HiveGrowthProcess.start(task, 100L));
@@ -97,8 +97,7 @@ class HiveNutrientTransferProcessTest {
         SubjectId lotId = new SubjectId("lot:hive-west-biomass"), accountId = new SubjectId("custody:hive-west-biomass");
         ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
         CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(west), Map.of(lotId, 64), Map.of());
-        ExactInventory inventory = baseline.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass"))
-                .withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account));
+        ExactInventory inventory = baseline.inventory().withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account));
         FrontierWorldState pending = baseline.withInventory(inventory);
         StrategicTask task = pending.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
 
@@ -117,7 +116,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void hotFungibleBiomassReservesItsBoundPortionAndConsumesOnlyTheObservedStack() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         SubjectId hive = baseline.bootstrap().hive().id(), west = new SubjectId("container:hive-west-store");
         SubjectId lotId = new SubjectId("lot:hive-west-biomass"), accountId = new SubjectId("custody:hive-west-biomass");
         ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
@@ -152,7 +151,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void coldTransferMovesTheSameExactNutrientAcrossNamedStoresAndRetainsItsReceipt() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(baseline, task, biomass, new SubjectId("container:hive-west-store"), 0);
@@ -188,7 +187,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void materializedEndpointRetainsTheSameCargoUntilPhysicalArrivalIsObserved() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(baseline, task, biomass, new SubjectId("container:hive-west-store"), 0);
@@ -221,7 +220,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void activeSourceRequiresOneObservedDepartureBeforeTheSameItemBecomesColdCargo() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
         FrontierWorldState sourcePrepared = ReferenceContainerCustodyFixtures.observedAndHeld(
@@ -244,7 +243,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void westGrowthWaitsForItsOwnInboundReceiptRatherThanConsumingEastBiomass() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> departure = HiveGrowthProcess.planStart(baseline, HiveGrowthProcess.start(task, 100L));
         HiveNutrientTransfer transfer = ((HiveNutrientTransferStarted) departure.getFirst().payload()).transfer();
@@ -270,7 +269,7 @@ class HiveNutrientTransferProcessTest {
 
     @Test
     void conflictedWestStoreBlocksOnlyItsGrowthAndInboundTransfer() {
-        FrontierWorldState baseline = growthTaskState();
+        FrontierWorldState baseline = exactGrowthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
         SubjectId west = new SubjectId("container:hive-west-store"); SubjectId east = new SubjectId("container:hive-east-store");
         FrontierWorldState conflicted = withReplicaConflict(baseline, west);
@@ -310,5 +309,13 @@ class HiveNutrientTransferProcessTest {
         StrategicTask task = new StrategicTask(new SubjectId("task:hive-nutrient"), objective.id(), hive, StrategicTaskKind.GROW_HIVE_ORGANISM,
                 Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
         return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+    }
+
+    private static FrontierWorldState exactGrowthTaskState() {
+        FrontierWorldState state = growthTaskState();
+        SubjectId east = new SubjectId("container:hive-east-store");
+        ExactItemStack biomass = new ExactItemStack(new SubjectId("item:bootstrap-hive-biomass"), state.bootstrap().hive().id(),
+                "minecraft:rotten_flesh", 64, new InventoryCustody.ContainerSlot(east, 0));
+        return state.withInventory(state.inventory().withFungibleResources(FungibleResourceLedger.empty()).store(biomass));
     }
 }
