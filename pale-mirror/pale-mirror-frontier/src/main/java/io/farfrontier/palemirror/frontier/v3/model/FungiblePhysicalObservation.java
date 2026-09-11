@@ -35,33 +35,34 @@ public final class FungiblePhysicalObservation {
         if (account == null) throw new IllegalArgumentException("physical observation has no known custody account");
         List<Stack> ordered = observed.stream().sorted(Comparator.comparing(stack -> stack.address().toString())).toList();
         if (ordered.stream().map(Stack::address).distinct().count() != ordered.size()) throw new IllegalArgumentException("physical observation duplicates one stack address");
-        int expected = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
-        if (ordered.stream().mapToInt(Stack::quantity).sum() != expected) throw new IllegalArgumentException("physical observation does not retain exact account quantity");
-
-        List<LotPart> lots = parts(ledger, account.lotQuantities()); List<ClaimPart> claims = claimParts(ledger, account.claimQuantities());
-        List<PhysicalStackBinding> bindings = new ArrayList<>(); int lotCursor = 0, claimCursor = 0;
-        int remainingLot = lots.getFirst().quantity(), remainingClaim = claims.isEmpty() ? 0 : claims.getFirst().quantity();
-        for (int ordinal = 0; ordinal < ordered.size(); ordinal++) {
-            Stack stack = ordered.get(ordinal); Map<SubjectId, Integer> lotQuantities = new HashMap<>(); Map<SubjectId, Integer> claimQuantities = new HashMap<>();
-            int remaining = stack.quantity(); String kind = null;
-            while (remaining > 0) {
-                LotPart part = lots.get(lotCursor); if (kind == null) kind = part.itemKind();
-                if (!kind.equals(part.itemKind())) throw new IllegalArgumentException("physical observation would merge mixed resource kinds");
-                if (!stack.itemKind().equals(kind)) throw new IllegalArgumentException("physical observation kind differs from canonical custody");
-                int used = Math.min(remaining, remainingLot); lotQuantities.merge(part.id(), used, Integer::sum); remaining -= used; remainingLot -= used;
-                if (remainingLot == 0 && ++lotCursor < lots.size()) remainingLot = lots.get(lotCursor).quantity();
+        Map<String, List<Stack>> observedByKind = ordered.stream().collect(java.util.stream.Collectors.groupingBy(Stack::itemKind));
+        Map<String, List<LotPart>> lotsByKind = parts(ledger, account.lotQuantities()).stream()
+                .collect(java.util.stream.Collectors.groupingBy(LotPart::itemKind));
+        if (!observedByKind.keySet().equals(lotsByKind.keySet())) throw new IllegalArgumentException("physical observation has an unknown or missing resource kind");
+        Map<String, List<ClaimPart>> claimsByKind = claimParts(ledger, account.claimQuantities()).stream()
+                .collect(java.util.stream.Collectors.groupingBy(ClaimPart::itemKind));
+        List<PhysicalStackBinding> bindings = new ArrayList<>(); int ordinal = 0;
+        for (String kind : observedByKind.keySet().stream().sorted().toList()) {
+            List<Stack> stacks = observedByKind.get(kind); List<LotPart> lots = lotsByKind.get(kind); List<ClaimPart> claims = claimsByKind.getOrDefault(kind, List.of());
+            int expected = lots.stream().mapToInt(LotPart::quantity).sum();
+            if (stacks.stream().mapToInt(Stack::quantity).sum() != expected) throw new IllegalArgumentException("physical observation does not retain exact account quantity");
+            int lotCursor = 0, claimCursor = 0, remainingLot = lots.getFirst().quantity(), remainingClaim = claims.isEmpty() ? 0 : claims.getFirst().quantity();
+            for (Stack stack : stacks) {
+                Map<SubjectId, Integer> lotQuantities = new HashMap<>(); Map<SubjectId, Integer> claimQuantities = new HashMap<>(); int remaining = stack.quantity();
+                while (remaining > 0) {
+                    LotPart part = lots.get(lotCursor); int used = Math.min(remaining, remainingLot); lotQuantities.merge(part.id(), used, Integer::sum);
+                    remaining -= used; remainingLot -= used; if (remainingLot == 0 && ++lotCursor < lots.size()) remainingLot = lots.get(lotCursor).quantity();
+                }
+                int claimRemaining = stack.quantity();
+                while (claimRemaining > 0 && claimCursor < claims.size()) {
+                    ClaimPart part = claims.get(claimCursor); int used = Math.min(claimRemaining, remainingClaim); claimQuantities.merge(part.id(), used, Integer::sum);
+                    claimRemaining -= used; remainingClaim -= used; if (remainingClaim == 0 && ++claimCursor < claims.size()) remainingClaim = claims.get(claimCursor).quantity();
+                }
+                SubjectId bindingId = new SubjectId("binding:" + accountId.value().replace(':', '-') + "-e" + authorityEpoch + "-s" + ordinal++);
+                bindings.add(new PhysicalStackBinding(bindingId, accountId, stack.address(), authorityEpoch, kind, lotQuantities, claimQuantities));
             }
-            int claimRemaining = stack.quantity();
-            while (claimRemaining > 0 && claimCursor < claims.size()) {
-                ClaimPart part = claims.get(claimCursor);
-                if (!part.itemKind().equals(kind)) throw new IllegalArgumentException("claim allocation is not compatible with its observed resource stack");
-                int used = Math.min(claimRemaining, remainingClaim); claimQuantities.merge(part.id(), used, Integer::sum); claimRemaining -= used; remainingClaim -= used;
-                if (remainingClaim == 0 && ++claimCursor < claims.size()) remainingClaim = claims.get(claimCursor).quantity();
-            }
-            SubjectId bindingId = new SubjectId("binding:" + accountId.value().replace(':', '-') + "-e" + authorityEpoch + "-s" + ordinal);
-            bindings.add(new PhysicalStackBinding(bindingId, accountId, stack.address(), authorityEpoch, kind, lotQuantities, claimQuantities));
+            if (lotCursor != lots.size() || claimCursor != claims.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");
         }
-        if (lotCursor != lots.size() || claimCursor != claims.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");
         return List.copyOf(bindings);
     }
 
