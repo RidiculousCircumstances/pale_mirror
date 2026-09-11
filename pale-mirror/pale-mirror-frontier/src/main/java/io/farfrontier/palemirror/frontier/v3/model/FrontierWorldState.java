@@ -673,6 +673,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     public FrontierWorldState createOperation(RouteOperation operation) {
         Objects.requireNonNull(operation, "route operation");
+        requireCurrentTacticalPlan(operation);
         if (operations.containsKey(operation.id())) throw new IllegalArgumentException("route operation identity already exists: " + operation.id().value());
         Map<SubjectId, RouteOperation> next = new LinkedHashMap<>(operations); next.put(operation.id(), operation);
         // Creation is a claim, never a movement.  Each assembly/travel cursor owns later positions.
@@ -689,6 +690,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (operation == null || (operation.activeTravel().isPresent() && !operation.activeTravel().orElseThrow().arrived())) {
             throw new IllegalArgumentException("operation already owns an in-progress exact travel or does not exist");
         }
+        requireCurrentTacticalPlan(operation);
         RouteOperation started = operation.startTravel(Objects.requireNonNull(travel, "operation travel"));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), started);
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
@@ -699,6 +701,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState advanceOperationTravel(SubjectId operationId, OperationTravel travel) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id"));
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalArgumentException("operation has no active exact travel");
+        requireCurrentTacticalPlan(operation);
         OperationTravel current = operation.activeTravel().orElseThrow();
         if (!current.corridor().equals(travel.corridor()) || travel.cursor() <= current.cursor() || travel.cursor() > current.nextColdCursor()) {
             throw new IllegalArgumentException("operation travel must advance its current bounded corridor");
@@ -722,6 +725,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState advanceOperationAssembly(SubjectId operationId, OperationAssembly assembly) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
         if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
+        requireCurrentTacticalPlan(operation);
         OperationAssembly advanced = operation.activeAssembly().orElseThrow().advance(Objects.requireNonNull(assembly, "operation assembly").members());
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), operation.withAssembly(advanced));
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
@@ -740,6 +744,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState deferOperationAssembly(SubjectId operationId, OperationAssemblyDeferral deferral) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
         if (operation == null || operation.activeAssembly().isEmpty()) throw new IllegalArgumentException("operation has no active assembly");
+        requireCurrentTacticalPlan(operation);
         RouteOperation deferred = operation.withAssembly(operation.activeAssembly().orElseThrow().defer(Objects.requireNonNull(deferral, "assembly deferral")));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), deferred);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
@@ -747,6 +752,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id")); if (operation == null) throw new IllegalArgumentException("unknown operation travel");
+        requireCurrentTacticalPlan(operation);
         RouteOperation completed = operation.completeTravelSegment();
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), completed);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
@@ -892,6 +898,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .serviceWorks(outcome.serviceWorks()));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
+
+    private void requireCurrentTacticalPlan(RouteOperation operation) {
+        if (!operation.tacticalPlan().currentFor(strategicPlans)) {
+            throw new IllegalArgumentException("route operation tactical plan has stale decision authority");
+        }
+    }
     public FrontierWorldState compactTerminalLogistics(SubjectId operationId, long terminalAtTick) {
         TerminalLogisticsReceipt receipt = FrontierOperationStateSupport.terminalLogisticsReceipt(this, operationId, terminalAtTick);
         RouteOperation operation = operations.get(operationId);

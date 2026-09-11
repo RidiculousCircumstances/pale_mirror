@@ -43,7 +43,8 @@ public final class FrontierSceneAdmission {
     public static boolean coldInterceptionAvailable(FrontierWorldState state, SubjectId operationId) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(operationId, "operation id");
         RouteOperation operation = state.operations().get(operationId);
-        return operation != null && !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId)
+        return operation != null && operation.tacticalPlan().currentFor(state.strategicPlans())
+                && !hasActiveSceneLease(state, operationId) && !hasUnresolvedRouteEngagement(state, operationId)
                 && available(state, operation.participantIds());
     }
 
@@ -55,7 +56,8 @@ public final class FrontierSceneAdmission {
     public static boolean coldEngagementAvailable(FrontierWorldState state, RouteEngagement engagement) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(engagement, "engagement");
         RouteOperation operation = state.operations().get(engagement.operationId());
-        if (operation == null || operation.stage() != OperationStage.EN_ROUTE || hasActiveSceneLease(state, operation.id())) return false;
+        if (operation == null || !operation.tacticalPlan().currentFor(state.strategicPlans())
+                || operation.stage() != OperationStage.EN_ROUTE || hasActiveSceneLease(state, operation.id())) return false;
         return coldEngagementActorsAvailable(state, engagement);
     }
 

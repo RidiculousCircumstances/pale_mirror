@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 141; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 142; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -615,6 +615,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (operation.activeAssembly().isPresent()) writeAssembly(output, operation.activeAssembly().orElseThrow());
             output.writeBoolean(operation.activeTravel().isPresent());
             if (operation.activeTravel().isPresent()) writeTravel(output, operation.activeTravel().orElseThrow());
+            TacticalPlanStateCodec.write(output, operation.tacticalPlan());
         }
     }
     private static Map<SubjectId, RouteOperation> readOperations(DataInputStream input, boolean hasTravel, boolean hasAssembly, boolean hasAssemblyDeferral,
@@ -630,7 +631,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             int routeIndex = input.readUnsignedByte(); int stage = input.readUnsignedByte();
             java.util.Optional<OperationAssembly> assembly = input.readBoolean() ? java.util.Optional.of(readAssembly(input, true, true)) : java.util.Optional.empty();
             java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(readTravel(input, true, true)) : java.util.Optional.empty();
-            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel)) != null) {
+            TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
+            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }

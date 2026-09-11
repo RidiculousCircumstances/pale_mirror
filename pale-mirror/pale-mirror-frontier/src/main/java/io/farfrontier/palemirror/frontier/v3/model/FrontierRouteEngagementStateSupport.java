@@ -59,7 +59,8 @@ public final class FrontierRouteEngagementStateSupport {
             if (delivery != null) plans = plans.transitionTask(delivery.id(), StrategicTaskStatus.BLOCKED);
             operations = new LinkedHashMap<>(operations);
             operations.put(operation.id(), new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
-                    operation.unit(), operation.route(), operation.routeIndex(), OperationStage.FAILED, java.util.Optional.empty(), java.util.Optional.empty()));
+                    operation.unit(), operation.route(), operation.routeIndex(), OperationStage.FAILED, java.util.Optional.empty(), java.util.Optional.empty(),
+                    operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
         }
         return copy(state, state.actorLocations(), operations, plans);
     }

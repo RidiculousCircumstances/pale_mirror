@@ -8,30 +8,46 @@ import java.util.Optional;
 /** Exact cargo and named people travelling a finite COLD route until a HOT lease takes ownership. */
 public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId cargoId, SubjectId destinationId,
                              RouteUnitManifest unit, List<BlockPosition> route, int routeIndex, OperationStage stage,
-                             Optional<OperationAssembly> activeAssembly, Optional<OperationTravel> activeTravel) {
+                             Optional<OperationAssembly> activeAssembly, Optional<OperationTravel> activeTravel, TacticalPlan tacticalPlan) {
     RouteOperation(SubjectId id, SubjectId settlementId, SubjectId cargoId, SubjectId destinationId,
                    List<SubjectId> participantIds, List<BlockPosition> route, int routeIndex, OperationStage stage) {
-        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, Optional.empty(), Optional.empty());
+        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, Optional.empty(), Optional.empty(),
+                TacticalPlan.cargoEscort(id, settlementId, 0L, legacyUnit(id, participantIds), route));
     }
     RouteOperation(SubjectId id, SubjectId settlementId, SubjectId cargoId, SubjectId destinationId,
                    List<SubjectId> participantIds, List<BlockPosition> route, int routeIndex, OperationStage stage,
                    Optional<OperationTravel> activeTravel) {
-        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, Optional.empty(), activeTravel);
+        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, Optional.empty(), activeTravel,
+                TacticalPlan.cargoEscort(id, settlementId, 0L, legacyUnit(id, participantIds), route));
     }
     /** Historical constructor retained only for schema/WAL hydration callers. */
     RouteOperation(SubjectId id, SubjectId settlementId, SubjectId cargoId, SubjectId destinationId,
                    List<SubjectId> participantIds, List<BlockPosition> route, int routeIndex, OperationStage stage,
                    Optional<OperationAssembly> activeAssembly, Optional<OperationTravel> activeTravel) {
-        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, activeAssembly, activeTravel);
+        this(id, settlementId, cargoId, destinationId, legacyUnit(id, participantIds), route, routeIndex, stage, activeAssembly, activeTravel,
+                TacticalPlan.cargoEscort(id, settlementId, 0L, legacyUnit(id, participantIds), route));
+    }
+    public RouteOperation(SubjectId id, SubjectId settlementId, SubjectId cargoId, SubjectId destinationId,
+                          RouteUnitManifest unit, List<BlockPosition> route, int routeIndex, OperationStage stage,
+                          Optional<OperationAssembly> activeAssembly, Optional<OperationTravel> activeTravel) {
+        this(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, activeAssembly, activeTravel,
+                TacticalPlan.cargoEscort(id, settlementId, 0L, unit, route));
     }
     public RouteOperation {
         Objects.requireNonNull(id); Objects.requireNonNull(settlementId); Objects.requireNonNull(cargoId); Objects.requireNonNull(destinationId);
         Objects.requireNonNull(unit, "route operation unit"); route = List.copyOf(route); Objects.requireNonNull(stage);
         activeAssembly = Objects.requireNonNull(activeAssembly, "active operation assembly");
         activeTravel = Objects.requireNonNull(activeTravel, "active operation travel");
+        tacticalPlan = Objects.requireNonNull(tacticalPlan, "operation tactical plan");
         if (unit.kind() != RouteUnitKind.CARGO_ESCORT || !unit.ownerId().equals(id) || !unit.id().equals(RouteUnitManifest.idFor(RouteUnitKind.CARGO_ESCORT, id))) {
             throw new IllegalArgumentException("route operation must own its exact cargo unit");
         }
+        if (!tacticalPlan.operationId().equals(id) || !tacticalPlan.authorityId().equals(settlementId)
+                || !tacticalPlan.policy().equals(TacticalPolicyRegistry.CARGO_ESCORT)) {
+            throw new IllegalArgumentException("route operation must retain its canonical tactical plan");
+        }
+        TacticalPolicyRegistry.require(tacticalPlan.policy());
+        tacticalPlan.validateMembers(unit.memberIds());
         if (route.size() < 2 || route.size() > 128) throw new IllegalArgumentException("operation route must contain 2..128 positions");
         if (routeIndex < 0 || routeIndex >= route.size()) throw new IllegalArgumentException("operation route index is outside route");
         if (stage == OperationStage.ASSEMBLING && routeIndex != 0) throw new IllegalArgumentException("assembling operation must begin at its first route point");
@@ -78,7 +94,7 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
     public SubjectId cargoCarrierId() { return activeAssembly.map(OperationAssembly::cargoCarrierId).orElseGet(unit::cargoCrewId); }
 
     public RouteOperation withAssembly(OperationAssembly assembly) {
-        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, Optional.of(assembly), activeTravel);
+        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, Optional.of(assembly), activeTravel, tacticalPlan);
     }
 
     public RouteOperation startTravel(OperationTravel travel) {
@@ -89,18 +105,18 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
                     || !travel.cargoAnchor().equals(assembly.cargoAnchor())) {
                 throw new IllegalArgumentException("operation travel must preserve its complete assembly formation and cargo anchor");
             }
-            return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, OperationStage.EN_ROUTE, Optional.empty(), Optional.of(travel));
+            return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, OperationStage.EN_ROUTE, Optional.empty(), Optional.of(travel), tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL));
         }
         OperationTravel previous = activeTravel.orElseThrow(() -> new IllegalArgumentException("operation has no completed travel formation"));
         if (!previous.arrived() || !previous.formation().equals(travel.formation()) || !previous.cargoAnchor().equals(travel.cargoAnchor())) {
             throw new IllegalArgumentException("next operation travel must retain the arrived formation and cargo anchor");
         }
         OperationStage nextStage = stage == OperationStage.ARRIVED || stage == OperationStage.RETURNING ? OperationStage.RETURNING : OperationStage.EN_ROUTE;
-        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, nextStage, Optional.empty(), Optional.of(travel));
+        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, nextStage, Optional.empty(), Optional.of(travel), tacticalPlan.withPhase(nextStage == OperationStage.RETURNING ? TacticalPlanPhase.RETURN : TacticalPlanPhase.TRAVEL));
     }
 
     public RouteOperation withTravel(OperationTravel travel) {
-        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, activeAssembly, Optional.of(travel));
+        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, stage, activeAssembly, Optional.of(travel), tacticalPlan);
     }
 
     /** Applies loaded owned-route loss to this operation's retained segment only. */
@@ -119,7 +135,8 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
         int nextIndex = stage == OperationStage.RETURNING ? routeIndex - 1 : routeIndex + 1;
         OperationStage nextStage = stage == OperationStage.RETURNING ? (nextIndex == 0 ? OperationStage.COMPLETED : OperationStage.RETURNING)
                 : (nextIndex == route.size() - 1 ? OperationStage.ARRIVED : OperationStage.EN_ROUTE);
-        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, nextIndex, nextStage, Optional.empty(), Optional.of(travel));
+        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, nextIndex, nextStage, Optional.empty(), Optional.of(travel),
+                tacticalPlan.withPhase(nextStage == OperationStage.COMPLETED ? TacticalPlanPhase.COMPLETE : nextStage == OperationStage.ARRIVED ? TacticalPlanPhase.CONTACT : tacticalPlan.phase()));
     }
 
     private static RouteUnitManifest legacyUnit(SubjectId id, List<SubjectId> participantIds) {

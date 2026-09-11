@@ -100,7 +100,7 @@ public final class SupplyOperationProcess {
         StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
         StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), contract.settlementId());
-        RouteOperation operation = routeOperation(state, contract, settlement);
+        RouteOperation operation = routeOperation(state, contract, settlement, delivery);
         List<ProposedEvent> events = new ArrayList<>();
         if (physicalTransition != null) events.add(new ProposedEvent(contract.settlementId(), physicalTransition));
         events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), cargo)),
@@ -398,7 +398,7 @@ public final class SupplyOperationProcess {
     private static boolean dependenciesCompleted(FrontierWorldState state, StrategicTask task) {
         return task.dependencies().stream().map(state.strategicPlans().tasks()::get).allMatch(value -> value.status() == StrategicTaskStatus.COMPLETED);
     }
-    private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract, Settlement settlement) {
+    private static RouteOperation routeOperation(FrontierWorldState state, SupplyContract contract, Settlement settlement, StrategicTask delivery) {
         SubjectId hauler = FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).orElseThrow().id();
         List<SubjectId> escorts = FrontierWorldStateSupport.availableRouteResidents(state, settlement.id(), ResidentProfession.SECURITY_WORKER).stream()
                 .limit(2).map(ResidentProfile::id).toList();
@@ -418,8 +418,10 @@ public final class SupplyOperationProcess {
             destinations.put(escort, escortSlots.get(index));
         }
         OperationAssembly assembly = OperationAssemblyCorridor.compileJoint(state, operationId, hauler, destinations);
+        List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
+        TacticalPlan tacticalPlan = TacticalPlan.cargoEscort(operationId, delivery.authorityId(), delivery.authorityEpoch(), unit, route);
         return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,
-                state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
+                route, 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty(), tacticalPlan);
     }
     private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, BreadSource bread) {
         SupplyContract contract = contract(state, task);

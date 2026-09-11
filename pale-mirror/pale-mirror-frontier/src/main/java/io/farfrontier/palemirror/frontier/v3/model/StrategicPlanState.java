@@ -225,6 +225,12 @@ public final class StrategicPlanState {
         return decisionAuthorities.require(ownerId);
     }
 
+    /** True only for the exact retained decision turn; legacy isolated fixtures have no authority registry. */
+    public boolean currentDecisionAuthority(SubjectId ownerId, long epoch) {
+        if (decisionAuthorities.authorities().isEmpty()) return epoch == 0L;
+        return requireDecisionAuthority(ownerId).reconsiderationEpoch() == epoch;
+    }
+
     /**
      * A reconsideration is a canonical authority transition. Existing live work
      * deliberately retains its old stamp and is therefore rejected by subsequent
@@ -352,6 +358,7 @@ public final class StrategicPlanState {
     public StrategicPlanState transitionTask(SubjectId taskId, StrategicTaskStatus nextStatus) {
         StrategicTask current = tasks.get(Objects.requireNonNull(taskId, "strategic task id"));
         if (current == null || !allowed(current.status(), nextStatus)) throw new IllegalArgumentException("strategic task transition is not allowed");
+        validateAuthorityStamp(current.ownerId(), current.authorityId(), current.authorityEpoch());
         Map<SubjectId, StrategicTask> nextTasks = new LinkedHashMap<>(tasks); nextTasks.put(taskId, current.withStatus(nextStatus));
         Map<SubjectId, StrategicObjective> nextObjectives = new LinkedHashMap<>(objectives);
         if (nextStatus == StrategicTaskStatus.BLOCKED || nextStatus == StrategicTaskStatus.COMPLETED) {

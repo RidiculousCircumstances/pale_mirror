@@ -646,11 +646,12 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeByte(operation.route().size());
         for (BlockPosition point : operation.route()) { output.writeInt(point.x()); output.writeInt(point.y()); output.writeInt(point.z()); }
         output.writeByte(operation.routeIndex()); output.writeByte(operation.stage().wireCode());
-        // 0xA5 separates the v3 assembly-aware envelope from the legacy one-byte travel flag.
-        output.writeByte(0xA5); output.writeBoolean(operation.activeAssembly().isPresent());
+        // 0xA6 separates the current retained-tactical-plan envelope from the legacy travel payload.
+        output.writeByte(0xA6); output.writeBoolean(operation.activeAssembly().isPresent());
         if (operation.activeAssembly().isPresent()) writeOperationAssembly(output, operation.activeAssembly().orElseThrow());
         output.writeBoolean(operation.activeTravel().isPresent());
         if (operation.activeTravel().isPresent()) writeOperationTravel(output, operation.activeTravel().orElseThrow());
+        TacticalPlanStateCodec.write(output, operation.tacticalPlan());
     }
     private static RouteOperation readOperation(DataInputStream input) throws IOException {
         SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
@@ -664,10 +665,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         int marker = input.readUnsignedByte();
         java.util.Optional<OperationAssembly> assembly = java.util.Optional.empty();
         java.util.Optional<OperationTravel> travel;
-        if (marker != 0xA5) throw new IllegalArgumentException("route operation payload requires the current assembly envelope");
+        if (marker != 0xA6) throw new IllegalArgumentException("route operation payload requires the current tactical-plan envelope");
         assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
         travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel);
+        TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
+        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         // This envelope is mandatory for every current-schema operation cursor.
