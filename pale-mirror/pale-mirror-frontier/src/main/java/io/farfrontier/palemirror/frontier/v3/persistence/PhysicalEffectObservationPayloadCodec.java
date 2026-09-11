@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -88,6 +89,13 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeShort(consumed.consumedCount()); output.writeLong(consumed.authorityEpoch()); output.writeByte(consumed.remainingStacks().size());
             for (FungiblePhysicalObservation.Stack stack : consumed.remainingStacks()) writeConsumedStack(output, stack);
         }
+        else if (observation instanceof FungibleNutrientDepartureObservation departure) {
+            output.writeByte(22); ids(output, departure); FrontierWorldPayloadCodecs.writeSubject(output, departure.transferId());
+            FrontierWorldPayloadCodecs.writeSubject(output, departure.cargoId()); FrontierWorldPayloadCodecs.writeSubject(output, departure.sourceAccountId());
+            FrontierWorldPayloadCodecs.writeSubject(output, departure.lotId()); output.writeShort(departure.quantity()); output.writeLong(departure.authorityEpoch());
+            output.writeByte(departure.remainingStacks().size());
+            for (FungiblePhysicalObservation.Stack stack : departure.remainingStacks()) writeConsumedStack(output, stack);
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -130,6 +138,7 @@ final class PhysicalEffectObservationPayloadCodec {
                     new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
             case 20 -> fungibleCargo(input);
             case 21 -> fungibleConsumed(input);
+            case 22 -> fungibleNutrientDeparture(input);
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }
@@ -180,6 +189,17 @@ final class PhysicalEffectObservationPayloadCodec {
             remaining.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(slot), FrontierWorldPayloadCodecs.readString(input), input.readUnsignedByte()));
         }
         return new FungibleResourceConsumedObservation(id, intent, account, lot, claim, count, epoch, remaining);
+    }
+    private static FungibleNutrientDepartureObservation fungibleNutrientDeparture(DataInputStream input) throws IOException {
+        PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input);
+        SubjectId transfer = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId cargo = FrontierWorldPayloadCodecs.readSubject(input).value();
+        SubjectId source = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId lot = FrontierWorldPayloadCodecs.readSubject(input).value();
+        int quantity = input.readUnsignedShort(); long epoch = input.readLong(); java.util.ArrayList<FungiblePhysicalObservation.Stack> remaining = new java.util.ArrayList<>();
+        for (int index = 0, size = input.readUnsignedByte(); index < size; index++) {
+            InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            remaining.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(slot), FrontierWorldPayloadCodecs.readString(input), input.readUnsignedByte()));
+        }
+        return new FungibleNutrientDepartureObservation(id, intent, transfer, cargo, source, lot, quantity, epoch, remaining);
     }
     private static void writeRepair(DataOutputStream output, StructuralRepairObservation value) throws IOException {
         output.writeByte(1); ids(output, value); FrontierWorldPayloadCodecs.writeSubject(output, value.itemId()); FrontierWorldPayloadCodecs.writePosition(output, value.position());

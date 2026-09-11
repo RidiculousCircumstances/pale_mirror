@@ -82,6 +82,11 @@ final class FrontierWorldPhysicalObservationValidation {
                         || !intent.subjectIds().equals(java.util.List.of(departure.transferId(), departure.cargoId(), departure.itemId()))) {
                     throw new IllegalArgumentException("hive nutrient departure receipt has foreign exact subjects");
                 }
+            } else if (observation instanceof FungibleNutrientDepartureObservation departure) {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
+                        || !intent.subjectIds().equals(java.util.List.of(departure.transferId(), departure.cargoId(), departure.lotId()))) {
+                    throw new IllegalArgumentException("fungible nutrient departure receipt has foreign exact subjects");
+                }
             } else if (observation instanceof HiveNutrientArrivalObservation arrival) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL
                         || !intent.subjectIds().equals(java.util.List.of(arrival.transferId(), arrival.cargoId(), arrival.itemId()))) {

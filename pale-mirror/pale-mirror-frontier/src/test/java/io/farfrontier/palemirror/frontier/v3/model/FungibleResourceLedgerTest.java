@@ -148,6 +148,26 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void observedHotDepartureCreatesColdCargoOnlyAfterItFencesTheSourceRemainder() {
+        FungibleResourceLedger hot = issue(10).rebind(DEPOT_ACCOUNT, 4L, List.of(binding("binding:source", 4L, 10,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)))));
+        SubjectId cargoId = new SubjectId("cargo:hot-departure");
+        SubjectId cargoAccountId = new SubjectId("custody:cargo-hot-departure");
+        CustodyAccount cargo = new CustodyAccount(cargoAccountId, new ResourceCustody.Cargo(cargoId), Map.of(LOT, 4), Map.of());
+        PhysicalStackBinding remainder = binding("binding:source-remainder", 4L, 6,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)));
+
+        FungibleResourceLedger moved = hot.transferObservedToColdNewAccount(DEPOT_ACCOUNT, cargo, 4L, Map.of(LOT, 4), Map.of(), List.of(remainder));
+
+        assertEquals(Map.of(LOT, 6), moved.accounts().get(DEPOT_ACCOUNT).lotQuantities());
+        assertEquals(Map.of(LOT, 4), moved.accounts().get(cargoAccountId).lotQuantities());
+        assertEquals(10, moved.totalQuantity(OWNER, "minecraft:bread"));
+        assertEquals(List.of(remainder), moved.bindings().values().stream().toList());
+        assertThrows(IllegalArgumentException.class, () -> hot.transferObservedToColdNewAccount(DEPOT_ACCOUNT, cargo, 3L,
+                Map.of(LOT, 4), Map.of(), List.of(remainder)));
+    }
+
+    @Test
     void observedHandoffIntoAnExistingContainerRetainsBothBalancesBehindOneFreshBinding() {
         SubjectId sourceLotId = new SubjectId("lot:player-bread");
         SubjectId destinationLotId = new SubjectId("lot:depot-bread");

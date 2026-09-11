@@ -303,6 +303,22 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
     }
 
+    /** Moves an observed HOT source portion into COLD cargo without ever releasing its source binding. */
+    public ExactInventory loadObservedFungibleCargo(CargoBatch batch, SubjectId sourceAccountId, long sourceEpoch,
+                                                    Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
+                                                    List<FungiblePhysicalObservation.Stack> remainingStacks) {
+        Objects.requireNonNull(batch, "observed fungible cargo batch");
+        if (!batch.fungibleContents() || cargo.containsKey(batch.id())) throw new IllegalArgumentException("observed fungible cargo identity is unavailable");
+        CustodyAccount destination = new CustodyAccount(new SubjectId("custody:" + batch.id().value().replace(':', '-')),
+                new ResourceCustody.Cargo(batch.id()), lotQuantities, claimQuantities);
+        List<PhysicalStackBinding> remaining = remainingStacks.isEmpty() ? List.of()
+                : FungiblePhysicalObservation.bind(fungibleResources, sourceAccountId, sourceEpoch, remainingStacks);
+        FungibleResourceLedger resources = fungibleResources.transferObservedToColdNewAccount(sourceAccountId, destination, sourceEpoch,
+                lotQuantities, claimQuantities, remaining);
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.put(batch.id(), batch);
+        return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
+    }
+
     /** Atomically retains a contract claim while moving its COLD lot portion into identified cargo. */
     public ExactInventory reserveAndLoadFungibleCargo(CargoBatch batch, SubjectId sourceAccountId, ResourceLot lot, ClaimAllocation claim) {
         Objects.requireNonNull(lot, "cargo lot"); Objects.requireNonNull(claim, "cargo claim");

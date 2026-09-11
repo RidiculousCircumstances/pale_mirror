@@ -120,12 +120,20 @@ public final class HiveNutrientTransferStateSupport {
     private static FrontierWorldState startFungible(FrontierWorldState state, HiveNutrientTransfer transfer) {
         CustodyAccount source = state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Container container
                 && container.containerId().equals(transfer.sourceStoreId())).findFirst().orElseThrow(() -> new IllegalArgumentException("fungible hive nutrient source account is absent"));
-        if (ReferenceContainerCustody.hasLiveCustody(state, transfer.sourceStoreId()) || source.lotQuantities().getOrDefault(transfer.itemId(), 0) < 64
+        if (source.lotQuantities().getOrDefault(transfer.itemId(), 0) < 64
                 || state.inventory().fungibleResources().lots().get(transfer.itemId()) == null) {
-            throw new IllegalArgumentException("fungible hive nutrient departure has no COLD source lot");
+            throw new IllegalArgumentException("fungible hive nutrient departure has no source lot");
         }
-        ExactInventory inventory = state.inventory().loadFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(),
-                Map.of(transfer.itemId(), 64), Map.of());
+        boolean liveSource = ReferenceContainerCustody.hasLiveCustody(state, transfer.sourceStoreId());
+        if (transfer.phase() == HiveNutrientTransferPhase.DEPARTURE_PENDING) {
+            if (!liveSource || state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(source.id()))) {
+                throw new IllegalArgumentException("fungible hive nutrient departure has no current source binding");
+            }
+            return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
+                    state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        }
+        if (liveSource) throw new IllegalArgumentException("fungible hive nutrient COLD departure retains live source custody");
+        ExactInventory inventory = state.inventory().loadFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(), Map.of(transfer.itemId(), 64), Map.of());
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startNutrientTransfer(transfer), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
@@ -159,6 +167,29 @@ public final class HiveNutrientTransferStateSupport {
                 observations, state.sceneLeases(), colony, state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
+    static FrontierWorldState completeFungiblePhysicalDeparture(FrontierWorldState state, PhysicalIntent intent,
+                                                                FungibleNutrientDepartureObservation observed,
+                                                                Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        HiveNutrientTransfer transfer = requireUnblocked(state, observed.transferId());
+        CustodyAccount source = state.inventory().fungibleResources().accounts().get(observed.sourceAccountId());
+        ResourceLot lot = state.inventory().fungibleResources().lots().get(observed.lotId());
+        if (!transfer.fungibleContents() || transfer.phase() != HiveNutrientTransferPhase.DEPARTURE_PENDING
+                || !transfer.endpointIntentId().equals(java.util.Optional.of(intent.id())) || !observed.intentId().equals(intent.id())
+                || !transfer.cargoId().equals(observed.cargoId()) || !transfer.itemId().equals(observed.lotId()) || observed.quantity() != 64
+                || source == null || lot == null || !(source.custody() instanceof ResourceCustody.Container store)
+                || !store.containerId().equals(transfer.sourceStoreId()) || source.lotQuantities().getOrDefault(lot.id(), 0) < observed.quantity()
+                || !lot.economicOwnerId().equals(transfer.hiveId())) {
+            throw new IllegalArgumentException("fungible nutrient departure observation does not match its retained source custody");
+        }
+        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observed.id())));
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations()); observations.put(observed.id(), observed);
+        ExactInventory inventory = state.inventory().loadObservedFungibleCargo(CargoBatch.fungible(transfer.cargoId(), transfer.hiveId()), source.id(),
+                observed.authorityEpoch(), Map.of(lot.id(), observed.quantity()), Map.of(), observed.remainingStacks());
+        HiveColony colony = state.hiveColony().advanceNutrientTransferState(transfer.id(), transfer.departed());
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+                observations, state.sceneLeases(), colony, state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+    }
+
     static FrontierWorldState completePhysicalArrival(FrontierWorldState state, PhysicalIntent intent, HiveNutrientArrivalObservation observed,
                                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         HiveNutrientTransfer transfer = requireUnblocked(state, observed.transferId());
@@ -179,6 +210,7 @@ public final class HiveNutrientTransferStateSupport {
     static FrontierWorldState completeEndpoint(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,
                                                Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) {
+            if (evidence instanceof FungibleNutrientDepartureObservation departure) return completeFungiblePhysicalDeparture(state, intent, departure, intents);
             if (!(evidence instanceof HiveNutrientDepartureObservation departure)) throw new IllegalArgumentException("hive nutrient departure requires exact source removal evidence");
             return completePhysicalDeparture(state, intent, departure, intents);
         }
@@ -227,7 +259,13 @@ public final class HiveNutrientTransferStateSupport {
         boolean cargoPhase = transfer.phase() == HiveNutrientTransferPhase.IN_TRANSIT || transfer.phase() == HiveNutrientTransferPhase.ARRIVAL_PENDING
                 || transfer.phase() == HiveNutrientTransferPhase.BLOCKED;
         CargoBatch batch = inventory.cargo().get(transfer.cargoId());
-        if (cargoPhase) {
+        if (transfer.phase() == HiveNutrientTransferPhase.DEPARTURE_PENDING) {
+            CustodyAccount source = inventory.fungibleResources().accounts().values().stream().filter(value -> value.custody() instanceof ResourceCustody.Container container
+                    && container.containerId().equals(transfer.sourceStoreId())).findFirst().orElse(null);
+            if (batch != null || source == null || source.lotQuantities().getOrDefault(transfer.itemId(), 0) < 64) {
+                throw new IllegalArgumentException("pending fungible nutrient departure has no retained source portion");
+            }
+        } else if (cargoPhase) {
             CustodyAccount account = inventory.fungibleResources().accounts().values().stream().filter(value -> value.custody() instanceof ResourceCustody.Cargo cargo
                     && cargo.cargoId().equals(transfer.cargoId())).findFirst().orElse(null);
             if (batch == null || !batch.fungibleContents() || account == null || account.lotQuantities().getOrDefault(transfer.itemId(), 0) != 64) {

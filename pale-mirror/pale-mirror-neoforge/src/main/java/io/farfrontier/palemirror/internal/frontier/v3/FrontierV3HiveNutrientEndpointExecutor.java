@@ -14,6 +14,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleNutrientDepartureObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientArrivalObservation;
@@ -26,8 +34,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -48,6 +58,10 @@ final class FrontierV3HiveNutrientEndpointExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, PhysicalIntent intent) {
+        if (fungibleDeparture(state, intent) != null) {
+            executeFungibleDeparture(level, runtime, state, intent, fungibleDeparture(state, intent));
+            return;
+        }
         Endpoint target;
         try { target = endpoint(state, intent); }
         catch (IllegalArgumentException invalid) { unknown(runtime, intent.id(), "canonical-precondition-conflict"); return; }
@@ -64,6 +78,73 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (!(transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running") instanceof CommandResult.Accepted)) return;
         if (!effect(intent, target, chest)) { unknown(runtime, intent.id(), "physical-effect-conflict"); return; }
         confirm(level, runtime, intent, target, chest);
+    }
+
+    private static FungibleDeparture fungibleDeparture(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) return null;
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
+                .filter(value -> value.fungibleContents() && value.endpointIntentId().equals(Optional.of(intent.id()))).findFirst().orElse(null);
+        if (transfer == null || !intent.subjectIds().equals(java.util.List.of(transfer.id(), transfer.cargoId(), transfer.itemId()))) return null;
+        List<CustodyAccount> accounts = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(transfer.sourceStoreId())).toList();
+        if (accounts.size() != 1) return null;
+        CustodyAccount account = accounts.getFirst(); ResourceLot lot = state.inventory().fungibleResources().lots().get(transfer.itemId());
+        List<PhysicalStackBinding> current = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (lot == null || account.lotQuantities().getOrDefault(lot.id(), 0) < 64 || current.isEmpty()) return null;
+        long epoch = current.getFirst().authorityEpoch();
+        if (current.stream().anyMatch(binding -> binding.authorityEpoch() != epoch)) return null;
+        PhysicalStackBinding source = current.stream().filter(binding -> binding.lotQuantities().equals(java.util.Map.of(lot.id(), 64))
+                && binding.claimQuantities().isEmpty() && binding.address() instanceof PhysicalStackAddress.ContainerSlot).findFirst().orElse(null);
+        if (source == null) return null;
+        InventoryCustody.ContainerSlot slot = ((PhysicalStackAddress.ContainerSlot) source.address()).slot();
+        ContainerSurface surface = state.inventory().surfaces().get(transfer.sourceStoreId());
+        if (surface == null || !slot.containerId().equals(transfer.sourceStoreId())) return null;
+        return new FungibleDeparture(transfer, account, lot, source, epoch, surface,
+                new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), slot.slot());
+    }
+
+    private static void executeFungibleDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                 FrontierWorldState state, PhysicalIntent intent, FungibleDeparture target) {
+        if (!level.hasChunkAt(target.position())) return;
+        if (ReferenceContainerCustody.isReferenceContainer(state, target.transfer().sourceStoreId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, target.transfer().sourceStoreId())) return;
+        if (target.surface().status() != ContainerSurfaceStatus.ACTIVE) return;
+        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
+                new FrontierV3CargoHandoffExecutor.StoreTarget(target.position(), target.transfer().sourceStoreId()));
+        if (chest == null) { unknown(runtime, intent.id(), "fungible-chest-conflict"); return; }
+        if (intent.status() == PhysicalIntentStatus.RUNNING) {
+            if (matchesFungibleDeparture(chest, target)) confirmFungibleDeparture(runtime, intent, target, chest);
+            else unknown(runtime, intent.id(), "fungible-restart-postcondition-conflict");
+            return;
+        }
+        if (!matchesFungibleSource(chest, target)) { unknown(runtime, intent.id(), "fungible-stack-precondition-conflict"); return; }
+        if (!(transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "fungible-running") instanceof CommandResult.Accepted)) return;
+        chest.setItem(target.slot(), ItemStack.EMPTY); chest.setChanged();
+        if (!matchesFungibleDeparture(chest, target)) { unknown(runtime, intent.id(), "fungible-physical-effect-conflict"); return; }
+        confirmFungibleDeparture(runtime, intent, target, chest);
+    }
+
+    private static boolean matchesFungibleSource(ChestBlockEntity chest, FungibleDeparture target) {
+        if (target.slot() < 0 || target.slot() >= chest.getContainerSize()) return false;
+        ItemStack stack = chest.getItem(target.slot());
+        return stack.getCount() == 64 && target.lot().itemKind().equals(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+    }
+
+    private static boolean matchesFungibleDeparture(ChestBlockEntity chest, FungibleDeparture target) {
+        return target.slot() >= 0 && target.slot() < chest.getContainerSize() && chest.getItem(target.slot()).isEmpty();
+    }
+
+    private static void confirmFungibleDeparture(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
+                                                 FungibleDeparture target, ChestBlockEntity chest) {
+        FrontierWorldState current = runtime.decodedState().orElseThrow();
+        List<FungiblePhysicalObservation.Stack> remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, current, target.transfer().sourceStoreId());
+        PhysicalObservationId observationId = new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-'));
+        PhysicalEffectObservation observation = new FungibleNutrientDepartureObservation(observationId, intent.id(), target.transfer().id(),
+                target.transfer().cargoId(), target.account().id(), target.lot().id(), 64, target.authorityEpoch(), remaining);
+        if (!(transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "fungible-confirmed") instanceof CommandResult.Accepted)) {
+            throw new IllegalStateException("fungible hive nutrient departure confirmation was rejected");
+        }
     }
 
     private static Endpoint endpoint(FrontierWorldState state, PhysicalIntent intent) {
@@ -149,4 +230,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
 
     private record Endpoint(HiveNutrientTransfer transfer, ContainerSurface surface, SubjectId containerId, int slot,
                             ExactItemStack item, BlockPos position) { }
+    private record FungibleDeparture(HiveNutrientTransfer transfer, CustodyAccount account, ResourceLot lot,
+                                    PhysicalStackBinding binding, long authorityEpoch, ContainerSurface surface,
+                                    BlockPos position, int slot) { }
 }

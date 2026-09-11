@@ -102,16 +102,22 @@ public final class HiveNutrientTransferProcess {
                                               SubjectId targetStore, int targetSlot) {
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(lot.accountId());
         if (account == null || !(account.custody() instanceof ResourceCustody.Container source) || lot.quantity() < 64
-                || ReferenceContainerCustody.hasLiveCustody(state, source.containerId()) || ReferenceContainerCustody.blocksCanonicalUse(state, source.containerId())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, source.containerId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, targetStore)) {
-            throw new IllegalArgumentException("fungible hive nutrient transfer has no COLD source custody");
+            throw new IllegalArgumentException("fungible hive nutrient transfer has no usable source custody");
+        }
+        boolean physicalDeparture = ReferenceContainerCustody.hasLiveCustody(state, source.containerId());
+        if (physicalDeparture && state.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(binding -> binding.accountId().equals(account.id()))) {
+            throw new IllegalArgumentException("fungible hive nutrient transfer has no current source binding");
         }
         List<BlockPosition> corridor = corridor(state.inventory().surfaces().get(source.containerId()).position(), state.inventory().surfaces().get(targetStore).position());
         String idSuffix = task.id().value().replace(':', '-'); SubjectId transferId = new SubjectId("transfer:hive-nutrient-" + idSuffix);
         return new HiveNutrientTransfer(transferId, state.bootstrap().hive().id(), task.id(), source.containerId(),
                 new InventoryCustody.ContainerSlot(source.containerId(), 0), targetStore, new InventoryCustody.ContainerSlot(targetStore, targetSlot),
                 new SubjectId("cargo:hive-nutrient-" + idSuffix), lot.lot().id(), true, corridor, 0,
-                HiveNutrientTransferPhase.IN_TRANSIT, java.util.Optional.empty(), java.util.Optional.empty());
+                physicalDeparture ? HiveNutrientTransferPhase.DEPARTURE_PENDING : HiveNutrientTransferPhase.IN_TRANSIT,
+                physicalDeparture ? java.util.Optional.of(departureIntentId(transferId)) : java.util.Optional.empty(), java.util.Optional.empty());
     }
 
     public static List<ProposedEvent> startEvents(FrontierWorldState state, HiveNutrientTransfer transfer, long dueAt) {

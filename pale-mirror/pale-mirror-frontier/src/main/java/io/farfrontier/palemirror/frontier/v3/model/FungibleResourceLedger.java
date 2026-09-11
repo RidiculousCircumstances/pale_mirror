@@ -219,6 +219,54 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     /**
+     * Commits a loaded-source removal into an unbound cargo account.  The source's replacement
+     * HOT layout is fenced in the same transaction; cargo is deliberately COLD only after that
+     * observed physical removal has become durable.
+     */
+    public FungibleResourceLedger transferObservedToColdNewAccount(SubjectId fromId, CustodyAccount destination, long sourceEpoch,
+                                                                   Map<SubjectId, Integer> lotQuantities,
+                                                                   Map<SubjectId, Integer> claimQuantities,
+                                                                   List<PhysicalStackBinding> remainingSource) {
+        CustodyAccount from = requireAccount(fromId); Objects.requireNonNull(destination, "observed cold destination");
+        Objects.requireNonNull(remainingSource, "observed cold source layout");
+        if (from.id().equals(destination.id()) || accounts.containsKey(destination.id()) || sourceEpoch < 1
+                || !(destination.custody() instanceof ResourceCustody.Cargo)) {
+            throw new IllegalArgumentException("observed cold transfer has an invalid destination or epoch");
+        }
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(from.id())).toList();
+        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != sourceEpoch)) {
+            throw new IllegalArgumentException("observed cold transfer does not own the current source binding");
+        }
+        requireSubset(from.lotQuantities(), lotQuantities, "observed cold transfer lots");
+        requireOptionalSubset(from.claimQuantities(), claimQuantities, "observed cold transfer claims");
+        if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) {
+            throw new IllegalArgumentException("observed cold claimed transfer must preserve exact quantity");
+        }
+        if (!destination.lotQuantities().equals(lotQuantities) || !destination.claimQuantities().equals(claimQuantities)) {
+            throw new IllegalArgumentException("observed cold destination does not retain exactly the transferred quantities");
+        }
+        Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
+        Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
+        if (remainingLots.isEmpty() != remainingSource.isEmpty()) {
+            throw new IllegalArgumentException("observed cold source layout does not match remaining custody");
+        }
+        requireBindings(remainingSource, from.id(), sourceEpoch, "observed cold source layout");
+        if (!boundQuantities(remainingSource, true).equals(remainingLots)
+                || !boundQuantities(remainingSource, false).equals(remainingClaims)) {
+            throw new IllegalArgumentException("observed cold source layout does not exactly account for its custody");
+        }
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
+        if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
+        else nextAccounts.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        nextAccounts.put(destination.id(), destination);
+        Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
+        for (PhysicalStackBinding binding : remainingSource) {
+            if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed cold source binding identity is already live");
+        }
+        return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
+    }
+
+    /**
      * Reconciles a physical transfer into an already-known custody account without releasing
      * either side to COLD ownership between the source and destination observations.
      */

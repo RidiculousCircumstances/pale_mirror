@@ -50,8 +50,7 @@ public final class HiveGrowthProcess {
             if (state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> transfer.requesterTaskId().equals(task.id()))) return List.of();
             Optional<FungibleResourceCustodySupport.LotAtContainer> remoteFungible = state.inventory().fungibleResources().accounts().values().stream()
                     .filter(account -> account.custody() instanceof ResourceCustody.Container container && state.isHiveStore(container.containerId())
-                            && !container.containerId().equals(targetStore) && !ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())
-                            && !ReferenceContainerCustody.hasLiveCustody(state, container.containerId()))
+                            && !container.containerId().equals(targetStore) && !ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId()))
                     .flatMap(account -> account.lotQuantities().entrySet().stream().map(entry -> new FungibleResourceCustodySupport.LotAtContainer(account.id(),
                             state.inventory().fungibleResources().lots().get(entry.getKey()), entry.getValue())))
                     .filter(value -> BIOMASS.equals(value.lot().itemKind()) && value.quantity() >= 64).sorted(Comparator.comparing(value -> value.lot().id())).findFirst();
