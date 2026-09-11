@@ -1,8 +1,9 @@
 # PM-F02C-COLD-ADMISSION-STRUCTURE-26: close the COLD admission boundary
 
-Specification revision: 1. Status: `CHECKPOINTED_METHOD_BUILD`.
+Specification revision: 1. Status: `EXECUTING_METHOD_BUILD`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/f02c_shared_assault_challenge24/terra_cold_admission_structure26`,
+one fresh `gpt-5.6-terra`, reasoning `high`.
 
 ## Bounded context packet
 
@@ -70,6 +71,6 @@ for a product-value decision rather than another test repair.
 Use branch `terra/f02c-cold-admission-structure-26`, worktree
 `/home/rd/proj/pm-f02c-cold-admission-structure-26` and task root
 `/home/rd/proj/pm-f02c-cold-admission-structure-26-tmp`. Preserve all prior
-worktrees/evidence and unrelated services. The liveness epoch begins on direct
-assignment; first check follows ten complete minutes of silence, and the first
-economy audit follows one hour if still active.
+worktrees/evidence and unrelated services. Assignment/liveness epoch:
+`2026-09-11T00:24:16Z`; first check follows ten complete minutes of silence.
+The first economy audit is due at `2026-09-11T01:24:16Z` if still active.
