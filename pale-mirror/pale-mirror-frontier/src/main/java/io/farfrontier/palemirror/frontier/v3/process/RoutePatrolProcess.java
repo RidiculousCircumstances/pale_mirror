@@ -154,7 +154,10 @@ public final class RoutePatrolProcess {
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
     private static StrategicTask task(FrontierWorldState state, SubjectId id, StrategicTaskStatus status) {
         StrategicTask task = state.strategicPlans().tasks().get(id);
-        if (task == null || task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || task.status() != status) throw new IllegalStateException("route patrol has no matching strategic task");
+        if (task == null || task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || task.status() != status
+                || !state.strategicPlans().currentDecisionAuthority(task.authorityId(), task.authorityEpoch())) {
+            throw new IllegalStateException("route patrol has no current matching strategic task");
+        }
         return task;
     }
 }
