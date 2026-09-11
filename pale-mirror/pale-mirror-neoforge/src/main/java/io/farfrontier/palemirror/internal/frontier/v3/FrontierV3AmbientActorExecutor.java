@@ -426,7 +426,7 @@ final class FrontierV3AmbientActorExecutor {
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || !recognizes(runtime, entity)) return JoinDisposition.NOT_MANAGED;
+        if (state == null || !FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)) return JoinDisposition.NOT_MANAGED;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return JoinDisposition.NOT_MANAGED;
         SubjectId actorId;
@@ -448,73 +448,11 @@ final class FrontierV3AmbientActorExecutor {
         return JoinDisposition.RETAINED;
     }
 
-    /**
-     * Strict non-mutating admission proof for the shared graybox entity boundary.
-     * A tag alone is never sufficient: this verifies the live canonical actor, exact UUID,
-     * actor kind and an extant ambient lease before a V3 body may enter the physical world.
-     */
+    /** Compatibility entrypoint; exact join recognition lives in its bounded companion. */
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
-        return recognizes(runtime, ManagedCarrier.from(entity));
+        return FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
     }
 
-    /**
-     * Exact non-Minecraft delegate of the Entity entrypoint above.  Lifecycle and source-firewall
-     * composition use this only after the real Entity adapter has supplied its immutable facts.
-     */
-    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier) {
-        return recognizes(runtime, carrier, current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current));
-    }
-
-    /**
-     * The non-Minecraft half of the actual entity-join recognition boundary.  Keeping this
-     * narrow carrier adapter lets the connected regression exercise the callback decision
-     * without inventing a fake Entity, while production still adapts the real entity above.
-     */
-    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier,
-                              FrontierSceneAdmission.ProviderSource providerSource) {
-        Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(carrier, "carrier"); Objects.requireNonNull(providerSource, "provider source");
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return false;
-        return recognizes(state, carrier, providerSource);
-    }
-
-    /** Shared read-only recognition decision after the runtime has selected its exact state. */
-    static boolean recognizes(FrontierWorldState state, ManagedCarrier carrier,
-                              FrontierSceneAdmission.ProviderSource providerSource) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(carrier, "carrier"); Objects.requireNonNull(providerSource, "provider source");
-        String rawActorId = carrier.actorId();
-        if (rawActorId.isBlank()) return false;
-        SubjectId actorId;
-        try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
-        // A join must never replace projection truth with the default pure-model compiler. If
-        // the registered snapshot is absent or structurally fenced, retain no ambient ownership
-        // claim until the projection stage publishes a compatible immutable view.
-        java.util.Optional<FrontierSettlementAssaultBattlefield.Provider> provider = providerSource.provider(state);
-        if (provider.isEmpty()) return false;
-        var location = state.actorLocations().get(actorId);
-        var lease = state.ambientLeases().get(actorId);
-        return location != null && location.condition().status() == ActorLifeStatus.ALIVE
-                && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
-                && !FrontierSceneAdmission.reserved(state, actorId, ignored -> provider)
-                && entityId(state, actorId).equals(carrier.entityId())
-                && carrier.ownedBy(actorId, bioform(state, actorId));
-    }
-
-    /** Exact read-only facts taken from a joining Minecraft entity. */
-    record ManagedCarrier(UUID entityId, String actorId, boolean removed, boolean bioform, String kind) {
-        ManagedCarrier {
-            Objects.requireNonNull(entityId, "entity id"); Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "kind");
-        }
-        static ManagedCarrier from(Entity entity) {
-            Objects.requireNonNull(entity, "entity");
-            return new ManagedCarrier(entity.getUUID(), entity.getPersistentData().getString(ACTOR_KEY), entity.isRemoved(),
-                    entity instanceof Zombie, entity.getPersistentData().getString(KIND_KEY));
-        }
-        boolean ownedBy(SubjectId expectedActor, boolean expectedBioform) {
-            return !removed && expectedActor.value().equals(actorId) && bioform == expectedBioform
-                    && (expectedBioform ? "BIOFORM" : "RESIDENT").equals(kind);
-        }
-    }
     /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
         FrontierWorldState state = runtime.decodedState().orElse(null);

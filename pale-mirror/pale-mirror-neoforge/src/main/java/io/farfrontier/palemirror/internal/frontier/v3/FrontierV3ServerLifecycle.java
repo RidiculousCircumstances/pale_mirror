@@ -552,7 +552,7 @@ public final class FrontierV3ServerLifecycle {
 
     /** Exact carrier delegate of {@link #observeSourceJoin(ServerLevel, Entity)} for focused runtime tests. */
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                               FrontierV3AmbientActorExecutor.ManagedCarrier carrier,
+                                               FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,
                                                EntityJoinAdmission lifecycleAdmission) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(carrier, "carrier");
         Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");
@@ -584,7 +584,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientActorExecutor.ManagedCarrier.from(entity))
+                && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
                 || FrontierV3SceneExecutor.recognizes(runtime, entity));
     }
 
@@ -594,8 +594,8 @@ public final class FrontierV3ServerLifecycle {
      * one production decision without requiring a synthetic Minecraft entity in focused tests.
      */
     static boolean recognizesManagedAmbientCarrier(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                   FrontierV3AmbientActorExecutor.ManagedCarrier carrier) {
-        return FrontierV3AmbientActorExecutor.recognizes(runtime, carrier);
+                                                   FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier) {
+        return FrontierV3AmbientCarrierRecognition.recognizes(runtime, carrier);
     }
 
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
@@ -604,7 +604,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         boolean sceneBody = FrontierV3SceneExecutor.recognizes(runtime, entity);
-        boolean ambientBody = FrontierV3AmbientActorExecutor.recognizes(runtime, entity);
+        boolean ambientBody = FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
         if (!sceneBody && !ambientBody) return false;
         FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, entity);
         return sceneBody ? FrontierV3SceneExecutor.observeDeath(runtime, entity, source)

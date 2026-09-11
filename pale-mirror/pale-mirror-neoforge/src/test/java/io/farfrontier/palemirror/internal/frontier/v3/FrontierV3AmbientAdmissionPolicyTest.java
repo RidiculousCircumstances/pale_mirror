@@ -175,7 +175,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
         EphemeralStore store = new EphemeralStore();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state, List.of(), store);
         try {
-            FrontierV3AmbientActorExecutor.ManagedCarrier carrier = new FrontierV3AmbientActorExecutor.ManagedCarrier(
+            FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT");
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
                     "an absent projection must fail closed through the same lifecycle/firewall composition");
@@ -263,7 +263,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     "the ordinary scheduled runtime transition must install its nutrient-only colony replacement");
 
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
-            FrontierV3AmbientActorExecutor.ManagedCarrier carrier = new FrontierV3AmbientActorExecutor.ManagedCarrier(
+            FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT");
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
                     "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider and firewall");
@@ -490,7 +490,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
     }
 
     private static void assertJoinFirewall(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                           FrontierV3AmbientActorExecutor.ManagedCarrier carrier,
+                                           FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,
                                            FrontierV3ServerLifecycle.EntityJoinAdmission lifecycleAdmission,
                                            boolean expectedCancellation, String phase) {
         FrontierV3ServerLifecycle.JoinFirewallProof proof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, carrier, lifecycleAdmission);
