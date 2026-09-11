@@ -9,10 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
@@ -37,7 +34,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
@@ -222,34 +218,22 @@ public final class FrontierV3ServerLifecycle {
      * candidate and natural-demand facts, but cannot use them to create a lease, load a chunk,
      * enqueue work, or mutate canonical state.
      */
-    static PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, BlockPosition anchor, SubjectId assaultId) {
-        Objects.requireNonNull(level, "pilot demand level"); Objects.requireNonNull(anchor, "pilot demand anchor");
+    static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
+        Objects.requireNonNull(level, "pilot demand level");
         Objects.requireNonNull(assaultId, "pilot demand assault");
-        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneDemand.observe(level, anchor);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return new PilotSceneDemandSnapshot(Optional.empty(), OptionalInt.empty(), demand.chunkLoaded(), demand.observerIds());
+            return FrontierV3PilotSceneDemandSnapshot.unavailable();
         }
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return new PilotSceneDemandSnapshot(Optional.empty(), OptionalInt.empty(), demand.chunkLoaded(), demand.observerIds());
+        if (state == null) return FrontierV3PilotSceneDemandSnapshot.unavailable();
         return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
-            FrontierSettlementAssaultBattlefield.Provider provider = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElse(null);
-            if (provider == null) return new PilotSceneDemandSnapshot(Optional.empty(), OptionalInt.empty(), demand.chunkLoaded(), demand.observerIds());
-            int candidates = FrontierSceneAdmission.settlementAssaultCandidates(state, ignored -> Optional.of(provider)).stream()
-                    .filter(candidate -> candidate.assaultId().equals(assaultId)).mapToInt(ignored -> 1).sum();
-            return new PilotSceneDemandSnapshot(Optional.of(provider.getClass().getName()), OptionalInt.of(candidates),
-                    demand.chunkLoaded(), demand.observerIds());
+            var provider = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElse(null);
+            if (provider == null) return FrontierV3PilotSceneDemandSnapshot.unavailable();
+            return FrontierV3PilotSceneDemandSnapshot.fromProviderCandidates(Optional.of(provider.getClass().getName()),
+                    io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission.settlementAssaultCandidates(state, ignored -> Optional.of(provider)), assaultId,
+                    anchor -> FrontierV3SceneDemand.observe(level, anchor));
         });
-    }
-
-    /** Immutable diagnostic facts only; an empty optional means the corresponding read was unavailable. */
-    record PilotSceneDemandSnapshot(Optional<String> providerIdentity, OptionalInt exactCandidateCount,
-                                    boolean demandChunkLoaded, Set<UUID> demandObserverIds) {
-        PilotSceneDemandSnapshot {
-            providerIdentity = Objects.requireNonNull(providerIdentity, "provider identity");
-            exactCandidateCount = Objects.requireNonNull(exactCandidateCount, "exact candidate count");
-            demandObserverIds = Set.copyOf(Objects.requireNonNull(demandObserverIds, "demand observer ids"));
-        }
     }
 
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */

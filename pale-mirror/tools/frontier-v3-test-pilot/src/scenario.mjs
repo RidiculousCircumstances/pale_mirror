@@ -284,8 +284,8 @@ export function validateScenario(scenario) {
 
 function validDemandHandshake(value) {
   return value === undefined || value !== null && typeof value === 'object' && !Array.isArray(value)
-    && Object.keys(value).length === 2 && typeof value.request === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value.request)
-    && typeof value.assault === 'string' && /^assault:[a-z0-9][a-z0-9_-]{0,95}$/.test(value.assault);
+    && Object.keys(value).length === 3 && typeof value.request === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value.request)
+    && typeof value.assault === 'string' && /^assault:[a-z0-9][a-z0-9_-]{0,95}$/.test(value.assault) && validPosition(value.handoff);
 }
 
 /**

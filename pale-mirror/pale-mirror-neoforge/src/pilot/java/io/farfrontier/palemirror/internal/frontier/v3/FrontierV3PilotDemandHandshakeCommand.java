@@ -6,7 +6,6 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3PilotChunkMapAccessor;
 import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3PilotDistanceManagerAccessor;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -59,17 +58,19 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         String request = StringArgumentType.getString(context, "request");
         String assault = StringArgumentType.getString(context, "assault");
         String dimension = StringArgumentType.getString(context, "dimension");
-        BlockPos anchor = new BlockPos(IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "y"),
+        BlockPos travelAnchor = new BlockPos(IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "y"),
                 IntegerArgumentType.getInteger(context, "z"));
         if (!request.matches("[a-z][a-z0-9_-]{0,63}") || !assault.matches("assault:[a-z0-9][a-z0-9_-]{0,95}")) return 0;
         ResourceLocation dimensionId = ResourceLocation.tryParse(dimension);
         ServerPlayer player = context.getSource().getEntity() instanceof ServerPlayer value ? value : null;
         ServerLevel destination = dimensionId == null ? null : context.getSource().getServer().getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
-        TicketState ticket = destination == null ? TicketState.absent() : ticketState(destination, anchor);
-        FrontierV3ServerLifecycle.PilotSceneDemandSnapshot snapshot = destination == null ? null
-                : FrontierV3ServerLifecycle.pilotSceneDemandSnapshot(destination, new BlockPosition(anchor.getX(), anchor.getY(), anchor.getZ()), new SubjectId(assault));
-        boolean destinationObserved = player != null && destination != null && player.serverLevel() == destination && player.blockPosition().equals(anchor);
-        Receipt receipt = Receipt.from(request, assault, dimension, anchor, player, destinationObserved, ticket, snapshot);
+        FrontierV3PilotSceneDemandSnapshot snapshot = destination == null ? null
+                : FrontierV3ServerLifecycle.pilotSceneDemandSnapshot(destination, new SubjectId(assault));
+        BlockPos handoff = snapshot == null ? null : snapshot.handoffPosition().map(position -> new BlockPos(position.x(), position.y(), position.z())).orElse(null);
+        TicketState ticket = destination == null || handoff == null ? TicketState.absent() : ticketState(destination, handoff);
+        boolean destinationObserved = player != null && destination != null && player.serverLevel() == destination;
+        Receipt receipt = Receipt.from(request, assault, dimension, travelAnchor, player == null ? Optional.empty() : Optional.of(player.getUUID()),
+                player == null ? Optional.empty() : Optional.of(player.blockPosition()), destinationObserved, ticket, snapshot);
         context.getSource().sendSuccess(() -> Component.literal("PMV3_DIAG " + receipt.json()), false);
         return receipt.reason() == Reason.ADMITTED ? 1 : 0;
     }
@@ -92,45 +93,56 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         static TicketState absent() { return new TicketState(false, false, -1, false); }
     }
 
-    record Receipt(String request, String assault, String destinationDimension, BlockPos anchor, String playerId,
-                   boolean destinationObserved, TicketState ticket, Optional<String> providerIdentity,
-                   Optional<Integer> exactCandidateCount, boolean demandChunkLoaded, java.util.Set<UUID> demandObserverIds,
-                   boolean requestedObserverPresent, Reason reason) {
-        static Receipt from(String request, String assault, String dimension, BlockPos anchor, ServerPlayer player,
-                            boolean destinationObserved, TicketState ticket, FrontierV3ServerLifecycle.PilotSceneDemandSnapshot snapshot) {
-            String playerId = player == null ? "" : player.getUUID().toString();
+    record Receipt(String request, String assault, String destinationDimension, BlockPos travelAnchor, String playerId,
+                   Optional<BlockPos> serverPlayerPosition, boolean destinationObserved, TicketState ticket, Optional<String> providerIdentity,
+                   Optional<Integer> exactCandidateCount, Optional<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> candidateHandoff,
+                   boolean demandChunkLoaded, java.util.Set<UUID> demandObserverIds, boolean requestedObserverPresent, Reason reason) {
+        static Receipt from(String request, String assault, String dimension, BlockPos travelAnchor, Optional<UUID> player,
+                            Optional<BlockPos> serverPlayerPosition, boolean destinationObserved, TicketState ticket,
+                            FrontierV3PilotSceneDemandSnapshot snapshot) {
+            String playerId = player.map(UUID::toString).orElse("");
             Optional<String> provider = snapshot == null ? Optional.empty() : snapshot.providerIdentity();
             Optional<Integer> candidates = snapshot == null || snapshot.exactCandidateCount().isEmpty() ? Optional.empty()
                     : Optional.of(snapshot.exactCandidateCount().getAsInt());
+            Optional<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> handoff = snapshot == null ? Optional.empty() : snapshot.handoffPosition();
             boolean chunkLoaded = snapshot != null && snapshot.demandChunkLoaded();
             java.util.Set<UUID> observers = snapshot == null ? java.util.Set.of() : snapshot.demandObserverIds();
-            boolean requestedObserver = player != null && observers.contains(player.getUUID());
-            Reason reason = FrontierV3PilotDemandHandshakeCommand.reason(destinationObserved, ticket, provider, candidates,
+            boolean requestedObserver = player.isPresent() && observers.contains(player.orElseThrow());
+            Reason reason = FrontierV3PilotDemandHandshakeCommand.reason(destinationObserved, ticket, provider, candidates, handoff,
                     chunkLoaded, requestedObserver);
-            return new Receipt(request, assault, dimension, anchor, playerId, destinationObserved, ticket, provider, candidates,
-                    chunkLoaded, java.util.Set.copyOf(observers), requestedObserver, reason);
+            return new Receipt(request, assault, dimension, travelAnchor, playerId, serverPlayerPosition, destinationObserved, ticket, provider,
+                    candidates, handoff, chunkLoaded, java.util.Set.copyOf(observers), requestedObserver, reason);
         }
 
         String json() {
             JsonObject value = new JsonObject(); value.addProperty("schema", 1); value.addProperty("kind", "demand_handshake");
             value.addProperty("id", request); value.addProperty("assault", assault); value.addProperty("destinationDimension", destinationDimension);
-            JsonObject point = new JsonObject(); point.addProperty("x", anchor.getX()); point.addProperty("y", anchor.getY()); point.addProperty("z", anchor.getZ());
-            value.add("anchor", point); value.addProperty("playerId", playerId); value.addProperty("destinationObserved", destinationObserved);
+            value.add("travelAnchor", point(travelAnchor)); value.addProperty("playerId", playerId);
+            if (serverPlayerPosition.isPresent()) value.add("serverPlayerPosition", point(serverPlayerPosition.orElseThrow())); else value.add("serverPlayerPosition", com.google.gson.JsonNull.INSTANCE);
+            value.addProperty("destinationObserved", destinationObserved);
             value.addProperty("destinationPlayerTicket", ticket.playerTicket()); value.addProperty("destinationHolder", ticket.holderPresent());
             value.addProperty("holderGenerationRefCount", ticket.generationRefCount()); value.addProperty("holderReadyForSaving", ticket.readyForSaving());
             if (providerIdentity.isPresent()) value.addProperty("providerIdentity", providerIdentity.orElseThrow()); else value.add("providerIdentity", com.google.gson.JsonNull.INSTANCE);
             if (exactCandidateCount.isPresent()) value.addProperty("exactCandidateCount", exactCandidateCount.orElseThrow()); else value.add("exactCandidateCount", com.google.gson.JsonNull.INSTANCE);
+            if (candidateHandoff.isPresent()) value.add("candidateHandoff", point(candidateHandoff.orElseThrow())); else value.add("candidateHandoff", com.google.gson.JsonNull.INSTANCE);
             value.addProperty("sceneDemandChunkLoaded", demandChunkLoaded); JsonArray observers = new JsonArray(); demandObserverIds.stream().map(UUID::toString).sorted().forEach(observers::add);
             value.add("sceneDemandObserverIds", observers); value.addProperty("requestedObserverPresent", requestedObserverPresent); value.addProperty("reason", reason.name());
             return value.toString();
         }
+
+        private static JsonObject point(BlockPos position) { return point(position.getX(), position.getY(), position.getZ()); }
+        private static JsonObject point(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return point(position.x(), position.y(), position.z()); }
+        private static JsonObject point(int x, int y, int z) {
+            JsonObject point = new JsonObject(); point.addProperty("x", x); point.addProperty("y", y); point.addProperty("z", z); return point;
+        }
     }
 
     static Reason reason(boolean destinationObserved, TicketState ticket, Optional<String> provider, Optional<Integer> candidates,
+                         Optional<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> handoff,
                          boolean demandChunkLoaded, boolean requestedObserverPresent) {
         if (!destinationObserved) return Reason.NO_DEMAND;
         if (provider.isEmpty()) return Reason.NO_PROVIDER;
-        if (candidates.orElse(0) == 0) return Reason.NO_CANDIDATE;
+        if (candidates.orElse(0) != 1 || handoff.isEmpty()) return Reason.NO_CANDIDATE;
         return !ticket.playerTicket() || !ticket.holderPresent() || !demandChunkLoaded || !requestedObserverPresent
                 ? Reason.NO_DEMAND : Reason.ADMITTED;
     }

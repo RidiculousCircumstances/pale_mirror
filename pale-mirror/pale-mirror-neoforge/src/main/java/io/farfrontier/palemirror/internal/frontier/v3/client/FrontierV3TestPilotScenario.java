@@ -205,10 +205,11 @@ final class FrontierV3TestPilotScenario {
 
     /** A demand-bound visit has no elapsed settle phase: its ordinary command response is the only completion authority. */
     private static boolean validDemandHandshake(JsonObject value) {
-        return value != null && value.entrySet().size() == 2 && value.has("request") && value.has("assault")
-                && value.get("request").isJsonPrimitive() && value.get("assault").isJsonPrimitive()
+        return value != null && value.entrySet().size() == 3 && value.has("request") && value.has("assault") && value.has("handoff")
+                && value.get("request").isJsonPrimitive() && value.get("assault").isJsonPrimitive() && value.get("handoff").isJsonObject()
                 && value.get("request").getAsString().matches("[a-z][a-z0-9_-]{0,63}")
-                && value.get("assault").getAsString().matches("assault:[a-z0-9][a-z0-9_-]{0,95}");
+                && value.get("assault").getAsString().matches("assault:[a-z0-9][a-z0-9_-]{0,95}") && whole(value.getAsJsonObject("handoff"), "x")
+                && whole(value.getAsJsonObject("handoff"), "y") && whole(value.getAsJsonObject("handoff"), "z");
     }
 
     /** A semantic camera may read one current operation projection, then perform only ordinary player travel. */

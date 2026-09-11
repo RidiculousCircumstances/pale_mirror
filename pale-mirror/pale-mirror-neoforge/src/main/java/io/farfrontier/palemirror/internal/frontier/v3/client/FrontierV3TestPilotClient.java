@@ -303,8 +303,7 @@ public final class FrontierV3TestPilotClient {
     }
     /** Places one declared ordinary block through the normal client use-item-on-block packet. */
     private static void placeBlock(Minecraft minecraft, JsonObject action) {
-        BlockPos target = resolvedPosition(minecraft, action, "position");
-        if (target == null) return;
+        BlockPos target = resolvedPosition(minecraft, action, "position"); if (target == null) return;
         ResourceLocation itemId = ResourceLocation.parse(action.get("item").getAsString());
         var item = BuiltInRegistries.ITEM.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("unknown placement item " + itemId));
         var expected = BuiltInRegistries.BLOCK.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("placement item is not a block " + itemId));
@@ -399,15 +398,13 @@ public final class FrontierV3TestPilotClient {
     }
     /** Uses only a fresh read-only operation snapshot to choose a player-side observation point. */
     private static void visitOperation(Minecraft minecraft, JsonObject action) {
-        BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent");
-        if (anchor == null) return;
+        BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent"); if (anchor == null) return;
         JsonObject offset = action.getAsJsonObject("offset");
         visit(minecraft, anchor.offset(offset.get("x").getAsInt(), offset.get("y").getAsInt(), offset.get("z").getAsInt()),
                 action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), action.get("timeoutMs").getAsLong(), "visit_operation", action);
     }
     private static void visit(Minecraft minecraft, BlockPos target, String dimension, long settleMs, long timeoutMs, String actionType, JsonObject action) {
-        long tick = minecraft.level.getGameTime();
-        if (!visitSent) {
+        long tick = minecraft.level.getGameTime(); if (!visitSent) {
             String username = minecraft.player.getGameProfile().getName();
             minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
             visitSent = true;
@@ -417,12 +414,15 @@ public final class FrontierV3TestPilotClient {
         if (ready) {
             JsonObject handshake = action.getAsJsonObject("demandHandshake"); if (handshake != null) {
                 String request = handshake.get("request").getAsString(), assault = handshake.get("assault").getAsString();
+                JsonObject handoff = handshake.getAsJsonObject("handoff");
+                BlockPos expectedHandoff = new BlockPos(handoff.get("x").getAsInt(), handoff.get("y").getAsInt(), handoff.get("z").getAsInt());
                 ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("demand_handshake", request)); if (!visitHandshakeSent) {
                     visitHandshakeBaseline = observed; minecraft.player.connection.sendCommand("pale_mirror_pilot_demand_handshake " + request + " " + assault + " " + dimension
                             + " " + target.getX() + " " + target.getY() + " " + target.getZ()); visitHandshakeSent = true; return;
                 }
                 if (observed != null && observed != visitHandshakeBaseline) {
-                    if (FrontierV3PilotDemandHandshake.admitted(observed.value(), request, assault, dimension, target)) { advance(actionType); return; }
+                    if (FrontierV3PilotDemandHandshake.mayAdvance(ready, true, observed.value(), request, assault, dimension, expectedHandoff,
+                            minecraft.player.getUUID().toString())) { advance(actionType); return; }
                     throw new IllegalStateException("server-thread demand handshake failed: " + observed.value());
                 }
             } else { if (visitChunkReadyTick < 0L) visitChunkReadyTick = tick;

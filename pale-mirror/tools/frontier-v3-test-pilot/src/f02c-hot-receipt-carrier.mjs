@@ -4,6 +4,7 @@ import { validateLifecycleBarrierRecords } from './lifecycle-barrier.mjs';
 
 const SCENE = 'assault:development-settlement-assault';
 const HANDSHAKE = 'settlement-assault-visit';
+const HANDOFF = Object.freeze({ x: -360, y: 64, z: -352 });
 const SLOTS = Object.freeze([[2, 'preRestart', 'HOT'], [3, 'recovered', 'HOT'], [5, 'released', 'CLOSED']]);
 
 /** The completed persistent-run manifest, rather than declaration literals, is the HOT receipt authority. */
@@ -37,7 +38,7 @@ export function assertF02cHotReceiptDeclaration(value) {
   const ingress = value.actions[0];
   if (ingress?.type !== 'visit' || ingress.dimension !== 'pale_mirror:frontier_graybox' || ingress.settleMs !== 0
       || !isDeepStrictEqual(ingress.position, { x: -360, y: 65, z: -352 })
-      || !isDeepStrictEqual(ingress.demandHandshake, { request: HANDSHAKE, assault: SCENE })) {
+      || !isDeepStrictEqual(ingress.demandHandshake, { request: HANDSHAKE, assault: SCENE, handoff: HANDOFF })) {
     throw new Error('F0.2C HOT carrier lacks its server-thread demand handshake ingress');
   }
   const selected = {};
@@ -120,11 +121,12 @@ function assertDemandHandshake(manifest, ingress) {
   const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
     && entry.observed?.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one server-thread demand handshake receipt');
-  const value = records[0].observed.value; const anchor = value.anchor;
+  const value = records[0].observed.value;
   if (value.assault !== ingress.demandHandshake.assault || value.destinationDimension !== ingress.dimension
-      || !isDeepStrictEqual(anchor, ingress.position) || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
+      || !isDeepStrictEqual(value.travelAnchor, ingress.position) || !isDeepStrictEqual(value.candidateHandoff, ingress.demandHandshake.handoff)
+      || !value.serverPlayerPosition || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
       || value.destinationObserved !== true || value.destinationPlayerTicket !== true || value.destinationHolder !== true
-      || typeof value.providerIdentity !== 'string' || value.providerIdentity.length === 0 || !Number.isInteger(value.exactCandidateCount) || value.exactCandidateCount < 1
+      || typeof value.providerIdentity !== 'string' || value.providerIdentity.length === 0 || value.exactCandidateCount !== 1
       || value.sceneDemandChunkLoaded !== true || value.requestedObserverPresent !== true
       || !Array.isArray(value.sceneDemandObserverIds) || !value.sceneDemandObserverIds.includes(value.playerId)) {
     throw new Error('F0.2C HOT carrier has an incomplete or non-admitted demand handshake receipt');

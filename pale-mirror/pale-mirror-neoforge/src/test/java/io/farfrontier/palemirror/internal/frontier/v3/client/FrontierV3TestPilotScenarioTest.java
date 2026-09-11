@@ -205,15 +205,15 @@ class FrontierV3TestPilotScenarioTest {
         assertEquals(1, FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
                 "position":{"x":-360,"y":65,"z":-352},"settleMs":0,
-                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault"}}]}""").actionCount());
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault","handoff":{"x":-360,"y":64,"z":-352}}}]}""").actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
                 "position":{"x":-360,"y":65,"z":-352},"settleMs":1,
-                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault"}}]}"""));
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault","handoff":{"x":-360,"y":64,"z":-352}}}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
                 "position":{"x":-360,"y":65,"z":-352},"settleMs":0,
-                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:foreign","extra":true}}]}"""));
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:foreign","handoff":{"x":-360,"y":64,"z":-352},"extra":true}}]}"""));
     }
 
     @Test

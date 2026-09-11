@@ -33,7 +33,8 @@ function envelope() {
     clientSegments: [{ segment: 'persistent_restart', manifest: 'settlement-assault.manifest.json', runId: clientRunId, timing: {}, reusedJvm: true }],
     diagnostics: [{ observed: { actionStep: 1, value: { kind: 'demand_handshake', id: current.actions[0].demandHandshake.request,
       assault: current.actions[0].demandHandshake.assault, destinationDimension: current.actions[0].dimension,
-      anchor: structuredClone(current.actions[0].position), playerId: '00000000-0000-0000-0000-000000000035', destinationObserved: true,
+      travelAnchor: structuredClone(current.actions[0].position), candidateHandoff: structuredClone(current.actions[0].demandHandshake.handoff),
+      playerId: '00000000-0000-0000-0000-000000000035', serverPlayerPosition: { x: -360, y: 65, z: -352 }, destinationObserved: true,
       destinationPlayerTicket: true, destinationHolder: true, providerIdentity: 'projection-snapshot', exactCandidateCount: 1,
       sceneDemandChunkLoaded: true, sceneDemandObserverIds: ['00000000-0000-0000-0000-000000000035'], requestedObserverPresent: true, reason: 'ADMITTED' } } }]
       .concat(semantic.map(record), [{ actionStep: 2, value: structuredClone(semantic[0].expect) }]) };
@@ -45,7 +46,7 @@ test('HOT declaration begins before manufacture and names three exact persistent
   const slots = assertF02cHotReceiptDeclaration(declaration);
   assert.deepEqual(Object.keys(slots), ['preRestart', 'recovered', 'released']);
   assert.deepEqual([slots.preRestart.after, slots.recovered.after, slots.released.after], [2, 3, 5]);
-  assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault' });
+  assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault', handoff: { x: -360, y: 64, z: -352 } });
   assert.equal(declaration.actions[0].settleMs, 0);
 });
 
@@ -86,7 +87,14 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.lifecycle[11].detail.segment = 'before_restart'; },
     value => { value.manifest.lifecycle.splice(12, 0, structuredClone(value.manifest.lifecycle[11])); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); },
     value => { value.manifest.diagnostics[0].observed.value.reason = 'NO_DEMAND'; },
+    value => { value.manifest.diagnostics[0].observed.value.id = 'other-request'; },
+    value => { value.manifest.diagnostics[0].observed.value.destinationDimension = 'minecraft:overworld'; },
     value => { value.manifest.diagnostics[0].observed.value.destinationPlayerTicket = false; },
+    value => { value.manifest.diagnostics[0].observed.value.exactCandidateCount = 2; },
+    value => { value.manifest.diagnostics[0].observed.value.candidateHandoff.y = 65; },
+    value => { value.manifest.diagnostics[0].observed.value.playerId = '00000000-0000-0000-0000-000000000036'; },
+    value => { value.manifest.diagnostics[0].observed.value.sceneDemandObserverIds = []; },
+    value => { value.manifest.diagnostics[0].observed.value.serverPlayerPosition = null; },
     value => { value.manifest.diagnostics.splice(1, 0, structuredClone(value.manifest.diagnostics[0])); }
   ]) {
     const value = envelope(); mutate(value); value.manifestSource = Buffer.from(`${JSON.stringify(value.manifest)}\n`);
