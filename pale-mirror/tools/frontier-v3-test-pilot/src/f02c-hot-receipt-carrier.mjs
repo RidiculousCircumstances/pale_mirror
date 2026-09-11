@@ -19,7 +19,10 @@ export function assertF02cHotReceiptCarrier({ declaration, manifest }) {
   if (!sameReceipt(preRestart, recovered) || !sameReceipt(preRestart, released)
       || preRestart.strikeEpoch !== 0 || preRestart.nextStrikeEpoch !== 1
       || recovered.strikeEpoch !== 0 || recovered.nextStrikeEpoch !== 1
-      || released.strikeEpoch !== 0 || released.nextStrikeEpoch !== 1
+      // COLD is an ordinary deterministic scheduler, so it may advance before the first
+      // once-per-second diagnostic poll after a CLOSED hand-off.  The retained HOT receipt
+      // stays epoch zero; COLD must have advanced from it without replaying that receipt.
+      || released.strikeEpoch !== 0 || !Number.isSafeInteger(released.nextStrikeEpoch) || released.nextStrikeEpoch < 1
       || released.assaultStatus !== 'COLD_COMBAT' || released.coldContinuationAvailable !== true) {
     throw new Error('F0.2C HOT carrier replayed, replaced, or misassociated its released receipt');
   }
@@ -207,7 +210,8 @@ function sceneExpectation(value, leaseStatus) {
     && value.strikeStatus === 'CONFIRMED' && value.strikeReceiptExact === true && value.strikeHealthChanged === true
     && typeof value.strikeCause === 'string' && typeof value.strikeAttacker === 'string' && typeof value.strikeTarget === 'string'
     && typeof value.strikeIntent === 'string' && typeof value.strikeReceipt === 'string'
-    && Number.isSafeInteger(value.strikeEpoch) && Number.isSafeInteger(value.nextStrikeEpoch);
+    && Number.isSafeInteger(value.strikeEpoch)
+    && (leaseStatus === 'CLOSED' || value.nextStrikeEpoch === 1);
 }
 
 function assertStrike(value, leaseStatus, phase) {

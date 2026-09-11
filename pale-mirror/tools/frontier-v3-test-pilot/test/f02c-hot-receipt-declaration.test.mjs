@@ -28,7 +28,8 @@ function envelope() {
   const lifecycle = barriers.map(([barrier, detail], index) => ({ schema: 1, sequence: index + 1, barrier, identity: structuredClone(identity), detail }));
   const semantic = current.assertions.filter(entry => [2, 3, 5].includes(entry.after));
   const record = (entry) => ({ assertion: structuredClone(entry), observed: { actionStep: entry.after,
-    value: { kind: 'scene', id: 'assault:development-settlement-assault', ...structuredClone(entry.expect) } } });
+    value: { kind: 'scene', id: 'assault:development-settlement-assault', ...structuredClone(entry.expect),
+      ...(entry.after === 5 ? { nextStrikeEpoch: 2 } : {}) } } });
   const manifest = { schema: 2, status: 'ok', scenarioId: current.id, scenarioSha256: declarationSha256, scenarioDeclarationSha256: declarationSha256,
     runId: clientRunId, build: structuredClone(build), recovery: { mode: 'graceful', splitAfterAction: 2, clientSession: { runId: outerAttempt, reusedJvm: true } },
     actions: current.actions.map((action, index) => ({ correlation: `scenario:${clientRunId}:${index + 1}`, action: structuredClone(action) })), lifecycle,
@@ -75,6 +76,16 @@ test('HOT consumer reads exactly one declaration-bound pre-restart, recovery, an
   assert.equal(receipt.scene, 'assault:development-settlement-assault'); assert.equal(receipt.lifecycle.released, 5);
 });
 
+test('HOT release accepts ordinary post-handoff COLD progression without misclassifying it as a replay', () => {
+  const value = envelope();
+  assert.equal(value.manifest.diagnostics[3].observed.value.nextStrikeEpoch, 2);
+  assert.equal(assertF02cHotReceiptCarrier({ declaration: value.declaration, manifest: value.manifest }).scene,
+    'assault:development-settlement-assault');
+  value.declaration.actions[4].expect.nextStrikeEpoch = 1;
+  value.declaration.assertions.find(entry => entry.after === 5).expect.nextStrikeEpoch = 1;
+  assert.throws(() => assertF02cHotReceiptCarrier({ declaration: value.declaration, manifest: value.manifest }), /HOT carrier/);
+});
+
 test('HOT client ingress retains final position diagnostically without requiring an exact travel coordinate', () => {
   const value = envelope(); value.manifest.diagnostics[4].observed.value.finalClientPosition = { x: -359, y: 64, z: -351 };
   assert.equal(assertF02cHotReceiptCarrier({ declaration: value.declaration, manifest: value.manifest }).scene, 'assault:development-settlement-assault');
@@ -94,6 +105,7 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.diagnostics[1].observed.value.id = 'assault:foreign'; },
     value => { value.manifest.diagnostics[2].observed.actionStep = 2; },
     value => { value.manifest.diagnostics[3].observed.value.strikeIntent = value.manifest.diagnostics[1].observed.value.strikeIntent.replace(/.$/, 'f'); },
+    value => { value.manifest.diagnostics[3].observed.value.nextStrikeEpoch = 0; },
     value => { value.manifest.lifecycle[5].identity.runId = clientRunId; },
     value => { value.manifest.diagnostics.splice(2, 0, structuredClone(value.manifest.diagnostics[2])); },
     value => { value.manifest.actions[3].correlation = `scenario:${clientRunId}:3`; },
