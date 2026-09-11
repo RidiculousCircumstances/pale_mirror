@@ -30,6 +30,8 @@ class FrontierV3PilotDemandHandshakeCommandTest {
     /** Northwatch settlement anchor; it is deliberately not the player travel coordinate. */
     private static final BlockPosition HANDOFF = new BlockPosition(-360, 64, -340);
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000035");
+    private static final FrontierV3PilotDemandHandshakeCommand.Correlation CORRELATION = new FrontierV3PilotDemandHandshakeCommand.Correlation(
+            "00000000-0000-0000-0000-000000000031", 1, "00000000-0000-0000-0000-000000000032");
 
     @Test
     void admitsOnlyAnObservedDestinationWithItsExistingProviderCandidateAndDemandFacts() {
@@ -66,8 +68,7 @@ class FrontierV3PilotDemandHandshakeCommandTest {
         assertEquals(HANDOFF, observedAt.get());
         assertEquals(Optional.of(HANDOFF), snapshot.handoffPosition());
         assertEquals(1, snapshot.exactCandidateCount().orElseThrow());
-        FrontierV3PilotDemandHandshakeCommand.Receipt receipt = FrontierV3PilotDemandHandshakeCommand.Receipt.from("request", ASSAULT.value(),
-                "pale_mirror:frontier_graybox", new BlockPos(-360, 65, -352), Optional.of(PLAYER), Optional.of(new BlockPos(-360, 65, -352)),
+        FrontierV3PilotDemandHandshakeCommand.Receipt receipt = FrontierV3PilotDemandHandshakeCommand.Receipt.from(armed(), Optional.of(PLAYER), Optional.of(new BlockPos(-360, 65, -352)),
                 true, READY_TICKET, snapshot);
         assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.ADMITTED, receipt.reason());
         assertTrue(receipt.json().contains("\"candidateHandoff\":{\"x\":-360,\"y\":64,\"z\":-340}"));
@@ -91,43 +92,51 @@ class FrontierV3PilotDemandHandshakeCommandTest {
     }
 
     @Test
-    void prearmedReceiptIsFulfilledOnceAtTheMatchingPostTransferBoundaryBeforeALateConsumerCanEraseItsCandidate() {
+    void armTransferPostDistanceAndCleanupUseOneReceiptCustodyComposition() {
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
         ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
         ResourceKey<Level> wrongDestination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("minecraft:overworld"));
-        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipt(
-                "settlement-assault-visit", ASSAULT.value(), destination.location().toString(), destination, new BlockPos(-360, 65, -352));
-
-        receipts.arm(PLAYER, armed);
-        assertTrue(receipts.fulfillAfterOrdinaryTransfer(PLAYER, wrongDestination).isEmpty());
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
+        FrontierV3PilotDemandHandshakeCommand.Candidate candidate = new FrontierV3PilotDemandHandshakeCommand.Candidate("projection-snapshot", HANDOFF);
+        assertTrue(receipts.arm(PLAYER, armed));
+        assertFalse(receipts.arm(PLAYER, armed));
+        assertFalse(receipts.observeTransfer(PLAYER, wrongDestination));
+        assertTrue(receipts.observeAfterDistance(PLAYER, ignored -> Optional.empty()).isEmpty());
+        assertTrue(receipts.observeTransfer(PLAYER, destination));
+        assertFalse(receipts.observeTransfer(PLAYER, destination));
         assertTrue(receipts.pending(PLAYER));
-        assertEquals(Optional.of(armed), receipts.fulfillAfterOrdinaryTransfer(PLAYER, destination));
+        FrontierV3PilotDemandHandshakeCommand.Receipt notReady = receipt(armed, FrontierV3PilotDemandHandshakeCommand.TicketState.absent());
+        assertTrue(receipts.observeAfterDistance(PLAYER, pending -> Optional.of(new FrontierV3PilotDemandHandshakeCommand.PostDistanceObservation(notReady, Optional.of(candidate)))).isEmpty());
+        assertTrue(receipts.pending(PLAYER));
+        FrontierV3PilotDemandHandshakeCommand.Receipt admitted = receipt(armed, READY_TICKET);
+        assertEquals(Optional.of(admitted), receipts.observeAfterDistance(PLAYER, pending -> {
+            assertEquals(Optional.of(candidate), pending.candidate());
+            return Optional.of(new FrontierV3PilotDemandHandshakeCommand.PostDistanceObservation(admitted, Optional.of(candidate)));
+        }));
         assertFalse(receipts.pending(PLAYER));
-        // A later scene turn may consume the cold candidate, but cannot replace this exact receipt.
-        assertTrue(receipts.fulfillAfterOrdinaryTransfer(PLAYER, destination).isEmpty());
-
-        FrontierV3PilotSceneDemandSnapshot early = FrontierV3PilotSceneDemandSnapshot.fromProviderCandidates(Optional.of("projection-snapshot"),
-                List.of(candidate(ASSAULT, HANDOFF)), ASSAULT, handoff -> new FrontierV3SceneDemand.Snapshot(true, Set.of(PLAYER)));
-        FrontierV3PilotDemandHandshakeCommand.Receipt earlyReceipt = FrontierV3PilotDemandHandshakeCommand.Receipt.from(armed.request(), armed.assault(), armed.dimension(),
-                armed.travelAnchor(), Optional.of(PLAYER), Optional.of(armed.travelAnchor()), true, READY_TICKET, early);
-        assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.ADMITTED, earlyReceipt.reason());
-
-        FrontierV3PilotSceneDemandSnapshot late = FrontierV3PilotSceneDemandSnapshot.fromProviderCandidates(Optional.of("projection-snapshot"), List.of(), ASSAULT,
-                handoff -> new FrontierV3SceneDemand.Snapshot(false, Set.of()));
-        assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.NO_CANDIDATE,
-                FrontierV3PilotDemandHandshakeCommand.reason(true, READY_TICKET, late.providerIdentity(), Optional.of(late.exactCandidateCount().orElse(0)), late.handoffPosition(), false, false));
     }
 
     @Test
     void armedReceiptIsRemovedOnTheSamePilotCleanupBoundariesAsTheTransferOwner() {
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
         ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
-        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipt(
-                "settlement-assault-visit", ASSAULT.value(), destination.location().toString(), destination, BlockPos.ZERO);
-        receipts.arm(PLAYER, armed); receipts.forget(PLAYER);
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
+        assertTrue(receipts.arm(PLAYER, armed)); assertTrue(receipts.observeTransfer(PLAYER, destination)); receipts.forget(PLAYER);
         assertFalse(receipts.pending(PLAYER));
-        receipts.arm(PLAYER, armed); receipts.clear();
+        assertTrue(receipts.observeAfterDistance(PLAYER, ignored -> Optional.empty()).isEmpty());
+        assertTrue(receipts.arm(PLAYER, armed)); receipts.clear();
         assertFalse(receipts.pending(PLAYER));
+    }
+
+    private static FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed() {
+        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
+        return new FrontierV3PilotDemandHandshakeCommand.ArmedReceipt(CORRELATION, "settlement-assault-visit", ASSAULT.value(), destination.location().toString(), destination, new BlockPos(-360, 65, -352));
+    }
+
+    private static FrontierV3PilotDemandHandshakeCommand.Receipt receipt(FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed,
+                                                                            FrontierV3PilotDemandHandshakeCommand.TicketState ticket) {
+        FrontierV3PilotSceneDemandSnapshot snapshot = new FrontierV3PilotSceneDemandSnapshot(Optional.of("projection-snapshot"), java.util.OptionalInt.of(1), Optional.of(HANDOFF), true, Set.of(PLAYER));
+        return FrontierV3PilotDemandHandshakeCommand.Receipt.from(armed, Optional.of(PLAYER), Optional.of(armed.travelAnchor()), true, ticket, snapshot);
     }
 
     private static SettlementAssaultSceneCandidate candidate(SubjectId assault, BlockPosition handoff) {

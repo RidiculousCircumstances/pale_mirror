@@ -406,14 +406,12 @@ public final class FrontierV3TestPilotClient {
     }
     private static void visit(Minecraft minecraft, BlockPos target, String dimension, long settleMs, long timeoutMs, String actionType, JsonObject action) {
         long tick = minecraft.level.getGameTime(); if (visitIngress == null) visitIngress = new FrontierV3PilotVisitIngress(dimension);
-        JsonObject handshake = action.getAsJsonObject("demandHandshake");
-        if (handshake != null && !visitHandshakeArmed) { String request = handshake.get("request").getAsString(), assault = handshake.get("assault").getAsString();
-            visitHandshakeBaseline = diagnostics.get(new DiagnosticIdentity("demand_handshake", request));
-            if (visitIngress.requestServerReceipt()) minecraft.player.connection.sendCommand("pale_mirror_pilot_demand_handshake arm " + request + " " + assault + " " + dimension
-                    + " " + target.getX() + " " + target.getY() + " " + target.getZ());
-            visitHandshakeArmed = true; return; }
-        if (!visitSent) { String username = minecraft.player.getGameProfile().getName();
-            minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
+        JsonObject handshake = action.getAsJsonObject("demandHandshake"); if (handshake != null && !visitHandshakeArmed) { String request = handshake.get("request").getAsString(), assault = handshake.get("assault").getAsString();
+            visitHandshakeBaseline = diagnostics.get(new DiagnosticIdentity("demand_handshake", request)); FrontierV3PilotVisitIngress.Correlation correlation = visitCorrelation();
+            if (visitIngress.requestServerReceipt(correlation)) minecraft.player.connection.sendCommand("pale_mirror_pilot_demand_handshake arm " + request + " " + assault + " " + dimension
+                    + " " + correlation.runId() + " " + correlation.actionStep() + " " + correlation.actionAttempt() + " " + target.getX() + " " + target.getY() + " " + target.getZ());
+            visitHandshakeArmed = true; visitSent = true; return; }
+        if (!visitSent) { String username = minecraft.player.getGameProfile().getName(); minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
             visitSent = true; return; }
         String clientDimension = minecraft.level.dimension().location().toString(); boolean ready = clientDimension.equals(dimension) && minecraft.level.hasChunkAt(target);
         visitIngress.observe(clientDimension, ready, minecraft.player.blockPosition());
@@ -433,6 +431,7 @@ public final class FrontierV3TestPilotClient {
     }
     private static void emitVisitIngress(String request) { JsonObject value = visitIngress.receipt(request);
         FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1, currentCausalMilestone); PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value); }
+    private static FrontierV3PilotVisitIngress.Correlation visitCorrelation() { try { return new FrontierV3PilotVisitIngress.Correlation(FrontierV3PilotSessionControl.runId(), index + 1, java.util.UUID.randomUUID().toString()); } catch (IOException failure) { throw new IllegalStateException("pilot visit correlation is unavailable", failure); } }
     private static void lookOperation(Minecraft minecraft, JsonObject action) {
         BlockPos anchor = operationAnchor(minecraft, action, action.has("anchor") ? action.get("anchor").getAsString() : "travelCargo");
         if (anchor == null) return;

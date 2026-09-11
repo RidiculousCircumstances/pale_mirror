@@ -11,14 +11,16 @@ final class FrontierV3PilotDemandHandshake {
     static boolean mayAdvance(FrontierV3PilotVisitIngress ingress, boolean freshReceipt, JsonObject value, String request, String assault,
                               String dimension, BlockPos expectedHandoff, String expectedPlayerId) {
         return ingress.serverReceiptRequested() && ingress.targetDimensionSeen() && ingress.targetChunkSeen() && freshReceipt
-                && admitted(value, request, assault, dimension, expectedHandoff, expectedPlayerId);
+                && admitted(value, request, assault, dimension, expectedHandoff, expectedPlayerId, ingress.correlation());
     }
 
-    static boolean admitted(JsonObject value, String request, String assault, String dimension, BlockPos expectedHandoff, String expectedPlayerId) {
+    static boolean admitted(JsonObject value, String request, String assault, String dimension, BlockPos expectedHandoff, String expectedPlayerId,
+                            FrontierV3PilotVisitIngress.Correlation correlation) {
         if (!"demand_handshake".equals(string(value, "kind")) || !request.equals(string(value, "id")) || !assault.equals(string(value, "assault"))
                 || !dimension.equals(string(value, "destinationDimension")) || !"ADMITTED".equals(string(value, "reason"))
                 || !value.has("candidateHandoff") || !value.get("candidateHandoff").isJsonObject()) return false;
-        return point(value.getAsJsonObject("candidateHandoff"), expectedHandoff) && expectedPlayerId.equals(string(value, "playerId"))
+        return correlation.runId().equals(string(value, "pilotRunId")) && correlation.actionStep() == integer(value, "pilotActionStep")
+                && correlation.actionAttempt().equals(string(value, "pilotActionAttempt")) && point(value.getAsJsonObject("candidateHandoff"), expectedHandoff) && expectedPlayerId.equals(string(value, "playerId"))
                 && value.has("serverPlayerPosition") && value.get("serverPlayerPosition").isJsonObject()
                 && value.has("destinationObserved") && value.get("destinationObserved").getAsBoolean()
                 && value.has("providerIdentity") && !value.get("providerIdentity").isJsonNull()
@@ -38,5 +40,8 @@ final class FrontierV3PilotDemandHandshake {
 
     private static String string(JsonObject value, String field) {
         return value.has(field) && value.get(field).isJsonPrimitive() ? value.get(field).getAsString() : "";
+    }
+    private static int integer(JsonObject value, String field) {
+        return value.has(field) && value.get(field).isJsonPrimitive() && value.get(field).getAsJsonPrimitive().isNumber() ? value.get(field).getAsInt() : -1;
     }
 }

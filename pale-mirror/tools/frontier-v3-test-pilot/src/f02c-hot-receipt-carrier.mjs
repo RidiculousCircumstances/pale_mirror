@@ -127,6 +127,7 @@ function assertDemandHandshake(manifest, ingress) {
   if (value.assault !== ingress.demandHandshake.assault || value.destinationDimension !== ingress.dimension
       || !isDeepStrictEqual(value.travelAnchor, ingress.position) || !isDeepStrictEqual(value.candidateHandoff, ingress.demandHandshake.handoff)
       || !value.serverPlayerPosition || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
+      || !uuid(value.pilotRunId) || value.pilotActionStep !== 1 || !uuid(value.pilotActionAttempt)
       || value.destinationObserved !== true || value.destinationPlayerTicket !== true || value.destinationHolder !== true
       || typeof value.providerIdentity !== 'string' || value.providerIdentity.length === 0 || value.exactCandidateCount !== 1
       || value.sceneDemandChunkLoaded !== true || value.requestedObserverPresent !== true
@@ -141,11 +142,15 @@ function assertClientIngress(manifest, ingress) {
     && entry.observed?.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one client ingress receipt');
   const value = records[0].observed.value;
+  const server = manifest.diagnostics.find(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
+    && entry.observed?.value?.id === ingress.demandHandshake.request)?.observed.value;
   if (value.targetDimensionSeen !== true || value.targetChunkSeen !== true || value.finalClientDimension !== ingress.dimension
-      || !isDeepStrictEqual(value.finalClientPosition, ingress.position)) {
+      || !point(value.finalClientPosition) || !server || value.pilotRunId !== server.pilotRunId
+      || value.pilotActionStep !== server.pilotActionStep || value.pilotActionAttempt !== server.pilotActionAttempt) {
     throw new Error('F0.2C HOT carrier has incomplete client destination/chunk ingress evidence');
   }
 }
+function point(value) { return value && Number.isSafeInteger(value.x) && Number.isSafeInteger(value.y) && Number.isSafeInteger(value.z); }
 
 // The shared journal validator deliberately owns generic identity, sequence and transition
 // validity.  This carrier alone owns which acknowledged actions and completed segments belong
