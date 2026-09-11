@@ -129,6 +129,8 @@ class SettlementAssaultTest {
         assertEquals(state.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan(),
                 restored.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan(),
                 "the same expedition tactical authority must survive the HOT/COLD recovery boundary");
+        assertFalse(restored.strategicPlans().frontEffects().accepts(effect),
+                "recovery must retain the completed typed cross-front receipt");
         assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
         assertEquals(observation, restored.physicalObservations().get(observation.id()));
         members.forEach(member -> assertEquals(lease.memberPosition(member.actorId()), restored.actorLocations().get(member.actorId()).body(),
