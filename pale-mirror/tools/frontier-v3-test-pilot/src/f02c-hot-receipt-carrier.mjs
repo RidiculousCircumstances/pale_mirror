@@ -116,7 +116,7 @@ function assertPersistentTopology(manifest, declaration) {
     if (current < 0 || current <= previous) throw new Error('F0.2C HOT carrier lifecycle is incomplete or misordered');
     previous = current;
   }
-  assertHotRestartPhaseTrace(records);
+  assertHotRestartPhaseTrace(records, declaration);
   assertDemandHandshake(manifest, declaration.actions[0]);
   assertClientIngress(manifest, declaration.actions[0]);
 }
@@ -124,10 +124,10 @@ function assertPersistentTopology(manifest, declaration) {
 /** The visit cannot become a completed action from client chunk visibility or elapsed settling alone. */
 function assertDemandHandshake(manifest, ingress) {
   const outerLifecycleRun = manifest.lifecycle?.[0]?.identity?.runId;
-  const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
-    && entry.observed?.value?.id === ingress.demandHandshake.request);
+  const records = observedDiagnostics(manifest).filter(entry => entry.actionStep === 1 && entry.value?.kind === 'demand_handshake'
+    && entry.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one server-thread demand handshake receipt');
-  const value = records[0].observed.value;
+  const value = records[0].value;
   if (value.assault !== ingress.demandHandshake.assault || value.destinationDimension !== ingress.dimension
       || !isDeepStrictEqual(value.travelAnchor, ingress.position) || !isDeepStrictEqual(value.candidateHandoff, ingress.demandHandshake.handoff)
       || !value.serverPlayerPosition || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
@@ -143,12 +143,13 @@ function assertDemandHandshake(manifest, ingress) {
 /** Client-visible ingress is a separate receipt: server admission never substitutes for it. */
 function assertClientIngress(manifest, ingress) {
   const outerLifecycleRun = manifest.lifecycle?.[0]?.identity?.runId;
-  const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'visit_ingress'
-    && entry.observed?.value?.id === ingress.demandHandshake.request);
+  const diagnostics = observedDiagnostics(manifest);
+  const records = diagnostics.filter(entry => entry.actionStep === 1 && entry.value?.kind === 'visit_ingress'
+    && entry.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one client ingress receipt');
-  const value = records[0].observed.value;
-  const server = manifest.diagnostics.find(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
-    && entry.observed?.value?.id === ingress.demandHandshake.request)?.observed.value;
+  const value = records[0].value;
+  const server = diagnostics.find(entry => entry.actionStep === 1 && entry.value?.kind === 'demand_handshake'
+    && entry.value?.id === ingress.demandHandshake.request)?.value;
   if (value.targetDimensionSeen !== true || value.targetChunkSeen !== true || value.finalClientDimension !== ingress.dimension
       || !point(value.finalClientPosition) || !server || value.pilotRunId !== outerLifecycleRun || value.pilotRunId !== server.pilotRunId
       || value.pilotActionStep !== server.pilotActionStep || value.pilotActionAttempt !== server.pilotActionAttempt) {
@@ -157,34 +158,67 @@ function assertClientIngress(manifest, ingress) {
 }
 function point(value) { return value && Number.isSafeInteger(value.x) && Number.isSafeInteger(value.y) && Number.isSafeInteger(value.z); }
 
+// Assertions retain their observed wrapper, while ordinary diagnostic stream entries are copied
+// verbatim by the native scenario runner.  Both describe the same read-only observation; do not
+// admit assertion metadata as if it were a raw receipt.
+function observedDiagnostics(manifest) {
+  return (manifest?.diagnostics ?? []).flatMap(entry => {
+    if (entry?.observed?.value) return [entry.observed];
+    if (entry?.assertion === undefined && entry?.value) return [entry];
+    return [];
+  });
+}
+
 // The shared journal validator deliberately owns generic identity, sequence and transition
 // validity.  This carrier alone owns which acknowledged actions and completed segments belong
 // on either side of its graceful restart; searching for matching tuples globally would permit
 // those phase details to be exchanged without changing the generic lifecycle shape.
-function assertHotRestartPhaseTrace(records) {
-  const checkpointBefore = exactlyOne(records, 'action_checkpoint_acknowledged', record => record.detail?.actionStep === 2 && record.detail?.segment === 'before_restart');
+function assertHotRestartPhaseTrace(records, declaration) {
+  const restartAfter = declaration?.restart?.afterAction;
+  const actionCount = declaration?.actions?.length;
+  if (!Number.isSafeInteger(restartAfter) || restartAfter < 1 || !Number.isSafeInteger(actionCount) || actionCount <= restartAfter) {
+    throw new Error('F0.2C HOT carrier declaration cannot bind its restart phase trace');
+  }
+  const checkpoints = records.filter(record => record.barrier === 'action_checkpoint_acknowledged');
+  const beforeCheckpoints = phaseCheckpoints(checkpoints, 'before_restart', restartAfter);
+  const afterCheckpoints = phaseCheckpoints(checkpoints, 'after_restart', actionCount - restartAfter);
+  if (beforeCheckpoints.length !== restartAfter || afterCheckpoints.length !== actionCount - restartAfter
+      || !sameSteps(beforeCheckpoints, 1) || !sameSteps(afterCheckpoints, restartAfter + 1)
+      || checkpoints.length !== actionCount) {
+    throw new Error('F0.2C HOT carrier lifecycle does not bind one exact ordered before_restart/after_restart phase trace');
+  }
+  const checkpointBefore = beforeCheckpoints.at(-1);
   const completeBefore = exactlyOne(records, 'scenario_segment_complete', record => record.detail?.segment === 'before_restart');
   const disconnected = exactlyOne(records, 'client_normally_disconnected', record => record.detail?.segment === 'before_restart');
   const saved = exactlyOne(records, 'durable_server_save');
   const portClosed = exactlyOne(records, 'game_port_closed');
   const recoveryReady = exactlyOne(records, 'recovery_server_ready');
   const reconnected = exactlyOne(records, 'same_client_reconnected_state_cleared');
-  const checkpointAfter = exactlyOne(records, 'action_checkpoint_acknowledged', record => record.detail?.actionStep === 6 && record.detail?.segment === 'after_restart');
+  const checkpointAfter = afterCheckpoints.at(-1);
   const completeAfter = exactlyOne(records, 'scenario_segment_complete', record => record.detail?.segment === 'after_restart');
   const terminal = exactlyOne(records, 'terminal_assertion_complete');
-  if (records.filter(record => record.barrier === 'action_checkpoint_acknowledged').length !== 2
-      || records.filter(record => record.barrier === 'scenario_segment_complete').length !== 2
+  if (records.filter(record => record.barrier === 'scenario_segment_complete').length !== 2
       || !(checkpointBefore.sequence < completeBefore.sequence
         && completeBefore.sequence < disconnected.sequence
         && disconnected.sequence < saved.sequence
         && saved.sequence < portClosed.sequence
         && portClosed.sequence < recoveryReady.sequence
         && recoveryReady.sequence < reconnected.sequence
-        && reconnected.sequence < checkpointAfter.sequence
+        && reconnected.sequence < afterCheckpoints[0].sequence
+        && afterCheckpoints.every((checkpoint, index) => index === 0 || afterCheckpoints[index - 1].sequence < checkpoint.sequence)
         && checkpointAfter.sequence < completeAfter.sequence
         && completeAfter.sequence < terminal.sequence)) {
     throw new Error('F0.2C HOT carrier lifecycle does not bind one exact ordered before_restart/after_restart phase trace');
   }
+}
+
+function phaseCheckpoints(checkpoints, segment, expectedCount) {
+  const matching = checkpoints.filter(record => record.detail?.segment === segment);
+  return matching.length === expectedCount ? matching : [];
+}
+
+function sameSteps(checkpoints, firstStep) {
+  return checkpoints.every((checkpoint, index) => checkpoint.detail?.actionStep === firstStep + index);
 }
 
 function assertionObservation(manifest, declaration, phase) {

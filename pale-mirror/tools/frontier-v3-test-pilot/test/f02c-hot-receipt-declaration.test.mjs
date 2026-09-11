@@ -19,10 +19,13 @@ function envelope() {
     scenarioId: current.id, segmentId: 'native-scenario', nonce, sessionId };
   const barriers = [
     ['server_run_ready', { serverRunId: 'before' }], ['prepared_client_ready', { clientPid: 101, segment: 'before_restart' }],
-    ['client_connected_fixture_ready', { clientPid: 101, segment: 'before_restart' }], ['action_checkpoint_acknowledged', { actionStep: 2, segment: 'before_restart' }],
+    ['client_connected_fixture_ready', { clientPid: 101, segment: 'before_restart' }], ['action_checkpoint_acknowledged', { actionStep: 1, segment: 'before_restart' }],
+    ['action_checkpoint_acknowledged', { actionStep: 2, segment: 'before_restart' }],
     ['scenario_segment_complete', { segment: 'before_restart' }], ['client_normally_disconnected', { clientPid: 101, segment: 'before_restart' }],
     ['durable_server_save', { serverRunId: 'before' }], ['game_port_closed', { port: 25575 }], ['recovery_server_ready', { serverRunId: 'after' }],
-    ['same_client_reconnected_state_cleared', { clientPid: 101 }], ['action_checkpoint_acknowledged', { actionStep: 6, segment: 'after_restart' }],
+    ['same_client_reconnected_state_cleared', { clientPid: 101 }], ['action_checkpoint_acknowledged', { actionStep: 3, segment: 'after_restart' }],
+    ['action_checkpoint_acknowledged', { actionStep: 4, segment: 'after_restart' }], ['action_checkpoint_acknowledged', { actionStep: 5, segment: 'after_restart' }],
+    ['action_checkpoint_acknowledged', { actionStep: 6, segment: 'after_restart' }],
     ['scenario_segment_complete', { segment: 'after_restart' }], ['terminal_assertion_complete', { assertionCount: 4 }]
   ];
   const lifecycle = barriers.map(([barrier, detail], index) => ({ schema: 1, sequence: index + 1, barrier, identity: structuredClone(identity), detail }));
@@ -76,6 +79,32 @@ test('HOT consumer reads exactly one declaration-bound pre-restart, recovery, an
   assert.equal(receipt.scene, 'assault:development-settlement-assault'); assert.equal(receipt.lifecycle.released, 5);
 });
 
+test('HOT carrier binds every declaration action checkpoint across its graceful restart', () => {
+  const value = envelope();
+  assert.equal(assertF02cHotReceiptCarrier({ declaration: value.declaration, manifest: value.manifest }).scene,
+    'assault:development-settlement-assault');
+  const checkpoints = value.manifest.lifecycle.filter(entry => entry.barrier === 'action_checkpoint_acknowledged');
+  assert.deepEqual(checkpoints.map(entry => [entry.detail.segment, entry.detail.actionStep]), [
+    ['before_restart', 1], ['before_restart', 2], ['after_restart', 3], ['after_restart', 4], ['after_restart', 5], ['after_restart', 6]
+  ]);
+  const missing = envelope();
+  const fourthCheckpoint = missing.manifest.lifecycle.findIndex(entry => entry.detail?.actionStep === 4);
+  missing.manifest.lifecycle.splice(fourthCheckpoint, 1);
+  missing.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; });
+  assert.throws(() => assertF02cHotReceiptCarrier({ declaration: missing.declaration, manifest: missing.manifest }), /phase trace/);
+});
+
+test('HOT carrier consumes native raw ingress diagnostics rather than requiring assertion wrappers', () => {
+  const value = envelope();
+  for (const index of [0, 4]) {
+    const observed = value.manifest.diagnostics[index].observed;
+    value.manifest.diagnostics[index] = { at: '2026-09-11T12:00:00.000Z', actionStep: observed.actionStep,
+      value: observed.value, line: 'PMV3_PILOT_DIAGNOSTIC' };
+  }
+  assert.equal(assertF02cHotReceiptCarrier({ declaration: value.declaration, manifest: value.manifest }).scene,
+    'assault:development-settlement-assault');
+});
+
 test('HOT release accepts ordinary post-handoff COLD progression without misclassifying it as a replay', () => {
   const value = envelope();
   assert.equal(value.manifest.diagnostics[3].observed.value.nextStrikeEpoch, 2);
@@ -110,12 +139,12 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.diagnostics.splice(2, 0, structuredClone(value.manifest.diagnostics[2])); },
     value => { value.manifest.actions[3].correlation = `scenario:${clientRunId}:3`; },
     value => { value.manifest.recovery.clientSession.runId = clientRunId; },
-    value => { value.manifest.lifecycle[3].detail.actionStep = 3; },
-    value => { value.manifest.lifecycle[10].detail.segment = 'before_restart'; },
-    value => { [value.manifest.lifecycle[3].detail, value.manifest.lifecycle[10].detail] = [value.manifest.lifecycle[10].detail, value.manifest.lifecycle[3].detail]; },
-    value => { value.manifest.lifecycle[4].detail.segment = 'after_restart'; },
-    value => { value.manifest.lifecycle[11].detail.segment = 'before_restart'; },
-    value => { value.manifest.lifecycle.splice(12, 0, structuredClone(value.manifest.lifecycle[11])); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); },
+    value => { value.manifest.lifecycle.find(entry => entry.detail?.actionStep === 2).detail.actionStep = 3; },
+    value => { value.manifest.lifecycle.find(entry => entry.detail?.actionStep === 6).detail.segment = 'before_restart'; },
+    value => { const before = value.manifest.lifecycle.find(entry => entry.detail?.actionStep === 2); const after = value.manifest.lifecycle.find(entry => entry.detail?.actionStep === 6); [before.detail, after.detail] = [after.detail, before.detail]; },
+    value => { value.manifest.lifecycle.find(entry => entry.barrier === 'scenario_segment_complete' && entry.detail.segment === 'before_restart').detail.segment = 'after_restart'; },
+    value => { value.manifest.lifecycle.find(entry => entry.barrier === 'scenario_segment_complete' && entry.detail.segment === 'after_restart').detail.segment = 'before_restart'; },
+    value => { const checkpoint = value.manifest.lifecycle.find(entry => entry.detail?.actionStep === 5); value.manifest.lifecycle.splice(value.manifest.lifecycle.indexOf(checkpoint), 0, structuredClone(checkpoint)); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); },
     value => { value.manifest.diagnostics[0].observed.value.reason = 'NO_DEMAND'; },
     value => { value.manifest.diagnostics[0].observed.value.id = 'other-request'; },
     value => { value.manifest.diagnostics[0].observed.value.destinationDimension = 'minecraft:overworld'; },
