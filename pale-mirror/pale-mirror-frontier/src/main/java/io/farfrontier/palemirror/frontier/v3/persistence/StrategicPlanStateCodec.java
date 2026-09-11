@@ -67,6 +67,7 @@ public final class StrategicPlanStateCodec {
             }
             writeCount(output, assault.defenderIds().size());
             for (SubjectId defender : assault.defenderIds()) writeSubject(output, defender);
+            TacticalPlanStateCodec.write(output, assault.tacticalPlan());
             output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
             output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
         }
@@ -230,9 +231,11 @@ public final class StrategicPlanStateCodec {
             }
             List<SubjectId> defenders = new ArrayList<>();
             for (int defender = 0, defenderCount = readCount(input); defender < defenderCount; defender++) defenders.add(readSubject(input));
+            TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
             int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
-            if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers, defenders,
+            if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers,
+                    SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenders), tacticalPlan,
                     FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
             }

@@ -73,4 +73,22 @@ public record TacticalPlan(SubjectId id, SubjectId operationId, SubjectId author
                 List.of(TacticalBehaviour.HOLD_FORMATION, TacticalBehaviour.ADVANCE_CHECKPOINT, TacticalBehaviour.OBSERVE_OBSTRUCTION,
                         TacticalBehaviour.RETREAT_TO_PORT), route.getFirst(), route.getLast(), route.getFirst());
     }
+
+    public static TacticalPlan hiveExpedition(StrategicTask task, SubjectId assaultId, SubjectId overseerId,
+                                               List<SubjectId> attackers, List<SubjectId> defenders, BlockPosition rendezvous) {
+        Objects.requireNonNull(task, "expedition tactical task"); Objects.requireNonNull(assaultId, "expedition assault");
+        if (task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || attackers.isEmpty() || defenders.isEmpty()) {
+            throw new IllegalArgumentException("expedition tactical plan requires one exact assault roster");
+        }
+        java.util.Map<SubjectId, TacticalRole> roles = new java.util.LinkedHashMap<>();
+        for (SubjectId attacker : attackers) roles.put(attacker, attacker.equals(overseerId) ? TacticalRole.OVERSEER : TacticalRole.ATTACKER);
+        for (SubjectId defender : defenders) if (roles.put(defender, TacticalRole.DEFENDER) != null) {
+            throw new IllegalArgumentException("expedition sides must be disjoint");
+        }
+        String suffix = assaultId.value().substring(assaultId.value().indexOf(':') + 1).replace(':', '-');
+        return new TacticalPlan(new SubjectId("plan:expedition-" + suffix), assaultId, task.authorityId(), task.authorityEpoch(), 0L,
+                TacticalPolicyRegistry.HIVE_EXPEDITION, TacticalPlanPhase.TRAVEL, List.of(task.id()), roles,
+                List.of(TacticalBehaviour.HOLD_FORMATION, TacticalBehaviour.ADVANCE_CHECKPOINT, TacticalBehaviour.ENGAGE_WITHIN_ENVELOPE,
+                        TacticalBehaviour.RETREAT_TO_PORT), rendezvous, rendezvous, rendezvous);
+    }
 }

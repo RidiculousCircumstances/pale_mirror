@@ -102,6 +102,7 @@ final class SettlementAssaultPayloadCodecs {
             output.writeByte(attacker.routeIndex());
         }
         output.writeByte(assault.defenderIds().size()); for (SubjectId defender : assault.defenderIds()) subject(output, defender);
+        TacticalPlanStateCodec.write(output, assault.tacticalPlan());
         output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
         output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
     }
@@ -117,9 +118,12 @@ final class SettlementAssaultPayloadCodecs {
         }
         List<SubjectId> defenders = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) defenders.add(subject(input));
+        TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
         int status = input.readUnsignedByte(), epoch = input.readInt();
         Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
-        return new SettlementAssault(id, task, hive, sighting, overseer, attackers, defenders, FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
+        return new SettlementAssault(id, task, hive, sighting, overseer, attackers,
+                SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenders), tacticalPlan,
+                FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
     }
 
     private static SettlementAssaultOutcome readOutcome(DataInputStream input) throws IOException {

@@ -121,6 +121,9 @@ class SettlementAssaultTest {
         FrontierWorldState restored = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, restored.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(1, restored.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch());
+        assertEquals(state.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan(),
+                restored.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan(),
+                "the same expedition tactical authority must survive the HOT/COLD recovery boundary");
         assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
         assertEquals(observation, restored.physicalObservations().get(observation.id()));
         members.forEach(member -> assertEquals(lease.memberPosition(member.actorId()), restored.actorLocations().get(member.actorId()).body(),

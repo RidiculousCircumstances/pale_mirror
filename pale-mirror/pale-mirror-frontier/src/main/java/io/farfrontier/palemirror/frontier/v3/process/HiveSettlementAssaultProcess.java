@@ -154,7 +154,8 @@ public final class HiveSettlementAssaultProcess {
         StrategicTask task = state.strategicPlans().tasks().get(assault.taskId());
         if (!subject.equals(assault.hiveId()) || task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT
                 || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(subject)
-                || !isExactOverseer(state, assault.overseerId()) || state.strategicPlans().settlementAssaults().containsKey(assault.id())) {
+                || !assault.tacticalPlan().currentFor(state.strategicPlans()) || !isExactOverseer(state, assault.overseerId())
+                || state.strategicPlans().settlementAssaults().containsKey(assault.id())) {
             throw new IllegalArgumentException("settlement assault start has a foreign owner, stale sighting or inactive task");
         }
         HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream()
@@ -167,7 +168,7 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, SettlementAssaultAttackerAdvanced advanced) {
         SettlementAssault assault = assault(state, advanced.assaultId());
-        if (!subject.equals(assault.hiveId()) || !coldAvailable(state, assault)) {
+        if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans()) || !coldAvailable(state, assault)) {
             throw new IllegalArgumentException("COLD assault advance has a foreign owner or leased actor");
         }
         SettlementAssault next = assault.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
@@ -182,7 +183,7 @@ public final class HiveSettlementAssaultProcess {
         boolean cold = transition.status() == SettlementAssaultStatus.COLD_COMBAT
                 && (!assault.allAttackersAtBattlefield() || !coldAvailable(state, assault)
                 || FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty());
-        if (!subject.equals(assault.hiveId()) || waiting || cold) {
+        if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans()) || waiting || cold) {
             throw new IllegalArgumentException("settlement assault transition has invalid COLD authority");
         }
         return state.withStrategicPlans(state.strategicPlans().transitionSettlementAssault(assault.id(), transition.status()));
@@ -190,7 +191,8 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceStrike(FrontierWorldState state, SubjectId subject, SettlementAssaultStrike strike) {
         SettlementAssault assault = assault(state, strike.assaultId());
-        if (!subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.COLD_COMBAT || !coldAvailable(state, assault)
+        if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans())
+                || assault.status() != SettlementAssaultStatus.COLD_COMBAT || !coldAvailable(state, assault)
                 || strike.epoch() != assault.nextStrikeEpoch()) throw new IllegalArgumentException("invalid COLD settlement assault strike");
         boolean hiveTurn = (strike.epoch() & 1) == 0;
         if (hiveTurn != assault.combatantAttackerIds().contains(strike.attackerId()) || hiveTurn == assault.combatantAttackerIds().contains(strike.targetId())
@@ -207,7 +209,8 @@ public final class HiveSettlementAssaultProcess {
 
     public static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, SettlementAssaultResolved resolved) {
         SettlementAssault assault = assault(state, resolved.assaultId());
-        if (!subject.equals(assault.hiveId()) || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.HOT
+        if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans())
+                || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.HOT
                 || resolved.outcome() != SettlementAssaultOutcome.ABORTED && outcome(state, assault) != resolved.outcome()) {
             throw new IllegalArgumentException("settlement assault resolution disagrees with exact combatants");
         }
@@ -272,10 +275,13 @@ public final class HiveSettlementAssaultProcess {
         if (defenders.isEmpty()) return null;
         List<BlockPosition> floors = FrontierSettlementAssaultBattlefield.attackerFloors(state, sighting, defenders, attackers.size()).orElse(null);
         if (floors == null) return null;
-        return new SettlementAssault(new SubjectId("assault:" + task.id().value().substring("task:".length())), task.id(), task.ownerId(), sighting,
-                overseerId, java.util.stream.IntStream.range(0, attackers.size()).mapToObj(index -> new SettlementAssaultAttacker(attackers.get(index),
-                        approach(state, starts.get(attackers.get(index)).support(), floors.get(index)), 0)).toList(),
-                defenders, SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
+        SubjectId assaultId = new SubjectId("assault:" + task.id().value().substring("task:".length()));
+        List<SettlementAssaultAttacker> selectedAttackers = java.util.stream.IntStream.range(0, attackers.size()).mapToObj(index ->
+                new SettlementAssaultAttacker(attackers.get(index), approach(state, starts.get(attackers.get(index)).support(), floors.get(index)), 0)).toList();
+        return new SettlementAssault(assaultId, task.id(), task.ownerId(), sighting, overseerId, selectedAttackers,
+                SettlementDefenderUnit.forAssault(assaultId, sighting.settlementId(), defenders),
+                TacticalPlan.hiveExpedition(task, assaultId, overseerId, attackers, defenders, sighting.settlementAnchor()),
+                SettlementAssaultStatus.APPROACHING, 0, Optional.empty());
     }
 
     private static List<ProposedEvent> admit(FrontierWorldState state, SettlementAssault assault, long now) {
