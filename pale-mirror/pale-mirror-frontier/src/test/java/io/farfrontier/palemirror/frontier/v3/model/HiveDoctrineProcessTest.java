@@ -8,6 +8,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -21,7 +23,8 @@ class HiveDoctrineProcessTest {
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(new SubjectId("operation:seen"), scout.id(), scoutPosition, 100L);
         HiveTerritoryKnowledge.Belief belief = new HiveTerritoryKnowledge.Belief(InfectionCell.at(scoutPosition),
                 new FixedRatio(new FixedScalar(500_000L)), scout.id(), scoutPosition, 100L);
-        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass")))
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(
+                        new SubjectId("custody:container-hive-east-store"), Map.of(new SubjectId("lot:bootstrap-hive-biomass"), 64), Map.of())))
                 .withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(HiveOperationKnowledge.empty().observe(sighting))
                         .withHiveTerritoryKnowledge(HiveTerritoryKnowledge.empty().observe(belief)));
 

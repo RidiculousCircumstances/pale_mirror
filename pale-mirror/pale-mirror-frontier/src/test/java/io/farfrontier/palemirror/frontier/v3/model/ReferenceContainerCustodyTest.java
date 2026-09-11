@@ -34,18 +34,30 @@ class ReferenceContainerCustodyTest {
     void canonicalAndObservedSlotFingerprintsAreDeterministicAndFailClosedOnDrift() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-fingerprint"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        SubjectId account = new SubjectId("custody:container-1-depot");
+        SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        FungibleResourceLedger resources = state.inventory().fungibleResources().rebind(account, 1L, java.util.List.of(
+                new PhysicalStackBinding(new SubjectId("binding:reference-fingerprint-wheat"), account,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), 1L,
+                        "minecraft:wheat", java.util.Map.of(wheat, 64), java.util.Map.of())));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
         String expected = ReferenceContainerCustody.canonicalFingerprint(state, depot);
         ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();
         for (int slot = 0; slot < state.inventory().containers().get(depot).slotCount(); slot++) {
+            int currentSlot = slot;
             ExactItemStack item = state.inventory().itemAt(depot, slot).orElse(null);
-            matching.add(item == null ? ReferenceContainerCustody.ObservedSlot.empty(slot)
-                    : new ReferenceContainerCustody.ObservedSlot(slot, item.id().value(), item.itemKind(), item.count()));
+            PhysicalStackBinding binding = state.inventory().fungibleResources().bindings().values().stream()
+                    .filter(value -> value.address().equals(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, currentSlot))))
+                    .findFirst().orElse(null);
+            matching.add(item != null ? new ReferenceContainerCustody.ObservedSlot(slot, item.id().value(), item.itemKind(), item.count())
+                    : binding == null ? ReferenceContainerCustody.ObservedSlot.empty(slot)
+                    : ReferenceContainerCustody.ObservedSlot.fungible(slot, binding.itemKind(), binding.quantity()));
         }
         assertEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
-        ExactItemStack original = state.inventory().itemAt(depot, 0).orElseThrow();
-        matching.set(0, new ReferenceContainerCustody.ObservedSlot(0, original.id().value(), original.itemKind(), original.count() - 1));
+        matching.set(0, ReferenceContainerCustody.ObservedSlot.fungible(0, "minecraft:wheat", 63));
         assertNotEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
-        assertThrows(IllegalArgumentException.class, () -> ReferenceContainerCustody.observedFingerprint(state, depot, matching.subList(1, matching.size())));
+        FrontierWorldState fingerprintState = state;
+        assertThrows(IllegalArgumentException.class, () -> ReferenceContainerCustody.observedFingerprint(fingerprintState, depot, matching.subList(1, matching.size())));
     }
 
     @Test

@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CargoCarrierReleaseStateTest {
     @Test
-    void releaseAtomicallyInterruptsRouteAndKeepsExactStacksPhysical() {
+    void releaseAtomicallyInterruptsRouteAndKeepsFungibleCargoHotAtItsObservedCarrier() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:cargo-release"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -42,10 +42,13 @@ class CargoCarrierReleaseStateTest {
         CargoCarrierReleased release = new CargoCarrierReleased(leaseId, operation.cargoId(), carrier, Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000051")));
         FrontierWorldState interrupted = hot.releaseCargoCarrier(release);
 
-        SubjectId itemId = hot.inventory().cargo().get(operation.cargoId()).itemIds().getFirst();
         assertTrue(!interrupted.inventory().cargo().containsKey(operation.cargoId()));
-        assertEquals(new InventoryCustody.WorldCarrier(carrier), interrupted.inventory().items().get(itemId).custody());
-        assertEquals(List.of(itemId), interrupted.inventory().worldCarrierItems().get(carrier));
+        CustodyAccount carrierAccount = interrupted.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(carrier))).findFirst().orElseThrow();
+        assertEquals(64, carrierAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(1, interrupted.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(carrierAccount.id())
+                        && binding.address().equals(new PhysicalStackAddress.WorldEntity(carrier))).count());
         assertEquals(ContractStatus.INTERRUPTED, interrupted.contracts().values().stream().filter(contract -> contract.cargoId().equals(operation.cargoId())).findFirst().orElseThrow().status());
         assertEquals(OperationStage.INTERRUPTED, interrupted.operations().get(operation.id()).stage());
         assertEquals(SceneLeaseStatus.DRAINING, interrupted.sceneLeases().get(leaseId).status());

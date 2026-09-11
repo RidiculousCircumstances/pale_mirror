@@ -25,7 +25,8 @@ class StrategicObjectiveProcessTest {
     @Test
     void hiveUtilitySelectsOneExactExpansionObjectiveAndDurableTask() {
         FrontierWorldState state = initial("frontier:strategic-hive", 401L); SubjectId hive = state.bootstrap().hive().id();
-        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass")));
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(
+                new SubjectId("custody:container-hive-east-store"), Map.of(new SubjectId("lot:bootstrap-hive-biomass"), 64), Map.of())));
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(hive, 1, 60L));
 
@@ -55,7 +56,8 @@ class StrategicObjectiveProcessTest {
     void settlementUtilityUsesOnlyItsLocalInfectionAndCannotDuplicateItsActiveObjective() {
         FrontierWorldState state = initial("frontier:strategic-settlement", 402L); Settlement settlement = state.bootstrap().settlements().getFirst();
         ExactInventory foodInventory = state.inventory();
-        state = state.withInventory(state.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat")));
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(
+                new SubjectId("custody:container-1-depot"), Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of())));
         InfectionCell nearby = InfectionCell.at(settlement.anchor()); state = state.withInfection(nearby, new FixedRatio(new FixedScalar(750_000L)));
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 40L));

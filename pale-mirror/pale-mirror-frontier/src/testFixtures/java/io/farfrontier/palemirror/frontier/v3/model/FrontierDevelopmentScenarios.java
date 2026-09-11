@@ -712,6 +712,7 @@ final class FrontierDevelopmentScenarios {
      */
     static MaterializedProductionFixture materializedProductionInputTheftFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        state = withLegacyMaterializedWheat(state);
         SubjectId settlementId = new SubjectId("settlement:1");
         for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlementId, 1, 4_000L))) {
             if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlementId, registered);
@@ -743,6 +744,23 @@ final class FrontierDevelopmentScenarios {
                 reservation.id(), quote.totalPrice(), MarketWorkOrderStatus.ACCEPTED);
         state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand).publish(quote, 0L).accept(order, 0L)));
         return new MaterializedProductionFixture(state, SimInstant.ZERO, List.of(), order.id());
+    }
+
+    /**
+     * This fixture isolates the retained exact-materialization recovery branch. Production
+     * bootstrap wheat itself is fungible; the fixture replaces only its local test input so
+     * player-theft recovery remains exercised without reintroducing a production bootstrap
+     * stack identity.
+     */
+    private static FrontierWorldState withLegacyMaterializedWheat(FrontierWorldState state) {
+        SubjectId account = new SubjectId("custody:container-1-depot");
+        SubjectId lot = new SubjectId("lot:bootstrap-1-wheat");
+        SubjectId item = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of());
+        ExactItemStack wheat = new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:wheat", 64,
+                new InventoryCustody.ContainerSlot(depot, 0));
+        return state.withInventory(state.inventory().withFungibleResources(resources).store(wheat));
     }
 
     /**

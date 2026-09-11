@@ -21,7 +21,7 @@ class ExactItemDestructionTest {
         WorldId worldId = new WorldId("frontier:item-destruction");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         ExactItemDestroyed destroyed = new ExactItemDestroyed(itemId, source, "explosion:intent-test");
         CommandId commandId = new CommandId("command:exact-item-destroy");
@@ -37,7 +37,7 @@ class ExactItemDestructionTest {
         WorldId worldId = new WorldId("frontier:world-carrier-destruction");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         InventoryCustody.WorldCarrier carrier = new InventoryCustody.WorldCarrier(java.util.UUID.fromString("00000000-0000-0000-0000-000000000077"));
         CommandId moved = new CommandId("command:exact-item-world-carrier");

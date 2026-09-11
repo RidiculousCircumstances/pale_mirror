@@ -461,13 +461,17 @@ public final class ProductionProcess {
                             throw new IllegalArgumentException("production finance block has ambiguous pending task");
                         }).orElseThrow(() -> new IllegalArgumentException("production finance block has no pending task")), StrategicTaskStatus.PENDING);
                 Optional<ExactItemStack> prospectiveInput = wheat(state, settlement);
-                if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty()
+                Optional<FungibleResourceCustodySupport.LotAtContainer> prospectiveFungible = FungibleResourceCustodySupport
+                        .firstAtContainer(state, depot, WHEAT, 64);
+                if (!blocked.workId().equals(workshop.id()) || prospectiveInput.isEmpty() && prospectiveFungible.isEmpty()
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.INDUSTRIAL_WORKER).isEmpty()) {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
                 int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
                 boolean cold = !ReferenceContainerCustody.hasLiveCustody(state, depot);
-                if (CompanyWorkPaymentProcess.canReserve(state, job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal, cold))) {
+                ProductionJob prospectiveJob = prospectiveFungible.map(value -> fungibleJob(state, settlement, workshop, value, ordinal))
+                        .orElseGet(() -> job(state, settlement, workshop, prospectiveInput.orElseThrow(), ordinal, cold));
+                if (CompanyWorkPaymentProcess.canReserve(state, prospectiveJob)) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
             }

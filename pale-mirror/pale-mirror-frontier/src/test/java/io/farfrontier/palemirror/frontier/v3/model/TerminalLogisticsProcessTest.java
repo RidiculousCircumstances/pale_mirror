@@ -124,8 +124,9 @@ class TerminalLogisticsProcessTest {
         SubjectId itemId = new SubjectId("item:production-1-1-bread");
         PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
         PhysicalObservationId observationId = new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff");
-        CargoHandoffObservation observation = new CargoHandoffObservation(observationId, intentId, cargoId, List.of(
-                new CargoHandoffPlacement(itemId, new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        FungibleCargoHandoffObservation observation = new FungibleCargoHandoffObservation(observationId, intentId, cargoId, 1L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0)), "minecraft:bread", 64)));
         PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED,
                 operationId, List.of(operationId, cargoId), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
                 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observationId));
@@ -148,10 +149,8 @@ class TerminalLogisticsProcessTest {
     private static FrontierWorldState completedDelivery(WorldId world) {
         FrontierWorldState state = initial(world); RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
         SupplyContract contract = state.contracts().get(new SubjectId("contract:supply-1-2"));
-        SubjectId item = state.inventory().cargo().get(operation.cargoId()).itemIds().getFirst();
         SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
-        ExactInventory inventory = state.inventory().completeCargoHandoff(operation.cargoId(), List.of(new CargoHandoffPlacement(item,
-                new InventoryCustody.ContainerSlot(receiver, state.inventory().firstFreeSlot(receiver).orElseThrow()))));
+        ExactInventory inventory = state.inventory().completeFungibleCargoHandoff(operation.cargoId(), receiver);
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
         RouteOperation completed = new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
                 operation.unit(), operation.route(), 0, OperationStage.COMPLETED, java.util.Optional.empty(), java.util.Optional.empty());

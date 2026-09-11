@@ -419,6 +419,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
         Objects.requireNonNull(carrierId, "carrier id");
         if (batch == null) throw new IllegalArgumentException("released cargo is absent: " + cargoId.value());
+        if (batch.fungibleContents()) return releaseFungibleCargoToWorldCarrier(batch, carrierId);
         if (worldCarrierItems.containsKey(carrierId)) throw new IllegalArgumentException("released cargo carrier identity is already owned");
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         for (SubjectId itemId : batch.itemIds()) {
@@ -432,6 +433,39 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
         nextCarriers.put(carrierId, new java.util.ArrayList<>(batch.itemIds()));
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, nextCarriers, conflicts, surfaces, economics, fungibleResources);
+    }
+
+    /**
+     * Turns one already-materialized fungible shipment into the single HOT world-carrier
+     * account. The release event is the physical boundary: it is allowed only when one
+     * ordinary Vanilla stack can represent the complete batch, so it never fabricates a
+     * second stock counter or leaves a COLD-spendable cargo account behind.
+     */
+    private ExactInventory releaseFungibleCargoToWorldCarrier(CargoBatch batch, UUID carrierId) {
+        SubjectId carrierAccountId = new SubjectId("custody:world-carrier-" + carrierId);
+        CustodyAccount cargoAccount = fungibleResources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Cargo custody && custody.cargoId().equals(batch.id()))
+                .reduce((left, right) -> { throw new IllegalArgumentException("released fungible cargo has ambiguous cargo accounts"); })
+                .orElse(null);
+        if (cargoAccount == null || !(cargoAccount.custody() instanceof ResourceCustody.Cargo custody)
+                || !custody.cargoId().equals(batch.id()) || fungibleResources.accounts().containsKey(carrierAccountId)) {
+            throw new IllegalArgumentException("released fungible cargo has no sole current cargo account");
+        }
+        int quantity = cargoAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        String kind = cargoAccount.lotQuantities().keySet().stream().map(fungibleResources.lots()::get)
+                .map(ResourceLot::itemKind).distinct().reduce((left, right) -> {
+                    throw new IllegalArgumentException("released fungible cargo has mixed physical kinds");
+                }).orElseThrow(() -> new IllegalArgumentException("released fungible cargo has no physical lot"));
+        if (quantity > 64) throw new IllegalArgumentException("released fungible cargo exceeds one physical carrier stack");
+        CustodyAccount carrier = new CustodyAccount(carrierAccountId, new ResourceCustody.WorldCarrier(carrierId),
+                cargoAccount.lotQuantities(), cargoAccount.claimQuantities());
+        FungibleResourceLedger transferred = fungibleResources.transferToNewAccount(cargoAccount.id(), carrier);
+        List<FungiblePhysicalObservation.Stack> observed = List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.WorldEntity(carrierId), kind, quantity));
+        List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(transferred, carrierAccountId, 1L, observed);
+        transferred = transferred.rebind(carrierAccountId, 1L, bindings);
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(batch.id());
+        return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, transferred);
     }
 
     /** Applies one observed trusted-surface transfer only when its exact source still agrees. */

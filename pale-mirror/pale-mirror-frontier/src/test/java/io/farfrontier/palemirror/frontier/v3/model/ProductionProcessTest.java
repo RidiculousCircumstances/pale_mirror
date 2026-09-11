@@ -44,11 +44,8 @@ class ProductionProcessTest {
     void coldFungibleProductionKeepsOneReservedLotUntilItTransformsIntoOneOutputLot() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fungible-production"), 91L));
         SubjectId settlement = new SubjectId("settlement:1"), depot = FrontierWorldState.depotId(settlement);
-        SubjectId lotId = new SubjectId("lot:bootstrap-1-wheat"), accountId = new SubjectId("custody:bootstrap-1-depot");
-        ResourceLot wheat = new ResourceLot(lotId, settlement, "minecraft:wheat", 64, "bootstrap", List.of());
-        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of());
-        ExactInventory inventory = initial.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat"))
-                .withFungibleResources(FungibleResourceLedger.empty().issue(wheat, account));
+        SubjectId lotId = new SubjectId("lot:bootstrap-1-wheat"), accountId = new SubjectId("custody:container-1-depot");
+        ExactInventory inventory = initial.inventory();
         FrontierWorldState pending = productionTask(initial.withInventory(inventory), StrategicTaskStatus.PENDING);
         StrategicTask task = pending.strategicPlans().tasks().values().iterator().next();
 
@@ -97,10 +94,7 @@ class ProductionProcessTest {
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(completed.productionJobs().isEmpty());
-        ExactItemStack bread = completed.inventory().items().get(new SubjectId("item:production-1-1-bread"));
-        assertEquals("minecraft:bread", bread.itemKind());
-        assertEquals(64, bread.count());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), bread.custody());
+        assertEquals(64, completed.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:bread"));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
         MarketDemand demand = completed.companies().market().demands().values().stream().filter(value -> value.buyerId().equals(new SubjectId("settlement:1")))
@@ -796,7 +790,9 @@ class ProductionProcessTest {
     @Test
     void productionRefusesToStartWithoutAnExactInputStack() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:input"), 91L));
-        FrontierWorldState withoutInput = productionTask(initial.withInventory(initial.inventory().withoutItem(new SubjectId("item:bootstrap-1-wheat"))), StrategicTaskStatus.PENDING);
+        FrontierWorldState withoutInput = productionTask(initial.withInventory(initial.inventory().withFungibleResources(
+                initial.inventory().fungibleResources().destroy(new SubjectId("custody:container-1-depot"),
+                        Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of()))), StrategicTaskStatus.PENDING);
         StrategicTask task = withoutInput.strategicPlans().tasks().values().iterator().next();
 
         List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(withoutInput, ProductionProcess.start(task, 200L));
@@ -832,8 +828,8 @@ class ProductionProcessTest {
         SubjectId unrelatedStore = new SubjectId("container:hive-east-store");
         assertFalse(ReferenceContainerCustody.blocksCanonicalUse(reduced, unrelatedStore),
                 "a depot conflict must not consume or fence an unrelated hive store");
-        assertTrue(reduced.inventory().items().containsKey(new SubjectId("item:bootstrap-1-wheat")),
-                "the canonical wheat remains exact retained evidence rather than being silently consumed");
+        assertEquals(64, reduced.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:wheat"),
+                "the canonical wheat lot remains retained evidence rather than being silently consumed");
     }
 
     @Test
@@ -931,7 +927,7 @@ class ProductionProcessTest {
     }
 
     private static MaterializedProduction activeMaterializedProduction() {
-        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-physical"), 91L));
+        FrontierWorldState initial = withLegacyExactWheat(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-physical"), 91L)));
         SubjectId settlement = new SubjectId("settlement:1"), depot = new SubjectId("container:1-depot");
         for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
             if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
@@ -955,7 +951,7 @@ class ProductionProcessTest {
     }
 
     private static ColdMarketJob coldMarketJob() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-cold-cancel"), 91L));
+        FrontierWorldState state = withLegacyExactWheat(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-cold-cancel"), 91L)));
         SubjectId settlement = new SubjectId("settlement:1");
         for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
             if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
@@ -986,6 +982,16 @@ class ProductionProcessTest {
         var checkpoint = engine.checkpoint();
         return engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 CauseChain.root(command), new PhysicalIntentTransition(intent, status, observation)));
+    }
+
+    /** Isolates retained exact-materialization recovery tests from the fungible production bootstrap. */
+    private static FrontierWorldState withLegacyExactWheat(FrontierWorldState state) {
+        SubjectId settlement = new SubjectId("settlement:1"), depot = FrontierWorldState.depotId(settlement);
+        FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(new SubjectId("custody:container-1-depot"),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of());
+        SubjectId item = new SubjectId("item:bootstrap-1-wheat");
+        ExactItemStack wheat = new ExactItemStack(item, settlement, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(depot, 0));
+        return state.withInventory(state.inventory().withFungibleResources(resources).store(wheat));
     }
 
     private static CommandResult submitSurface(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,

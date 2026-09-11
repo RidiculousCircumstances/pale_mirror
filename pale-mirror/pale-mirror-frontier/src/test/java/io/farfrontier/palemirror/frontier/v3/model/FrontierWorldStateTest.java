@@ -50,7 +50,7 @@ class FrontierWorldStateTest {
         assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
         assertEquals(15, state.inventory().containers().size());
         assertEquals(FrontierRouteNetwork.OWNER, state.inventory().containers().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).ownerId());
-        assertEquals(2 + state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS, state.inventory().items().size());
+        assertEquals(state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS, state.inventory().items().size());
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.serviceWorks().isEmpty());
@@ -422,7 +422,7 @@ class FrontierWorldStateTest {
 
     @Test
     void hiveGrowthConsumesOneExactStoreItemBeforeItPublishesItsNewIdentities() {
-        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        FrontierWorldState baseline = withLegacyExactBiomass(initial()); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
         HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-1"), hive, east, HiveOrganKind.RELAY, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
@@ -461,7 +461,7 @@ class FrontierWorldStateTest {
 
     @Test
     void unknownHiveBiomassEffectReleasesTheActiveGrowthSlotWithoutAssumingConsumption() {
-        FrontierWorldState baseline = initial(); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        FrontierWorldState baseline = withLegacyExactBiomass(initial()); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
         HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-unknown"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-unknown"), hive, east, HiveOrganKind.RELAY, new BlockPosition(440, 64, 432), java.util.Optional.empty()),
@@ -484,6 +484,17 @@ class FrontierWorldStateTest {
 
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:state"), 1234L));
+    }
+
+    /** Retained exact-consumption recovery coverage uses a local synthetic stack, never bootstrap biomass. */
+    private static FrontierWorldState withLegacyExactBiomass(FrontierWorldState state) {
+        SubjectId hive = state.bootstrap().hive().id(), store = new SubjectId("container:hive-east-store");
+        FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(new SubjectId("custody:container-hive-east-store"),
+                Map.of(new SubjectId("lot:bootstrap-hive-biomass"), 64), Map.of());
+        SubjectId item = new SubjectId("item:bootstrap-hive-biomass");
+        ExactItemStack biomass = new ExactItemStack(item, hive, "minecraft:rotten_flesh", 64,
+                new InventoryCustody.ContainerSlot(store, 0));
+        return state.withInventory(state.inventory().withFungibleResources(resources).store(biomass));
     }
 
     private static List<BlockPosition> adjacentSegment(BlockPosition from, BlockPosition to) {

@@ -58,13 +58,16 @@ class HiveSettlementAssaultProcessTest {
         ResidentProfile resident = fixture.state().humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(fixture.sighting().settlementId()))
                 .filter(value -> value.profession() == ResidentProfession.INDUSTRIAL_WORKER).findFirst().orElseThrow();
-        ExactItemStack input = fixture.state().inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
-                && slot.containerId().equals(FrontierWorldState.depotId(resident.settlementId())) && "minecraft:wheat".equals(item.itemKind())).findFirst().orElseThrow();
+        CustodyAccount input = fixture.state().inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody()
+                .equals(new ResourceCustody.Container(FrontierWorldState.depotId(resident.settlementId())))).findFirst().orElseThrow();
+        ResourceLot wheat = input.lotQuantities().keySet().stream().map(fixture.state().inventory().fungibleResources().lots()::get)
+                .filter(lot -> "minecraft:wheat".equals(lot.itemKind())).findFirst().orElseThrow();
         ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), resident.settlementId(),
                 FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), resident.settlementId()).structures().stream()
                         .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), resident.id(),
-                input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:occupied-output"), "minecraft:bread", input.count());
-        FrontierWorldState occupied = fixture.state().startProductionJob(job, input.id());
+                wheat.id(), new ProductionInputHold.FungibleCold(wheat.id(), input.id(), new SubjectId("claim:assault-occupied")),
+                new SubjectId("lot:occupied-output"), "minecraft:bread", 64);
+        FrontierWorldState occupied = fixture.state().startFungibleProductionJob(job);
         List<ProposedEvent> events = HiveSettlementAssaultProcess.planStart(occupied,
                 HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         SettlementAssaultStarted started = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload());
