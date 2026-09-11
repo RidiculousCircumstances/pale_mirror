@@ -14,8 +14,9 @@ import java.util.function.Function;
 /**
  * Pilot-only custody for one travel/request attempt.  It deliberately knows no scene, ticket,
  * or admission API: adapters supply the real command dispatch, transfer event, and read-only
- * post-distance observation.  Keeping those transitions together makes a receipt impossible
- * unless the command's synchronous transfer callback has occurred first.
+ * post-distance observation.  A nested Minecraft command queues behind its owning command;
+ * custody therefore survives dispatcher return until either that queue produces its transfer or
+ * the first post-distance boundary proves the queued command produced none.
  */
 public final class FrontierV3PilotDemandReceiptTransition {
     private FrontierV3PilotDemandReceiptTransition() { }
@@ -58,13 +59,14 @@ public final class FrontierV3PilotDemandReceiptTransition {
     @FunctionalInterface
     public interface Dispatcher { void dispatch(String command); }
 
-    public record Pending(UUID player, Arm arm, boolean transferObserved, Optional<Candidate> candidate) {
+    public record Pending(UUID player, Arm arm, boolean dispatchReturned, boolean transferObserved, Optional<Candidate> candidate) {
         public Pending {
             Objects.requireNonNull(player, "player"); Objects.requireNonNull(arm, "arm");
             candidate = candidate == null ? Optional.empty() : candidate;
         }
-        Pending transferred() { return new Pending(player, arm, true, candidate); }
-        Pending retain(Optional<Candidate> observed) { return new Pending(player, arm, transferObserved, candidate.isPresent() ? candidate : observed); }
+        Pending dispatched() { return new Pending(player, arm, true, transferObserved, candidate); }
+        Pending transferred() { return new Pending(player, arm, dispatchReturned, true, candidate); }
+        Pending retain(Optional<Candidate> observed) { return new Pending(player, arm, dispatchReturned, transferObserved, candidate.isPresent() ? candidate : observed); }
     }
 
     public record Observation<T>(T value, boolean admitted, Optional<Candidate> candidate) {
@@ -72,8 +74,9 @@ public final class FrontierV3PilotDemandReceiptTransition {
     }
 
     /**
-     * Shared adapter composition.  A real dispatcher synchronously emits the matching transfer
-     * event; returning without it is cancellation/veto/no-event and destroys the arm.
+     * Shared adapter composition.  Nested {@code performPrefixedCommand} calls return while the
+     * owning command's execution context still holds the exact travel command.  The HIGHEST
+     * post-distance adapter resolves a returned-without-transfer arm only after that queue drain.
      */
     public static final class Custody {
         private final Map<UUID, Pending> pending = new HashMap<>();
@@ -81,17 +84,14 @@ public final class FrontierV3PilotDemandReceiptTransition {
         public boolean armAndDispatch(UUID player, String playerName, Arm arm, Dispatcher dispatcher) {
             Objects.requireNonNull(player, "player"); Objects.requireNonNull(dispatcher, "dispatcher");
             if (pending.containsKey(player)) return false;
-            Pending armed = new Pending(player, arm, false, Optional.empty()); pending.put(player, armed);
+            Pending armed = new Pending(player, arm, false, false, Optional.empty()); pending.put(player, armed);
             try {
                 dispatcher.dispatch(travelCommand(arm, playerName));
             } catch (RuntimeException failure) {
                 pending.remove(player, armed); throw failure;
             }
-            Pending afterDispatch = pending.get(player);
-            if (afterDispatch == null || !afterDispatch.transferObserved()) {
-                pending.remove(player, armed); return false;
-            }
-            return true;
+            pending.computeIfPresent(player, (ignored, current) -> current == armed || current.arm().equals(arm) ? current.dispatched() : current);
+            return pending.containsKey(player);
         }
 
         /** Called only from the real dimension-change adapter during command dispatch. */
@@ -111,6 +111,17 @@ public final class FrontierV3PilotDemandReceiptTransition {
 
         public List<Pending> transferred() {
             return new ArrayList<>(pending.values()).stream().filter(Pending::transferObserved).toList();
+        }
+
+        /** Called at the queue-drain/post-distance fence: a queued command that never transferred is terminal. */
+        public boolean resolveQueuedWithoutTransfer(UUID player) {
+            Pending armed = pending.get(player);
+            if (armed == null || !armed.dispatchReturned() || armed.transferObserved()) return false;
+            pending.remove(player); return true;
+        }
+
+        public List<Pending> queuedWithoutTransfer() {
+            return new ArrayList<>(pending.values()).stream().filter(value -> value.dispatchReturned() && !value.transferObserved()).toList();
         }
 
         /** Post-distance observations retain the first exact candidate until one admitted send. */

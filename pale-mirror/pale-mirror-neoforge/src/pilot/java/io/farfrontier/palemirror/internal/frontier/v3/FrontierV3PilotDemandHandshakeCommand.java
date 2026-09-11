@@ -99,6 +99,11 @@ public final class FrontierV3PilotDemandHandshakeCommand {
     /** Runs after vanilla level/distance-manager work and before the default-priority PM scene Post listener. */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onServerTick(ServerTickEvent.Post event) {
+        // Commands drains the nested travel queue before this post-distance fence.  A returned
+        // arm without its matching event is cancellation/no-event, never a later rearm token.
+        for (FrontierV3PilotDemandReceiptTransition.Pending pending : TRANSITIONS.queuedWithoutTransfer()) {
+            TRANSITIONS.resolveQueuedWithoutTransfer(pending.player());
+        }
         for (FrontierV3PilotDemandReceiptTransition.Pending pending : TRANSITIONS.transferred()) {
             ServerPlayer player = event.getServer().getPlayerList().getPlayer(pending.player());
             if (player == null) { TRANSITIONS.forget(pending.player()); continue; }
@@ -160,6 +165,8 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         boolean observeTransfer(UUID player, String destination) { return custody.observeTransfer(player, destination); }
         boolean observeCurrentDestination(UUID player, String destination) { return custody.observeCurrentDestination(player, destination); }
         List<FrontierV3PilotDemandReceiptTransition.Pending> transferred() { return custody.transferred(); }
+        List<FrontierV3PilotDemandReceiptTransition.Pending> queuedWithoutTransfer() { return custody.queuedWithoutTransfer(); }
+        boolean resolveQueuedWithoutTransfer(UUID player) { return custody.resolveQueuedWithoutTransfer(player); }
         <T> Optional<T> observeAfterDistance(UUID player, java.util.function.Function<FrontierV3PilotDemandReceiptTransition.Pending,
                 Optional<FrontierV3PilotDemandReceiptTransition.Observation<T>>> observer) { return custody.observeAfterDistance(player, observer); }
         void forget(UUID player) { custody.forget(player); }

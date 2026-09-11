@@ -98,11 +98,16 @@ class FrontierV3PilotDemandHandshakeCommandTest {
         String destination = "pale_mirror:frontier_graybox";
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
         FrontierV3PilotDemandReceiptTransition.Candidate candidate = new FrontierV3PilotDemandReceiptTransition.Candidate("projection-snapshot", new BlockPos(-360, 64, -340));
+        AtomicReference<Runnable> queuedTravel = new AtomicReference<>();
         assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> {
             assertEquals("execute in pale_mirror:frontier_graybox run tp pilot -360 65 -352", command);
-            assertTrue(receipts.observeTransfer(PLAYER, destination));
+            // Nested Commands queues this exact command, then returns to the outer arm command.
+            queuedTravel.set(() -> assertTrue(receipts.observeTransfer(PLAYER, destination)));
         }));
         assertFalse(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), ignored -> { }));
+        assertTrue(receipts.pending(PLAYER));
+        assertTrue(receipts.transferred().isEmpty());
+        queuedTravel.get().run();
         assertFalse(receipts.observeTransfer(PLAYER, "minecraft:overworld"));
         assertTrue(receipts.observeAfterDistance(PLAYER, ignored -> Optional.empty()).isEmpty());
         assertFalse(receipts.observeTransfer(PLAYER, destination));
@@ -124,8 +129,12 @@ class FrontierV3PilotDemandHandshakeCommandTest {
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
         // A transfer observed before the client/server arm is stale and cannot later supply a receipt.
         assertFalse(receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"));
-        assertFalse(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), ignored -> { }));
+        assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), ignored -> { }));
+        assertTrue(receipts.pending(PLAYER));
+        assertEquals(1, receipts.queuedWithoutTransfer().size());
+        assertTrue(receipts.resolveQueuedWithoutTransfer(PLAYER));
         assertFalse(receipts.pending(PLAYER));
+        assertFalse(receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"));
         assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> { receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"); }));
         assertFalse(receipts.observeCurrentDestination(PLAYER, "minecraft:overworld"));
         assertFalse(receipts.pending(PLAYER));
