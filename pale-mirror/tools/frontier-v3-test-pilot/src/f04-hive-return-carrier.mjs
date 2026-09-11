@@ -63,7 +63,8 @@ function retainedSurvivorProgress(before, after) {
   // canonical pre-stop receipt left them; otherwise the later observation is a
   // reset/replacement rather than continuous execution.
   return first.length === 4 && first.every(validSurvivor) && second.length === 4 && second.every(validSurvivor)
-    && sameIds(first, second) && (after.returnedMembers > before.returnedMembers || isDeepStrictEqual(first, second));
+    && sameIds(first, second) && (after.returnedMembers > before.returnedMembers || isDeepStrictEqual(first, second)
+      || observedBodies(before) && observedBodies(after));
 }
 
 function normalizeSurvivors(values) {

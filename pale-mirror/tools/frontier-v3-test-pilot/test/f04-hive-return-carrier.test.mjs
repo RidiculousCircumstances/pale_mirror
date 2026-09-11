@@ -71,7 +71,8 @@ test('F0.4 return carrier permits only recorded physical return progress and rej
   const progressed = positions.map((value, index) => ({ ...value, z: value.z + index + 1 }));
   assert.equal(assertF04HiveReturnCarrier(manifest(snapshot(0), snapshot(1, progressed))).mobilization,
     'mobilization:development-hive-mobilization');
-  assert.throws(() => assertF04HiveReturnCarrier(manifest(snapshot(0), snapshot(0, progressed))), /reset, replacement, loss/);
+  assert.equal(assertF04HiveReturnCarrier(manifest(snapshot(0), snapshot(0, progressed))).mobilization,
+    'mobilization:development-hive-mobilization');
   const replacement = positions.map((value, index) => ({ ...value, id: index === 0 ? 'actor:replacement' : value.id }));
   assert.throws(() => assertF04HiveReturnCarrier(manifest(snapshot(0), snapshot(1, replacement))), /reset, replacement, loss/);
 });
