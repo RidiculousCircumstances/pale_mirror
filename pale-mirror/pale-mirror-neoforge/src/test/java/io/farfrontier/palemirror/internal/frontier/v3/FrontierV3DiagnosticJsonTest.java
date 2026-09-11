@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -11,6 +12,10 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
+import io.farfrontier.palemirror.frontier.v3.model.HiveReturnAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactInventory;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -47,6 +52,29 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void returningHiveDiagnosticIsAParseablePilotDocument() {
+        var configuration = FrontierV3FixtureCatalog.hiveReturnConfiguration(new WorldId("frontier:diagnostic-hive-return"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        HiveMobilization mobilization = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
+        SubjectId next = returning.safeAdvances().stream().min(java.util.Comparator.naturalOrder()).orElseThrow();
+        HiveTaskAssembly.Member member = returning.members().get(next);
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(0L),
+                configuration.initialInstant(), new byte[] {1}, List.of(), List.of());
+
+        String json = FrontierV3HiveMobilizationDiagnostic.returningJson(checkpoint, state, mobilization, returning, next, member,
+                0L, 0L, new FrontierV3PhysicalDemand.Readiness(false, false, false, 0, 0), false);
+
+        var parsed = JsonParser.parseString(json.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("RETURNING", parsed.get("mobilizationStatus").getAsString());
+        assertEquals(4, parsed.get("survivors").getAsInt());
+        assertEquals(next.value(), parsed.get("nextMember").getAsString());
+        assertEquals(member.cursor(), parsed.get("cursor").getAsInt());
+        assertEquals(4, parsed.getAsJsonArray("survivorPositions").size(),
+                "the exact native-pilot diagnostic remains a single parseable JSON document");
+    }
+
     @Test
     void exposesTheExactPendingAftermathOwnerPartAndAuthorityRevisionWithoutMutatingIt() {
         var configuration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:diagnostic-cold-aftermath"), 41L);

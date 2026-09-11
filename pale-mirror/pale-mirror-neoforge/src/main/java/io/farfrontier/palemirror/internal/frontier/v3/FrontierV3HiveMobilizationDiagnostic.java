@@ -135,12 +135,12 @@ final class FrontierV3HiveMobilizationDiagnostic {
         long hot = returning.members().keySet().stream().map(state.ambientLeases()::get)
                 .filter(lease -> lease != null && lease.status() == AmbientLeaseStatus.HOT
                         && lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN).count();
-        String survivorPositions = returning.members().keySet().stream().sorted().map(actor -> {
-            SurfaceAnchor surface = state.actorLocations().get(actor).supportingSurface();
-            return "{\"id\":\"" + quote(actor.value()) + "\",\"x\":" + surface.support().x()
-                    + ",\"y\":" + surface.support().y() + ",\"z\":" + surface.support().z() + "}";
-        }).collect(Collectors.joining(",", "[", "]"));
         if (member == null) {
+            String survivorPositions = returning.members().keySet().stream().sorted().map(actor -> {
+                SurfaceAnchor surface = state.actorLocations().get(actor).supportingSurface();
+                return "{\"id\":\"" + quote(actor.value()) + "\",\"x\":" + surface.support().x()
+                        + ",\"y\":" + surface.support().y() + ",\"z\":" + surface.support().z() + "}";
+            }).collect(Collectors.joining(",", "[", "]"));
             return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
                     base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
                             + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
@@ -152,12 +152,29 @@ final class FrontierV3HiveMobilizationDiagnostic {
         BlockPos targetBlock = new BlockPos(target.support().x(), target.support().y(), target.support().z());
         FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, targetBlock);
         boolean standingColumn = demand.chunkLoaded() && FrontierV3StandingPosition.hasExactStandingColumn(level, target.support());
+        return returningJson(checkpoint, state, mobilization, returning, nextActor, member, completed, hot, demand, standingColumn);
+    }
+
+    /**
+     * Keeps the exact-returning diagnostic wire document independently parseable by the pilot.
+     * It is a read-only formatter: all canonical and physical facts are supplied by {@link #returning}.
+     */
+    static String returningJson(CheckpointImage checkpoint, FrontierWorldState state, HiveMobilization mobilization,
+                                HiveReturnAssembly returning, SubjectId nextActor, HiveTaskAssembly.Member member,
+                                long completed, long hot, FrontierV3PhysicalDemand.Readiness demand, boolean standingColumn) {
+        SurfaceAnchor current = member.currentSurface();
+        SurfaceAnchor target = member.nextSurface();
+        String survivorPositions = returning.members().keySet().stream().sorted().map(actor -> {
+            SurfaceAnchor surface = state.actorLocations().get(actor).supportingSurface();
+            return "{\"id\":\"" + quote(actor.value()) + "\",\"x\":" + surface.support().x()
+                    + ",\"y\":" + surface.support().y() + ",\"z\":" + surface.support().z() + "}";
+        }).collect(Collectors.joining(",", "[", "]"));
         return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
                 base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
                         + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
                         + ",\"hotMembers\":" + hot + ",\"returnComplete\":false,\"nextMember\":\"" + quote(nextActor.value())
                         + "\",\"survivorPositions\":" + survivorPositions
-                        + "\",\"cursor\":" + member.cursor() + ",\"current\":{\"x\":" + current.support().x()
+                        + ",\"cursor\":" + member.cursor() + ",\"current\":{\"x\":" + current.support().x()
                         + ",\"y\":" + current.support().y() + ",\"z\":" + current.support().z() + "},\"target\":{\"x\":"
                         + target.support().x() + ",\"y\":" + target.support().y() + ",\"z\":" + target.support().z()
                         + "},\"physicalReadiness\":{\"chunkLoaded\":" + demand.chunkLoaded() + ",\"ordinaryPlayerNearby\":"
