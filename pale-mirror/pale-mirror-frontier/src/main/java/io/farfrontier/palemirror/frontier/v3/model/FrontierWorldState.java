@@ -738,8 +738,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 nextAmbient.put(actor, lease.withGoal(AmbientGoalKind.OPERATION_ASSEMBLY, target.standingBody()));
             }
         });
-        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, nextAmbient);
+        return next(nextActors, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, nextAmbient);
     }
     public FrontierWorldState deferOperationAssembly(SubjectId operationId, OperationAssemblyDeferral deferral) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation assembly operation id"));
@@ -747,16 +746,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         requireCurrentTacticalPlan(operation);
         RouteOperation deferred = operation.withAssembly(operation.activeAssembly().orElseThrow().defer(Objects.requireNonNull(deferral, "assembly deferral")));
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), deferred);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState completeOperationTravelSegment(SubjectId operationId) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "operation travel operation id")); if (operation == null) throw new IllegalArgumentException("unknown operation travel");
         requireCurrentTacticalPlan(operation);
         RouteOperation completed = operation.completeTravelSegment();
         Map<SubjectId, RouteOperation> nextOperations = new LinkedHashMap<>(operations); nextOperations.put(operation.id(), completed);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, nextOperations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState preparePhysicalIntent(PhysicalIntent intent) {
         Objects.requireNonNull(intent, "physical intent");
@@ -766,8 +763,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (HumanEquipmentStateSupport.owns(intent)) HumanEquipmentStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations,
-                next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus, java.util.Optional<PhysicalEffectObservation> observation) {
         PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
@@ -898,7 +894,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .serviceWorks(outcome.serviceWorks()));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
-
     private void requireCurrentTacticalPlan(RouteOperation operation) {
         if (!operation.tacticalPlan().currentFor(strategicPlans)) {
             throw new IllegalArgumentException("route operation tactical plan has stale decision authority");

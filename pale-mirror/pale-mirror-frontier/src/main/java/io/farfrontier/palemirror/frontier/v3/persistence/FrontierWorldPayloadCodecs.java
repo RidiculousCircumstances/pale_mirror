@@ -767,8 +767,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> handoffActors = new java.util.LinkedHashSet<>();
         for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
-        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition), position,
-                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
+        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
                 FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors,
                 java.util.Optional.empty());
     }
@@ -804,8 +803,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 FrontierWireTags.require(SceneLeaseStatus.class, status), members, positions, ambient, java.util.Optional.empty());
     }
     private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException { output.writeByte(values.size()); for (SceneMemberPosition member : values) writeMemberPosition(output, member); }
-    private static void writeMemberPosition(DataOutputStream output, SceneMemberPosition member) throws IOException { writeSubject(output, member.actorId()); output.writeInt(member.body().x());
-        output.writeInt(member.body().y());
+    private static void writeMemberPosition(DataOutputStream output, SceneMemberPosition member) throws IOException { writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y());
         output.writeInt(member.body().z()); output.writeLong(member.health().raw()); }
     private static java.util.List<SceneMemberPosition> readMemberPositions(DataInputStream input) throws IOException {
         java.util.ArrayList<SceneMemberPosition> values = new java.util.ArrayList<>();
