@@ -125,11 +125,13 @@ final class FrontierV3GrayboxExecutor {
      */
     static Optional<FrontierSettlementAssaultBattlefield.Provider> admissionProvider(
             FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
-        Cursor cursor = CURSORS.get(runtime);
-        ProjectionWork work = workFor(runtime); work.compatibilityChecks++;
-        if (cursor == null || !cursor.input().matches(state)) return Optional.empty();
-        work.providerAcquisitions++;
-        return Optional.of(cursor.providerSnapshot(state, work));
+        return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
+            Cursor cursor = CURSORS.get(runtime);
+            ProjectionWork work = workFor(runtime); work.compatibilityChecks++;
+            if (cursor == null || !cursor.input().matches(state)) return Optional.empty();
+            work.providerAcquisitions++;
+            return Optional.of(cursor.providerSnapshot(state, work));
+        });
     }
 
     /**

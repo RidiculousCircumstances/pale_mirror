@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Deterministic v3 graybox plan derived only from canonical state.
@@ -19,6 +20,8 @@ import java.util.Set;
  */
 public final class FrontierGrayboxPlan {
     private static final int MAX_CELLS = 65_536;
+    /** Admission reads may only consume an already-published projection snapshot. */
+    private static final ThreadLocal<Integer> STRUCTURAL_DERIVATION_FORBIDDEN = ThreadLocal.withInitial(() -> 0);
     private final Map<BlockPosition, GrayboxCell> cells;
     private final Map<InfectionCell, FixedRatio> infection;
 
@@ -29,6 +32,7 @@ public final class FrontierGrayboxPlan {
     }
 
     public static FrontierGrayboxPlan compile(FrontierWorldState state) {
+        requireStructuralDerivationAllowed();
         return compile(state, true);
     }
 
@@ -40,6 +44,7 @@ public final class FrontierGrayboxPlan {
      * player must use {@link #compile(FrontierWorldState)}, which includes those losses.
      */
     public static FrontierGrayboxPlan compileStructuralBaseline(FrontierWorldState state) {
+        requireStructuralDerivationAllowed();
         return compile(state, false);
     }
 
@@ -76,10 +81,33 @@ public final class FrontierGrayboxPlan {
      * for read-only equality at the NeoForge projection boundary.
      */
     public static StructuralInput structuralInput(FrontierWorldState state) {
+        requireStructuralDerivationAllowed();
         Objects.requireNonNull(state, "structural projection state");
         return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
                 state.hiveColony().bioformLifecycles(), retainedCocoonLifecycles(state.hiveColony()), state.routeTopology(),
                 state.routeConstructions(), activeWorksiteStaging(state));
+    }
+
+    /**
+     * Binds a read boundary which must not derive global geometry.  Projection admission uses
+     * this around its provider acquisition, making an accidental compiler/structural-input
+     * fallback fail closed instead of silently moving work before its first point query.
+     */
+    public static <T> T withoutStructuralDerivation(Supplier<T> read) {
+        Objects.requireNonNull(read, "projection read");
+        int previous = STRUCTURAL_DERIVATION_FORBIDDEN.get();
+        STRUCTURAL_DERIVATION_FORBIDDEN.set(previous + 1);
+        try { return read.get(); }
+        finally {
+            if (previous == 0) STRUCTURAL_DERIVATION_FORBIDDEN.remove();
+            else STRUCTURAL_DERIVATION_FORBIDDEN.set(previous);
+        }
+    }
+
+    private static void requireStructuralDerivationAllowed() {
+        if (STRUCTURAL_DERIVATION_FORBIDDEN.get() != 0) {
+            throw new IllegalStateException("projection admission may not derive structural geometry");
+        }
     }
 
     private static Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles(HiveColony colony) {

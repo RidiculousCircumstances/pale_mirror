@@ -538,6 +538,25 @@ public final class FrontierV3ServerLifecycle {
     }
 
     /**
+     * The one ordinary Entity-join composition consumed by the event callback and source
+     * firewall.  The retained lifecycle result and strict provider proof stay coupled so a
+     * restored body cannot fall through to a default-provider path between those two gates.
+     */
+    public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        return new JoinFirewallProof(observeEntityJoin(level, entity), recognizesManagedCarrier(level, entity));
+    }
+
+    /** Exact carrier delegate of {@link #observeSourceJoin(ServerLevel, Entity)} for focused runtime tests. */
+    static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                               FrontierV3AmbientActorExecutor.ManagedCarrier carrier,
+                                               EntityJoinAdmission lifecycleAdmission) {
+        Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(carrier, "carrier");
+        Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");
+        return new JoinFirewallProof(lifecycleAdmission, recognizesManagedAmbientCarrier(runtime, carrier));
+    }
+
+    /**
      * Lets the shared Graybox admission boundary admit only an exact active V3
      * ambient or scene carrier. This is a predicate only; EntityJoin observation
      * remains the sole lifecycle mutation path.
@@ -861,6 +880,12 @@ public final class FrontierV3ServerLifecycle {
 
     /** Result of the read-only ambient join bridge; only a duplicate may be safely cancelled. */
     public enum EntityJoinAdmission { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
+    /** Immutable result passed once from the lifecycle join gate to the source firewall. */
+    public record JoinFirewallProof(EntityJoinAdmission lifecycleAdmission, boolean verifiedV3Carrier) {
+        public JoinFirewallProof {
+            Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");
+        }
+    }
 
     static boolean enabled() { return Boolean.getBoolean(ENABLED_PROPERTY); }
 }

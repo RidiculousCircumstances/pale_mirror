@@ -151,19 +151,12 @@ public final class PaleMirrorEvents {
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
-            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeEntityJoin(level, event.getEntity())
-                    == io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.EntityJoinAdmission.DUPLICATE_UNINDEXED) {
-                // A same-UUID second body cannot become a physical executor. Keep the first
-                // pending candidate untouched and fail the later admission closed before
-                // Minecraft can surface a flickering duplicate to players.
-                event.setCanceled(true);
-                return;
+            var joinProof = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeSourceJoin(level, event.getEntity());
+            if (SourceGrayboxEntityAdmission.rejects(level, event.getEntity(), joinProof)) {
+                // The source firewall consumes the exact lifecycle proof. A duplicate or an
+                // unverified body is canceled before Minecraft can expose a second executor.
+                event.setCanceled(true); return;
             }
-        }
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
-                && SourceGrayboxEntityAdmission.rejects(level, event.getEntity())) {
-            event.setCanceled(true);
-            return;
         }
         if (AdapterRegistry.rejectsUnmanagedEntity(event.getEntity())) {
             event.setCanceled(true);

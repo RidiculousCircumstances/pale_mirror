@@ -172,21 +172,29 @@ class FrontierV3AmbientAdmissionPolicyTest {
                         .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor)))
                 .findFirst().orElseThrow();
         FrontierWorldState state = withPreparedLease(base, ambientResident);
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        EphemeralStore store = new EphemeralStore();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state, List.of(), store);
         try {
-            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
-            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientActorExecutor.ManagedCarrier carrier = new FrontierV3AmbientActorExecutor.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT");
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
+                    "an absent projection must fail closed through the same lifecycle/firewall composition");
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
 
             int members = state.strategicPlans().settlementAssaults().values().stream()
                     .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
                     .mapToInt(assault -> assault.attackerIds().size() + assault.defenderIds().size()).sum();
-            assertTrue(FrontierV3ServerLifecycle.recognizesManagedAmbientCarrier(runtime, carrier),
-                    "the actual lifecycle recognition delegate must retain an exact ambient resident through the registered runtime provider");
-            assertFalse(SourceGrayboxEntityAdmission.rejectsSourceMob(true, false, true),
-                    "the production source firewall must not cancel the exact body that lifecycle recognition retained");
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
+                    "the actual lifecycle recognition delegate and production firewall must retain the exact ambient resident");
             assertProjectionReadWork(runtime, members, "initial lifecycle recognition");
+
+            assertThrows(IllegalStateException.class, () -> FrontierGrayboxPlan.withoutStructuralDerivation(
+                    () -> FrontierGrayboxPlan.structuralInput(state)),
+                    "fault control: the former pre-query structural-input fallback is forbidden inside provider acquisition");
+            assertThrows(IllegalStateException.class, () -> FrontierGrayboxPlan.withoutStructuralDerivation(
+                    () -> FrontierGrayboxPlan.compileStructuralBaseline(state)),
+                    "fault control: a global baseline compiler is equally forbidden inside provider acquisition");
 
             GrayboxCell damaged = FrontierGrayboxPlan.compile(state).cells().values().stream()
                     .filter(cell -> cell.ownerId().equals(state.bootstrap().settlements().getFirst().structures().getFirst().id()))
@@ -195,10 +203,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     damaged.ownerId(), damaged.position(), damaged.semanticPart(), "player:runtime-structural-change"), "command:runtime-structure-damage");
 
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
-            assertFalse(FrontierV3ServerLifecycle.recognizesManagedAmbientCarrier(runtime, carrier),
-                    "an installed structural runtime replacement must fence join recognition before any projector refresh");
-            assertTrue(SourceGrayboxEntityAdmission.rejectsSourceMob(true, false, false),
-                    "without the stale recognition proof, the exact same source firewall must cancel the body");
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
+                    "an installed structural replacement must fence lifecycle recognition and cancel at the same source firewall");
             FrontierV3GrayboxExecutor.ProjectionWorkSnapshot fenced = FrontierV3GrayboxExecutor.projectionWork(runtime);
             assertEquals(1, fenced.compatibilityChecks());
             assertEquals(0, fenced.freshnessConstructions());
@@ -208,10 +214,28 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
-            assertTrue(FrontierV3ServerLifecycle.recognizesManagedAmbientCarrier(runtime, carrier),
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
                     "only the projection owner may refresh the installed structural state and restore its exact joining body");
-            assertFalse(SourceGrayboxEntityAdmission.rejectsSourceMob(true, false, true));
             assertProjectionReadWork(runtime, members, "projection refresh after installed structural change");
+
+            FrontierV3GrayboxExecutor.forget(runtime);
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
+                    "forget/restart loses only the derived snapshot and must fence the same join/firewall composition");
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
+                    "the projection owner reconstructs a forgotten snapshot without changing exact join ownership");
+
+            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> restarted = runtime(state, List.of(), store);
+            try {
+                assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, restarted.status().kind(), "the ordinary WAL runtime restart stays active");
+                assertEquals(runtime.decodedState().orElseThrow(), restarted.decodedState().orElseThrow(),
+                        "restart must recover the installed structural transition before join recognition runs");
+                assertJoinFirewall(restarted, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
+                        "a restarted runtime has no retained provider and must fence the same join/firewall composition");
+                FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), restarted);
+                assertJoinFirewall(restarted, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
+                        "the restarted projection owner alone restores the exact join/firewall proof from recovered state");
+            } finally { FrontierV3GrayboxExecutor.forget(restarted); restarted.shutdown(); }
         } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
     }
 
@@ -234,10 +258,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientActorExecutor.ManagedCarrier carrier = new FrontierV3AmbientActorExecutor.ManagedCarrier(
                     FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT");
-            assertTrue(FrontierV3ServerLifecycle.recognizesManagedAmbientCarrier(runtime, carrier),
-                    "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider");
-            assertFalse(SourceGrayboxEntityAdmission.rejectsSourceMob(true, false, true),
-                    "the source firewall must consume that live lifecycle proof instead of canceling the exact joining body");
+            assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
+                    "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider and firewall");
             FrontierV3GrayboxExecutor.admissionProvider(runtime, nutrientReplacement).orElseThrow()
                     .cellAt(nutrientReplacement.actorLocations().get(resident).supportingSurface().support());
             FrontierV3GrayboxExecutor.ProjectionWorkSnapshot work = FrontierV3GrayboxExecutor.projectionWork(runtime);
@@ -428,12 +450,18 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(FrontierWorldState state,
                                                                                                     List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> schedules) {
+        return runtime(state, schedules, new EphemeralStore());
+    }
+
+    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(FrontierWorldState state,
+                                                                                                    List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> schedules,
+                                                                                                    EphemeralStore store) {
         var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(
                 base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
                 base.stateCodec(), base.projectionMapper(), base.limits(), schedules, base.transactionCommitter(),
                 base.stateValidator(), base.executionMetrics());
-        return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
+        return FrontierV3ServerRuntime.start(configuration, store, 10_000);
     }
 
     private static void submit(FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime, WorldId world,
@@ -454,6 +482,15 @@ class FrontierV3AmbientAdmissionPolicyTest {
         assertEquals(members * 3, work.pointQueries(), phase);
     }
 
+    private static void assertJoinFirewall(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           FrontierV3AmbientActorExecutor.ManagedCarrier carrier,
+                                           FrontierV3ServerLifecycle.EntityJoinAdmission lifecycleAdmission,
+                                           boolean expectedCancellation, String phase) {
+        FrontierV3ServerLifecycle.JoinFirewallProof proof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, carrier, lifecycleAdmission);
+        assertEquals(expectedCancellation, SourceGrayboxEntityAdmission.rejectsSourceMob(proof, true, false), phase);
+        assertEquals(!expectedCancellation, proof.verifiedV3Carrier(), phase);
+    }
+
     private static final class FullyLoadedPhysicalWorld implements FrontierV3AftermathPhysicalWorld {
         private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
         @Override public boolean naturallyLoaded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
@@ -465,8 +502,10 @@ class FrontierV3AmbientAdmissionPolicyTest {
     }
 
     private static final class EphemeralStore implements FrontierStore {
-        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
+        private final List<TransactionRecord> transactions = new ArrayList<>();
+        @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.copyOf(transactions)); }
         @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            transactions.add(transaction);
             return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
         }
         @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("admission test does not compact"); }

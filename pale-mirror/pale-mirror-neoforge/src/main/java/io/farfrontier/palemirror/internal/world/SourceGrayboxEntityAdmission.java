@@ -23,7 +23,14 @@ public final class SourceGrayboxEntityAdmission {
     /** True when a non-source mob must be denied before it can affect the source projection. */
     public static boolean rejects(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level");
-        return rejects(level.dimension(), entity, FrontierV3ServerLifecycle.recognizesManagedCarrier(level, entity));
+        return rejects(level, entity, FrontierV3ServerLifecycle.observeSourceJoin(level, entity));
+    }
+
+    /** The exact lifecycle/firewall composition used by the ordinary EntityJoinLevelEvent. */
+    public static boolean rejects(ServerLevel level, Entity entity, FrontierV3ServerLifecycle.JoinFirewallProof proof) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(proof, "join proof");
+        return rejectsSourceMob(proof, level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION),
+                SourceGrayboxMaterializer.recognizesManagedEntity(entity));
     }
 
     static boolean rejects(ResourceKey<Level> dimension, Entity entity) {
@@ -44,5 +51,13 @@ public final class SourceGrayboxEntityAdmission {
      */
     public static boolean rejectsSourceMob(boolean sourceDimension, boolean sourceManaged, boolean verifiedV3Carrier) {
         return sourceDimension && !sourceManaged && !verifiedV3Carrier;
+    }
+
+    /** Carrier-test delegate of the production composition above; its proof is never caller-supplied. */
+    public static boolean rejectsSourceMob(FrontierV3ServerLifecycle.JoinFirewallProof proof,
+                                           boolean sourceDimension, boolean sourceManaged) {
+        Objects.requireNonNull(proof, "join proof");
+        return proof.lifecycleAdmission() == FrontierV3ServerLifecycle.EntityJoinAdmission.DUPLICATE_UNINDEXED
+                || rejectsSourceMob(sourceDimension, sourceManaged, proof.verifiedV3Carrier());
     }
 }
