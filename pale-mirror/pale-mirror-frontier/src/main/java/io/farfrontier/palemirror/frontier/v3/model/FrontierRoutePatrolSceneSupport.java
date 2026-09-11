@@ -28,7 +28,7 @@ public final class FrontierRoutePatrolSceneSupport {
     }
 
     public static Optional<Candidate> candidate(FrontierWorldState state, RoutePatrol patrol) {
-        if (!patrol.active() || hasScene(state, patrol.taskId())) return Optional.empty();
+        if (!patrol.active() || !patrol.tacticalPlan().currentFor(state.strategicPlans()) || hasScene(state, patrol.taskId())) return Optional.empty();
         StrategicTask task = state.strategicPlans().tasks().get(patrol.taskId());
         if (task == null || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(patrol.settlementId())) return Optional.empty();
         Map<SubjectId, BodyPosition> bodies = bodies(patrol);
@@ -76,6 +76,7 @@ public final class FrontierRoutePatrolSceneSupport {
     /** Atomically commits exactly the retained next physical arrival, never a world-derived sidestep. */
     public static FrontierWorldState advanceObserved(FrontierWorldState state, RoutePatrol current, SceneLeaseId leaseId,
                                                      SubjectId actorId, BodyPosition observedBody) {
+        requireCurrentPlan(state, current);
         SceneLease lease = requireHotLease(state, current, leaseId);
         if (!current.safeAdvances().contains(actorId)) throw new IllegalArgumentException("route-patrol observation is not a safe retained advance");
         RoutePatrol next = current.advance(actorId);
@@ -90,6 +91,7 @@ public final class FrontierRoutePatrolSceneSupport {
 
     public static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
         RoutePatrol patrol = require(state, FrontierSceneBehaviors.routePatrol(lease));
+        requireCurrentPlan(state, patrol);
         BodyPosition expected = bodies(patrol).get(actorId);
         if (expected == null || !expected.equals(observed)) throw new IllegalArgumentException("route-patrol scene release diverged from its retained formation");
         return expected;
@@ -106,6 +108,12 @@ public final class FrontierRoutePatrolSceneSupport {
         return state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .filter(FrontierSceneBehaviors::isRoutePatrol)
                 .anyMatch(lease -> FrontierSceneBehaviors.routePatrol(lease).taskId().equals(taskId));
+    }
+
+    private static void requireCurrentPlan(FrontierWorldState state, RoutePatrol patrol) {
+        if (!patrol.tacticalPlan().currentFor(state.strategicPlans())) {
+            throw new IllegalArgumentException("route-patrol scene has stale tactical authority");
+        }
     }
 
     public record Candidate(SubjectId taskId, SubjectId settlementId, SubjectId leaderId, BlockPosition handoffPosition,

@@ -66,6 +66,33 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
+    void reconsideredAuthorityCannotAdmitAdvanceOrReleaseTheRetainedHotPatrol() {
+        FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-stale-plan"));
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-stale-plan");
+        var world = state.bootstrap().worldId();
+        SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
+                candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
+                candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
+                candidate.memberBodies(), Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        RoutePatrol patrol = state.strategicPlans().routePatrols().get(candidate.taskId());
+        SubjectId actor = patrol.safeAdvances().getFirst();
+        BodyPosition next = FrontierRoutePatrolSceneSupport.bodies(patrol.advance(actor)).get(actor);
+        SubjectId owner = patrol.settlementId();
+        FrontierWorldState reconsidered = state.withStrategicPlans(state.strategicPlans().reconsider(owner,
+                state.strategicPlans().requireDecisionAuthority(owner).commitmentIds(), List.of()));
+
+        assertTrue(FrontierRoutePatrolSceneSupport.candidates(reconsidered).isEmpty());
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierRoutePatrolSceneSupport.advanceObserved(reconsidered, patrol, leaseId, actor, next));
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierRoutePatrolSceneSupport.releasedBody(reconsidered, reconsidered.sceneLeases().get(leaseId), actor,
+                        candidate.memberBodies().get(actor)));
+    }
+
+    @Test
     void activePatrolFreezesGenericAmbientGoalsWithoutDrainingAnExistingExactBody() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-reservation"));
         RoutePatrol patrol = state.strategicPlans().routePatrols().values().iterator().next();
@@ -108,6 +135,6 @@ class RoutePatrolSceneSupportTest {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
         RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
                 RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
-        return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol));
+        return state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task).startPatrol(patrol));
     }
 }
