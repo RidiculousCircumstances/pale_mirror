@@ -17,7 +17,8 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         Objects.requireNonNull(sourceAccountId, "handoff source account"); Objects.requireNonNull(destinationAccount, "handoff destination account");
         if (sourceEpoch < 1 || destinationEpoch < 1) throw new IllegalArgumentException("handoff authority epochs must be positive");
         lotQuantities = quantities(lotQuantities, "lot", false); claimQuantities = quantities(claimQuantities, "claim", true);
-        remainingSource = List.copyOf(remainingSource); destinationBindings = List.copyOf(destinationBindings);
+        remainingSource = remainingSource.stream().sorted(java.util.Comparator.comparing(PhysicalStackBinding::id)).toList();
+        destinationBindings = destinationBindings.stream().sorted(java.util.Comparator.comparing(PhysicalStackBinding::id)).toList();
         if (remainingSource.stream().anyMatch(Objects::isNull) || destinationBindings.isEmpty() || destinationBindings.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("handoff requires current non-null destination binding evidence");
         }
