@@ -107,14 +107,18 @@ class SettlementAssaultTest {
                 "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
 
         FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        // A loaded HOT body can be between the retained provider floors when release observes
+        // it.  That transient position must not become a COLD admission authority.
         state = draining.releaseSceneLease(leaseId, members.stream()
-                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
+                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body().offset(0, 10, 0),
                         draining.actorLocations().get(member.actorId()).condition().health())).toList());
         FrontierWorldState restored = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
         assertEquals(SettlementAssaultStatus.COLD_COMBAT, restored.strategicPlans().settlementAssaults().get(assault.id()).status());
         assertEquals(1, restored.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch());
         assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
         assertEquals(observation, restored.physicalObservations().get(observation.id()));
+        members.forEach(member -> assertEquals(lease.memberPosition(member.actorId()), restored.actorLocations().get(member.actorId()).body(),
+                "release must restore the exact provider-approved assault floor rather than a transient HOT observation"));
 
         // The closed receipt owns its completed HOT epoch, not the outcome of a later COLD
         // admission.  A later ordinary battlefield validation may conflict without making the

@@ -364,7 +364,11 @@ public final class FrontierSceneBehaviors {
             return state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).id(), SettlementAssaultStatus.COLD_COMBAT);
         }
         @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            return observed;
+            // HOT bodies may be observed between the exact provider-approved assault floors
+            // while Minecraft unloads them.  The lease is the sole durable COLD/HOT hand-off:
+            // retaining a transient body here would make the next COLD battlefield admission
+            // depend on a floor that no provider ever approved.
+            return lease.memberPosition(actorId);
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
