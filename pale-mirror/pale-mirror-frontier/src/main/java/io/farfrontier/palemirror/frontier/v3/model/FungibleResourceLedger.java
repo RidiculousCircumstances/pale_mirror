@@ -78,6 +78,18 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return withAccount(reservation.account(), reservation.claims(), next);
     }
 
+    /** Releases an unspent COLD allocation when its owning work is cancelled before effect. */
+    public FungibleResourceLedger releaseClaim(SubjectId accountId, SubjectId claimId) {
+        CustodyAccount account = requireAccount(accountId); requireNoPhysicalBinding(account.id(), "claim release");
+        ClaimAllocation claim = claims.get(Objects.requireNonNull(claimId, "released claim"));
+        if (claim == null || account.claimQuantities().getOrDefault(claimId, 0) != claim.quantity()) {
+            throw new IllegalArgumentException("claim release does not own one current complete allocation");
+        }
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.remove(claimId);
+        Map<SubjectId, Integer> nextQuantities = new HashMap<>(account.claimQuantities()); nextQuantities.remove(claimId);
+        return withAccount(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), nextQuantities), nextClaims, bindings);
+    }
+
     /** Exact zero-sum custody transfer; the caller names both lot and claim portions. */
     public FungibleResourceLedger transfer(SubjectId fromId, SubjectId toId, Map<SubjectId, Integer> lotQuantities,
                                             Map<SubjectId, Integer> claimQuantities) {
